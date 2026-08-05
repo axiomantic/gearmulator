@@ -73,7 +73,8 @@ jobs:
         working-directory: lint-tools
         run: |
           python3 -m nmg2_tools.payload_lint "${GITHUB_WORKSPACE}/under-test" \
-            --register nmg2_tools/testdata/register.tsv
+            --register nmg2_tools/testdata/register.tsv \
+            --visibility "${{ inputs.visibility }}"
 
       # The upload step reads the WHOLE workflow text and NOT an action
       # allow-list. A `run: gh release download` against the private
