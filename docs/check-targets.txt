@@ -1,0 +1,18 @@
+# This file is the repository-side declaration of what this repository's
+# own Check: lines target, per the plan document's plan_lint.py
+# --check-targets condition (PLAN-CHECKTARGETS).
+#
+# One check target per line. Blank lines and lines starting with "#" are
+# ignored. A line is either a ctest test name or a "pytest <path>"
+# invocation.
+#
+# THE FILE DECLARES THE TARGETS OF THE TASKS DECLARED COMPLETE, AND NO OTHERS.
+# The condition is asserted only for tasks a lint run declares complete, so a
+# target added before its task completes would make the lint fail on work that
+# has not happened yet.
+#
+# NO TASK THAT REGISTERS A CHECK TARGET IN THIS REPOSITORY IS COMPLETE YET.
+# BRD-0 creates the test directory and the per-track CMake lists that
+# every other track registers through.
+# The list below is therefore empty on purpose. It is not a placeholder and it
+# is not an oversight.
