@@ -1,0 +1,39 @@
+# The repo track's reusable workflow. Task REPO-6 creates it; the repo track
+# fills it.
+#
+# A per-track unit is a REUSABLE WORKFLOW and it contributes a JOB, not a step.
+# GitHub resolves a local reusable workflow only as `./.github/workflows/<file>`,
+# and nothing outside a callee workflow can insert a step into it. Each track
+# therefore declares exactly one job in its own file and adds its steps inside
+# that job.
+#
+# This file exists in ALL SEVEN repositories, because the four artifact-boundary
+# lint steps run in every one of them, and a step with no file to live in runs
+# nowhere.
+
+name: track-repo
+
+on:
+  workflow_call:
+    inputs:
+      visibility:
+        description: >-
+          The calling repository's visibility, `public` or `private`. One clause
+          of the credential lint is scoped to public repositories: a `secrets.`
+          reference outside the three organization momus secrets is a defect in
+          a public repository, while inside the private one the T1 and T2 jobs
+          legitimately hold what they need.
+        required: false
+        type: string
+        default: public
+
+permissions:
+  contents: read
+
+jobs:
+  repo-lints:
+    name: repo-lints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository under test
+        uses: actions/checkout@v4
