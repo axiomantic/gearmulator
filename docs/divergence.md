@@ -18,3 +18,4 @@ the table below.
 
 | File | Reason | Can it be removed? |
 |---|---|---|
+| `.gitmodules` | The `source/dsp56300` submodule points at the fork `axiomantic/dsp56300` and not at `dsp56300/dsp56300`. The fork carries this project's framework changes before they merge upstream, and `source/nord/g2/` must compile against them. The pinned commit is `c051afad31612c2d2c7a81a7ab23e1c5ac9e61af`, which is the commit upstream `gearmulator` pinned, so this change moves the URL and not the framework version. | Yes. Remove it when every contribution of design section 21.2 has merged into `dsp56300/dsp56300`. Point the URL back at upstream and pin a commit on upstream. |
