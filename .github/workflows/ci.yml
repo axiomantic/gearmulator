@@ -1,0 +1,122 @@
+# The T0 job matrix. Task REPO-6 owns this file and is the only task that edits
+# one.
+#
+# THIS MATRIX IS T0 ONLY, AND IT ALWAYS WILL BE. No T1 job, no T2 job and no
+# integer-comparison job runs here. All three need a firmware byte, and no
+# public repository may hold a credential that could fetch one. Those jobs run
+# inside the private artifact repository instead. T0 only is what lets every job
+# here run on a pull request from a fork.
+#
+# EVERY PER-TRACK UNIT IS A REUSABLE WORKFLOW AND IT CONTRIBUTES A JOB.
+# GitHub resolves a local reusable workflow only as `./.github/workflows/<file>`.
+# A file under `.github/jobs/` is not resolvable by `uses:` and never runs.
+# Nothing outside a callee workflow can insert a step into it, so each track
+# declares one job in its own file and adds its steps there.
+#
+# A merge of every track's branch touches this file in ZERO places.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The T0 name prefix this repository registers.
+  T0_PATTERN: '^t0_'
+
+jobs:
+  build-and-t0:
+    name: build-and-t0
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runs-on: macos-14
+          - target: linux-x86-64
+            runs-on: ubuntu-latest
+          - target: windows-x86-64
+            runs-on: windows-2022
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # CTest 3.20 is the floor because `--no-tests=error` is a CTest flag and
+      # the earlier releases do not carry it. Without that flag every `-R` check
+      # in this project passes against no code at all.
+      - name: Require CMake and CTest 3.20 or newer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --version
+          ctest --version
+          have=$(cmake --version | head -1 | grep -Eo '[0-9]+\.[0-9]+' | head -1)
+          major=${have%%.*}
+          minor=${have##*.}
+          if [ "${major}" -lt 3 ] || { [ "${major}" -eq 3 ] && [ "${minor}" -lt 20 ]; }; then
+            echo "FAILURE: CMake ${have} is older than the 3.20 floor."
+            exit 1
+          fi
+
+      - name: Configure and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      # THE LISTING TEXT IS THE MECHANISM AND THE EXIT CODE IS NOT.
+      # `--no-tests=error` governs a test RUN. In `-N` listing mode it is inert:
+      # the listing exits 0 whether or not any test matched. So this step reads
+      # what the listing PRINTS.
+      - name: Assert that the build registers at least one test
+        shell: bash
+        run: |
+          set -uo pipefail
+          listing=$(ctest --test-dir build --no-tests=error -N)
+          printf '%s\n' "${listing}"
+          if printf '%s\n' "${listing}" | grep -q 'Total Tests: 0'; then
+            echo "FAILURE: the build tree of ${GITHUB_REPOSITORY} registers no test at all."
+            exit 1
+          fi
+
+      - name: Run the T0 suite
+        shell: bash
+        run: ctest --test-dir build --no-tests=error -R "${T0_PATTERN}" --output-on-failure
+
+  sanitizer-t0:
+    name: sanitizer-t0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure and build with the address and undefined sanitizers
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build build-asan --parallel
+
+      - name: Run the T0 suite under the sanitizers
+        run: ctest --test-dir build-asan --no-tests=error -R "${T0_PATTERN}" --output-on-failure
+
+  track-repo:
+    uses: ./.github/workflows/track-repo.yml
+    with:
+      visibility: public
+
+  track-board:
+    uses: ./.github/workflows/track-board.yml
+
+  track-sched:
+    uses: ./.github/workflows/track-sched.yml
