@@ -82,12 +82,20 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # mcf5307::mcf5307. A declaration that is never populated costs nothing.
 #
 # Set G2_MCF5307_SOURCE_DIR to a sibling checkout to build against that instead
-# of a fetched tree. G2_MCF5307_GIT_TAG carries the pin, and it is EMPTY until
-# the mcf5307 repository has a CMake project to pin. Plan section 1.3 rule 1
-# forbids writing a tag that names nothing.
+# of a fetched tree. G2_MCF5307_GIT_TAG carries the pin.
+#
+# TASK BRD-23 WRITES THE PIN. Task BRD-0 created this declaration with the tag
+# EMPTY, because plan section 1.3 rule 1 forbids writing a tag that names
+# nothing and the mcf5307 repository held no CMake project at that wave. Task
+# CPU-1 created one, so the tag now names it.
+#
+# THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
+# clean configure, so BRD-23's check would measure a different core from one
+# run to the next and a green result would not be reproducible. The commit
+# below is CPU-1's, verified to resolve on the remote with `git ls-remote`.
 
 set(G2_MCF5307_SOURCE_DIR "" CACHE PATH "Build the MCF5307 core from this checkout instead of fetching it")
-set(G2_MCF5307_GIT_TAG "" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
+set(G2_MCF5307_GIT_TAG "408df4065c85aae6b507bf71f0cff78b6cc366b9" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5307
