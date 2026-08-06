@@ -190,3 +190,19 @@ target_link_libraries(t0_run_dsp_cycles_contract PRIVATE g2Lib)
 set_property(TARGET t0_run_dsp_cycles_contract PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_run_dsp_cycles_contract COMMAND t0_run_dsp_cycles_contract)
+
+# ---------------- SCH-9 - t0_run_dsp_cycles
+#
+# An ordinary executable. SCH-8's t0_run_dsp_cycles_contract holds the declared
+# signature and the shape of the loop; this one drives the BOUND over 1,000
+# quanta for each of four scripted block lengths that straddle the budget. The
+# upper half of the bound comes from the fixture's own largest measured
+# dispatch unit, never from maxInstructionsPerBlock, which the shipped
+# configuration leaves uncapped.
+
+add_executable(t0_run_dsp_cycles
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_run_dsp_cycles.cpp)
+target_link_libraries(t0_run_dsp_cycles PRIVATE g2Lib)
+set_property(TARGET t0_run_dsp_cycles PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_run_dsp_cycles COMMAND t0_run_dsp_cycles)
