@@ -97,7 +97,15 @@ endif()
 # case that proves this guard fires.
 
 set(G2_UNMEASURED_SYMBOLS G2_MCU_BUS_CLOCK_HZ G2_MCU_BUS_DIVIDER)
-set(G2_UNMEASURED_DECLARATION_SITE ${CMAKE_CURRENT_SOURCE_DIR}/g2/timebase.h)
+
+# BOTH SIDES OF THE COMPARISON ARE NORMALISED, and that is load-bearing.
+# file(GLOB_RECURSE) returns each path with the glob pattern's own spelling
+# preserved, so a pattern that carries ".." yields ".../g2Lib/../g2Lib/g2/
+# timebase.h". That string never compares equal to the declaration site written
+# without the "..", the exemption below never fires for any file, and the guard
+# then rejects its own declaration site. REALPATH collapses both spellings.
+get_filename_component(G2_UNMEASURED_DECLARATION_SITE
+	"${CMAKE_CURRENT_SOURCE_DIR}/g2/timebase.h" REALPATH)
 
 file(GLOB_RECURSE G2_GUARDED_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/../*.c
@@ -106,6 +114,7 @@ file(GLOB_RECURSE G2_GUARDED_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/../*.hpp)
 
 foreach(guardedFile IN LISTS G2_GUARDED_FILES)
+	get_filename_component(guardedFile "${guardedFile}" REALPATH)
 	if(guardedFile STREQUAL G2_UNMEASURED_DECLARATION_SITE)
 		continue()
 	endif()
