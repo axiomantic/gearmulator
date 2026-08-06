@@ -18,3 +18,6 @@ list(APPEND G2LIB_SOURCES latches.cpp)
 
 # ----------------- BRD-15, the CS1 decode
 list(APPEND G2LIB_SOURCES hdi08Decode.cpp)
+
+# ----------------- BRD-6, the C++ firmware extractor
+list(APPEND G2LIB_SOURCES firmwareExtract.cpp)
