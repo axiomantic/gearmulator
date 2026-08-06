@@ -102,3 +102,16 @@ add_test(NAME t0_clock_guard COMMAND t0_clock_guard
 # would collide with the file t0_clock_guard. The test then cannot create it,
 # every command it runs in it fails with no output, and the case reports
 # failures that say nothing about the guard.
+
+# ---------------- SCH-5 - t0_frame_conversion
+#
+# SCH-4's t0_frame_layout holds the four SIGNATURES, which is a build-time
+# property. This one holds the BEHAVIOUR, so it is an ordinary executable that
+# links the library the conversions live in.
+
+add_executable(t0_frame_conversion
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_frame_conversion.cpp)
+target_link_libraries(t0_frame_conversion PRIVATE g2Lib)
+set_property(TARGET t0_frame_conversion PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_frame_conversion COMMAND t0_frame_conversion)
