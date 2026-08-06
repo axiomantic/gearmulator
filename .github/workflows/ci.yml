@@ -38,6 +38,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macos-arm64 is EXCLUDED here, not unsupported. macOS/arm64 is the
+          # development platform and is exercised locally. It left CI after
+          # this repository's INHERITED CMake run 31033322092, where the macOS
+          # jobs were CANCELLED at >=4h 32m without completing, against 19m 46s
+          # for the comparable Ubuntu job: >=13.8x, and unbounded, because a
+          # cancelled job gives a lower bound and not a duration. That run is
+          # cmake.yml, not this workflow. No equivalent measurement exists for
+          # this workflow's own build.
+          # Uncomment the two lines below to restore the macOS job.
+          # - target: macos-arm64
+          #   runs-on: macos-14
           - target: linux-x86-64
             runs-on: ubuntu-latest
           - target: windows-x86-64
