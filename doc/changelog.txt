@@ -27,6 +27,13 @@ Framework:
         strokeRect, beginPath, moveTo, lineTo, rect, arc, ellipse, fill,
         stroke). Skin scripts can draw custom graphics on a canvas.
 
+G2:
+
+- [New] The build carries the Clavia Nord Modular G2 as a new product. The
+        option gearmulator_SYNTH_G2 turns it on and it is on by default.
+        The product is a skeleton at this point: it declares the targets
+        g2Lib, g2TestConsole and g2JucePlugin and it emulates nothing.
+
 2.2.7:
 
 Framework:
