@@ -70,3 +70,35 @@ target_link_libraries(t0_frames_for_block PRIVATE g2Lib)
 set_property(TARGET t0_frames_for_block PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_frames_for_block COMMAND t0_frames_for_block)
+
+# ---------------- SCH-3 - t0_clock_guard
+#
+# An ordinary executable, and every path it needs is passed on the command
+# line. A path the test had to guess would be a path the test could get wrong
+# in silence.
+#
+# The scratch header the negative case plants must live under source/nord/g2/,
+# because that is the tree BRD-0's guard scans. The test writes it, runs one
+# configure and removes it again.
+#
+# THE NEGATIVE CONFIGURE IS NOT THE WHOLE PROJECT. The test writes a scratch
+# CMake project whose only content is one add_subdirectory of g2Lib, so it
+# configures the real g2Lib/CMakeLists.txt -- where the guard lives -- and
+# nothing else. That costs about a second.
+
+add_executable(t0_clock_guard ${CMAKE_CURRENT_SOURCE_DIR}/t0_clock_guard.cpp)
+set_property(TARGET t0_clock_guard PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_clock_guard COMMAND t0_clock_guard
+	${CMAKE_SOURCE_DIR}
+	${G2_GIT_EXECUTABLE}
+	${CMAKE_COMMAND}
+	${CMAKE_CURRENT_SOURCE_DIR}/..
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_clock_guard_scratch.h
+	${CMAKE_CURRENT_BINARY_DIR}/t0_clock_guard_work)
+
+# THE WORK DIRECTORY IS NOT NAMED AFTER THE TARGET. CMAKE_CURRENT_BINARY_DIR is
+# where the executable itself lands, so a work directory called t0_clock_guard
+# would collide with the file t0_clock_guard. The test then cannot create it,
+# every command it runs in it fails with no output, and the case reports
+# failures that say nothing about the guard.
