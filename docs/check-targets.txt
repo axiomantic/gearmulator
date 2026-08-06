@@ -33,3 +33,6 @@ t0_manifest_parses
 
 # BRD-6, the C++ firmware extractor.
 t0_extract_matches_python
+
+# BRD-11, the firmware version and the mismatch policy.
+t0_version_mismatch

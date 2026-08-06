@@ -124,3 +124,14 @@ target_compile_definitions(t0_extract_matches_python PRIVATE
 
 add_test(NAME t0_extract_matches_python COMMAND t0_extract_matches_python)
 set_tests_properties(t0_extract_matches_python PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-11, the firmware version and the mismatch policy
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_version_mismatch$
+
+add_executable(t0_version_mismatch t0_version_mismatch.cpp)
+target_link_libraries(t0_version_mismatch PRIVATE g2Lib)
+set_property(TARGET t0_version_mismatch PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_version_mismatch COMMAND t0_version_mismatch)
+set_tests_properties(t0_version_mismatch PROPERTIES LABELS "UnitTest")
