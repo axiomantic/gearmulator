@@ -38,3 +38,14 @@ set_property(TARGET t0_memory_map PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_memory_map COMMAND t0_memory_map)
 set_tests_properties(t0_memory_map PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-2, the SIM registers
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_sim$
+
+add_executable(t0_sim t0_sim.cpp)
+target_link_libraries(t0_sim PRIVATE g2Lib)
+set_property(TARGET t0_sim PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_sim COMMAND t0_sim)
+set_tests_properties(t0_sim PROPERTIES LABELS "UnitTest")
