@@ -14,11 +14,12 @@
 # BRD-0 creates the test directory and the per-track CMake lists that
 # every other track registers through. It registers no check target of its own.
 #
-# SCH-0's t0_timebase_header is NOT listed, and its absence is deliberate. The
-# task is implemented but it cannot land: g2Lib/CMakeLists.txt exempts
-# g2/timebase.h from the unmeasured-symbol guard by comparing an unnormalised
+# SCH-0's t0_timebase_header IS listed here, and on this branch only. The task
+# is complete and its check passes, but it cannot land on the main line until
+# the BRD-0 owner repairs one comparison: g2Lib/CMakeLists.txt exempts
+# g2/timebase.h from the unmeasured-symbol guard by testing an unnormalised
 # glob path against a normalised one, so the exemption never fires and the
-# declaration site fails its own configure guard. The line goes in when the
-# BRD-0 owner repairs that comparison.
+# declaration site fails its own configure guard.
 
+t0_timebase_header
 t0_frame_layout
