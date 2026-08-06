@@ -115,3 +115,18 @@ target_link_libraries(t0_frame_conversion PRIVATE g2Lib)
 set_property(TARGET t0_frame_conversion PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_frame_conversion COMMAND t0_frame_conversion)
+
+# ---------------- SCH-6 - t0_dsp_context_layout
+#
+# The member list is a compile-time property, so most of this check is
+# static_assert and a deleted member is a build failure. Plan section 7.7.1
+# separates that from a check report, so the registered program also carries a
+# runtime half: the executor's pointer recovery, and that the ten members are
+# ten distinct objects.
+
+add_executable(t0_dsp_context_layout
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_context_layout.cpp)
+target_link_libraries(t0_dsp_context_layout PRIVATE g2Lib)
+set_property(TARGET t0_dsp_context_layout PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_dsp_context_layout COMMAND t0_dsp_context_layout)

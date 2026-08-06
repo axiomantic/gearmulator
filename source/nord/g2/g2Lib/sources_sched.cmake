@@ -11,3 +11,9 @@
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.h)
+
+# SCH-6. dspContext.h declares JobFault, JobContext and DspContext. It has no
+# compiled part; it is listed so that the file the sched track owns appears in
+# the target, exactly as SCH-4's frame.h does.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/dspContext.h)
