@@ -5,3 +5,25 @@
 # LINE PASSES TO -R. Edit no other CMake file in this tree.
 #
 # Created empty by task BRD-0.
+
+# ----------------- BRD-23, the mcf5307::mcf5307 link
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_mcf5307_link$
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE. It never names mcf5307::mcf5307 on
+# its own link line, so the header and the symbol both have to arrive through
+# g2Lib's own PUBLIC link -- the one line BRD-23 turns on. Naming the core
+# here as well would let this test pass with that line deleted, which is the
+# exact defect it exists to catch.
+#
+# The target is declared UNCONDITIONALLY and is NOT guarded by
+# if(G2_LINK_MCF5307). The guard would make the option-OFF build succeed by
+# building nothing, and BRD-23's negative case asserts that the option-OFF
+# build FAILS at the COMPILE step on the missing mcf5307.h.
+
+add_executable(t0_mcf5307_link t0_mcf5307_link.cpp)
+target_link_libraries(t0_mcf5307_link PRIVATE g2Lib)
+set_property(TARGET t0_mcf5307_link PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mcf5307_link COMMAND t0_mcf5307_link)
+set_tests_properties(t0_mcf5307_link PROPERTIES LABELS "UnitTest")
