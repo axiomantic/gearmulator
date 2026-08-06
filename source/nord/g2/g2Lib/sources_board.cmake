@@ -8,3 +8,6 @@
 
 # ----------------- BRD-1, the memory decode and the two bus callbacks
 list(APPEND G2LIB_SOURCES memoryMap.cpp)
+
+# ----------------- BRD-2, the SIM registers
+list(APPEND G2LIB_SOURCES sim.cpp)
