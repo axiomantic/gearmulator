@@ -24,3 +24,6 @@ t0_frame_layout
 
 # REPO-5, the ArtifactResolver interface.
 t0_artifact_resolver
+
+# REPO-7, the skip discipline.
+t0_skip_discipline
