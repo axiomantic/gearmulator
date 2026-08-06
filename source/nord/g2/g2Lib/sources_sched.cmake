@@ -44,3 +44,11 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/runDspCycles.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/runDspCycles.h)
+
+# SCH-14. tools/blockTableHarness.* walks every entry of a compiled block table
+# and reports the largest encoded cycle count. ITS TIER FOLLOWS ITS INPUT: T0
+# against SCH-14's committed synthetic program, T1 against the real compiled
+# kernel, which is SCH-31's measurement. It establishes no maxDispatchCost.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.h)
