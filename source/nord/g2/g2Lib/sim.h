@@ -11,9 +11,12 @@
 // IT IS A BusTarget, so it takes the offset the BRD-1 decode produced and it
 // carries no knowledge of where the boot loader put MBAR.
 //
-// CLEAN-ROOM. Every offset, width, reset value and access rule below is read
-// from the MCF5307 User's Manual. See the provenance record at the head of
-// sim.cpp for what was taken and which section it came from. No file of
+// CLEAN-ROOM. The chip-select register family is read from AGENTS.md section
+// 3.8, which MEASURES the boot loader programming CS3. Every other offset,
+// width, reset value and access rule is read from the MCF5307 User's Manual.
+// See the provenance record at the head of sim.cpp for what was taken, which
+// source it came from, the ONE CONFLICT between the two and how it resolved,
+// and the one evidence gap that stays open. No file of
 // MegabytePhreak/qemu-mcf5307 was opened for this task.
 //
 // NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is

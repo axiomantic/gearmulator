@@ -21,21 +21,12 @@
 //     address or a read-only register has no effect and that a read of a
 //     write-only register returns zero: section 9.4.1, Table 9-5, footnotes 1
 //     and 3.
-//   * CS2 to CS7 share one base register: section 9.4.2.1. "CSAR0 and CSAR1
-//     determine the base addresses from which chip-selects 0 and 1 will be
-//     offset, respectively. CSBAR determines the base address from which
-//     chip-selects 2 through 7 will be offset." The part carries no CSAR2 to
-//     CSAR5, so the base of CS2 to CS5 is CSBAR.
 //   * The DRAM controller register map: section 11.5, Table 11-1.
 //   * The timer register map: section 12.3.1, Table 12-1.
-//   * THE ONE ACCESS-WIDTH RULE: section 14.3.7. "All UART module registers
-//     must be accessed as bytes." MBAR+$1D0 is a UART module register, and it
-//     is the only register modelled here that carries a width restriction.
-//     No other section of the manual states an access-width rule for the
-//     chip-select, DRAM controller, timer or parallel-port registers, and the
-//     ACCESS column of Table 9-5 is read/write and not width. So this model
-//     accepts every width everywhere else, and inventing a restriction there
-//     would be inventing a fact.
+//   * THE ONE ACCESS-WIDTH RULE THIS MODEL ENFORCES: section 14.3.7. "All UART
+//     module registers must be accessed as bytes." MBAR+$1D0 is a UART module
+//     register. See the EVIDENCE GAP below for why that is a statement about
+//     this model and not a statement about the part.
 //
 // SOURCE: this project's own measurements, in AGENTS.md.
 //
@@ -45,6 +36,75 @@
 //     2.3 and 4.1. detect_model() at 0x30050864 reads it.
 //   * The G2 wires six chip selects, CS0 to CS5: section 2.2. The part carries
 //     eight. CS6 and CS7 are not modelled, because no G2 signal reaches them.
+//   * THE CHIP-SELECT REGISTER FAMILY: section 3.8, a FIRMWARE MEASUREMENT.
+//     See the RESOLVED CONFLICT below.
+//
+// ---------------------------------------------------------------------------
+// RESOLVED CONFLICT: CSAR PER SELECT, NOT ONE SHARED CSBAR.
+//
+// AN EARLIER REVISION OF THIS FILE MODELLED ONE CSBAR AT MBAR+$098 AND NO
+// CSAR2 TO CSAR5, reading MCF5307 UM section 9.4.2.1 to say that chip-selects
+// 2 through 7 are offset from one shared base. THAT READING IS WITHDRAWN.
+// AGENTS.md is authoritative on hardware facts and it refutes the reading:
+//
+//   1. Section 3.8 MEASURES the boot loader, BOOT_128_Loader.bin, programming
+//      CS3: CSAR3 at MBAR+$0A4 = $1300, CSMR3 at MBAR+$0A8 = $00000001, CSCR3
+//      at MBAR+$0AE = $0540. CSAR3 = $1300 gives base $13000000, the ISP1181
+//      USB device controller. A PER-SELECT BASE IS A VALUE ONE SHARED CSBAR
+//      CANNOT EXPRESS, and the offset $0A4 is not CSBAR's.
+//   2. Section 9, open question 21, names "CSAR0 to CSAR5 and CSMR0 to CSMR5"
+//      as the registers the boot loader programs. Plan section 4.2 register
+//      row 18 and task SPK-13 say the same.
+//   3. Section 11 already warned that the Linux m5307sim.h reference map
+//      "carries two chip-select layouts selected by CONFIG_OLDMASK". The
+//      withdrawn reading was one of those two, chosen without reconciling it
+//      against the section 3.8 measurement.
+//
+// THE MEASUREMENT FIXES THE STRIDE, IT IS NOT EXTRAPOLATED FROM ONE POINT.
+// Section 3.8's three offsets are each exactly $24 above the CS0 register of
+// the same kind: $0A4-$080 = $0A8-$084 = $0AE-$08A = $24 = 3 x $0C. So the
+// family repeats every twelve bytes as CSARn, CSMRn, CSCRn. Two of the
+// intermediate offsets are corroborated independently, because the withdrawn
+// revision had already read CSMR2 at $09C and CSCR2 at $0A2 from the manual
+// and both are exactly what the stride gives. Every CSCRn offset that
+// revision carried also matches the stride; what it got wrong was CSAR2 to
+// CSAR5, which it omitted, and CSMR3 to CSMR5, which it placed two bytes high
+// and two bytes short.
+//
+// The register widths are corroborated by the widths the firmware itself
+// drives in the same section 3.8 measurement: CSARn is a 16-bit value, CSMRn
+// a 32-bit value, CSCRn a 16-bit value.
+//
+// WHERE AGENTS.md AND THE MANUAL CONFLICT, AGENTS.md WINS. This is that case,
+// and it is recorded rather than smoothed over: a measurement of the shipped
+// firmware outranks a reading of a manual section that describes a part with
+// two documented chip-select layouts.
+//
+// ---------------------------------------------------------------------------
+// EVIDENCE GAP, DECLARED RATHER THAN CLOSED BY A GUESS.
+//
+// AGENTS.md section 4.2 states AS FACT that access widths for the chip-select
+// and DRAM controller registers exist and are recorded, and that they are "a
+// useful corroboration BECAUSE THE MANUAL IS HARD TO READ ON THIS POINT". So
+// the silence of the manual is NOT evidence that those registers accept every
+// width. The withdrawn revision reasoned from that silence, and that reasoning
+// is withdrawn with it.
+//
+// This model therefore enforces exactly one access-width restriction, on
+// MBAR+$1D0, and it makes NO CLAIM that the chip-select, DRAM controller,
+// timer or parallel-port registers are unrestricted on the real part. What is
+// asserted about them is a property of THIS MODEL: it accepts every width.
+// Plan section 13.1 requires that shape, so that the check "does not depend on
+// a restriction that may not exist".
+//
+// WHY THE GAP WAS NOT CLOSED. BRD-2 permits opening
+// MegabytePhreak/qemu-mcf5307 to CHECK exactly one width the manual states
+// less clearly, then to write the value from the manual. THE REPOSITORY WAS
+// NOT OPENED. The MCF5307 User's Manual is not on disk in this workspace, so
+// the value could not have been written from the manual afterwards, and
+// AGENTS.md section 4.2 is explicit about that case: "If you cannot write it
+// from the manual, stop and raise it - do not reach for the source file." It
+// is raised here. Closing it needs the manual, or SPK-13's firmware read.
 //
 // DIVERGENCE, STATED RATHER THAN HIDDEN. MBAR+$1D0 belongs to the UART block,
 // and task BRD-4 owns UART0. This model answers that one offset because the
@@ -77,22 +137,29 @@ namespace g2
 		// 11.5 Table 11-1, section 12.3.1 Table 12-1.
 		constexpr RegisterSpec g_registers[] =
 		{
-			// The six chip selects the G2 wires. CSAR0 and CSAR1 carry the
-			// bases of CS0 and CS1; CSBAR carries the base of CS2 to CS5.
+			// The six chip selects the G2 wires, one CSARn, CSMRn and CSCRn
+			// each. AGENTS.md section 3.8 measures CS3 at $0A4, $0A8 and $0AE
+			// and that fixes the twelve-byte stride; see the RESOLVED CONFLICT
+			// at the head of this file. CS6 and CS7 exist on the part and are
+			// not modelled, because AGENTS.md section 2.2 records that no G2
+			// signal reaches them.
 			{0x080, 2, Access::ReadWrite, false, 0,      0, "CSAR0"},
 			{0x084, 4, Access::ReadWrite, false, 0,      0, "CSMR0"},
 			{0x08a, 2, Access::ReadWrite, false, 0,      0, "CSCR0"},
 			{0x08c, 2, Access::ReadWrite, false, 0,      0, "CSAR1"},
 			{0x090, 4, Access::ReadWrite, false, 0,      0, "CSMR1"},
 			{0x096, 2, Access::ReadWrite, false, 0,      0, "CSCR1"},
-			{0x098, 1, Access::ReadWrite, false, 0,      0, "CSBAR"},
-			{0x09c, 2, Access::ReadWrite, false, 0,      0, "CSMR2"},
+			{0x098, 2, Access::ReadWrite, false, 0,      0, "CSAR2"},
+			{0x09c, 4, Access::ReadWrite, false, 0,      0, "CSMR2"},
 			{0x0a2, 2, Access::ReadWrite, false, 0,      0, "CSCR2"},
-			{0x0aa, 2, Access::ReadWrite, false, 0,      0, "CSMR3"},
+			{0x0a4, 2, Access::ReadWrite, false, 0,      0, "CSAR3"},
+			{0x0a8, 4, Access::ReadWrite, false, 0,      0, "CSMR3"},
 			{0x0ae, 2, Access::ReadWrite, false, 0,      0, "CSCR3"},
-			{0x0b6, 2, Access::ReadWrite, false, 0,      0, "CSMR4"},
+			{0x0b0, 2, Access::ReadWrite, false, 0,      0, "CSAR4"},
+			{0x0b4, 4, Access::ReadWrite, false, 0,      0, "CSMR4"},
 			{0x0ba, 2, Access::ReadWrite, false, 0,      0, "CSCR4"},
-			{0x0c2, 2, Access::ReadWrite, false, 0,      0, "CSMR5"},
+			{0x0bc, 2, Access::ReadWrite, false, 0,      0, "CSAR5"},
+			{0x0c0, 4, Access::ReadWrite, false, 0,      0, "CSMR5"},
 			{0x0c6, 2, Access::ReadWrite, false, 0,      0, "CSCR5"},
 
 			// The DRAM controller.
@@ -118,7 +185,17 @@ namespace g2
 			// section 4.1 fixes bit 0 at zero, so this machine presents $0E.
 			// A read returns UIPCR and a write reaches UACR, so a write never
 			// changes what a read returns.
-			{0x1d0, 1, Access::ReadOnly,  true,  0x0e,   0x01, "UIPCR"},
+			//
+			// strapBits IS $00 HERE ON PURPOSE. Access::ReadOnly already holds
+			// every bit of the register, so naming bit 0 again would add no
+			// protection. The earlier revision carried $01 here and it was
+			// DEAD DATA: the constructor read strapBits only on a ReadWrite
+			// row, so the value could not reach m_writeProtect. The constructor
+			// below now applies strapBits on every row, so the field can never
+			// go silently dead again; this row sets it to $00 because the fact
+			// it once carried is already carried by Access::ReadOnly and by the
+			// reset value $0E.
+			{0x1d0, 1, Access::ReadOnly,  true,  0x0e,   0x00, "UIPCR"},
 
 			// The parallel port. Port A bit 9 is an input strap.
 			{0x244, 2, Access::ReadWrite, false, 0x0000, 0x0000, "PADDR"},
@@ -170,8 +247,14 @@ namespace g2
 
 				m_space[index] = uint8_t((spec.resetValue >> shift) & 0xffu);
 
-				if(spec.access == Access::ReadWrite)
-					m_writeProtect[index] = uint8_t((spec.strapBits >> shift) & 0xffu);
+				// A read-only register holds every bit. A read/write register
+				// holds only the bits a board strap drives. strapBits is
+				// applied on BOTH kinds, so a strap named on a read-only row
+				// cannot become dead data the way it did before.
+				uint8_t protect = spec.access == Access::ReadOnly ? 0xffu : 0x00u;
+				protect |= uint8_t((spec.strapBits >> shift) & 0xffu);
+
+				m_writeProtect[index] = protect;
 			}
 		}
 	}
