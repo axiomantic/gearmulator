@@ -14,12 +14,13 @@
 # BRD-0 creates the test directory and the per-track CMake lists that
 # every other track registers through. It registers no check target of its own.
 #
-# SCH-0's t0_timebase_header IS listed here, and on this branch only. The task
-# is complete and its check passes, but it cannot land on the main line until
-# the BRD-0 owner repairs one comparison: g2Lib/CMakeLists.txt exempts
-# g2/timebase.h from the unmeasured-symbol guard by testing an unnormalised
-# glob path against a normalised one, so the exemption never fires and the
-# declaration site fails its own configure guard.
+# The sched and repo tracks' Wave 2 and 2b tasks are the first to register one.
 
+# SCH-0, g2/timebase.h.
 t0_timebase_header
+
+# SCH-4, g2::Frame and the two ESAI conversion functions.
 t0_frame_layout
+
+# REPO-5, the ArtifactResolver interface.
+t0_artifact_resolver
