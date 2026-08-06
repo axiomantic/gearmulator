@@ -74,7 +74,7 @@ target_include_directories(g2Lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # is created in wave 2. Task BRD-23 turns the option ON once the target exists.
 # The root CMakeLists.txt declares where the sources come from.
 
-option(G2_LINK_MCF5307 "Link the MCF5307 core" OFF)
+option(G2_LINK_MCF5307 "Link mcf5307 core" ON)
 
 if(G2_LINK_MCF5307)
 	if(G2_MCF5307_SOURCE_DIR)

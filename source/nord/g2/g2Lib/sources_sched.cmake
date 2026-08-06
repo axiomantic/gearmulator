@@ -10,4 +10,6 @@
 # dsp56k::Audio frame types; nothing else in g2Lib names a library frame type.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/frame.h)
+	${CMAKE_CURRENT_SOURCE_DIR}/frame.h
+	${CMAKE_CURRENT_SOURCE_DIR}/executor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/dspContext.cpp)

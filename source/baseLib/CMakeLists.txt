@@ -28,4 +28,4 @@ endif()
 
 set_property(TARGET baseLib PROPERTY FOLDER "Gearmulator")
 
-target_include_directories(baseLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(baseLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR})
