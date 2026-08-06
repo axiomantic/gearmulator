@@ -135,3 +135,18 @@ set_property(TARGET t0_version_mismatch PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_version_mismatch COMMAND t0_version_mismatch)
 set_tests_properties(t0_version_mismatch PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-10, the no-firmware path
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_no_firmware$
+#
+# THE TEST IS NOT GATED AND IT MUST NOT BE. It drives the case where the
+# firmware is ABSENT, so a gate on NMG2_ARTIFACTS would skip the one state the
+# task exists to answer. The test sets and clears the variable itself.
+
+add_executable(t0_no_firmware t0_no_firmware.cpp)
+target_link_libraries(t0_no_firmware PRIVATE g2Lib)
+set_property(TARGET t0_no_firmware PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_no_firmware COMMAND t0_no_firmware)
+set_tests_properties(t0_no_firmware PROPERTIES LABELS "UnitTest")

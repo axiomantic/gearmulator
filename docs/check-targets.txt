@@ -36,3 +36,6 @@ t0_extract_matches_python
 
 # BRD-11, the firmware version and the mismatch policy.
 t0_version_mismatch
+
+# BRD-10, the no-firmware path.
+t0_no_firmware
