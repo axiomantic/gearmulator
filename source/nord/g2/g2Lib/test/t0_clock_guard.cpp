@@ -206,6 +206,74 @@ namespace
 		return path;
 	}
 
+	/* ---------------- what is NOT source, and how it is found
+	 *
+	 * THE SCAN MUST NOT READ BUILD OUTPUT, AND A DIRECTORY NAME IS NOT A
+	 * RELIABLE WAY TO TELL. This was measured rather than argued.
+	 *
+	 * The scan covers this repository's tracked files plus its untracked,
+	 * non-ignored ones. `.gitignore` ignores /build/, so a build tree at that
+	 * one path is out of scope -- and a build tree at ANY OTHER PATH is not.
+	 * A CTest log quotes the output of other tests, and task SCH-0's own check
+	 * PRINTS the refuted value in full when it reports the value absent. So a
+	 * second build tree, at any name but `build`, puts the literal into
+	 * <tree>/Testing/Temporary/LastTest.log and this case reports it as
+	 * present. Measured: the case passed in `build` and failed in `build2`
+	 * with three matches, every one of them a log line.
+	 *
+	 * A check that passes because of a directory name is an accident, not a
+	 * check. The scope is therefore stated by a PROPERTY of the directory and
+	 * not by its name: a directory that holds a CMakeCache.txt is a CMake
+	 * build tree, and a build tree is output rather than source.
+	 *
+	 * The exclusions are REPORTED with any failure, so the scope is never
+	 * invisible to whoever reads the result.
+	 *
+	 * TASK SCH-0's CHECK CARRIES THE SAME FRAGILITY and this task does not
+	 * repair it: that check belongs to SCH-0 and section 7.4.2 keeps each task
+	 * to its own files. It is reported instead. */
+	std::vector<std::string> buildTreeExclusions(const std::string& repositoryRoot,
+		const std::string& gitExecutable)
+	{
+		std::vector<std::string> exclusions;
+
+		/* The top-level entries git can see. A CMake build tree placed deeper
+		 * than one level is not covered, and saying so is better than implying
+		 * a completeness this does not have. */
+		const CommandResult listing = runCommand(repositoryRoot,
+			{ gitExecutable, "ls-files", "--others", "--directory",
+			  "--exclude-standard" });
+
+		if(!listing.ran)
+			return exclusions;
+
+		size_t start = 0;
+
+		while(start < listing.output.size())
+		{
+			size_t end = listing.output.find('\n', start);
+			if(end == std::string::npos)
+				end = listing.output.size();
+
+			std::string entry = listing.output.substr(start, end - start);
+			start = end + 1;
+
+			if(entry.empty())
+				continue;
+
+			/* git reports a directory with a trailing slash. */
+			if(entry.back() != '/')
+				continue;
+
+			if(!fileExists(repositoryRoot + "/" + entry + "CMakeCache.txt"))
+				continue;
+
+			exclusions.push_back(":(exclude)" + entry);
+		}
+
+		return exclusions;
+	}
+
 	/* ---------------- the spelling table
 	 *
 	 * One row for each spelling the refuted value can take. `pattern` is the
@@ -360,6 +428,17 @@ int main(const int argc, const char* const* const argv)
 		check(table.size() == 6,
 			"the spelling table holds every spelling this case claims");
 
+		const std::vector<std::string> exclusions =
+			buildTreeExclusions(repositoryRoot, gitExecutable);
+
+		std::string scopeReport = "the scan excluded these build trees:";
+		if(exclusions.empty())
+			scopeReport += " none";
+		for(const std::string& exclusion : exclusions)
+			scopeReport += " " + exclusion;
+
+		printf("t0_clock_guard case 1: %s\n", scopeReport.c_str());
+
 		/* The positive control's scratch tree. It lives in the work directory,
 		 * which is inside the build tree and therefore outside the scan of the
 		 * real case below. */
@@ -422,12 +501,21 @@ int main(const int argc, const char* const* const argv)
 			 * clone with its submodules initialised. This scope is the widest
 			 * one that still passes and it covers every file this project
 			 * actually writes. */
-			const CommandResult scan = runCommand(
-				repositoryRoot,
-				{
-					gitExecutable, "grep", "-I", "--untracked",
-					"--line-number", "-E", "-e", spelling.pattern
-				});
+			std::vector<std::string> scanArguments =
+			{
+				gitExecutable, "grep", "-I", "--untracked",
+				"--line-number", "-E", "-e", spelling.pattern
+			};
+
+			if(!exclusions.empty())
+			{
+				scanArguments.push_back("--");
+				scanArguments.push_back(".");
+				for(const std::string& exclusion : exclusions)
+					scanArguments.push_back(exclusion);
+			}
+
+			const CommandResult scan = runCommand(repositoryRoot, scanArguments);
 
 			if(!scan.ran)
 			{
@@ -445,7 +533,7 @@ int main(const int argc, const char* const* const argv)
 				fail("the refuted MCU clock is present in this repository, in "
 					+ spelling.name + ". Design section 13.4.3 refutes it on "
 					"five independent grounds and it must never come back.\n"
-					+ scan.output);
+					+ scopeReport + "\n" + scan.output);
 				continue;
 			}
 
