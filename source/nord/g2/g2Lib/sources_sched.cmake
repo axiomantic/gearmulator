@@ -23,3 +23,9 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.h)
+
+# SCH-15. codecQueues.* are the two bounded queues between the Device and the
+# chain. Both carry the capacity lookaheadFrames + B.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/codecQueues.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/codecQueues.h)
