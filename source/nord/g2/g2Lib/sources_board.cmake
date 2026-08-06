@@ -11,3 +11,7 @@ list(APPEND G2LIB_SOURCES memoryMap.cpp)
 
 # ----------------- BRD-2, the SIM registers
 list(APPEND G2LIB_SOURCES sim.cpp)
+
+# ----------------- BRD-12, the panel and the CS5 latches
+list(APPEND G2LIB_SOURCES panel.cpp)
+list(APPEND G2LIB_SOURCES latches.cpp)
