@@ -27,3 +27,14 @@ set_property(TARGET t0_mcf5307_link PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_mcf5307_link COMMAND t0_mcf5307_link)
 set_tests_properties(t0_mcf5307_link PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-1, the memory decode and the two bus callbacks
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_memory_map$
+
+add_executable(t0_memory_map t0_memory_map.cpp)
+target_link_libraries(t0_memory_map PRIVATE g2Lib)
+set_property(TARGET t0_memory_map PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_memory_map COMMAND t0_memory_map)
+set_tests_properties(t0_memory_map PROPERTIES LABELS "UnitTest")

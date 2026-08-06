@@ -5,3 +5,6 @@
 # file in this tree. See plan section 7.4.2.
 #
 # Created empty by task BRD-0.
+
+# ----------------- BRD-1, the memory decode and the two bus callbacks
+list(APPEND G2LIB_SOURCES memoryMap.cpp)
