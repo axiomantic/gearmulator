@@ -11,8 +11,14 @@
 # target added before its task completes would make the lint fail on work that
 # has not happened yet.
 #
-# NO TASK THAT REGISTERS A CHECK TARGET IN THIS REPOSITORY IS COMPLETE YET.
 # BRD-0 creates the test directory and the per-track CMake lists that
-# every other track registers through.
-# The list below is therefore empty on purpose. It is not a placeholder and it
-# is not an oversight.
+# every other track registers through. It registers no check target of its own.
+#
+# SCH-0's t0_timebase_header is NOT listed, and its absence is deliberate. The
+# task is implemented but it cannot land: g2Lib/CMakeLists.txt exempts
+# g2/timebase.h from the unmeasured-symbol guard by comparing an unnormalised
+# glob path against a normalised one, so the exemption never fires and the
+# declaration site fails its own configure guard. The line goes in when the
+# BRD-0 owner repairs that comparison.
+
+t0_frame_layout
