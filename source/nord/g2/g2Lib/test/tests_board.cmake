@@ -71,3 +71,56 @@ set_property(TARGET t0_cs1_decode PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cs1_decode COMMAND t0_cs1_decode)
 set_tests_properties(t0_cs1_decode PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-6, the C++ firmware extractor
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_extract_matches_python$
+#
+# THIS TEST NEEDS THE PYTHON ORACLE, because design section 20.2 makes the
+# Python extractor in axiomantic/nmg2-tools the oracle for the C++ one and
+# BRD-6 asserts the two produce byte-identical output. The oracle therefore has
+# to be on disk when the test runs, and this block is what puts it there.
+#
+# THE ARRANGEMENT MIRRORS THE ONE THE ROOT CMakeLists.txt USES FOR mcf5307, and
+# it is the same choice for the same reason: a cache variable names a sibling
+# checkout when a local engineer has one, and FetchContent fetches a PINNED
+# commit when nobody has. Two mechanisms with one spelling.
+#
+# NO CLAVIA BYTE ARRIVES THROUGH EITHER ROUTE. axiomantic/nmg2-tools is PUBLIC
+# and MIT, it holds no firmware, and this test authors every container it reads.
+
+set(G2_NMG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools to use instead of fetching one")
+set(G2_NMG2_TOOLS_GIT_TAG "968090b52b4d9198027dc71587bfc97b33bc2283" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
+
+if(G2_NMG2_TOOLS_SOURCE_DIR)
+	set(G2_ORACLE_TOOLS_DIR "${G2_NMG2_TOOLS_SOURCE_DIR}")
+else()
+	include(FetchContent)
+	FetchContent_Declare(nmg2tools
+		GIT_REPOSITORY https://github.com/axiomantic/nmg2-tools.git
+		GIT_TAG ${G2_NMG2_TOOLS_GIT_TAG})
+	# The repository holds no CMakeLists.txt, so this populates it and adds no
+	# subdirectory. The Python package is then at ${nmg2tools_SOURCE_DIR}.
+	FetchContent_MakeAvailable(nmg2tools)
+	set(G2_ORACLE_TOOLS_DIR "${nmg2tools_SOURCE_DIR}")
+endif()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+
+# THE TEST IS REGISTERED WHETHER OR NOT EITHER PATH WAS FOUND, and it FAILS at
+# run time when one is missing. Registering it conditionally would make
+# `ctest --no-tests=error -R ^t0_extract_matches_python$` fail with "no tests
+# found", which reads as a broken build rather than as an absent oracle; and
+# skipping inside the test would return 0 and count as a pass. The check has no
+# gate, so an oracle that is not there is a failure of the check.
+
+add_executable(t0_extract_matches_python t0_extract_matches_python.cpp)
+target_link_libraries(t0_extract_matches_python PRIVATE g2Lib)
+set_property(TARGET t0_extract_matches_python PROPERTY FOLDER "G2/test")
+target_compile_definitions(t0_extract_matches_python PRIVATE
+	G2_ORACLE_PYTHON="${Python3_EXECUTABLE}"
+	G2_ORACLE_TOOLS_DIR="${G2_ORACLE_TOOLS_DIR}"
+	G2_ORACLE_WORK_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+
+add_test(NAME t0_extract_matches_python COMMAND t0_extract_matches_python)
+set_tests_properties(t0_extract_matches_python PROPERTIES LABELS "UnitTest")
