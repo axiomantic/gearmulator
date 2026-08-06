@@ -49,3 +49,14 @@ set_property(TARGET t0_sim PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_sim COMMAND t0_sim)
 set_tests_properties(t0_sim PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-12, the panel and the CS5 latches
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_panel$
+
+add_executable(t0_panel t0_panel.cpp)
+target_link_libraries(t0_panel PRIVATE g2Lib)
+set_property(TARGET t0_panel PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_panel COMMAND t0_panel)
+set_tests_properties(t0_panel PROPERTIES LABELS "UnitTest")
