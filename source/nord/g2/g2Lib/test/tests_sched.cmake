@@ -130,3 +130,15 @@ target_link_libraries(t0_dsp_context_layout PRIVATE g2Lib)
 set_property(TARGET t0_dsp_context_layout PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_context_layout COMMAND t0_dsp_context_layout)
+
+# ---------------- SCH-10 - t0_esai_frame
+#
+# An ordinary executable. The fixture builds a real dsp56k::Memory, two
+# PeripheralsNop and a real dsp56k::DSP, because both ESAI control-register
+# writes reach through the peripheral set to the DSP.
+
+add_executable(t0_esai_frame ${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_frame.cpp)
+target_link_libraries(t0_esai_frame PRIVATE g2Lib)
+set_property(TARGET t0_esai_frame PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_esai_frame COMMAND t0_esai_frame)

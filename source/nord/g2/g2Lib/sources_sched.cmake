@@ -17,3 +17,9 @@ list(APPEND G2LIB_SOURCES
 # the target, exactly as SCH-4's frame.h does.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/dspContext.h)
+
+# SCH-10. esaiFrame.* advances one whole ESAI frame in each direction. These
+# two calls are what replaces an EsaiClock: the scheduler drives the frame.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.h)
