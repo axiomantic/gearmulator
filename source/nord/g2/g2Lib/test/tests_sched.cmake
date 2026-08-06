@@ -157,3 +157,19 @@ target_link_libraries(t0_codec_queue_surface PRIVATE g2Lib)
 set_property(TARGET t0_codec_queue_surface PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_codec_queue_surface COMMAND t0_codec_queue_surface)
+
+# ---------------- SCH-7 - t0_executor
+#
+# An ordinary executable. The four declared names are held by their fully
+# qualified types inside the translation unit, so the compiler and the linker
+# carry that half. What remains for ctest is the behaviour: the order of the
+# eight jobs, that every job ran on the CALLING thread, and that a refused
+# re-entry is counted. The re-entry count is an observable in every build type,
+# because the default build here is Release with NDEBUG and a check whose
+# predicate is "the debug build asserted" cannot fail in it.
+
+add_executable(t0_executor ${CMAKE_CURRENT_SOURCE_DIR}/t0_executor.cpp)
+target_link_libraries(t0_executor PRIVATE g2Lib)
+set_property(TARGET t0_executor PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_executor COMMAND t0_executor)
