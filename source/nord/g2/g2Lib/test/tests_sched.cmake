@@ -142,3 +142,18 @@ target_link_libraries(t0_esai_frame PRIVATE g2Lib)
 set_property(TARGET t0_esai_frame PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_esai_frame COMMAND t0_esai_frame)
+
+# ---------------- SCH-15 - t0_codec_queue_surface
+#
+# An ordinary executable. A BUILD of the target tests neither the surface nor
+# the refusal, so both belong to a registered program that runs. The address of
+# every declared method is taken through its fully qualified type, so a renamed
+# or re-signed method is a compile error and a declared-and-undefined one is a
+# link error.
+
+add_executable(t0_codec_queue_surface
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_codec_queue_surface.cpp)
+target_link_libraries(t0_codec_queue_surface PRIVATE g2Lib)
+set_property(TARGET t0_codec_queue_surface PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_codec_queue_surface COMMAND t0_codec_queue_surface)
