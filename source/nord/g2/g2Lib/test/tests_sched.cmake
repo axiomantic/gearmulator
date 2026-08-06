@@ -58,3 +58,15 @@ target_link_libraries(t0_alloc PRIVATE g2Lib)
 set_property(TARGET t0_alloc PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_alloc COMMAND t0_alloc)
+
+# ---------------- SCH-2 - t0_frames_for_block
+#
+# An ordinary executable, for the reason t0_alloc gives: g2/timebase.h has no
+# compiled part and the link supplies the include directories.
+
+add_executable(t0_frames_for_block
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_frames_for_block.cpp)
+target_link_libraries(t0_frames_for_block PRIVATE g2Lib)
+set_property(TARGET t0_frames_for_block PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_frames_for_block COMMAND t0_frames_for_block)
