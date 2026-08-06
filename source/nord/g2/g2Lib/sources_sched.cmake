@@ -37,3 +37,10 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/executor.h
 	${CMAKE_CURRENT_SOURCE_DIR}/serialExecutor.cpp)
+
+# SCH-8. runDspCycles.* is the DSP-side run call: the ctx.run(want) of design
+# section 13.4.6 for a DSP context. dsp56k::DSP has no budgeted call, so this
+# is an adapter this project writes.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/runDspCycles.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/runDspCycles.h)

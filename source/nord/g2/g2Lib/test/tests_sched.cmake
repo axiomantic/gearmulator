@@ -173,3 +173,20 @@ target_link_libraries(t0_executor PRIVATE g2Lib)
 set_property(TARGET t0_executor PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_executor COMMAND t0_executor)
+
+# ---------------- SCH-8 - t0_run_dsp_cycles_contract
+#
+# An ordinary executable. The declared signature is held by the whole function
+# type inside the translation unit, so the compiler carries that half and a
+# declared-and-undefined function is a link error. What remains for ctest is
+# the SHAPE OF THE LOOP: a wantCycles of 0 executes no exec() at all, and a
+# wantCycles of 1 against a block that costs more than 1 executes exactly one.
+# Both are read from the DSP's own instruction and cycle counters, so neither
+# depends on an assertion that a release build removes.
+
+add_executable(t0_run_dsp_cycles_contract
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_run_dsp_cycles_contract.cpp)
+target_link_libraries(t0_run_dsp_cycles_contract PRIVATE g2Lib)
+set_property(TARGET t0_run_dsp_cycles_contract PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_run_dsp_cycles_contract COMMAND t0_run_dsp_cycles_contract)
