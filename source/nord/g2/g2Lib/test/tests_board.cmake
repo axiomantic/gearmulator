@@ -60,3 +60,14 @@ set_property(TARGET t0_panel PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_panel COMMAND t0_panel)
 set_tests_properties(t0_panel PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-15, the CS1 decode
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_cs1_decode$
+
+add_executable(t0_cs1_decode t0_cs1_decode.cpp)
+target_link_libraries(t0_cs1_decode PRIVATE g2Lib)
+set_property(TARGET t0_cs1_decode PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_cs1_decode COMMAND t0_cs1_decode)
+set_tests_properties(t0_cs1_decode PROPERTIES LABELS "UnitTest")

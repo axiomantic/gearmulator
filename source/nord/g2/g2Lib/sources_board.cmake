@@ -15,3 +15,6 @@ list(APPEND G2LIB_SOURCES sim.cpp)
 # ----------------- BRD-12, the panel and the CS5 latches
 list(APPEND G2LIB_SOURCES panel.cpp)
 list(APPEND G2LIB_SOURCES latches.cpp)
+
+# ----------------- BRD-15, the CS1 decode
+list(APPEND G2LIB_SOURCES hdi08Decode.cpp)
