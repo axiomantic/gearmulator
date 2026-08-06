@@ -29,3 +29,11 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/codecQueues.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/codecQueues.h)
+
+# SCH-7. executor.h declares the Executor interface and the serial executor;
+# serialExecutor.cpp defines the serial one. It runs the jobs in order ON THE
+# CALLING THREAD and creates no thread: neither file names std::thread or
+# <thread>.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/executor.h
+	${CMAKE_CURRENT_SOURCE_DIR}/serialExecutor.cpp)
