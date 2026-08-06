@@ -74,6 +74,27 @@ set(CPACK_RPM_PACKAGE_AUTOREQ "yes")
 set(CPACK_RPM_PACKAGE_URL ${CPACK_DEBIAN_PACKAGE_HOMEPAGE})
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 
+# ----------------- the MCF5307 core, for the G2
+#
+# The core lives in its own repository, axiomantic/mcf5307. It is DECLARED here
+# and POPULATED nowhere unless source/nord/g2/g2Lib/CMakeLists.txt turns
+# G2_LINK_MCF5307 on, which task BRD-23 does once task CPU-1 exports the target
+# mcf5307::mcf5307. A declaration that is never populated costs nothing.
+#
+# Set G2_MCF5307_SOURCE_DIR to a sibling checkout to build against that instead
+# of a fetched tree. G2_MCF5307_GIT_TAG carries the pin, and it is EMPTY until
+# the mcf5307 repository has a CMake project to pin. Plan section 1.3 rule 1
+# forbids writing a tag that names nothing.
+
+set(G2_MCF5307_SOURCE_DIR "" CACHE PATH "Build the MCF5307 core from this checkout instead of fetching it")
+set(G2_MCF5307_GIT_TAG "" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
+
+include(FetchContent)
+FetchContent_Declare(mcf5307
+	GIT_REPOSITORY https://github.com/axiomantic/mcf5307.git
+	GIT_TAG ${G2_MCF5307_GIT_TAG}
+)
+
 # ----------------- source
 
 add_subdirectory(source)
