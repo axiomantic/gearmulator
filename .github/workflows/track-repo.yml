@@ -122,6 +122,68 @@ jobs:
           done
           exit "${fail}"
 
+      # REPO-7, THE SKIP DISCIPLINE. Design section 18.5 steps 3 and 4.
+      #
+      #   3. The CI job prints a summary line with the counts: run, passed,
+      #      failed, skipped.
+      #   4. A run that executed zero gated tests is reported as NOT VERIFIED,
+      #      not as PASS. The job's own summary says so in plain words.
+      #
+      # "run" counts gated tests that EXECUTED THEIR BODY. A skipped test is not
+      # a run test, which is what makes "a run that executed zero gated tests"
+      # the condition run == 0. gatedFixture.h in the gearmulator fork carries
+      # the same three verdict tokens and the same rule, and t0_skip_discipline
+      # is the check that proves the rule fires -- including the negative case,
+      # that a job which ran one gated test does NOT print NOT VERIFIED.
+      #
+      # THE COUNT LABELS ARE LOWERCASE AND THE VERDICT TOKENS ARE UPPERCASE, so
+      # that "the summary never prints PASS" is a case-sensitive property which
+      # "passed=0" cannot satisfy by accident.
+      #
+      # WHERE THE COUNTS COME FROM, STATED HONESTLY: a job that runs gated tests
+      # writes gated-tests.counts at the root of the repository under test, with
+      # one "name=integer" line per count. NO REPOSITORY PRODUCES THAT FILE
+      # TODAY -- the first gated tests are T1 and T2, they run inside the private
+      # repository, and this file exists in all seven repositories. Until one
+      # does, every repository prints NOT VERIFIED, WHICH IS THE TRUE ANSWER: no
+      # gated test has been verified here. A step that printed PASS instead
+      # would be the exact green tick design section 18.5 exists to prevent.
+      #
+      # The step does not fail the job. It reports. T1 and T2 are informational
+      # tiers by design section 19.1 and the job that runs a gated test owns its
+      # own exit status; overloading this reporter's status would put the tier
+      # rule in two places.
+      - name: gated-test-summary
+        run: |
+          set -uo pipefail
+          counts="${GITHUB_WORKSPACE}/under-test/gated-tests.counts"
+          run=0
+          passed=0
+          failed=0
+          skipped=0
+          if [ -f "${counts}" ]; then
+            for name in run passed failed skipped; do
+              value=$(awk -F= -v key="${name}" '$1 == key { print $2 + 0 }' "${counts}" | tail -n 1)
+              [ -n "${value}" ] || value=0
+              eval "${name}=\${value}"
+            done
+          else
+            echo "no gated-tests.counts in the repository under test; every count is zero."
+          fi
+          verdict="NOT VERIFIED"
+          if [ "${run}" -gt 0 ]; then
+            if [ "${failed}" -gt 0 ]; then
+              verdict="FAIL"
+            else
+              verdict="PASS"
+            fi
+          fi
+          line="gated tests: run=${run} passed=${passed} failed=${failed} skipped=${skipped} -- ${verdict}"
+          echo "${line}"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            echo "${line}" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
       - name: no-artifact-credential
         working-directory: lint-tools
         run: |
