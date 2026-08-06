@@ -27,3 +27,6 @@ t0_artifact_resolver
 
 # REPO-7, the skip discipline.
 t0_skip_discipline
+
+# REPO-8, artifacts.sha256 and golden.timebase.
+t0_manifest_parses

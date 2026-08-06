@@ -32,3 +32,20 @@ set_property(TARGET t0_skip_discipline PROPERTY FOLDER "G2")
 
 add_test(NAME t0_skip_discipline COMMAND t0_skip_discipline)
 set_tests_properties(t0_skip_discipline PROPERTIES LABELS "UnitTest")
+
+# ----------------- REPO-8, artifacts.sha256 and golden.timebase
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_manifest_parses$
+#
+# Both manifests are committed at the ROOT of this repository, so the test is
+# given the repository root rather than deriving it from the working directory.
+# ctest runs a test from its own binary directory, and a relative path would
+# find nothing and be indistinguishable from a manifest that is genuinely
+# absent.
+
+add_executable(t0_manifest_parses t0_manifest_parses.cpp)
+target_compile_definitions(t0_manifest_parses PRIVATE G2_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}")
+set_property(TARGET t0_manifest_parses PROPERTY FOLDER "G2")
+
+add_test(NAME t0_manifest_parses COMMAND t0_manifest_parses)
+set_tests_properties(t0_manifest_parses PROPERTIES LABELS "UnitTest")
