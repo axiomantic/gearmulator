@@ -5,3 +5,10 @@
 # file in this tree. See plan section 7.4.2.
 #
 # Created empty by task BRD-0.
+
+# ----------------- REPO-5, the ArtifactResolver interface
+
+list(APPEND G2LIB_SOURCES
+	artifactResolver.h
+	artifactResolver.cpp
+)
