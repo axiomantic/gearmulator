@@ -30,3 +30,6 @@ t0_skip_discipline
 
 # REPO-8, artifacts.sha256 and golden.timebase.
 t0_manifest_parses
+
+# BRD-6, the C++ firmware extractor.
+t0_extract_matches_python
