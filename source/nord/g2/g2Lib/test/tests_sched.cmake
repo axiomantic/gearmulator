@@ -206,3 +206,21 @@ target_link_libraries(t0_run_dsp_cycles PRIVATE g2Lib)
 set_property(TARGET t0_run_dsp_cycles PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_run_dsp_cycles COMMAND t0_run_dsp_cycles)
+
+# ---------------- SCH-14 - t0_block_table_harness
+#
+# An ordinary executable, and the path of the committed synthetic program is
+# passed on the command line. A path the check had to guess would be a path the
+# check could get wrong in silence.
+#
+# THIS ROW ESTABLISHES NO maxDispatchCost. It verifies the instrument against a
+# program whose longest block is known by construction. SCH-31 is the
+# measurement that reads the real compiled kernel, and it is T1.
+
+add_executable(t0_block_table_harness
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_block_table_harness.cpp)
+target_link_libraries(t0_block_table_harness PRIVATE g2Lib)
+set_property(TARGET t0_block_table_harness PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_block_table_harness COMMAND t0_block_table_harness
+	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/synthetic_block_program.asm)
