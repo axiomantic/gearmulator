@@ -224,3 +224,18 @@ set_property(TARGET t0_block_table_harness PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_block_table_harness COMMAND t0_block_table_harness
 	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/synthetic_block_program.asm)
+
+# ---------------- SCH-16 - t0_codec_capacity
+#
+# An ordinary executable. SCH-15's t0_codec_queue_surface holds the declared
+# members and the refusal; this one drives the CAPACITY ARITHMETIC over 1,000
+# blocks and carries the negative cases that prove the three counters can fire.
+# The sink is primed with the lookahead, without which a capacity of B alone
+# would pass every assertion and the L + B rule would go untested.
+
+add_executable(t0_codec_capacity
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_codec_capacity.cpp)
+target_link_libraries(t0_codec_capacity PRIVATE g2Lib)
+set_property(TARGET t0_codec_capacity PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_codec_capacity COMMAND t0_codec_capacity)
