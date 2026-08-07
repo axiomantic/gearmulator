@@ -21,3 +21,14 @@ list(APPEND G2LIB_SOURCES hdi08Decode.cpp)
 
 # ----------------- BRD-6, the C++ firmware extractor
 list(APPEND G2LIB_SOURCES firmwareExtract.cpp)
+
+# ----------------- BRD-7, the flash model
+#
+# flash.h declares the read-only flash surface and flash.cpp carries the
+# implementation. The model is constructed with two (base, size) pairs the
+# fixture supplies: no shipped header carries a chip-select base literal.
+
+list(APPEND G2LIB_SOURCES
+	flash.h
+	flash.cpp
+)
