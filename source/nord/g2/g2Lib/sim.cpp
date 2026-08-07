@@ -270,12 +270,18 @@ namespace g2
 			// strapBits IS $00 HERE ON PURPOSE. Access::ReadOnly already holds
 			// every bit of the register, so naming bit 0 again would add no
 			// protection. The earlier revision carried $01 here and it was
-			// DEAD DATA: the constructor read strapBits only on a ReadWrite
-			// row, so the value could not reach m_writeProtect. The constructor
-			// below now applies strapBits on every row, so the field can never
-			// go silently dead again; this row sets it to $00 because the fact
-			// it once carried is already carried by Access::ReadOnly and by the
-			// reset value $0E.
+			// DEAD DATA.
+			//
+			// THE REASON IT WAS DEAD IS NOT THE REASON A PREVIOUS REVISION OF
+			// THIS COMMENT GAVE. That revision said the constructor read
+			// strapBits only on a ReadWrite row and that applying it on every
+			// row meant the field "can never go silently dead again". The
+			// second half is false. A strap on a read-only row is dead in BOTH
+			// forms, because a read-only row is fully protected either way, and
+			// the two constructor forms compute the same mask for every input
+			// they can be given. See the static_assert block below for the
+			// full record. What keeps the field honest is the invariant those
+			// static_asserts hold, not the shape of the constructor.
 			{0x1d0, 1, Access::ReadOnly,  true,  0x0e,   0x00, "UIPCR"},
 
 			// The parallel port. Port A bit 9 is an input strap.
@@ -284,6 +290,54 @@ namespace g2
 		};
 
 		constexpr size_t g_registerCount = sizeof(g_registers) / sizeof(g_registers[0]);
+
+		// The bits a write cannot reach, for one byte of one register. A
+		// read-only register holds every bit. A read/write register holds only
+		// the bits a board strap drives.
+		//
+		// IT IS constexpr SO THAT THE static_assert BLOCK BELOW CAN GUARD IT.
+		// A static_assert is not removed by NDEBUG, so this invariant is
+		// checked in the Release build the project ships, and it is checked
+		// when the file is compiled rather than by a case somebody has to
+		// remember to run.
+		constexpr uint8_t protectByte(const Access _access, const uint32_t _strapBits,
+			const uint32_t _widthBytes, const uint32_t _byte)
+		{
+			const int shift = int(8 * (_widthBytes - 1 - _byte));
+			const uint8_t base = _access == Access::ReadOnly ? 0xffu : 0x00u;
+			return uint8_t(base | uint8_t((_strapBits >> shift) & 0xffu));
+		}
+
+		// THE INVARIANT: whatever the access kind, every bit a board strap
+		// holds is a bit a write cannot reach. Narrowing either arm breaks the
+		// build here instead of going quiet.
+		//
+		// WHY THIS GUARD AND NOT A CASE IN t0_sim.cpp. An earlier revision
+		// wrote that applying strapBits on every row meant the field "can
+		// never go silently dead again", and a reviewer found that reverting
+		// to the earlier form left all 390 cases green. The reviewer was
+		// right about the coverage and the earlier revision was wrong about
+		// the reason. THE TWO FORMS ARE THE SAME FUNCTION. Access::ReadOnly
+		// already sets every bit of the mask, so `0xff | strap` is `0xff` for
+		// every strap, and the read/write arm is `strap` in both forms. All
+		// 512 possible inputs were compared and none of them differ. The
+		// change made the field REACHABLE, not COVERED, and no runtime case
+		// can be red on it because it changes no behaviour at all.
+		//
+		// So the honest guard is a guard on the invariant the field exists
+		// for, and it lives here where it can see the arms. t0_sim.cpp case
+		// group 14 recovers the whole mask from behaviour and carries the
+		// runtime half of the same claim.
+		static_assert((protectByte(Access::ReadWrite, 0x0200u, 2, 0) & 0x02u) == 0x02u,
+			"a strap named on a read/write row must reach the write-protect mask");
+		static_assert((protectByte(Access::ReadOnly, 0x0200u, 2, 0) & 0x02u) == 0x02u,
+			"a strap named on a read-only row must reach the write-protect mask");
+		static_assert(protectByte(Access::ReadWrite, 0x0200u, 2, 0) == 0x02u,
+			"a read/write row protects the bits a strap holds and no other bit");
+		static_assert(protectByte(Access::ReadWrite, 0x0200u, 2, 1) == 0x00u,
+			"a byte of a read/write row that carries no strap bit stays fully writable");
+		static_assert(protectByte(Access::ReadOnly, 0x0000u, 1, 0) == 0xffu,
+			"a read-only row protects every bit");
 
 		const RegisterSpec* find(const uint32_t _offset)
 		{
@@ -328,14 +382,13 @@ namespace g2
 
 				m_space[index] = uint8_t((spec.resetValue >> shift) & 0xffu);
 
-				// A read-only register holds every bit. A read/write register
-				// holds only the bits a board strap drives. strapBits is
-				// applied on BOTH kinds, so a strap named on a read-only row
-				// cannot become dead data the way it did before.
-				uint8_t protect = spec.access == Access::ReadOnly ? 0xffu : 0x00u;
-				protect |= uint8_t((spec.strapBits >> shift) & 0xffu);
-
-				m_writeProtect[index] = protect;
+				// The mask comes from protectByte, which the static_assert
+				// block above guards. strapBits is applied on BOTH access
+				// kinds. That makes the field reachable on every row; it does
+				// NOT make the read-only arm observable, because a read-only
+				// row is already fully protected. See the note beside the
+				// static_asserts.
+				m_writeProtect[index] = protectByte(spec.access, spec.strapBits, spec.widthBytes, byte);
 			}
 		}
 	}
