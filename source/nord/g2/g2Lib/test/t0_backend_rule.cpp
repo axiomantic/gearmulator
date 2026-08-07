@@ -1,0 +1,128 @@
+/* t0_backend_rule.cpp -- the check of task SCH-17. Design section 11.4.3.
+ *
+ * THE RULE, IN ONE SENTENCE.
+ *
+ *   `Scheduler::create` succeeds only when `config.backend == Backend::Jit`
+ *    AND `dsp56k::g_useJIT` is true. Any other combination returns a null
+ *    `Scheduler` object.
+ *
+ * WHAT THIS TEST DOES.
+ *
+ *   1. With backend == Backend::Jit and `g_useJIT` true,
+ *      `Scheduler::create` returns a non-null object.
+ *   2. With backend == Backend::Interpreter, `Scheduler::create` returns
+ *      null, regardless of `g_useJIT`.
+ *
+ * The second case is unconditional and runs on every build. The first is
+ * CONDITIONAL ON THE BUILD: in an interpreter build the design records
+ * that no Scheduler can be created at all, because `runDspCycles` cannot
+ * terminate in such a build (the DSP's `m_cycles` counter is never
+ * written). The test asserts the conditional case so that the assertion
+ * does not pin a property the build cannot exercise.
+ *
+ * WHAT THIS TEST DOES NOT DO.
+ *
+ *   It does not look at `Status::BadBackend`. SCH-18 owns Status, and a
+ *   check that asserted the Status value here would create the cycle this
+ *   task is the first writer of. The null-vs-non-null distinction is what
+ *   proves the rule, and it is observable without a Status type. Design
+ *   section 13.10 rule 4 forbids throwing -- so the rule is observable
+ *   solely through the return value.
+ *
+ *   It does not assert "one backend for one run". `g_useJIT` is
+ *   `static constexpr` at dsp.h:36 and the dispatch at dsp.h:172-178 is a
+ *   plain `if`, not `if constexpr`, so the branch folds at compile time
+ *   because its condition is a constant expression. A test asserting
+ *   structural one-backend-per-build would pass by exercising nothing --
+ *   a green mirage of the class design section 18.7 exists to prevent.
+ *
+ * THE BUILD MODE IS PRINTED, IN THE FIRST LINE. The plan requires the
+ * test to be observable in both configurations, and the printout makes
+ * the configuration visible in the test log without a separate device.
+ *
+ * Counts failures, prints a one-line summary, and exits 0 on success.
+ * Design section 18.5's skip discipline is the wrong tool here: this
+ * test is T0 with no firmware artifact, and the rule's truth does not
+ * gate on NMG2_ARTIFACTS.
+ */
+
+#include "scheduler.h"
+
+#include "dsp56kEmu/dsp.h"
+
+#include <cstdio>
+#include <memory>
+
+namespace
+{
+	int g_failures = 0;
+
+	void check(const bool _condition, const char* const _what)
+	{
+		if(_condition)
+		{
+			std::printf("ok   %s\n", _what);
+			return;
+		}
+		std::printf("FAIL %s\n", _what);
+		++g_failures;
+	}
+}
+
+int main()
+{
+	std::printf("t0_backend_rule: g_useJIT = %s\n",
+		dsp56k::g_useJIT ? "true" : "false");
+
+	/* ---------------- case 1: backend == Backend::Jit
+	 *
+	 * The conditional result. The design says the rule is structural, so
+	 * the assertion is conditional on the same constant the rule reads.
+	 *
+	 * A release build removes the branch the rule does not take, so the
+	 * assertion is the only observable of the rule's reach: the test
+	 * names the build mode above and the case below so the outcome is
+	 * traceable to a configuration. */
+	{
+		g2::Scheduler::Config cfg;
+		cfg.backend = g2::Backend::Jit;
+
+		std::unique_ptr<g2::Scheduler> s = g2::Scheduler::create(cfg);
+
+		if(dsp56k::g_useJIT)
+		{
+			check(s != nullptr,
+				"Backend::Jit with g_useJIT=true returns non-null");
+		}
+		else
+		{
+			check(s == nullptr,
+				"Backend::Jit with g_useJIT=false returns null");
+		}
+	}
+
+	/* ---------------- case 2: backend == Backend::Interpreter
+	 *
+	 * UNCONDITIONAL. The semantic cross-check harness of design section
+	 * 11.4.3 drives DSP::exec directly and never constructs a Scheduler,
+	 * so the enumerator exists but is never accepted by create(). The
+	 * rule rejects it on every build, and the test asserts it on every
+	 * build. */
+	{
+		g2::Scheduler::Config cfg;
+		cfg.backend = g2::Backend::Interpreter;
+
+		std::unique_ptr<g2::Scheduler> s = g2::Scheduler::create(cfg);
+
+		check(s == nullptr, "Backend::Interpreter returns null");
+	}
+
+	if(g_failures != 0)
+	{
+		std::printf("t0_backend_rule: %d check(s) failed\n", g_failures);
+		return 1;
+	}
+
+	std::printf("t0_backend_rule: all checks passed\n");
+	return 0;
+}
