@@ -46,3 +46,22 @@ target_link_libraries(t0_frame_layout PRIVATE g2Lib)
 set_property(TARGET t0_frame_layout PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_frame_layout COMMAND t0_frame_layout)
+
+# ---------------- SCH-17 - t0_backend_rule
+#
+# An ordinary executable, because SCH-17's acceptance criterion is the
+# NULL-vs-non-null distinction of Scheduler::create. The test reads
+# dsp56k::g_useJIT at run time, so the Backend::Jit case is conditional on
+# the build and the Backend::Interpreter case is unconditional. The test
+# prints the build mode in its first line so the outcome is traceable
+# without a separate device.
+#
+# No library beyond g2Lib is linked, and the g2Lib target carries the
+# dsp56kEmu include directories transitively, so the test reaches
+# dsp56k::g_useJIT through scheduler.h.
+
+add_executable(t0_backend_rule ${CMAKE_CURRENT_SOURCE_DIR}/t0_backend_rule.cpp)
+target_link_libraries(t0_backend_rule PRIVATE g2Lib)
+set_property(TARGET t0_backend_rule PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_backend_rule COMMAND t0_backend_rule)

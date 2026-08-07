@@ -11,3 +11,11 @@
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.h)
+
+# SCH-17. scheduler.h declares the Backend enum and the minimum Scheduler
+# factory for the single backend rule. SCH-19 opens scheduler.cpp and grows
+# the class. The header is listed here so the build system knows it; the
+# implementation is inline in the header so scheduler.cpp does not yet
+# exist.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h)
