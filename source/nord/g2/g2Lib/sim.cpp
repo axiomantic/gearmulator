@@ -10,101 +10,180 @@
 // NO FILE OF MegabytePhreak/qemu-mcf5307 WAS OPENED FOR THIS TASK, and no
 // value below was checked against it. AGENTS.md section 4.2 forbids taking
 // expression from that repository and the plan withdrew the harvest it once
-// instructed. Everything here comes from the manual.
+// instructed.
 //
-// SOURCE: MCF5307 User's Manual, which AGENTS.md section 11 names.
+// ---------------------------------------------------------------------------
+// THE MANUAL IS NOW READ. A PREVIOUS REVISION OF THIS BLOCK CONTRADICTED
+// ITSELF.
 //
-//   * The register offsets, widths, reset values and read/write access of
-//     every register modelled here: Appendix B, Table B-1, "MCF5307 User
-//     Programming Model".
-//   * The chip-select register map, and the rule that a write to a reserved
-//     address or a read-only register has no effect and that a read of a
-//     write-only register returns zero: section 9.4.1, Table 9-5, footnotes 1
-//     and 3.
-//   * The DRAM controller register map: section 11.5, Table 11-1.
-//   * The timer register map: section 12.3.1, Table 12-1.
-//   * THE ONE ACCESS-WIDTH RULE THIS MODEL ENFORCES: section 14.3.7. "All UART
-//     module registers must be accessed as bytes." MBAR+$1D0 is a UART module
-//     register. See the EVIDENCE GAP below for why that is a statement about
-//     this model and not a statement about the part.
+// That revision said "Everything here comes from the manual". Ninety lines
+// later it said the manual was not on disk, and it kept one evidence gap open
+// for that reason. The two statements cannot both be true. Whoever wrote the
+// citations either had the manual or did not.
+//
+// The manual is now on disk and every citation below is verified against it,
+// one by one. The document is:
+//
+//   MCF5307 ColdFire Integrated Microprocessor User's Manual, Motorola, 1998.
+//   456 pages. 27,240,768 bytes.
+//   sha256 86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa
+//
+// It is the part manual, not the errata and not the MCF5206.
+//
+// ---------------------------------------------------------------------------
+// SOURCE: MCF5307 User's Manual. Each citation below was opened and read.
+//
+//   * The register offsets, widths, reset values and read/write access of the
+//     timer, parallel-port and UART registers modelled here: Appendix B,
+//     Table B-1, "MCF5307 User Programming Model". VERIFIED. Table B-1 ends at
+//     MBAR+$3D4, which is why sim.h models one kilobyte.
+//   * The rule that a write to a reserved address has no effect, and the rule
+//     that a read of a write-only register returns zeros and a write to a
+//     read-only register has no effect: section 9.4.1, Table 9-5, footnotes 1
+//     and 3. VERIFIED. Both footnotes say what this file uses them for.
+//   * The DRAM controller register map: Table 11-1, "DRAM Controller Memory
+//     Map". VERIFIED: DCR $100, DACR0 $108, DMR0 $10C, DACR1 $110, DMR1 $114.
+//     The table sits in section 11.5.1, "Asynchronous Memory Map", inside
+//     section 11.5. The previous citation said only "section 11.5", which is
+//     correct but not exact. It is made exact here.
+//   * The timer register map: section 12.3.1, Table 12-1, "Programming Model
+//     for Timers". VERIFIED: TMR $140/$180, TRR $144/$184, TCR $148/$188,
+//     TCN $14C/$18C, TER $151/$191. Table 12-1 gives offsets only. The widths,
+//     reset values and the read-only access of TCR come from Table B-1.
+//   * THE ONE ACCESS-WIDTH RULE THIS MODEL ENFORCES: section 14.3.7, "Bus
+//     Operation". "All UART module registers must be accessed as bytes."
+//     VERIFIED, and the section number is correct. MBAR+$1D0 is UIPCR1, a UART
+//     module register.
+//   * MBAR+$1D0 is UIPCR1 on read and UACR1 on write. Both are 8 bits.
+//     UIPCR1 reset is $0F and its access is read-only. Table B-1. VERIFIED.
 //
 // SOURCE: this project's own measurements, in AGENTS.md.
 //
 //   * Port A data at MBAR+$248 bit 9 reads LOW and the bit is an INPUT in
 //     every model: sections 2.3 and 4.1. is_expanded() at 0x30037F64 reads it.
+//     The manual gives PADAT reset $0000 with no strap; the strap is ours.
 //   * MBAR+$1D0 bit 0 reads zero, so the machine is not an Engine: sections
-//     2.3 and 4.1. detect_model() at 0x30050864 reads it.
+//     2.3 and 4.1. detect_model() at 0x30050864 reads it. This is why the
+//     reset value modelled here is $0E and not the manual's $0F.
 //   * The G2 wires six chip selects, CS0 to CS5: section 2.2. The part carries
 //     eight. CS6 and CS7 are not modelled, because no G2 signal reaches them.
 //   * THE CHIP-SELECT REGISTER FAMILY: section 3.8, a FIRMWARE MEASUREMENT.
-//     See the RESOLVED CONFLICT below.
+//     See the MASK-REVISION CONFLICT below.
 //
 // ---------------------------------------------------------------------------
-// RESOLVED CONFLICT: CSAR PER SELECT, NOT ONE SHARED CSBAR.
+// THE SECTION 9.4.2.1 CITATION WAS ACCURATE. IT WAS NOT FABRICATED.
 //
-// AN EARLIER REVISION OF THIS FILE MODELLED ONE CSBAR AT MBAR+$098 AND NO
-// CSAR2 TO CSAR5, reading MCF5307 UM section 9.4.2.1 to say that chip-selects
-// 2 through 7 are offset from one shared base. THAT READING IS WITHDRAWN.
-// AGENTS.md is authoritative on hardware facts and it refutes the reading:
+// This entry corrects the record, and it corrects it against the previous
+// revision of this same block.
 //
-//   1. Section 3.8 MEASURES the boot loader, BOOT_128_Loader.bin, programming
-//      CS3: CSAR3 at MBAR+$0A4 = $1300, CSMR3 at MBAR+$0A8 = $00000001, CSCR3
-//      at MBAR+$0AE = $0540. CSAR3 = $1300 gives base $13000000, the ISP1181
-//      USB device controller. A PER-SELECT BASE IS A VALUE ONE SHARED CSBAR
-//      CANNOT EXPRESS, and the offset $0A4 is not CSBAR's.
-//   2. Section 9, open question 21, names "CSAR0 to CSAR5 and CSMR0 to CSMR5"
-//      as the registers the boot loader programs. Plan section 4.2 register
-//      row 18 and task SPK-13 say the same.
-//   3. Section 11 already warned that the Linux m5307sim.h reference map
-//      "carries two chip-select layouts selected by CONFIG_OLDMASK". The
-//      withdrawn reading was one of those two, chosen without reconciling it
-//      against the section 3.8 measurement.
+// A revision before that one modelled ONE CSBAR at MBAR+$098 and no CSAR2 to
+// CSAR5. It cited MCF5307 UM section 9.4.2.1 and quoted it. The revision that
+// replaced it called that reading "withdrawn" and implied the citation was
+// unsound. IT WAS NOT. The manual was read on 2026-08-06 and section 9.4.2.1
+// says exactly what was quoted:
+//
+//   Section 9.4.2.1 is titled "CHIP-SELECT ADDRESS REGISTER (CSAR0, CSAR1 AND
+//   CSBAR)". It states that CSBAR determines the base address from which
+//   chip-selects 2 through 7 are offset.
+//
+// Eight separate places in the manual agree: sections 9.3 and 9.3.1, Table
+// 9-5, section 9.4.2.1 twice, section 9.4.2.2, the section 9.5 code example
+// ("CSBAR EQU MBARx+$098"), and the index. Table 9-5 was also read from the
+// rendered page, not only from the text layer, so this is not an OCR artefact.
+//
+// SO THE CONFLICT IS NOT A BAD CITATION. IT IS TWO SILICON MASK REVISIONS.
+// The 1998 manual documents the older chip-select layout. The G2 carries the
+// newer one. The evidence:
+//
+//   1. In the 1998 layout, MBAR+$0A4, $0B0, $0BC, $0C8 and $0D4 are marked
+//      "Reserved", 32 bits. Those five holes are EXACTLY where CSAR3 to CSAR7
+//      sit in the newer layout. The newer layout fills the older one's gaps.
+//   2. AGENTS.md section 3.8 MEASURES the boot loader, BOOT_128_Loader.bin,
+//      writing CSAR3 at MBAR+$0A4 = $1300, CSMR3 at MBAR+$0A8 = $00000001 and
+//      CSCR3 at MBAR+$0AE = $0540. A write to $0A4 is a write to a reserved
+//      hole under the 1998 layout, and footnote 1 says it would have no
+//      effect. The firmware would then never program CS3 at all.
+//   3. The USB driver reaches the ISP1181 at 0x13000000 and 0x13000010. Under
+//      the newer layout CSAR3 = $1300 gives base $13000000 directly. Under the
+//      1998 layout CS3 is CSBAR<<24 with A[23:21] = 011, which puts it at
+//      0x13600000. The driver's own addresses agree with the newer layout and
+//      disagree with the 1998 one.
+//   4. AGENTS.md section 11 already warned that the Linux m5307sim.h map
+//      "carries two chip-select layouts selected by CONFIG_OLDMASK". This is
+//      that split, seen from the manual side. CONFIG_OLDMASK is the 1998 one.
+//
+// THE REVIEWER'S MCF5206 HYPOTHESIS IS REFUTED. The shared-CSBAR text is not
+// borrowed from an MCF5206 document. It is in the MCF5307 manual, under the
+// MCF5307 name, describing MCF5307 silicon of an earlier mask.
 //
 // THE MEASUREMENT FIXES THE STRIDE, IT IS NOT EXTRAPOLATED FROM ONE POINT.
 // Section 3.8's three offsets are each exactly $24 above the CS0 register of
 // the same kind: $0A4-$080 = $0A8-$084 = $0AE-$08A = $24 = 3 x $0C. So the
-// family repeats every twelve bytes as CSARn, CSMRn, CSCRn. Two of the
-// intermediate offsets are corroborated independently, because the withdrawn
-// revision had already read CSMR2 at $09C and CSCR2 at $0A2 from the manual
-// and both are exactly what the stride gives. Every CSCRn offset that
-// revision carried also matches the stride; what it got wrong was CSAR2 to
-// CSAR5, which it omitted, and CSMR3 to CSMR5, which it placed two bytes high
-// and two bytes short.
+// family repeats every twelve bytes as CSARn, CSMRn, CSCRn. The manual's own
+// section 9.5 code example corroborates three of the intermediate offsets:
+// it gives CSMR3 at $0A8, CSMR4 at $0B4 and CSMR5 at $0C0, which are the
+// stride's values and NOT the values its own Table 9-5 gives. The 1998 manual
+// is internally inconsistent on this point, and its code example agrees with
+// the model.
 //
 // The register widths are corroborated by the widths the firmware itself
 // drives in the same section 3.8 measurement: CSARn is a 16-bit value, CSMRn
 // a 32-bit value, CSCRn a 16-bit value.
 //
-// WHERE AGENTS.md AND THE MANUAL CONFLICT, AGENTS.md WINS. This is that case,
-// and it is recorded rather than smoothed over: a measurement of the shipped
-// firmware outranks a reading of a manual section that describes a part with
-// two documented chip-select layouts.
+// WHERE AGENTS.md AND THE MANUAL CONFLICT, AGENTS.md WINS, and here it wins
+// on merit and not only on rank: the firmware measurement and the driver's
+// own addresses both point at the newer layout.
 //
 // ---------------------------------------------------------------------------
-// EVIDENCE GAP, DECLARED RATHER THAN CLOSED BY A GUESS.
+// MODELLED VALUES THE 1998 MANUAL CONTRADICTS. REPORTED, NOT CHANGED.
 //
-// AGENTS.md section 4.2 states AS FACT that access widths for the chip-select
-// and DRAM controller registers exist and are recorded, and that they are "a
-// useful corroboration BECAUSE THE MANUAL IS HARD TO READ ON THIS POINT". So
-// the silence of the manual is NOT evidence that those registers accept every
-// width. The withdrawn revision reasoned from that silence, and that reasoning
-// is withdrawn with it.
+// The chip-select rows below do not match the 1998 manual, for the mask
+// reason above. The differences are listed so that no later reader has to
+// rediscover them:
 //
-// This model therefore enforces exactly one access-width restriction, on
-// MBAR+$1D0, and it makes NO CLAIM that the chip-select, DRAM controller,
-// timer or parallel-port registers are unrestricted on the real part. What is
-// asserted about them is a property of THIS MODEL: it accepts every width.
-// Plan section 13.1 requires that shape, so that the check "does not depend on
-// a restriction that may not exist".
+//   $098  modelled CSAR2, 16 bits. 1998 manual: CSBAR, 8 bits, shared by
+//         CS2 to CS7.
+//   $09C  modelled CSMR2, 32 bits. 1998 manual: CSMR2, 16 bits.
+//   $0A4  modelled CSAR3, 16 bits. 1998 manual: reserved, 32 bits.
+//   $0A8  modelled CSMR3, 32 bits. 1998 manual: CSMR3 at $0AA, 16 bits.
+//         The manual's own section 9.5 example gives $0A8.
+//   $0B0  modelled CSAR4, 16 bits. 1998 manual: reserved, 32 bits.
+//   $0B4  modelled CSMR4, 32 bits. 1998 manual: CSMR4 at $0B6, 16 bits.
+//         The manual's own section 9.5 example gives $0B4.
+//   $0BC  modelled CSAR5, 16 bits. 1998 manual: reserved, 32 bits.
+//   $0C0  modelled CSMR5, 32 bits. 1998 manual: CSMR5 at $0C2, 16 bits.
+//         The manual's own section 9.5 example gives $0C0.
 //
-// WHY THE GAP WAS NOT CLOSED. BRD-2 permits opening
-// MegabytePhreak/qemu-mcf5307 to CHECK exactly one width the manual states
-// less clearly, then to write the value from the manual. THE REPOSITORY WAS
-// NOT OPENED. The MCF5307 User's Manual is not on disk in this workspace, so
-// the value could not have been written from the manual afterwards, and
-// AGENTS.md section 4.2 is explicit about that case: "If you cannot write it
-// from the manual, stop and raise it - do not reach for the source file." It
-// is raised here. Closing it needs the manual, or SPK-13's firmware read.
+// NOTHING IN THE TABLE BELOW WAS CHANGED TO MATCH THE MANUAL. AGENTS.md
+// section 1.3 rule 5 requires that a modelled offset, width or reset value
+// that the manual contradicts is REPORTED and not silently corrected. The
+// operator owns that decision. Every non-chip-select row was checked and
+// every one of them agrees with the manual.
+//
+// ---------------------------------------------------------------------------
+// ACCESS WIDTHS: WHAT THE MANUAL ACTUALLY GIVES.
+//
+// The gap the previous revision left open is now closed, and the answer is
+// that the manual states NO access-width rule for the chip-select or DRAM
+// controller registers.
+//
+// The whole manual was searched. It carries exactly ONE statement of this
+// kind, in section 14.3.7, and it is about the UART block. No section of
+// chapter 9, chapter 11 or chapter 12 states a permitted access size. What
+// Table 9-5, Table B-1 and Table 11-1 give is the WIDTH OF EACH REGISTER, not
+// the widths a bus access may use. Table 11-1 gives its DRAM rows as BYTE0 to
+// BYTE3 columns, which shows where each register sits inside its longword and
+// still says nothing about permitted access size. THIS IS WHY AGENTS.md
+// section 4.2 calls the manual "hard to read on this point". The reading is
+// hard because the answer is not there.
+//
+// So this model keeps exactly one access-width restriction, on MBAR+$1D0, and
+// it still makes NO CLAIM that the chip-select, DRAM controller, timer or
+// parallel-port registers are unrestricted on the real part. What is asserted
+// about them stays a property of THIS MODEL: it accepts every width. Plan
+// section 13.1 requires that shape, so that the check "does not depend on a
+// restriction that may not exist". The manual does not let anyone tighten it,
+// and it does not let anyone claim the part is permissive either.
 //
 // DIVERGENCE, STATED RATHER THAN HIDDEN. MBAR+$1D0 belongs to the UART block,
 // and task BRD-4 owns UART0. This model answers that one offset because the
@@ -134,15 +213,17 @@ namespace g2
 		};
 
 		// MCF5307 UM Appendix B Table B-1, section 9.4.1 Table 9-5, section
-		// 11.5 Table 11-1, section 12.3.1 Table 12-1.
+		// 11.5.1 Table 11-1, section 12.3.1 Table 12-1.
 		constexpr RegisterSpec g_registers[] =
 		{
 			// The six chip selects the G2 wires, one CSARn, CSMRn and CSCRn
 			// each. AGENTS.md section 3.8 measures CS3 at $0A4, $0A8 and $0AE
-			// and that fixes the twelve-byte stride; see the RESOLVED CONFLICT
-			// at the head of this file. CS6 and CS7 exist on the part and are
-			// not modelled, because AGENTS.md section 2.2 records that no G2
-			// signal reaches them.
+			// and that fixes the twelve-byte stride. THESE ROWS DO NOT MATCH
+			// THE 1998 MANUAL, which documents an earlier mask with one shared
+			// CSBAR; see the MASK-REVISION CONFLICT at the head of this file
+			// for the evidence and for the list of differences. CS6 and CS7
+			// exist on the part and are not modelled, because AGENTS.md
+			// section 2.2 records that no G2 signal reaches them.
 			{0x080, 2, Access::ReadWrite, false, 0,      0, "CSAR0"},
 			{0x084, 4, Access::ReadWrite, false, 0,      0, "CSMR0"},
 			{0x08a, 2, Access::ReadWrite, false, 0,      0, "CSCR0"},

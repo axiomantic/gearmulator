@@ -19,10 +19,17 @@
 // THE CHIP-SELECT FAMILY BELOW IS AGENTS.md SECTION 3.8, NOT THE MANUAL.
 // Section 3.8 is a FIRMWARE MEASUREMENT of BOOT_128_Loader.bin programming
 // CS3 - CSAR3 $0A4 = $1300, CSMR3 $0A8 = $00000001, CSCR3 $0AE = $0540 - and
-// AGENTS.md is authoritative on hardware facts. It refutes the shared-CSBAR
-// reading an earlier revision of this test carried. sim.cpp's RESOLVED
-// CONFLICT block holds the full record. Case group 8 drives those three
-// measured offsets directly.
+// AGENTS.md is authoritative on hardware facts. Case group 8 drives those
+// three measured offsets directly.
+//
+// THE SHARED-CSBAR READING AN EARLIER REVISION CARRIED WAS A CORRECT READING
+// OF THE 1998 MANUAL. It was checked against the manual on 2026-08-06 and
+// section 9.4.2.1 says what that revision quoted. The 1998 manual documents an
+// earlier silicon mask; the G2 carries a later one. sim.cpp's MASK-REVISION
+// CONFLICT block holds the full record and lists every modelled value the 1998
+// manual contradicts. Do not read the rows below as a manual disagreement that
+// somebody already settled in the model's favour. They are a mask difference,
+// and the operator owns whether the model keeps them.
 //
 // THE TWO WIDTH CLASSES. Plan section 13.1 requires that every modelled
 // register is in exactly one of two classes, so that the check does not depend
@@ -38,12 +45,15 @@
 // MODEL accepts every width at those offsets. IT DOES NOT CLAIM THAT THE REAL
 // PART DOES. An earlier revision of this file asserted "every other modelled
 // register carries no width restriction" and rested that on the manual saying
-// nothing. THAT REASONING IS WITHDRAWN. AGENTS.md section 4.2 states as fact
-// that access widths for the chip-select and DRAM controller registers exist
-// and are recorded, and that they are a useful corroboration "because the
-// manual is hard to read on this point". Silence in a document that is hard to
-// read is not evidence of absence. The gap is declared in sim.cpp and stays
-// open until the manual or SPK-13's firmware read closes it.
+// nothing. THAT REASONING STAYS WITHDRAWN, and the manual now confirms why it
+// had to be. The whole manual was searched on 2026-08-06. It states exactly
+// one access-width rule, section 14.3.7, and that rule is about the UART
+// block. Chapters 9, 11 and 12 state none. The WIDTH columns of Table 9-5,
+// Table B-1 and Table 11-1 give the width of each REGISTER, not the widths a
+// bus access may use. So the manual cannot close this either way: it does not
+// license a restriction and it does not license a claim of permissiveness.
+// sim.cpp records the finding. SPK-13's firmware read is now the only route
+// to a positive answer.
 
 #include "memoryMap.h"
 #include "sim.h"
@@ -120,16 +130,21 @@ namespace
 
 	// The chip-select family: AGENTS.md section 3.8. Everything else: MCF5307
 	// User's Manual, Appendix B Table B-1, section 9.4.1 Table 9-5, section
-	// 11.5 Table 11-1 and section 12.3.1 Table 12-1.
+	// 11.5.1 Table 11-1 and section 12.3.1 Table 12-1. Every one of those
+	// citations was verified against the manual on 2026-08-06.
 	//
-	// EACH CHIP SELECT CARRIES ITS OWN CSARn. Section 3.8 measures the boot
-	// loader writing CSAR3 at $0A4, CSMR3 at $0A8 and CSCR3 at $0AE, and each
-	// of the three sits exactly $24 above the CS0 register of the same kind,
-	// so the family repeats every twelve bytes. CSAR3 = $1300 is a PER-SELECT
-	// base, $13000000, which one shared CSBAR could not express. The earlier
-	// revision of this table modelled a single CSBAR at $098 and no CSAR2 to
-	// CSAR5, and it was written from the same manual reading as the model it
-	// was meant to check, so it could not catch the fault.
+	// EACH CHIP SELECT CARRIES ITS OWN CSARn ON THE MASK THE G2 CARRIES.
+	// Section 3.8 measures the boot loader writing CSAR3 at $0A4, CSMR3 at $0A8
+	// and CSCR3 at $0AE, and each of the three sits exactly $24 above the CS0
+	// register of the same kind, so the family repeats every twelve bytes.
+	// CSAR3 = $1300 is a PER-SELECT base, $13000000, and the USB driver reaches
+	// the ISP1181 at exactly that address.
+	//
+	// THE 1998 MANUAL DOCUMENTS A DIFFERENT LAYOUT, one shared 8-bit CSBAR at
+	// $098 and no CSAR2 to CSAR7. That is a real MCF5307 layout on an earlier
+	// mask, not an error. The rows below therefore DISAGREE WITH THE MANUAL at
+	// $098, $09C, $0A4, $0A8, $0B0, $0B4, $0BC and $0C0. sim.cpp lists each
+	// difference. The disagreement is reported and is not settled here.
 	const RegisterFact g_registers[] =
 	{
 		{0x080, 16, Kind::ReadWrite, false, 0, false, 0, "CSAR0"},
@@ -331,9 +346,11 @@ int main()
 	// This asserts a property of THIS MODEL and not of the part. See the note
 	// at the head of this file: AGENTS.md section 4.2 records that chip-select
 	// and DRAM controller access widths exist, so the manual saying nothing
-	// about them proves nothing about them. What is pinned here is that the
-	// model rejects a width at exactly one offset and nowhere else, which is
-	// the shape plan section 13.1 requires.
+	// about them proves nothing about them. The manual was searched on
+	// 2026-08-06 and it does say nothing about them: section 14.3.7 is its only
+	// access-width rule. What is pinned here is that the model rejects a width
+	// at exactly one offset and nowhere else, which is the shape plan section
+	// 13.1 requires.
 	{
 		Bus bus;
 		const int widths[] = {8, 16, 32};
