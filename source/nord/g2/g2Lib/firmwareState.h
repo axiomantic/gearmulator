@@ -32,15 +32,6 @@
 // HEADER-ONLY ON PURPOSE: BRD-10's Files: line names this header and no
 // translation unit.
 //
-// -------------------------------------------------------------------------
-// A NOTE ON THIS TASK'S DECLARED PREDECESSOR. BRD-10's Depends: line names
-// BRD-7 and REPO-5. BRD-7 IS STOPPED under plan section 1.3 rule 5: its test is
-// required to call mcf5307_reset, and that symbol is DECLARED in mcf5307.h and
-// DEFINED nowhere in the core at any commit that exists. Nothing in this file
-// or in its test names the flash model, a chip select, an address, or any
-// mcf5307 symbol, so no part of the blocked work is stood in for here. Design
-// section 7.7 is answered on its own terms.
-// -------------------------------------------------------------------------
 
 #pragma once
 
