@@ -14,10 +14,12 @@
 // CLEAN-ROOM. The chip-select register family is read from AGENTS.md section
 // 3.8, which MEASURES the boot loader programming CS3. Every other offset,
 // width, reset value and access rule is read from the MCF5307 User's Manual.
-// See the provenance record at the head of sim.cpp for what was taken, which
-// source it came from, the ONE CONFLICT between the two and how it resolved,
-// and the one evidence gap that stays open. No file of
-// MegabytePhreak/qemu-mcf5307 was opened for this task.
+// The manual is on disk and every citation is verified against it. See the
+// provenance record at the head of sim.cpp for what was taken, which source it
+// came from, the ONE CONFLICT between the two, and the list of modelled values
+// the 1998 manual contradicts. That conflict is a silicon mask revision, not a
+// bad citation. No file of MegabytePhreak/qemu-mcf5307 was opened for this
+// task.
 //
 // NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
 // Release and it defines NDEBUG.
