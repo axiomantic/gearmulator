@@ -13,3 +13,10 @@
 
 list(APPEND G2LIB_SOURCES slotWriteView.h)
 
+
+# ----------------- CHN-1, the mailbox delay line
+#
+# The whole allocation of the ring happens once, in the constructor, so the
+# compiled part is a single translation unit.
+list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
+
