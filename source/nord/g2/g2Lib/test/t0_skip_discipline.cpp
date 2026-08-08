@@ -194,14 +194,18 @@ int main()
 			check(contains(summary, "FAIL"), "failing gated test: the summary prints FAIL");
 		}
 
-		// ---------------- a directory that is not there is also a skip
+		// ---------------- a directory that is not there is also a skip, and it
+		// prints message 2 of design section 4.2 rather than message 1.
 		//
 		// Section 18.5's mechanism is written against ArtifactResolver, not
 		// against getenv, so the gate must close for every empty resolve and
-		// not only for the unset one.
+		// not only for the unset one. The skip line carries the actual reason
+		// the resolver returned: message 1 for unset/empty and message 2 for
+		// a path that does not exist or is not a directory.
 
 		{
-			setArtifactsVariable("/nmg2/no/such/directory/REPO-7");
+			const std::string missingDir = "/nmg2/no/such/directory/REPO-7";
+			setArtifactsVariable(missingDir.c_str());
 
 			g2::EnvArtifactResolver resolver;
 			g2::test::GatedCounters counters;
@@ -210,8 +214,13 @@ int main()
 			int bodiesThatRan = 0;
 			g2::test::runGated(resolver, out, counters, [&] { ++bodiesThatRan; return true; });
 
+			const std::string expectedMissingSkipLine =
+				"SKIPPED: firmware artifact not available (NMG2_ARTIFACTS names no directory: "
+				+ missingDir + ")";
+
 			check(bodiesThatRan == 0, "missing directory: the gated body did not run");
-			check(out.str() == g_expectedSkipLine + "\n", "missing directory: the skip line is the same word for word");
+			check(out.str() == expectedMissingSkipLine + "\n",
+				"missing directory: the skip line carries message 2 word for word");
 		}
 
 		setArtifactsVariable(nullptr);
