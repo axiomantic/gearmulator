@@ -211,3 +211,20 @@ set_property(TARGET t0_hdi08_adapter PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_adapter COMMAND t0_hdi08_adapter)
 set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
 
+# ----------------- BRD-4, UART0
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_uart0$
+#
+# UART0 at MBAR+0x1C0, vector 0x42, divider 0x36, 8N1; UART1 unused reads reset
+# values. The test drives the register file directly and wires UART0 to a
+# BRD-3 controller to assert the vectored (vector 0x42, autovector 0) source,
+# and exercises the one restricted width rule of MCF5307 UM section 14.3.7
+# (all UART registers are bytes).
+
+add_executable(t0_uart0 t0_uart0.cpp)
+target_link_libraries(t0_uart0 PRIVATE g2Lib)
+set_property(TARGET t0_uart0 PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_uart0 COMMAND t0_uart0)
+set_tests_properties(t0_uart0 PROPERTIES LABELS "UnitTest")
+

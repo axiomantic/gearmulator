@@ -39,3 +39,17 @@ list(APPEND G2LIB_SOURCES
 	hdi08Adapter.h
 	hdi08Adapter.cpp
 )
+
+# ----------------- BRD-4, UART0
+#
+# UART0 is the MCF5307 DUART module at MBAR+0x1C0 with vector 0x42 and the
+# observed divider 0x36, 8N1. UART1 (MBAR+0x200) is unused and reads back its
+# reset values; the same model owns both blocks. The transmitter buffer is the
+# source for readMidiOut in the Device subclass (design section 14.5). The 54
+# MHz clock once derived from the divider is refuted and must not return, so
+# this model stores the divider as data and names no clock rate.
+
+list(APPEND G2LIB_SOURCES
+	uart0.h
+	uart0.cpp
+)
