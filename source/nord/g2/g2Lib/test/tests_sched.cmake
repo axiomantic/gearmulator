@@ -279,6 +279,25 @@ set_property(TARGET t0_cycle_debt PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cycle_debt COMMAND t0_cycle_debt)
 
+# ---------------- SCH-13 - t0_long_dispatch
+#
+# An ordinary executable. SCH-13 drives rule 4 of design section 13.4.6: a
+# SYNTHETIC context whose single dispatch unit costs more than one frame's
+# allocation drives the want <= 0 branch of the g2::runQuantum template
+# (SCH-12). Each branch quantum raises longDispatchQuanta by EXACTLY one, pays
+# the debt down by one whole allocation, and never invokes the role-filler;
+# once the spike is paid down the running branch resumes and the debt returns
+# inside the fixture's own rule 2 bound. No case reads a clock, and the bound
+# comes from this fixture, never from maxInstructionsPerBlock (which the
+# shipped configuration leaves uncapped).
+
+add_executable(t0_long_dispatch
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_long_dispatch.cpp)
+target_link_libraries(t0_long_dispatch PRIVATE g2Lib)
+set_property(TARGET t0_long_dispatch PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_long_dispatch COMMAND t0_long_dispatch)
+
 # ---------------- SCH-11 - t0_dsp_job_order
 #
 # An ordinary executable. The whole check is the ORDER inside dspJob, and it
