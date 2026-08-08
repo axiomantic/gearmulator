@@ -40,3 +40,11 @@ list(APPEND G2LIB_SOURCES
 # scheduler.cpp yet.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h)
+
+# SCH-12. cycleDebt.h declares the g2::runQuantum function template -- design
+# section 13.4.6's budget/want/debt block, the one shared block applied once
+# for a DSP context (SCH-11) and once for the MCU (SCH-30). It has no compiled
+# part; it is listed so that the file the sched track owns appears in the
+# target, exactly as SCH-4's frame.h and SCH-6's dspContext.h do.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/cycleDebt.h)

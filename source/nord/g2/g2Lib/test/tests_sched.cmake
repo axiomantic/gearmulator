@@ -244,3 +244,23 @@ target_link_libraries(t0_backend_rule PRIVATE g2Lib)
 set_property(TARGET t0_backend_rule PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_backend_rule COMMAND t0_backend_rule)
+
+# ---------------- SCH-12 - t0_cycle_debt
+#
+# An ordinary executable. SCH-12 declares g2::runQuantum as a function
+# template in g2Lib/cycleDebt.h, and this check drives the rule itself -- the
+# invariant 0 <= debt < maxDispatchCost, the floor at zero, the never-idle
+# zero-drift case and the forced-idle slow-and-bounded case, plus the want <= 0
+# branch -- against a SYNTHETIC context and SYNTHETIC role-filler. The bound
+# comes from the test's own fixture (maxDispatchCost is measurement register
+# row 1 and has no committed value), the context exposes exactly the four
+# members the template needs, and the role-filler models spent as emulated
+# cycles only, never a wall clock. The "one block used twice" acceptance
+# criterion is discharged at the two call sites SCH-11 and SCH-30, which this
+# task does not write.
+
+add_executable(t0_cycle_debt ${CMAKE_CURRENT_SOURCE_DIR}/t0_cycle_debt.cpp)
+target_link_libraries(t0_cycle_debt PRIVATE g2Lib)
+set_property(TARGET t0_cycle_debt PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_cycle_debt COMMAND t0_cycle_debt)
