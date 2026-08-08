@@ -151,3 +151,14 @@ set_property(TARGET t0_flash PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_flash COMMAND t0_flash)
 set_tests_properties(t0_flash PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-3, the two-tier interrupt controller
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_interrupts$
+
+add_executable(t0_interrupts t0_interrupts.cpp)
+target_link_libraries(t0_interrupts PRIVATE g2Lib)
+set_property(TARGET t0_interrupts PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_interrupts COMMAND t0_interrupts)
+set_tests_properties(t0_interrupts PROPERTIES LABELS "UnitTest")
