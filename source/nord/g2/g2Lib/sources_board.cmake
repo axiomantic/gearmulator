@@ -45,3 +45,9 @@ list(APPEND G2LIB_SOURCES
 	interruptController.h
 	interruptController.cpp
 )
+
+# ----------------- BRD-19, the bootstrap ROM
+list(APPEND G2LIB_SOURCES
+	hdi08Bootstrap.h
+	hdi08Bootstrap.cpp
+)
