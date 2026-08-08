@@ -162,6 +162,8 @@ set_property(TARGET t0_interrupts PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_interrupts COMMAND t0_interrupts)
 set_tests_properties(t0_interrupts PROPERTIES LABELS "UnitTest")
+
+
 # ----------------- BRD-13, the panel seam for criterion (h)
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_panel_seam$
@@ -198,3 +200,14 @@ set_property(TARGET t0_bootstrap_rom PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_bootstrap_rom COMMAND t0_bootstrap_rom)
 set_tests_properties(t0_bootstrap_rom PROPERTIES LABELS "UnitTest")
+# ----------------- BRD-16, the HDI08 host-port adapter
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_adapter$
+
+add_executable(t0_hdi08_adapter t0_hdi08_adapter.cpp)
+target_link_libraries(t0_hdi08_adapter PRIVATE g2Lib)
+set_property(TARGET t0_hdi08_adapter PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_hdi08_adapter COMMAND t0_hdi08_adapter)
+set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
+

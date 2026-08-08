@@ -33,3 +33,9 @@ list(APPEND G2LIB_SOURCES
 	hdi08Bootstrap.h
 	hdi08Bootstrap.cpp
 )
+
+# ----------------- BRD-16, the HDI08 host-port adapter
+list(APPEND G2LIB_SOURCES
+	hdi08Adapter.h
+	hdi08Adapter.cpp
+)
