@@ -19,6 +19,13 @@ list(APPEND G2LIB_SOURCES latches.cpp)
 # ----------------- BRD-15, the CS1 decode
 list(APPEND G2LIB_SOURCES hdi08Decode.cpp)
 
+# ----------------- BRD-5, the anomaly log
+#
+# Header-only on purpose: BRD-5's Files: line names anomalyLog.h and no
+# translation unit. Listed here for the IDE source group, like flash.h above.
+
+list(APPEND G2LIB_SOURCES anomalyLog.h)
+
 # ----------------- BRD-6, the C++ firmware extractor
 list(APPEND G2LIB_SOURCES firmwareExtract.cpp)
 

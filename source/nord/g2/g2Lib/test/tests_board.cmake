@@ -72,6 +72,17 @@ set_property(TARGET t0_cs1_decode PROPERTY FOLDER "G2/test")
 add_test(NAME t0_cs1_decode COMMAND t0_cs1_decode)
 set_tests_properties(t0_cs1_decode PROPERTIES LABELS "UnitTest")
 
+# ----------------- BRD-5, the anomaly log
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_anomaly_log$
+
+add_executable(t0_anomaly_log t0_anomaly_log.cpp)
+target_link_libraries(t0_anomaly_log PRIVATE g2Lib)
+set_property(TARGET t0_anomaly_log PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_anomaly_log COMMAND t0_anomaly_log)
+set_tests_properties(t0_anomaly_log PROPERTIES LABELS "UnitTest")
+
 # ----------------- BRD-6, the C++ firmware extractor
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_extract_matches_python$
