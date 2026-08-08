@@ -39,3 +39,9 @@ list(APPEND G2LIB_SOURCES
 	flash.h
 	flash.cpp
 )
+
+# ----------------- BRD-3, the two-tier interrupt controller
+list(APPEND G2LIB_SOURCES
+	interruptController.h
+	interruptController.cpp
+)
