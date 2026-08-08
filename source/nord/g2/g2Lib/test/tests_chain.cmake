@@ -17,3 +17,15 @@ set_property(TARGET t0_slot_write_view PROPERTY FOLDER "G2/test")
 add_test(NAME t0_slot_write_view COMMAND t0_slot_write_view)
 set_tests_properties(t0_slot_write_view PROPERTIES LABELS "UnitTest")
 
+
+# ----------------- CHN-1, the mailbox surface
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_mailbox_surface$
+
+add_executable(t0_mailbox_surface t0_mailbox_surface.cpp)
+target_link_libraries(t0_mailbox_surface PRIVATE g2Lib)
+set_property(TARGET t0_mailbox_surface PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mailbox_surface COMMAND t0_mailbox_surface)
+set_tests_properties(t0_mailbox_surface PROPERTIES LABELS "UnitTest")
+
