@@ -15,10 +15,12 @@
 //      not changed, and a log line names the address and the access width.
 
 #include "../flash.h"
+#include "baseLib/logging.h"
 
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include <vector>
 
 namespace
@@ -39,11 +41,37 @@ namespace
 	// unset.
 	constexpr uint32_t syntheticSp = 0x00080000;
 	constexpr uint32_t syntheticPc = 0x30000100;
+
+	// The rejection messages are emitted through
+	// baseLib::logging::logToConsole, whose LogFunc defaults to fputs on
+	// stdout (or OutputDebugString on Windows). Neither a std::cout.rdbuf
+	// redirect nor a C-stdout redirect can observe that. setLogFunc() is the
+	// mechanism baseLib provides for redirecting the messages, so the test
+	// installs a capture LogFunc and asserts on the captured text. If a
+	// future refactor drops or rewrites the rejection log, the capture
+	// function is never called with the expected text and the assertions
+	// below fail.
+	std::string g_capturedLog;
+
+	void captureLog(const std::string& _s)
+	{
+		g_capturedLog += _s;
+		g_capturedLog += '\n';
+	}
+
+	bool contains(const std::string& _haystack, const std::string& _needle)
+	{
+		return _haystack.find(_needle) != std::string::npos;
+	}
 }
 
 int main()
 {
 	g2::Flash flash(kFixtureCs0Base, kFixtureCs0Size, kFixtureCs2Base, kFixtureCs2Size);
+
+	// Every rejection message below goes through baseLib::logging, so capture
+	// it from the first write onward.
+	baseLib::logging::setLogFunc(&captureLog);
 
 	// ---------------- CS0 image: reset vector at offsets 0 and 4, 0xAA fill
 	//
@@ -81,13 +109,26 @@ int main()
 	assert(flash.read16(kFixtureCs2Base + 0x10) == 0x1234);
 	assert(flash.read32(kFixtureCs2Base + 0x10) == 0x12345678u);
 
-	// ---------------- writes are rejected; the bytes do not change
-
+	// ---------------- writes are rejected; the bytes do not change, and the
+	// rejection is REPORTED with the address and the width
+	//
+	// The byte invariance above is necessary but not sufficient: a refactor
+	// that silently dropped the rejection log would keep every assertion
+	// green. Each write is therefore wrapped in a capture of
+	// baseLib::logging, and the captured text must name both 'Rejected' and
+	// the exact address of the write. The full message prefix also locks the
+	// access width -- the write8 message carries no width word, the write32
+	// message carries "32-bit" -- so a width routed to the wrong message
+	// fails here as well.
+	g_capturedLog.clear();
 	flash.write8(kFixtureCs0Base, 0xff);
 	assert(flash.read32(kFixtureCs0Base) == syntheticSp);
+	assert(contains(g_capturedLog, "Rejected write to read-only Flash at 0x30000000"));
 
+	g_capturedLog.clear();
 	flash.write32(kFixtureCs2Base + 0x10, 0u);
 	assert(flash.read32(kFixtureCs2Base + 0x10) == 0x12345678u);
+	assert(contains(g_capturedLog, "Rejected 32-bit write to read-only Flash at 0x20000010"));
 
 	std::cout << "t0_flash passed" << std::endl;
 	return 0;
