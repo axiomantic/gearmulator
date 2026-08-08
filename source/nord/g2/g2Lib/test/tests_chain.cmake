@@ -29,3 +29,15 @@ set_property(TARGET t0_mailbox_surface PROPERTY FOLDER "G2/test")
 add_test(NAME t0_mailbox_surface COMMAND t0_mailbox_surface)
 set_tests_properties(t0_mailbox_surface PROPERTIES LABELS "UnitTest")
 
+
+# ----------------- CHN-2, the mailbox index test
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_mailbox_index$
+
+add_executable(t0_mailbox_index t0_mailbox_index.cpp)
+target_link_libraries(t0_mailbox_index PRIVATE g2Lib)
+set_property(TARGET t0_mailbox_index PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mailbox_index COMMAND t0_mailbox_index)
+set_tests_properties(t0_mailbox_index PROPERTIES LABELS "UnitTest")
+
