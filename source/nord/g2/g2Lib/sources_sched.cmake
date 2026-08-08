@@ -48,3 +48,9 @@ list(APPEND G2LIB_SOURCES
 # target, exactly as SCH-4's frame.h and SCH-6's dspContext.h do.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/cycleDebt.h)
+
+# SCH-11. dspJob.cpp is the DSP job body: receive, the cycle-debt block
+# (which INSTANTIATES SCH-12's g2::runQuantum template, not re-implements
+# it), transmit. Design sections 13.10.3 and 13.4.6.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/dspJob.cpp)

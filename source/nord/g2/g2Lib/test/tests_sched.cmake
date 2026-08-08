@@ -264,3 +264,19 @@ target_link_libraries(t0_cycle_debt PRIVATE g2Lib)
 set_property(TARGET t0_cycle_debt PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cycle_debt COMMAND t0_cycle_debt)
+
+# ---------------- SCH-11 - t0_dsp_job_order
+#
+# An ordinary executable. The whole check is the ORDER inside dspJob, and it
+# is asserted through the fixture's ordered callback log on the audio and
+# second Esai. The signature half is held by a static_assert against the
+# Executor's JobFn inside the translation unit. The debt-consumed quantum
+# never reaches a DSP, so the context carries a NULL dsp on purpose and no
+# JIT backend is required -- which is why this check can run in any build.
+
+add_executable(t0_dsp_job_order
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_job_order.cpp)
+target_link_libraries(t0_dsp_job_order PRIVATE g2Lib)
+set_property(TARGET t0_dsp_job_order PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_dsp_job_order COMMAND t0_dsp_job_order)
