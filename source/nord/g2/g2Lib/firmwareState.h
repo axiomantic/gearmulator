@@ -45,10 +45,12 @@
 
 namespace g2
 {
-	// The two states design section 7.7 distinguishes. There is no third: a
-	// directory that is not there is the same as a variable that is not set,
-	// because design section 4.2 gives the two cases one message and task
-	// REPO-5's check requires the result to be the same.
+	// The two states design section 7.7 distinguishes. A directory that is not
+	// there is reported ABSENT just like a variable that is not set -- both
+	// cases mean the plugin cannot find the firmware -- but they reach this
+	// state through DIFFERENT messages. Design section 4.2 names three failure
+	// messages; this enum does not encode that detail, only the up/down
+	// outcome the plugin reports to the host.
 	enum class FirmwareState
 	{
 		Absent,

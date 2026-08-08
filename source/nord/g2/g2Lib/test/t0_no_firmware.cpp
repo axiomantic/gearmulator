@@ -84,7 +84,7 @@ namespace
 	public:
 		explicit CountingResolver(std::string _directory) : m_directory(std::move(_directory)) {}
 
-		std::string resolve(std::string& _why) override
+		std::string resolve(std::string& _why, const char* /*_name*/) override
 		{
 			++calls;
 			if(m_directory.empty())
@@ -199,21 +199,32 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. NMG2_ARTIFACTS NAMING A DIRECTORY THAT IS NOT THERE IS THE
-	// SAME AS UNSET.
+	// Case group 3. NMG2_ARTIFACTS NAMING A DIRECTORY THAT IS NOT THERE GETS A
+	// DISTINCT MESSAGE FROM UNSET.
 	//
-	// Design section 4.2 gives the two cases one message and REPO-5's check
-	// requires that the result is the same. This surface must not improve on it.
+	// Design section 4.2 names THREE failure messages -- one for unset, one
+	// for a path that is not a directory, and one for a directory that lacks
+	// the named artifact. The unset case and the missing-directory case are
+	// DIFFERENT inputs and get DIFFERENT messages so that an operator with a
+	// wrong path sees the path they typed rather than a message that sends
+	// them to look at the wrong file.
 	{
-		setArtifacts("/this/directory/does/not/exist/nmg2");
+		const std::string missingDir = "/this/directory/does/not/exist/nmg2";
+		setArtifacts(missingDir.c_str());
 
 		g2::EnvArtifactResolver resolver;
 		const g2::FirmwareStatus status = g2::resolveFirmwareState(resolver);
 
 		check(status.state == g2::FirmwareState::Absent,
 			"a directory that is not there reports the firmware absent");
-		checkEqual(status.message, g_expectedMessage,
-			"a directory that is not there shows the same message as an unset variable");
+		// The status.message opens with the resolver's message (message 2
+		// here) and then carries the requirement-3 text. Both messages start
+		// with "firmware artifact not available (" and that is the only
+		// overlap.
+		check(status.message.find(
+			"firmware artifact not available (NMG2_ARTIFACTS names no directory: "
+			+ missingDir + ")") == 0,
+			"a directory that is not there opens with message 2 word for word");
 
 		setArtifacts(nullptr);
 	}
