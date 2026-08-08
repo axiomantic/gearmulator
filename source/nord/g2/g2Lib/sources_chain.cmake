@@ -5,3 +5,11 @@
 # file in this tree. See plan section 7.4.2.
 #
 # Created empty by task BRD-0.
+
+# ----------------- CHN-3, SlotWriteView
+#
+# Header-only on purpose: CHN-3's Files: line names slotWriteView.h and no
+# translation unit. Listed here for the IDE source group, like anomalyLog.h.
+
+list(APPEND G2LIB_SOURCES slotWriteView.h)
+
