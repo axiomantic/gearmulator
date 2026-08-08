@@ -162,3 +162,20 @@ set_property(TARGET t0_interrupts PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_interrupts COMMAND t0_interrupts)
 set_tests_properties(t0_interrupts PROPERTIES LABELS "UnitTest")
+# ----------------- BRD-13, the panel seam for criterion (h)
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_panel_seam$
+#
+# The panel carries `tick(uint64_t frameIndex)`, `stateSize`, `stateSave` and
+# `stateLoad` now, with an empty body and a zero-byte state. The scheduler's
+# order table (design section 13.5, owned by the SCH track) lists the panel at
+# position 0, before the MCU. This test asserts the seam surface only; the
+# scheduler and executor halves of section 13.5 are asserted by their own
+# tracks' tests.
+
+add_executable(t0_panel_seam t0_panel_seam.cpp)
+target_link_libraries(t0_panel_seam PRIVATE g2Lib)
+set_property(TARGET t0_panel_seam PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_panel_seam COMMAND t0_panel_seam)
+set_tests_properties(t0_panel_seam PROPERTIES LABELS "UnitTest")
