@@ -273,5 +273,20 @@ namespace g2
 		std::vector<dsp56k::Esai*> m_secondEsai;
 		std::vector<uint8_t>       m_audioWritten;
 		std::vector<uint8_t>       m_secondWritten;
+
+		/* ------------- CHN-7 private state: the two underrun counters.
+		 *
+		 * One uint64_t for each position for each bus. advanceAll step 1
+		 * increments m_underrun[position] on EVERY quantum when the
+		 * position's audio-bus written flag is clear; step 2 increments
+		 * m_secondUnderrun[position] ONLY on the second-bus window quanta
+		 * (frameIndex % secondBusFrameDivider == 0). The two are separate
+		 * storage, because the two buses advance at different rates, and
+		 * both are sized to dspCount at construction so advanceAll indexes
+		 * them without resizing. The third counter, phaseErrorFrames, counts
+		 * in the transmit wrappers rather than in advanceAll and is task
+		 * CHN-8's. */
+		std::vector<uint64_t> m_underrun;
+		std::vector<uint64_t> m_secondUnderrun;
 	};
 }

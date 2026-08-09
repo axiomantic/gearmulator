@@ -95,3 +95,23 @@ set_property(TARGET t0_written_flag PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_written_flag COMMAND t0_written_flag)
 set_tests_properties(t0_written_flag PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- CHN-7, advanceAll and the four ordered steps
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_advance_all$
+#
+# advanceAll closes the underrun accounting for the quantum that just ended:
+# (1) every quantum, count audio-bus underruns from clear audio flags; (2)
+# only when frameIndex % secondBusFrameDivider == 0, count second-bus
+# underruns; (3) clear the audio flags always and the second-bus flags only
+# on the window quanta; (4) advance() the selected mailboxes. The test drives
+# the real CHN-6 flags through a divider of 2 and asserts the counters, the
+# per-bus clear cadence, and the second-bus mailbox-advance gate.
+
+add_executable(t0_advance_all t0_advance_all.cpp)
+target_link_libraries(t0_advance_all PRIVATE g2Lib)
+set_property(TARGET t0_advance_all PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_advance_all COMMAND t0_advance_all)
+set_tests_properties(t0_advance_all PROPERTIES LABELS "UnitTest")
