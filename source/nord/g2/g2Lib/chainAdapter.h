@@ -288,5 +288,16 @@ namespace g2
 		 * CHN-8's. */
 		std::vector<uint64_t> m_underrun;
 		std::vector<uint64_t> m_secondUnderrun;
+
+		/* ------------- CHN-8 private state: the phase-error counter.
+		 *
+		 * ONE uint64_t for each position, shared across the two buses
+		 * (section 13.10.2 counts "a transmit callback the scheduler did not
+		 * ask for, on either bus"). The transmit wrappers increment it, never
+		 * advanceAll: it counts the out-of-band execTX() callbacks
+		 * (esai.cpp:209) and a duplicate delivery, which are events that
+		 * happen in the wrappers. Sized to dspCount at construction so a
+		 * wrapper indexes it without resizing. */
+		std::vector<uint64_t> m_phaseError;
 	};
 }

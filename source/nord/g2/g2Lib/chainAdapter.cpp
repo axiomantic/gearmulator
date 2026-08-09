@@ -79,6 +79,10 @@ namespace g2
 		 * them from the first fire without resizing. */
 		, m_underrun(dspCount, 0u)
 		, m_secondUnderrun(dspCount, 0u)
+		/* CHN-8: one phase-error counter per position, shared across the
+		 * two buses, so a wrapper can index it from the first fire without
+		 * resizing. */
+		, m_phaseError(dspCount, 0u)
 	{
 		assert(hopFrames >= 1u
 			&& "a mailbox with a hop delay of zero cannot express the delay "
@@ -253,6 +257,24 @@ namespace g2
 	EsaiWriteTxCallback ChainAdapter::audioTxCallback(const unsigned position)
 	{
 		return [this, position](uint64_t&, const dsp56k::Audio::TxFrame& in) noexcept {
+			/* CHN-8 PHASE-ERROR RULE (section 12.3, 13.10.2), the audio-bus
+			 * half. phaseErrorFrames counts a transmit callback the scheduler
+			 * did NOT ask for, on either bus. On the audio bus that condition
+			 * is one thing: the position has ALREADY delivered on this bus in
+			 * this quantum. "Already delivered" is exactly the position's
+			 * audio written flag being set at this instant - advanceAll clears
+			 * the audio flags every quantum, so a set audio flag at callback
+			 * time can only mean a previous audio transmit in this same
+			 * quantum. The check runs BEFORE this callback updates the flag,
+			 * so the lone, scheduler-driven delivery - the one callback the
+			 * scheduler asks for - is not counted, while a second one is. */
+			if(position < this->m_phaseError.size()
+				&& position < this->m_audioWritten.size()
+				&& this->m_audioWritten[position] != 0u)
+			{
+				++this->m_phaseError[position];
+			}
+
 			/* CHN-6 WRITTEN-FLAG RULE (section 12.3). The flag is NOT "the
 			 * callback fired" - the scheduler drives a transmit callback for
 			 * every position on every quantum, so an arrival flag could never
@@ -309,7 +331,31 @@ namespace g2
 
 	EsaiWriteTxCallback ChainAdapter::secondTxCallback(const unsigned position)
 	{
-		return [this, position](uint64_t&, const dsp56k::Audio::TxFrame& in) noexcept {
+		return [this, position](uint64_t& frameIndex, const dsp56k::Audio::TxFrame& in) noexcept {
+			/* CHN-8 PHASE-ERROR RULE, the second-bus half (sections 12.3,
+			 * 13.10.2). Increment AT MOST ONCE per callback - it is ONE
+			 * unwanted callback, so one increment even when both conditions
+			 * hold at once - when either of the two conditions is met:
+			 *   (a) the position has ALREADY delivered on this bus in this
+			 *       quantum (its second written flag is set at this instant;
+			 *       advanceAll clears the second flags only on the window
+			 *       quanta, which is exactly the cadence that makes a set
+			 *       flag mean "delivered this quantum" on this bus), or
+			 *   (b) on the second bus only, this is outside the advance
+			 *       window: frameIndex % secondBusFrameDivider != 0.
+			 * The check runs BEFORE this callback updates the flag, so the
+			 * lone scheduler-driven window delivery is not counted. */
+			if(position < this->m_phaseError.size())
+			{
+				const bool alreadyDelivered =
+					position < this->m_secondWritten.size()
+					&& this->m_secondWritten[position] != 0u;
+				const bool nonWindow =
+					frameIndex % this->m_secondBusFrameDivider != 0u;
+				if(alreadyDelivered || nonWindow)
+					++this->m_phaseError[position];
+			}
+
 			/* CHN-6 WRITTEN-FLAG RULE, the second-bus half. Same condition as
 			 * the audio wrapper - M_TUE clear in readStatusRegister() at this
 			 * instant sets the position's SECOND-bus flag, otherwise clears
@@ -358,9 +404,10 @@ namespace g2
 	/* CHN-7 gives underrunFrames and secondBusUnderrunFrames their real
 	 * storage, fed by advanceAll's step 1 and step 2 (the two are separate
 	 * vectors, because the two buses advance at different rates, which is
-	 * exactly the separation CHN-8 asserts). phaseErrorFrames counts in the
-	 * transmit wrappers rather than in advanceAll, so it stays zero here and
-	 * task CHN-8 owns its storage. */
+	 * exactly the separation CHN-8 asserts). CHN-8 gives phaseErrorFrames
+	 * its real storage: one counter per position, incremented in the transmit
+	 * wrappers (never in advanceAll) when a callback the scheduler did not
+	 * ask for fires. */
 	uint64_t ChainAdapter::underrunFrames(const unsigned position) const noexcept
 	{
 		return position < m_underrun.size() ? m_underrun[position] : 0u;
@@ -371,7 +418,10 @@ namespace g2
 		return position < m_secondUnderrun.size() ? m_secondUnderrun[position] : 0u;
 	}
 
-	uint64_t ChainAdapter::phaseErrorFrames(unsigned) const noexcept { return 0u; }
+	uint64_t ChainAdapter::phaseErrorFrames(const unsigned position) const noexcept
+	{
+		return position < m_phaseError.size() ? m_phaseError[position] : 0u;
+	}
 
 	/* ------------- the state trio. --------------------------------------------- */
 
