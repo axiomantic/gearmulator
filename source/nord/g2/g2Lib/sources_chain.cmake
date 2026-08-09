@@ -20,8 +20,10 @@ list(APPEND G2LIB_SOURCES slotWriteView.h)
 # compiled part is a single translation unit.
 list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
 
-# ----------------- CHN-4, ChainTopology and mailboxCount
+# ----------------- CHN-4/CHN-5, ChainTopology + the ChainAdapter class
 #
-# Header-only at this task: CHN-4 lays down chainAdapter.h and CHN-5 defines
-# the class in chainAdapter.cpp. Listed here for the IDE source group.
-list(APPEND G2LIB_SOURCES chainAdapter.h)
+# CHN-4 lays down chainAdapter.h; CHN-5 defines the class in chainAdapter.cpp
+# and is the first task to give the chain track a real translation unit, so it
+# is here that the header is joined by the .cpp. Both stay in the same source
+# group so the IDE shows them together.
+list(APPEND G2LIB_SOURCES chainAdapter.h chainAdapter.cpp)
