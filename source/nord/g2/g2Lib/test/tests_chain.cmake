@@ -41,3 +41,19 @@ set_property(TARGET t0_mailbox_index PROPERTY FOLDER "G2/test")
 add_test(NAME t0_mailbox_index COMMAND t0_mailbox_index)
 set_tests_properties(t0_mailbox_index PROPERTIES LABELS "UnitTest")
 
+# ----------------- CHN-4, ChainTopology and mailboxCount
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_mailbox_count$
+#
+# The registered test asserts mailboxCount in a CONSTANT EXPRESSION: the
+# mailbox arrays are sized from exactly such a use, so a declaration-only
+# function compiles and links a target and fails only at the constant-
+# expression use (plan section 7.7.1). A static_assert is the only check
+# that can catch it.
+
+add_executable(t0_mailbox_count t0_mailbox_count.cpp)
+target_link_libraries(t0_mailbox_count PRIVATE g2Lib)
+set_property(TARGET t0_mailbox_count PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mailbox_count COMMAND t0_mailbox_count)
+set_tests_properties(t0_mailbox_count PROPERTIES LABELS "UnitTest")
