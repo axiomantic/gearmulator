@@ -57,3 +57,21 @@ set_property(TARGET t0_mailbox_count PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_mailbox_count COMMAND t0_mailbox_count)
 set_tests_properties(t0_mailbox_count PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- CHN-5, the ChainAdapter surface
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_chain_adapter_surface$
+#
+# Constructs one adapter with each of the four constructor arguments set to a
+# distinct value and asserts each is forwarded and readable; asserts the audio
+# chain reports exactly dspCount + 1 mailboxes at every second-bus topology;
+# and takes the address of every method on the declared public surface, so a
+# missing one is a link error.
+
+add_executable(t0_chain_adapter_surface t0_chain_adapter_surface.cpp)
+target_link_libraries(t0_chain_adapter_surface PRIVATE g2Lib)
+set_property(TARGET t0_chain_adapter_surface PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_chain_adapter_surface COMMAND t0_chain_adapter_surface)
+set_tests_properties(t0_chain_adapter_surface PROPERTIES LABELS "UnitTest")
