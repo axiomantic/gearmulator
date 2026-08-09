@@ -27,6 +27,7 @@
 #include "frame.h"
 #include "dsp56kEmu/esai.h"
 
+#include <algorithm>
 #include <cassert>
 
 namespace g2
@@ -74,6 +75,10 @@ namespace g2
 		, m_secondEsai(dspCount, nullptr)
 		, m_audioWritten(dspCount, 0u)
 		, m_secondWritten(dspCount, 0u)
+		/* CHN-7: one counter per position per bus, so advanceAll can index
+		 * them from the first fire without resizing. */
+		, m_underrun(dspCount, 0u)
+		, m_secondUnderrun(dspCount, 0u)
 	{
 		assert(hopFrames >= 1u
 			&& "a mailbox with a hop delay of zero cannot express the delay "
@@ -136,18 +141,54 @@ namespace g2
 
 	/* ------------- the swap point. -------------------------------------------- */
 
+	/* CHN-7: advanceAll closes the underrun accounting for the quantum that
+	 * just ended, in the FOUR-STEP ORDER of section 13.10.2, then swaps the
+	 * selected mailboxes. There are 2 x dspCount written flags - one per
+	 * position per bus - and the ORDER is load-bearing because the flags
+	 * describe the quantum that ENDED, not the one about to start:
+	 *
+	 *   1. EVERY quantum: for each position, if its audio-bus flag is clear,
+	 *      increment that position's underrunFrames.
+	 *   2. ONLY when frameIndex % secondBusFrameDivider == 0: for each
+	 *      position, if its second-bus flag is clear, increment that
+	 *      position's secondBusUnderrunFrames. The second bus is not
+	 *      expected to transmit outside its advance window, so examining its
+	 *      flag there would count a non-event.
+	 *   3. Clear the audio flags ALWAYS; clear the second-bus flags ONLY on
+	 *      the same quanta as step 2, for the same reason.
+	 *   4. advance() the selected mailboxes: the audio bus every quantum,
+	 *      the second bus only on the window quanta. */
 	void ChainAdapter::advanceAll(const uint64_t frameIndex) noexcept
 	{
-		/* Step 4 of the four-step order of section 13.10.2: the audio bus
-		 * advances every quantum, the second bus only on the window quanta.
-		 * The count-then-clear-then-advance accounting order of section
-		 * 13.10.2 that turns the per-position written flags into the three
-		 * counters is task CHN-7's, and it prepends steps 1 to 3 to this
-		 * body without moving this cadence. */
+		const auto count = [this](const std::vector<uint8_t>& flags,
+		                          std::vector<uint64_t>& counters) noexcept
+		{
+			for(unsigned p = 0u; p < m_dspCount; ++p)
+				if(!(p < flags.size() && flags[p] != 0u))
+					++counters[p];
+		};
+
+		/* Step 1: every quantum, count audio-bus underruns from clear
+		 * audio-bus flags. */
+		count(m_audioWritten, m_underrun);
+
+		/* Step 2: only on the window quanta, count second-bus underruns. */
+		const bool window = frameIndex % m_secondBusFrameDivider == 0u;
+		if(window)
+			count(m_secondWritten, m_secondUnderrun);
+
+		/* Step 3: clear the audio flags always; clear the second-bus flags
+		 * only on the window quanta. */
+		std::fill(m_audioWritten.begin(), m_audioWritten.end(), 0u);
+		if(window)
+			std::fill(m_secondWritten.begin(), m_secondWritten.end(), 0u);
+
+		/* Step 4: advance() the selected mailboxes - the audio bus every
+		 * quantum, the second bus only on the window quanta. */
 		for(auto& mailbox : m_audio)
 			mailbox.advance();
 
-		if(frameIndex % m_secondBusFrameDivider == 0u)
+		if(window)
 			for(auto& mailbox : m_second)
 				mailbox.advance();
 	}
@@ -314,13 +355,22 @@ namespace g2
 
 	/* ------------- the three counters. ----------------------------------------- */
 
-	/* CHN-5 declares and defines the counters so the surface links; the real
-	 * storage and the advanceAll cadence that feed them are tasks CHN-7 and
-	 * CHN-8. Returning zero here is deliberate: a counter that cannot be
-	 * driven above zero is exactly the green mirage CHN-8 replaces, and it
-	 * makes the differential obvious when the owning task lands. */
-	uint64_t ChainAdapter::underrunFrames(unsigned) const noexcept { return 0u; }
-	uint64_t ChainAdapter::secondBusUnderrunFrames(unsigned) const noexcept { return 0u; }
+	/* CHN-7 gives underrunFrames and secondBusUnderrunFrames their real
+	 * storage, fed by advanceAll's step 1 and step 2 (the two are separate
+	 * vectors, because the two buses advance at different rates, which is
+	 * exactly the separation CHN-8 asserts). phaseErrorFrames counts in the
+	 * transmit wrappers rather than in advanceAll, so it stays zero here and
+	 * task CHN-8 owns its storage. */
+	uint64_t ChainAdapter::underrunFrames(const unsigned position) const noexcept
+	{
+		return position < m_underrun.size() ? m_underrun[position] : 0u;
+	}
+
+	uint64_t ChainAdapter::secondBusUnderrunFrames(const unsigned position) const noexcept
+	{
+		return position < m_secondUnderrun.size() ? m_secondUnderrun[position] : 0u;
+	}
+
 	uint64_t ChainAdapter::phaseErrorFrames(unsigned) const noexcept { return 0u; }
 
 	/* ------------- the state trio. --------------------------------------------- */
