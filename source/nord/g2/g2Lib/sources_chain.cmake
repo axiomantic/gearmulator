@@ -20,3 +20,8 @@ list(APPEND G2LIB_SOURCES slotWriteView.h)
 # compiled part is a single translation unit.
 list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
 
+# ----------------- CHN-4, ChainTopology and mailboxCount
+#
+# Header-only at this task: CHN-4 lays down chainAdapter.h and CHN-5 defines
+# the class in chainAdapter.cpp. Listed here for the IDE source group.
+list(APPEND G2LIB_SOURCES chainAdapter.h)
