@@ -115,3 +115,21 @@ set_property(TARGET t0_advance_all PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_advance_all COMMAND t0_advance_all)
 set_tests_properties(t0_advance_all PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- CHN-8, the three counters
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_chain_counters$
+#
+# Asserts the two properties this row owns: (1) underrunFrames and
+# secondBusUnderrunFrames are separate storage, driven one above zero at a
+# single position while the other stays zero there; (2) one unwanted callback
+# raises phaseErrorFrames(position) by exactly ONE even when both conditions
+# (already delivered this quantum AND non-window) hold at once.
+
+add_executable(t0_chain_counters t0_chain_counters.cpp)
+target_link_libraries(t0_chain_counters PRIVATE g2Lib)
+set_property(TARGET t0_chain_counters PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_chain_counters COMMAND t0_chain_counters)
+set_tests_properties(t0_chain_counters PROPERTIES LABELS "UnitTest")
