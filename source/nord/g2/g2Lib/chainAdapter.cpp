@@ -25,6 +25,7 @@
 #include "chainAdapter.h"
 
 #include "frame.h"
+#include "dsp56kEmu/esai.h"
 
 #include <cassert>
 
@@ -66,6 +67,13 @@ namespace g2
 		, m_hopFrames(hopFrames)
 		, m_secondBusTopology(secondBusTopology)
 		, m_secondBusFrameDivider(secondBusFrameDivider)
+		/* CHN-6: one borrowed Esai pointer and one cleared written flag for
+		 * each position on each bus. Sized to dspCount now, so a position's
+		 * wrapper can index them from the first fire without resizing. */
+		, m_audioEsai(dspCount, nullptr)
+		, m_secondEsai(dspCount, nullptr)
+		, m_audioWritten(dspCount, 0u)
+		, m_secondWritten(dspCount, 0u)
 	{
 		assert(hopFrames >= 1u
 			&& "a mailbox with a hop delay of zero cannot express the delay "
@@ -102,6 +110,28 @@ namespace g2
 	unsigned ChainAdapter::secondBusMailboxCount() const noexcept
 	{
 		return static_cast<unsigned>(m_second.size());
+	}
+
+	/* ------------- CHN-6: the written flags and their Esai source. ---------- */
+
+	void ChainAdapter::attachEsai(const unsigned position,
+	                              dsp56k::Esai& audio,
+	                              dsp56k::Esai& second)
+	{
+		if(position < m_audioEsai.size())
+			m_audioEsai[position] = &audio;
+		if(position < m_secondEsai.size())
+			m_secondEsai[position] = &second;
+	}
+
+	bool ChainAdapter::audioWritten(const unsigned position) const noexcept
+	{
+		return position < m_audioWritten.size() && m_audioWritten[position] != 0u;
+	}
+
+	bool ChainAdapter::secondWritten(const unsigned position) const noexcept
+	{
+		return position < m_secondWritten.size() && m_secondWritten[position] != 0u;
 	}
 
 	/* ------------- the swap point. -------------------------------------------- */
@@ -182,11 +212,32 @@ namespace g2
 	EsaiWriteTxCallback ChainAdapter::audioTxCallback(const unsigned position)
 	{
 		return [this, position](uint64_t&, const dsp56k::Audio::TxFrame& in) noexcept {
+			/* CHN-6 WRITTEN-FLAG RULE (section 12.3). The flag is NOT "the
+			 * callback fired" - the scheduler drives a transmit callback for
+			 * every position on every quantum, so an arrival flag could never
+			 * be clear and underrunFrames could never rise (a green mirage).
+			 * The source is the emulated ESAI's own M_TUE bit, read at this
+			 * instant: M_TUE rises in writeSlotToFrame (esai.cpp:380-384)
+			 * before the frame is delivered and is not cleared until the
+			 * interrupt path (esai.cpp:108-112) runs after, so the bit states
+			 * whether the frame this callback carries is stale. Set the flag
+			 * true exactly when M_TUE is clear; actively clear it otherwise,
+			 * so a stale callback overwrites a good flag rather than leaving
+			 * it set. The wrapper reaches its position's Esai through
+			 * m_audioEsai, which attachEsai filled at construction. */
+			if(position < this->m_audioWritten.size())
+			{
+				const dsp56k::Esai* esai =
+					position < this->m_audioEsai.size() ? this->m_audioEsai[position] : nullptr;
+				const bool mTueClear = (esai != nullptr)
+					&& !(esai->readStatusRegister() & (1u << dsp56k::Esai::M_TUE));
+				this->m_audioWritten[position] = mTueClear ? 1u : 0u;
+			}
+
 			/* Line: the transmit callback of position k writes mailbox k + 1's
 			 * write() frame. The tail position N - 1 therefore writes mailbox
-			 * N, which is the mailbox the egress phase reads. CHN-6 adds the
-			 * written-flag rule to this wrapper; CHN-9 owns the head/tail slot
-			 * forms. */
+			 * N, which is the mailbox the egress phase reads. (CHN-9 owns the
+			 * head/tail slot forms.) */
 			if(this->m_audio.empty() || position + 1u >= this->m_audio.size())
 				return;
 
@@ -218,6 +269,20 @@ namespace g2
 	EsaiWriteTxCallback ChainAdapter::secondTxCallback(const unsigned position)
 	{
 		return [this, position](uint64_t&, const dsp56k::Audio::TxFrame& in) noexcept {
+			/* CHN-6 WRITTEN-FLAG RULE, the second-bus half. Same condition as
+			 * the audio wrapper - M_TUE clear in readStatusRegister() at this
+			 * instant sets the position's SECOND-bus flag, otherwise clears
+			 * it - but it writes m_secondWritten, the per-bus storage that
+			 * lets CHN-7 count the two buses on different cadences. */
+			if(position < this->m_secondWritten.size())
+			{
+				const dsp56k::Esai* esai =
+					position < this->m_secondEsai.size() ? this->m_secondEsai[position] : nullptr;
+				const bool mTueClear = (esai != nullptr)
+					&& !(esai->readStatusRegister() & (1u << dsp56k::Esai::M_TUE));
+				this->m_secondWritten[position] = mTueClear ? 1u : 0u;
+			}
+
 			/* The second bus transmits on TX2 (frame.h's reg table), so the
 			 * frame is read through the Tx conversion with kSecondReg.
 			 *
@@ -226,9 +291,7 @@ namespace g2
 			 *   Broadcast: every position writes the one mailbox, committing
 			 *               slot (position) ONLY through Mailbox::writeSlot,
 			 *               which is what prevents eight producers from
-			 *               overwriting one another (sections 12.3, 13.10.2).
-			 *
-			 * CHN-6 adds the written-flag rule to this wrapper. */
+			 *               overwriting one another (sections 12.3, 13.10.2). */
 			const unsigned n = static_cast<unsigned>(this->m_second.size());
 			if(n == 0u)
 				return;

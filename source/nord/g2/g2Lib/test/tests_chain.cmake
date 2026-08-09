@@ -75,3 +75,23 @@ set_property(TARGET t0_chain_adapter_surface PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_chain_adapter_surface COMMAND t0_chain_adapter_surface)
 set_tests_properties(t0_chain_adapter_surface PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- CHN-6, the written-flag rule
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_written_flag$
+#
+# The transmit wrappers' written flag is driven by the emulated ESAI's own
+# M_TUE transmit-underrun bit, clear in Esai::readStatusRegister() at the
+# instant the callback fires, and NOT by the callback's arrival (section 12.3).
+# The test constructs real dsp56k::Esai objects, drives M_TUE set/clear, fires
+# each position's transmit wrapper and reads the flag back through
+# ChainAdapter::audioWritten / secondWritten, asserting the per-position and
+# per-bus separation directly.
+
+add_executable(t0_written_flag t0_written_flag.cpp)
+target_link_libraries(t0_written_flag PRIVATE g2Lib)
+set_property(TARGET t0_written_flag PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_written_flag COMMAND t0_written_flag)
+set_tests_properties(t0_written_flag PROPERTIES LABELS "UnitTest")
