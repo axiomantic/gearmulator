@@ -35,6 +35,13 @@
 #include <cstdint>
 #include <vector>
 
+/* CHN-6: the transmit wrappers inspect the emulated ESAI's M_TUE bit through
+ * Esai::readStatusRegister(). The adapter stores only borrowed pointers to the
+ * per-position ESAs (the DSP set owns them, section 13.10.2), so a forward
+ * declaration is enough here; chainAdapter.cpp includes the full
+ * dsp56kEmu/esai.h when it dereferences them. */
+namespace dsp56k { class Esai; }
+
 namespace g2
 {
 	/* The two alias types the four callback factories return, bound to the
@@ -174,6 +181,33 @@ namespace g2
 		EsaiReadRxCallback  secondRxCallback(unsigned position);
 		EsaiWriteTxCallback secondTxCallback(unsigned position);
 
+		/* ------------- CHN-6, the written-flag mechanism.
+		 *
+		 * Each transmit wrapper sets its position's WRITTEN flag: true
+		 * exactly when the callback fires AND the emulated ESAI's M_TUE
+		 * transmit-underrun bit is clear in Esai::readStatusRegister() at
+		 * that instant (section 12.3). M_TUE rises in writeSlotToFrame
+		 * (esai.cpp:380-384) before the frame is delivered and is not
+		 * cleared until the interrupt path (esai.cpp:108-112) runs after,
+		 * so at the instant the callback runs the bit states whether the
+		 * frame it carries is stale. This is the better measurement of
+		 * section 12.3 and the assertion behind the CHN-6 Check.
+		 *
+		 * attachEsai records the borrowed per-position Esai pointers a
+		 * position's transmit wrappers inspect. The DSP set calls it for
+		 * every position at construction, BEFORE it produces the four
+		 * callbacks - the position's wrappers need the Esai from the first
+		 * fire. It is CHN-6's seam so the rule is testable before CHN-7's
+		 * advanceAll consumes the flags.
+		 *
+		 * audioWritten/secondWritten read one position's flag back; they are
+		 * the test and diagnostic surface of the M_TUE rule. Nothing can SET
+		 * a flag outside ChainAdapter - a flag changes only when its own
+		 * transmit wrapper fires. */
+		void attachEsai(unsigned position, dsp56k::Esai& audio, dsp56k::Esai& second);
+		bool audioWritten (unsigned position) const noexcept;
+		bool secondWritten(unsigned position) const noexcept;
+
 		/* ------------- The three counters.
 		 *
 		 * underrunFrames counts, per position, quanta in which the audio
@@ -222,5 +256,22 @@ namespace g2
 		unsigned       m_hopFrames           = 0;
 		ChainTopology  m_secondBusTopology   = ChainTopology::Ring;
 		unsigned       m_secondBusFrameDivider = 1;
+
+		/* ------------- CHN-6 private state: the written flags and the
+		 * Esai pointers the transmit wrappers inspect.
+		 *
+		 * m_audioWritten and m_secondWritten hold ONE flag for each position
+		 * and EACH bus, so 2 x dspCount flags and never dspCount (section
+		 * 13.10.2). A position's audio transmit wrapper sets m_audioWritten
+		 * and its second transmit wrapper sets m_secondWritten, which is
+		 * what lets CHN-7 count the two buses on different cadences.
+		 *
+		 * m_audioEsai / m_secondEsai are the borrowed per-position Esai
+		 * pointers (owned by the DSP set), populated by attachEsai before
+		 * the four factories are produced. */
+		std::vector<dsp56k::Esai*> m_audioEsai;
+		std::vector<dsp56k::Esai*> m_secondEsai;
+		std::vector<uint8_t>       m_audioWritten;
+		std::vector<uint8_t>       m_secondWritten;
 	};
 }
