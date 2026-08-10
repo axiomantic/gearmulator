@@ -197,3 +197,22 @@ set_property(TARGET t0_uart0 PROPERTY FOLDER "G2/test")
 add_test(NAME t0_uart0 COMMAND t0_uart0)
 set_tests_properties(t0_uart0 PROPERTIES LABELS "UnitTest")
 
+# ----------------- BRD-21, the Board class
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_board_surface$
+#
+# The surface test asserts concreteness two ways (the five static_asserts in
+# board.h at compile time, the same properties through <type_traits> at run
+# time), the six methods the Scheduler uses, and the single construction log
+# line that names G2_MCU_CORE_CLOCK_HZ, the placeholder value and criterion (j).
+#
+# NMG2_ARTIFACTS is not read: the test is T0 and constructs a Board that drives
+# no program, so no Clavia byte reaches it.
+
+add_executable(t0_board_surface t0_board_surface.cpp)
+target_link_libraries(t0_board_surface PRIVATE g2Lib)
+set_property(TARGET t0_board_surface PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_board_surface COMMAND t0_board_surface)
+set_tests_properties(t0_board_surface PROPERTIES LABELS "UnitTest")
+

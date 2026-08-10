@@ -52,3 +52,21 @@ list(APPEND G2LIB_SOURCES
 	uart0.h
 	uart0.cpp
 )
+
+# ----------------- BRD-21, the Board class
+#
+# board.h declares the six-method surface the Scheduler uses -- runMcu,
+# faulted, tickSofIfDue, stateSize, stateSave and stateLoad -- and carries the
+# five static_asserts that make "concrete, not copyable, not movable" a
+# COMPILE-TIME property. board.cpp carries the lifetime, the bodies and the one
+# G2_MCU_CORE_CLOCK_HZ placeholder line that t0_board_surface counts.
+#
+# THE TRANSLATION UNIT IS LISTED HERE AND NOT ONLY THE HEADER. board.cpp
+# defines every method t0_board_surface calls, so a build that compiles the
+# test without compiling this source fails at the LINK step on g2::Board. BRD-22
+# extends board.cpp with the real tickSofIfDue and adds no name to this list.
+
+list(APPEND G2LIB_SOURCES
+	board.h
+	board.cpp
+)
