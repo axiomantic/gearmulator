@@ -95,7 +95,7 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # below is CPU-1's, verified to resolve on the remote with `git ls-remote`.
 
 set(G2_MCF5307_SOURCE_DIR "" CACHE PATH "Build the MCF5307 core from this checkout instead of fetching it")
-set(G2_MCF5307_GIT_TAG "408df4065c85aae6b507bf71f0cff78b6cc366b9" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
+set(G2_MCF5307_GIT_TAG "f9d3593faaaa09e05624bf4662e43437500f1073" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5307
