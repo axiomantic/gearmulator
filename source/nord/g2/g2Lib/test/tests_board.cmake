@@ -101,7 +101,7 @@ set_tests_properties(t0_anomaly_log PROPERTIES LABELS "UnitTest")
 # and MIT, it holds no firmware, and this test authors every container it reads.
 
 set(G2_NMG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools to use instead of fetching one")
-set(G2_NMG2_TOOLS_GIT_TAG "968090b52b4d9198027dc71587bfc97b33bc2283" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
+set(G2_NMG2_TOOLS_GIT_TAG "fbbff97deea9842ef4126dfe50082db2c21d85e7" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
 
 if(G2_NMG2_TOOLS_SOURCE_DIR)
 	set(G2_ORACLE_TOOLS_DIR "${G2_NMG2_TOOLS_SOURCE_DIR}")
