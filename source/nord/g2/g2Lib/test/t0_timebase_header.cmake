@@ -89,11 +89,11 @@ endif()
 # rather than tracked.
 #
 # THE NEEDLES ARE ASSEMBLED FROM HALVES, and that is load-bearing rather than
-# cosmetic. The scan below covers every file in this repository with NO
-# exclusion list. A driver that spelled either needle out in full would match
-# ITSELF, the case could never pass, and the usual repair -- excluding the
-# driver from its own scan -- would open exactly the hole the case exists to
-# close.
+# cosmetic. This driver is a tracked file inside the tree the scan covers, and
+# nothing below excludes it. A driver that spelled either needle out in full
+# would match ITSELF, the case could never pass, and the usual repair --
+# excluding the driver from its own scan -- would open exactly the hole the case
+# exists to close.
 string(CONCAT g2RefutedMcuClock "540" "00000")
 string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 
@@ -114,11 +114,104 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 # every file this project actually writes.
 #
 # -I skips binary files. --fixed-strings makes the needle a literal.
+#
+# ---------------- WHAT IS NOT SOURCE, AND HOW IT IS FOUND
+#
+# THE SCAN MUST NOT READ BUILD OUTPUT, AND A DIRECTORY NAME IS NOT A RELIABLE
+# WAY TO TELL. This was measured rather than argued.
+#
+# `--untracked` covers untracked, non-ignored files. `.gitignore` ignores
+# /build/ and nothing else, so a build tree at that ONE path is out of scope and
+# a build tree at ANY OTHER PATH is not. A CTest log quotes the output of the
+# tests it ran, and the failure message below PRINTS the refuted value in full.
+# So a second build tree, under any name but `build`, puts the literal into
+# <tree>/Testing/Temporary/LastTest.log and this case reports it as present:
+# THE CHECK'S OWN OUTPUT BECOMES ITS INPUT. Measured on this repository: with
+# the untracked build trees `build-baseline/` and `build-pins/` on disk, the
+# case reported five matches and every one of them was a log line -- one of them
+# a log of a run that had quoted the OTHER tree's log.
+#
+# A check that passes because of what somebody called a directory is an
+# accident, not a check. The scope is therefore stated by a PROPERTY of the
+# directory and never by its name: A DIRECTORY THAT HOLDS A CMakeCache.txt IS A
+# CMake BUILD TREE, and a build tree is output rather than source. The set is
+# computed at run time, so a build tree created after this file was written is
+# excluded too, and a directory that merely LOOKS like build output is not.
+#
+# THE EXCLUDED SET IS PRINTED WITH THE RESULT -- on the passing path and in
+# every failure message -- so the scope is never invisible to whoever reads the
+# verdict. An exclusion nobody can see is indistinguishable from a check that
+# stopped working.
+#
+# WHAT THIS DOES NOT COVER, stated rather than implied: a build tree that is not
+# a wholly untracked directory -- an IN-SOURCE configure at the repository root
+# is the real instance. That tree has no untracked directory to exclude, and
+# excluding the root would exclude the whole scan. Such a tree makes this case
+# report a FALSE POSITIVE, which is loud, rather than a false pass, which is
+# silent. That is the correct direction for the failure to point.
+
+execute_process(
+	COMMAND ${G2_GIT_EXECUTABLE} ls-files --others --directory
+		--exclude-standard
+	WORKING_DIRECTORY ${G2_REPO_ROOT}
+	RESULT_VARIABLE g2ListingResult
+	OUTPUT_VARIABLE g2ListingOutput
+	ERROR_VARIABLE g2ListingError)
+
+set(g2BuildTreeExclusions "")
+set(g2ExcludedNames "")
+
+if(g2ListingResult EQUAL 0)
+	string(REPLACE "\n" ";" g2ListedEntries "${g2ListingOutput}")
+
+	foreach(g2Entry IN LISTS g2ListedEntries)
+		# git reports a directory with a trailing slash and a file without one.
+		if(NOT g2Entry MATCHES "/$")
+			continue()
+		endif()
+
+		if(NOT EXISTS "${G2_REPO_ROOT}/${g2Entry}CMakeCache.txt")
+			continue()
+		endif()
+
+		list(APPEND g2BuildTreeExclusions ":(exclude)${g2Entry}")
+		list(APPEND g2ExcludedNames "${g2Entry}")
+	endforeach()
+endif()
+
+if(g2ExcludedNames STREQUAL "")
+	string(CONCAT g2ScopeReport
+		"t0_timebase_header case 3 scope: excluded build trees: NONE. No "
+		"untracked directory holds a CMakeCache.txt.")
+else()
+	string(REPLACE ";" " " g2ExcludedNamesText "${g2ExcludedNames}")
+	string(CONCAT g2ScopeReport
+		"t0_timebase_header case 3 scope: excluded build trees, each because it "
+		"holds a CMakeCache.txt: ${g2ExcludedNamesText}")
+endif()
+
+# The listing is what makes the exclusion computable. If it could not run the
+# scan still proceeds -- a WIDER scan can only produce a false positive, never a
+# false pass -- but the report says so rather than implying an exclusion set
+# that was never computed.
+if(NOT g2ListingResult EQUAL 0)
+	string(CONCAT g2ScopeReport
+		"${g2ScopeReport} WARNING: git ls-files exited ${g2ListingResult}, so "
+		"no exclusion could be computed and the scan below is WIDER than the "
+		"rule specifies: ${g2ListingError}")
+endif()
+
+message(STATUS "${g2ScopeReport}")
+
+set(g2GrepPathspec "")
+if(NOT g2BuildTreeExclusions STREQUAL "")
+	set(g2GrepPathspec -- . ${g2BuildTreeExclusions})
+endif()
 
 foreach(g2Needle IN ITEMS ${g2RefutedMcuClock} ${g2DeletedDebtMacro})
 	execute_process(
 		COMMAND ${G2_GIT_EXECUTABLE} grep -I --untracked --line-number
-			--fixed-strings -e ${g2Needle}
+			--fixed-strings -e ${g2Needle} ${g2GrepPathspec}
 		WORKING_DIRECTORY ${G2_REPO_ROOT}
 		RESULT_VARIABLE g2GrepResult
 		OUTPUT_VARIABLE g2GrepOutput
@@ -133,11 +226,13 @@ foreach(g2Needle IN ITEMS ${g2RefutedMcuClock} ${g2DeletedDebtMacro})
 			"present in this repository. Design section 13.4.3 refutes the "
 			"MCU clock literal and design section 13.4.6 deleted the debt "
 			"alarm macro; neither may come back.\n"
+			"${g2ScopeReport}\n"
 			"${g2GrepOutput}")
 	elseif(NOT g2GrepResult EQUAL 1)
 		message(FATAL_ERROR
 			"t0_timebase_header case 3 FAILED: git grep could not run, so the "
 			"case is unproven rather than passed.\n"
+			"${g2ScopeReport}\n"
 			"exit code: ${g2GrepResult}\n"
 			"${g2GrepError}")
 	endif()
