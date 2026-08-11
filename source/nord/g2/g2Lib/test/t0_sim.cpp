@@ -909,6 +909,200 @@ int main()
 			"CSMR0, below CSCR0, takes nothing from the 32-bit write");
 	}
 
+	// -----------------------------------------------------------------------
+	// Case group 17. THE WINDOW BOUND. AN ACCESS THAT RUNS OFF THE TOP OF THE
+	// MBAR WINDOW REACHES NOTHING BEYOND IT.
+	//
+	// sim.h sizes m_space and m_writeProtect at g_simSpaceSize each and
+	// declares them one after the other, so THE BYTE ONE PAST THE TOP OF
+	// m_space IS THE FIRST BYTE OF m_writeProtect. Sim::read and Sim::write
+	// each carry a bound check for that reason, and UNTIL NOW NO CASE DROVE
+	// EITHER: deleting both left every case above green.
+	//
+	// THE ACCESS BELOW IS NOT EXOTIC, AND IT IS NOT A BACK DOOR. It arrives
+	// through the same decode every other group in this file uses.
+	// MemoryMap::decode examines only the START address, so MBAR+0x3fe is
+	// inside the one-kilobyte window and a 32-bit access there is handed to the
+	// SIM as offset 0x3fe. The SIM then walks four bytes, 0x3fe to 0x401, and
+	// the last two lie past the top of the window.
+	//
+	// IT IS THE COMPLEMENT OF CASE GROUP 16. Group 16 pins that a wide access
+	// does not stop at a REGISTER boundary. This group pins that it does stop
+	// at the WINDOW boundary. The two are different boundaries and only one of
+	// them bounds the storage.
+	//
+	// WHAT THE FAILURE WOULD COST. Without the write bound the model stores two
+	// bytes of a firmware write into m_writeProtect, which UNPROTECTS reserved
+	// MBAR space that UM Table 9-5 footnote 1 requires to stay inert - so a
+	// later write to a reserved offset would be kept, which is the exact defect
+	// case group 13 exists to prevent. Without the read bound the model hands
+	// protection bytes back as if they were register contents. Both are
+	// out-of-bounds accesses on a fixed-size array, reached through the
+	// ordinary bus entry point.
+	//
+	// THE LOG LINE IS ASSERTED ON BOTH HALVES, AND PLAN SECTION 13.1 REQUIRES
+	// IT: the case "asserts the model refuses it AND writes one log line naming
+	// the offset, the width and the direction". The refusal above was asserted
+	// and the log line was not, so the trace half of that sentence rested on
+	// nobody having looked - the same shape group 18 repaired for the byte-run
+	// contract.
+	//
+	// THE LINE READS UNMODELLED, AND THAT IS THE WHOLE POINT OF ASSERTING IT.
+	// No register covers MBAR+0x3fe, so Sim::find answers null and the access
+	// is traced exactly as any other unmodelled access is. An access that
+	// silently walks off the top of the window with NO trace is the failure
+	// this asserts against: the operator would see the model complete an
+	// out-of-bounds access and report nothing about it. The offset asserted is
+	// the one the access STARTED at, which is the rule group 18 states.
+	{
+		Bus bus;
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+
+		// THE READ BOUND. The two bytes past the top must contribute nothing.
+		// They are the write-protect bytes of MBAR+0x000 and MBAR+0x001, which
+		// no register covers and which therefore hold 0xff, so an UNBOUNDED
+		// read returns 0x0000ffff here and a bounded one returns zero. The
+		// discriminating value is a property of the model's own reset state and
+		// not of any allocator, so this case is deterministic.
+		bus.sim().clearLog();
+		const uint32_t value = bus.read(0x3fe, 32, status);
+
+		checkEqual(status, MCF5307_BUS_OK,
+			"a 32-bit read that runs off the top of the MBAR window completes rather than faulting");
+		checkEqual(value, uint32_t(0),
+			"a 32-bit read at MBAR+0x3fe reads zero for the two bytes that lie past the top of the window, rather than the bytes the model stores after it");
+		checkEqual(bus.sim().log().size(), size_t(1),
+			"the 32-bit read at MBAR+0x3fe writes exactly one log line, so an access that runs off the top of the window is never silent");
+		checkEqual(bus.logLine(0),
+			std::string("sim: UNMODELLED read of 32 bits at offset 0x000003fe"),
+			"the log line of the read names the offset it started at, its width and its direction");
+	}
+	{
+		// THE WRITE BOUND, observed exactly where an unbounded write would
+		// land. The first byte past m_space is the write-protect byte of
+		// MBAR+0x000, so an unbounded write at 0x3fe unprotects part of a
+		// reserved offset. modelWritableMask recovers that protection from
+		// behaviour, in the same way case group 14 does.
+		//
+		// THE FIRST CASE IS THE BEFORE PICTURE and it is not decoration: it
+		// establishes that the mask this group watches starts fully protected,
+		// so the second case's 0x00 is a value that was OBSERVED to be
+		// reachable rather than one that could never have been anything else.
+		Bus bus;
+
+		checkEqual(uint32_t(modelWritableMask(bus, 0x000)), uint32_t(0x00),
+			"the reserved offset 0x000 is fully write-protected before anything runs off the top of the window");
+	}
+	{
+		Bus bus;
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+
+		bus.sim().clearLog();
+		bus.write(0x3fe, 32, 0xdeadbeefu, status);
+
+		checkEqual(status, MCF5307_BUS_OK,
+			"a 32-bit write that runs off the top of the MBAR window completes rather than faulting");
+
+		// ASSERTED BEFORE modelWritableMask RUNS, because that helper drives
+		// four further accesses of its own at an offset no register covers and
+		// each of them appends to the same log.
+		checkEqual(bus.sim().log().size(), size_t(1),
+			"the 32-bit write at MBAR+0x3fe writes exactly one log line, so a write that runs off the top of the window is never silent");
+		checkEqual(bus.logLine(0),
+			std::string("sim: UNMODELLED write of 32 bits at offset 0x000003fe"),
+			"the log line of the write names the offset it started at, its width and the write direction");
+
+		checkEqual(uint32_t(modelWritableMask(bus, 0x000)), uint32_t(0x00),
+			"the reserved offset 0x000 is STILL fully write-protected after a 32-bit write at MBAR+0x3fe, so the write reached no byte past the top of the window");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 18. THE MIRROR OF CASE GROUP 16: AN ACCESS THAT STARTS IN
+	// RESERVED SPACE AND RUNS INTO A REGISTER.
+	//
+	// GROUP 16 PINS THE BYTE-RUN CONTRACT IN ONE DIRECTION ONLY - an access
+	// that starts INSIDE a register and runs out of it - while claiming the
+	// behaviour is "pinned either way". The mirror was unpinned, and two
+	// separate mutations proved it: making Sim::write discard an access whose
+	// START offset is unmodelled left every case above green, and so did making
+	// Sim::read return zero for the same case.
+	//
+	// THE DIRECTION THIS PINS, AND WHY IT IS THE RIGHT ONE. The model keeps the
+	// byte-run reading: the bytes that land inside a register DO reach it, and
+	// the log line records the offset the access STARTED at. Three things
+	// already in the model decide this, and none of them admits the other
+	// reading:
+	//
+	//   * GROUP 16 STATES THE RULE WITHOUT A DIRECTION. "The model treats an
+	//     access as a run of bytes from the offset it is given, exactly as the
+	//     part's bus does, and applies the write protection byte by byte." A
+	//     run of bytes has no start-offset exemption, so the reading that
+	//     discards on an unmodelled start is not a narrower version of that
+	//     rule - it CONTRADICTS it.
+	//   * THE PROTECTION IS PER BYTE. Group 13's hole is kept inert by the
+	//     write-protect mask of ITS OWN bytes, not by any decision taken at the
+	//     access's start offset. Discarding on an unmodelled start would be a
+	//     SECOND and redundant mechanism answering the same question, and the
+	//     two would disagree on exactly this case.
+	//   * sim.h DEFINES THE LOG as carrying one line "for every access to an
+	//     offset the manual assigns to no register this model carries". That is
+	//     the access's offset, singular - the one it was given. Logging by
+	//     start offset and transferring by byte run are orthogonal facts, which
+	//     is why the two halves below assert them separately.
+	//
+	// THE OFFSET IS DRAWN FROM THE DRAM CONTROLLER ON PURPOSE. UM Table 11-1
+	// gives DCR at $100 and DACR0 at $108, so $102 to $107 belong to no
+	// register, and sim.cpp records those rows as VERIFIED against the manual.
+	// The chip-select block carries an OPEN MASK-REVISION QUESTION and its holes
+	// could move if that question is answered against the model; this hole
+	// cannot. What is pinned here therefore does not rest on the answer.
+	//
+	// WHAT THE FAILURE WOULD COST. It is the harm case group 13 names, arriving
+	// from the other side. A 32-bit write at $106 leaves DACR0 holding half of
+	// it while the log calls the access UNMODELLED - a misdirected write that
+	// reads back exactly like a modelled one, which is the one thing BRD-5's
+	// anomaly log exists to make visible.
+	{
+		Bus bus;
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+
+		bus.sim().clearLog();
+		bus.write(0x106, 32, 0x11223344u, status);
+
+		checkEqual(status, MCF5307_BUS_OK,
+			"a 32-bit write starting in the reserved hole below DACR0 completes rather than faulting");
+		checkEqual(bus.sim().log().size(), size_t(1),
+			"the write writes exactly one log line, because the offset it starts at is one no register covers");
+		checkEqual(bus.logLine(0),
+			std::string("sim: UNMODELLED write of 32 bits at offset 0x00000106"),
+			"the log line names the offset the access STARTED at, and not the register it ran into");
+		checkEqual(bus.read(0x108, 32, status), uint32_t(0x33440000u),
+			"DACR0 takes the two bytes of the write that landed inside it, because a wide access is a run of bytes and does not stop where a register BEGINS");
+		checkEqual(bus.read(0x106, 16, status), uint32_t(0),
+			"the two reserved bytes the write started in take none of it");
+		checkEqual(bus.read(0x100, 16, status), uint32_t(0),
+			"DCR, below the hole, takes nothing from the write");
+	}
+	{
+		Bus bus;
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+
+		bus.write(0x108, 32, 0xa5a5a5a5u, status);
+
+		bus.sim().clearLog();
+		const uint32_t value = bus.read(0x106, 32, status);
+
+		checkEqual(status, MCF5307_BUS_OK,
+			"a 32-bit read starting in the reserved hole below DACR0 completes rather than faulting");
+		checkEqual(bus.sim().log().size(), size_t(1),
+			"the read writes exactly one log line, because the offset it starts at is one no register covers");
+		checkEqual(bus.logLine(0),
+			std::string("sim: UNMODELLED read of 32 bits at offset 0x00000106"),
+			"the log line of the read names the offset the access STARTED at");
+		checkEqual(value, uint32_t(0x0000a5a5u),
+			"the read returns the two reserved bytes as zero and the two bytes of DACR0 it ran into, so a read is a run of bytes in the same way a write is");
+	}
+
 	if(g_failures)
 	{
 		std::cout << "t0_sim: " << g_failures << " of " << g_cases
