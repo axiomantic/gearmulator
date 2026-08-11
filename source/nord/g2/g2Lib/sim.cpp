@@ -193,8 +193,6 @@
 
 #include "sim.h"
 
-#include <cstddef>
-
 namespace g2
 {
 	namespace
@@ -288,8 +286,6 @@ namespace g2
 			{0x244, 2, Access::ReadWrite, false, 0x0000, 0x0000, "PADDR"},
 			{0x248, 2, Access::ReadWrite, false, 0x0000, 0x0200, "PADAT"},
 		};
-
-		constexpr size_t g_registerCount = sizeof(g_registers) / sizeof(g_registers[0]);
 
 		// The bits a write cannot reach, for one byte of one register. A
 		// read-only register holds every bit. A read/write register holds only
