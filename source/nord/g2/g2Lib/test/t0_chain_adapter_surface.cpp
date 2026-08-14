@@ -56,18 +56,18 @@ namespace
 
 using ChainAdapter = g2::ChainAdapter;
 
-/* the four phase methods */
+/* the phase methods */
 void (ChainAdapter::*const kAdvanceAll)(uint64_t) noexcept = &ChainAdapter::advanceAll;
 void (ChainAdapter::*const kInjectCodecSource)(const g2::Frame&) noexcept = &ChainAdapter::injectCodecSource;
 void (ChainAdapter::*const kExtractCodecSink)(g2::Frame&) noexcept = &ChainAdapter::extractCodecSink;
 
-/* the four callback factories */
+/* the callback factories */
 g2::EsaiReadRxCallback (ChainAdapter::*const kAudioRx)(unsigned) = &ChainAdapter::audioRxCallback;
 g2::EsaiWriteTxCallback (ChainAdapter::*const kAudioTx)(unsigned) = &ChainAdapter::audioTxCallback;
 g2::EsaiReadRxCallback (ChainAdapter::*const kSecondRx)(unsigned) = &ChainAdapter::secondRxCallback;
 g2::EsaiWriteTxCallback (ChainAdapter::*const kSecondTx)(unsigned) = &ChainAdapter::secondTxCallback;
 
-/* the three counters */
+/* the counters */
 uint64_t (ChainAdapter::*const kUnderrun)(unsigned) const noexcept = &ChainAdapter::underrunFrames;
 uint64_t (ChainAdapter::*const kSecondUnderrun)(unsigned) const noexcept = &ChainAdapter::secondBusUnderrunFrames;
 uint64_t (ChainAdapter::*const kPhaseError)(unsigned) const noexcept = &ChainAdapter::phaseErrorFrames;

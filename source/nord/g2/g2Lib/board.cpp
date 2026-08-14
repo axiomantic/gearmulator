@@ -23,10 +23,7 @@
 // THE STATE METHODS AND THE MISSING NIM BLOCKS, STATED RATHER THAN HIDDEN.
 // Design section 13.10 says stateSize/stateSave/stateLoad "embed the Nim
 // mcf5307_state_* and isp1181_state_* blocks of section 5.2". The pinned core
-// commit exports none of those C symbols (measured against libmcf5307.a at
-// the CPU-3 commit this build pins: mcf5307_create, mcf5307_destroy,
-// mcf5307_reset, mcf5307_exec and mcf5307_runtime_init are exported; the
-// state_* and isp1181_* families are not). This task therefore serialises the
+// commit exports none of those C symbols. This task therefore serialises the
 // Board's own determinism-relevant state and documents the deviation rather
 // than stubbing a call to a symbol that would not link -- the same
 // documented-deviation route BRD-23 took for mcf5307_exec earlier in this

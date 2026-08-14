@@ -2,10 +2,9 @@
  * Design sections 13.3 and 13.10.3.
  *
  * IT RUNS THE JOBS IN ORDER ON THE CALLING THREAD. There is no thread here, no
- * queue, no mutex and no condition variable, and neither <thread> nor
- * std::thread is named in this file. A worker thread would make job completion
- * order depend on the host scheduler, which ends the bit-exactness claim this
- * design makes at the 96 kHz Q23 integer boundary.
+ * queue, no mutex and no condition variable. A worker thread would make job
+ * completion order depend on the host scheduler, which ends the bit-exactness
+ * claim this design makes at the 96 kHz Q23 integer boundary.
  */
 
 #include "executor.h"

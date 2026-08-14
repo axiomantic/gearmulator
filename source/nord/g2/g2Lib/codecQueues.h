@@ -81,13 +81,12 @@ namespace g2
 
 		/* Present for symmetry with CodecSink::capacity(), and because the
 		 * Scheduler's required log line for a short push names "the queue
-		 * capacity" -- a value an earlier draft exposed nowhere, so the line
-		 * it demanded could not be written. */
+		 * capacity". Without this accessor that line cannot be written. */
 		size_t       capacity() const noexcept;
 
-		/* Counts the frames push() refused. An earlier draft had no
-		 * counterpart to starvedFrames() on the input side, so an overflow --
-		 * the symmetric failure to a starve -- was unhandled AND uncounted. */
+		/* Counts the frames push() refused. Without a counterpart to
+		 * starvedFrames() on the input side, an overflow -- the symmetric
+		 * failure to a starve -- would be unhandled AND uncounted. */
 		uint64_t     overflowFrames() const noexcept;
 
 		/* Counts the quanta that consumed a zero frame because the host had
@@ -112,10 +111,7 @@ namespace g2
 
 		/* REFUSES WHEN FULL. IT DOES NOT OVERWRITE THE OLDEST FRAME.
 		 *
-		 * An earlier design draft declared "overwrites oldest when full" while
-		 * the lookahead section said "when the queue is full, the scheduler
-		 * stops". Those two cannot both stand, and the overwrite is the one
-		 * that had to go: overwriting silently discards a frame the host has
+		 * Overwriting silently discards a frame the host has
 		 * already been told to expect, which changes the real latency
 		 * mid-session while the reported figure stays constant -- the exact
 		 * failure the constant-latency requirement exists to prevent, and one
@@ -138,16 +134,16 @@ namespace g2
 		size_t   capacity() const noexcept;
 
 		/* Counts the frames push() refused. droppedFrames() above zero is a
-		 * DEFECT REPORT, not a tolerance. An earlier draft declared this
-		 * counter and NO test read it, which made it decoration. */
+		 * DEFECT REPORT, not a tolerance. A counter no test reads is
+		 * decoration. */
 		uint64_t droppedFrames() const noexcept;
 
 		/* Counts the frames pull() could not supply -- the number by which a
 		 * pull's return fell short of its request. This is the SINK's
-		 * under-supply counter, and an earlier draft had none: the source
-		 * counted both starvation and overflow while the sink counted only
-		 * overflow, so the one quadrant an under-sized sink capacity actually
-		 * lands in was the quadrant nothing watched. */
+		 * under-supply counter. Without it the source counts both starvation
+		 * and overflow while the sink counts only overflow, and the one
+		 * quadrant an under-sized sink capacity actually lands in is the
+		 * quadrant nothing watches. */
 		uint64_t underflowFrames() const noexcept;
 
 	private:
@@ -158,9 +154,9 @@ namespace g2
 		uint64_t           m_underflow = 0;
 	};
 
-	/* The determinism boundary is INTEGER. These two assertions are here so
-	 * that a later member of a floating-point type is a compile error and not
-	 * a discovery. */
+	/* The determinism boundary is INTEGER. This assertion is here so that a
+	 * later member of a floating-point type is a compile error and not a
+	 * discovery. */
 	static_assert(std::is_same_v<std::remove_extent_t<decltype(Frame::slot)>,
 			int32_t>,
 		"A queued frame is Q23 integer storage. No floating-point type may "

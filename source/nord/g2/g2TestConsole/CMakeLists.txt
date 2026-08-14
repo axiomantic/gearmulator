@@ -2,11 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(g2TestConsole)
 
-# This directory is SHARED BY ORDER and not by ownership. Task INT-1 creates
-# main.cpp in wave 4a, INT-2 extends it in wave 5b, PLG-14 in wave 6 and PERF-1
-# in wave 7. No two writers share a wave. See plan section 7.4.2.
-#
-# Task BRD-0 creates this file and the target.
+# This directory is SHARED BY ORDER and not by ownership. See plan section
+# 7.4.2.
 
 add_executable(g2TestConsole)
 
@@ -16,11 +13,10 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 	list(APPEND SOURCES main.cpp)
 endif()
 
-# BRD-0 creates the target before any writer creates main.cpp, and an executable
-# with no source at all cannot link. Until INT-1 lands, the target carries one
-# translation unit GENERATED INTO THE BUILD TREE. It is not a committed source
-# file: BRD-0 creates CMake files and no C++ source. The placeholder disappears
-# by itself as soon as main.cpp exists.
+# An executable with no source at all cannot link. Until main.cpp exists, the
+# target carries one translation unit GENERATED INTO THE BUILD TREE, not a
+# committed source file. The placeholder disappears by itself as soon as
+# main.cpp exists.
 if(NOT SOURCES)
 	set(G2_TEST_CONSOLE_PLACEHOLDER ${CMAKE_CURRENT_BINARY_DIR}/g2TestConsolePlaceholder.cpp)
 	file(WRITE ${G2_TEST_CONSOLE_PLACEHOLDER}

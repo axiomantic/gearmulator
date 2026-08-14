@@ -34,20 +34,12 @@
 //
 // BRD-23's Check: line says the test "calls mcf5307_runtime_init() and takes
 // the address of mcf5307_exec". THE SECOND HALF CANNOT BE SATISFIED at the
-// commit this build pins, and the measurement is below rather than an
-// argument. At axiomantic/mcf5307 408df4065c85aae6b507bf71f0cff78b6cc366b9,
-// which is the commit task CPU-1 landed, src/mcf5307.nim exports exactly ONE
-// symbol -- mcf5307_runtime_init. mcf5307_exec is DECLARED in
-// include/mcf5307.h and is DEFINED nowhere in the library. Measured on
-// 2026-08-06 against libmcf5307.a built from that commit:
+// commit this build pins. src/mcf5307.nim exports mcf5307_runtime_init;
+// mcf5307_exec is DECLARED in include/mcf5307.h and is DEFINED nowhere in the
+// library. To confirm against libmcf5307.a built from the pinned commit:
 //
 //   $ nm -g libmcf5307.a | grep mcf5307_
-//   0000000000000000 T _mcf5307_runtime_init          ; and the NimMain set
-//                                                     ; mcf5307_exec: ABSENT
 //   $ c++ probe.o libmcf5307.a -o probe
-//   Undefined symbols for architecture arm64:
-//     "_mcf5307_exec", referenced from:
-//         _main in probe.o
 //
 // So a test that took that address would fail to LINK, and BRD-23's positive
 // case could not pass at all. The address is NOT taken here and NO stub is

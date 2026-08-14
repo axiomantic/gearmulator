@@ -209,7 +209,7 @@ namespace
 	/* ---------------- what is NOT source, and how it is found
 	 *
 	 * THE SCAN MUST NOT READ BUILD OUTPUT, AND A DIRECTORY NAME IS NOT A
-	 * RELIABLE WAY TO TELL. This was measured rather than argued.
+	 * RELIABLE WAY TO TELL.
 	 *
 	 * The scan covers this repository's tracked files plus its untracked,
 	 * non-ignored ones. `.gitignore` ignores /build/, so a build tree at that
@@ -218,8 +218,7 @@ namespace
 	 * PRINTS the refuted value in full when it reports the value absent. So a
 	 * second build tree, at any name but `build`, puts the literal into
 	 * <tree>/Testing/Temporary/LastTest.log and this case reports it as
-	 * present. Measured: the case passed in `build` and failed in `build2`
-	 * with three matches, every one of them a log line.
+	 * present, on matches that are all log lines.
 	 *
 	 * A check that passes because of a directory name is an accident, not a
 	 * check. The scope is therefore stated by a PROPERTY of the directory and
@@ -569,7 +568,7 @@ int main(const int argc, const char* const* const argv)
 		/* THE MCF5307 LINK IS TURNED OFF FOR THE SCRATCH CONFIGURE, and the
 		 * reason is stated rather than left as a flag nobody can explain.
 		 *
-		 * Task BRD-23 turns G2_LINK_MCF5307 ON by default, and g2Lib then
+		 * G2_LINK_MCF5307 defaults ON, and g2Lib then
 		 * either adds a subdirectory the ROOT CMakeLists.txt points it at or
 		 * calls FetchContent_MakeAvailable(mcf5307) against details the ROOT
 		 * declares. This scratch project is not that root, so the fetch has no

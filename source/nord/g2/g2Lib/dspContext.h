@@ -1,10 +1,10 @@
 /* dspContext.h -- JobFault, JobContext and DspContext. Task SCH-6.
  * Design section 13.10.3.
  *
- * THE ERROR CHANNEL, AS A TYPE. An earlier design draft said a fault "sets the
- * fault field of that job's own context" and declared no context type, no
- * fault field and no accessor, so the path after Executor::run could not be
- * written at all. The three declarations below close it.
+ * THE ERROR CHANNEL, AS A TYPE. A fault sets the fault field of that job's own
+ * context. Without a context type, a fault field and an accessor, the path
+ * after Executor::run cannot be written at all. The declarations below close
+ * it.
  *
  * The eight DspContext objects are the whole job array. They are declared here
  * because Job points at one, and because a `void* user` gave the fault field

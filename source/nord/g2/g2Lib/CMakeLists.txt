@@ -2,9 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(g2Lib)
 
-# THIS FILE HAS ONE OWNER: task BRD-0. Task BRD-23 is the one declared second
-# writer, and it changes exactly one line -- the default of the option
-# G2_LINK_MCF5307, from OFF to ON. See plan section 7.4.2.
+# THIS FILE HAS ONE OWNER: task BRD-0. See plan section 7.4.2.
 #
 # NO OTHER TASK EDITS THIS FILE. A track that needs a change here -- a new link
 # library, a new compile option -- reports it to the BRD-0 owner.
@@ -14,10 +12,9 @@ project(g2Lib)
 
 add_library(g2Lib STATIC)
 
-# ----------------- the ten per-track source lists
+# ----------------- the per-track source lists
 #
-# Each list appends to G2LIB_SOURCES. Every list is created empty by BRD-0 and
-# is owned by the track its name carries.
+# Each list appends to G2LIB_SOURCES and is owned by the track its name carries.
 
 set(G2LIB_SOURCES)
 
@@ -32,11 +29,10 @@ include(sources_oracle.cmake)
 include(sources_perf.cmake)
 include(sources_int.cmake)
 
-# BRD-0 creates every list empty, and a CMake target with no source at all
-# fails at generate time. While every list is still empty the target carries one
-# translation unit GENERATED INTO THE BUILD TREE. It is not a committed source
-# file: BRD-0 creates CMake files and no C++ source. The placeholder disappears
-# by itself as soon as the first track adds a name to its own list.
+# A CMake target with no source at all fails at generate time. While every list
+# is still empty the target carries one translation unit GENERATED INTO THE
+# BUILD TREE, not a committed source file. The placeholder disappears by itself
+# as soon as the first track adds a name to its own list.
 if(NOT G2LIB_SOURCES)
 	set(G2LIB_PLACEHOLDER ${CMAKE_CURRENT_BINARY_DIR}/g2LibPlaceholder.cpp)
 	file(WRITE ${G2LIB_PLACEHOLDER}
@@ -69,9 +65,6 @@ target_include_directories(g2Lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ----------------- the MCF5307 core
 #
-# The link is BEHIND AN OPTION and the option defaults to OFF, because the
-# target mcf5307::mcf5307 is exported by task CPU-1 in wave 3a while this file
-# is created in wave 2. Task BRD-23 turns the option ON once the target exists.
 # The root CMakeLists.txt declares where the sources come from.
 
 option(G2_LINK_MCF5307 "Link the MCF5307 core" ON)
@@ -93,8 +86,7 @@ endif()
 # a zero, so the build fails at configure time and names the symbol.
 #
 # The one file allowed to carry the two names is their declaration site,
-# g2Lib/g2/timebase.h, which task SCH-0 owns. Task SCH-3 drives the negative
-# case that proves this guard fires.
+# g2Lib/g2/timebase.h.
 
 set(G2_UNMEASURED_SYMBOLS G2_MCU_BUS_CLOCK_HZ G2_MCU_BUS_DIVIDER)
 

@@ -73,14 +73,7 @@
 // ---------------------------------------------------------------------------
 // THE SECTION 9.4.2.1 CITATION WAS ACCURATE. IT WAS NOT FABRICATED.
 //
-// This entry corrects the record, and it corrects it against the previous
-// revision of this same block.
-//
-// A revision before that one modelled ONE CSBAR at MBAR+$098 and no CSAR2 to
-// CSAR5. It cited MCF5307 UM section 9.4.2.1 and quoted it. The revision that
-// replaced it called that reading "withdrawn" and implied the citation was
-// unsound. IT WAS NOT. The manual was read on 2026-08-06 and section 9.4.2.1
-// says exactly what was quoted:
+// MCF5307 UM section 9.4.2.1 is sound and says:
 //
 //   Section 9.4.2.1 is titled "CHIP-SELECT ADDRESS REGISTER (CSAR0, CSAR1 AND
 //   CSBAR)". It states that CSBAR determines the base address from which
@@ -163,8 +156,7 @@
 // ---------------------------------------------------------------------------
 // ACCESS WIDTHS: WHAT THE MANUAL ACTUALLY GIVES.
 //
-// The gap the previous revision left open is now closed, and the answer is
-// that the manual states NO access-width rule for the chip-select or DRAM
+// The manual states NO access-width rule for the chip-select or DRAM
 // controller registers.
 //
 // The whole manual was searched. It carries exactly ONE statement of this
@@ -267,19 +259,10 @@ namespace g2
 			//
 			// strapBits IS $00 HERE ON PURPOSE. Access::ReadOnly already holds
 			// every bit of the register, so naming bit 0 again would add no
-			// protection. The earlier revision carried $01 here and it was
-			// DEAD DATA.
-			//
-			// THE REASON IT WAS DEAD IS NOT THE REASON A PREVIOUS REVISION OF
-			// THIS COMMENT GAVE. That revision said the constructor read
-			// strapBits only on a ReadWrite row and that applying it on every
-			// row meant the field "can never go silently dead again". The
-			// second half is false. A strap on a read-only row is dead in BOTH
-			// forms, because a read-only row is fully protected either way, and
-			// the two constructor forms compute the same mask for every input
-			// they can be given. See the static_assert block below for the
-			// full record. What keeps the field honest is the invariant those
-			// static_asserts hold, not the shape of the constructor.
+			// protection: a strap named on a read-only row is DEAD DATA,
+			// because a read-only row is fully protected either way. What
+			// keeps the field honest is the invariant the static_assert block
+			// below holds, not the shape of the constructor.
 			{0x1d0, 1, Access::ReadOnly,  true,  0x0e,   0x00, "UIPCR"},
 
 			// The parallel port. Port A bit 9 is an input strap.
@@ -308,17 +291,13 @@ namespace g2
 		// holds is a bit a write cannot reach. Narrowing either arm breaks the
 		// build here instead of going quiet.
 		//
-		// WHY THIS GUARD AND NOT A CASE IN t0_sim.cpp. An earlier revision
-		// wrote that applying strapBits on every row meant the field "can
-		// never go silently dead again", and a reviewer found that reverting
-		// to the earlier form left all 390 cases green. The reviewer was
-		// right about the coverage and the earlier revision was wrong about
-		// the reason. THE TWO FORMS ARE THE SAME FUNCTION. Access::ReadOnly
-		// already sets every bit of the mask, so `0xff | strap` is `0xff` for
-		// every strap, and the read/write arm is `strap` in both forms. All
-		// 512 possible inputs were compared and none of them differ. The
-		// change made the field REACHABLE, not COVERED, and no runtime case
-		// can be red on it because it changes no behaviour at all.
+		// WHY THIS GUARD AND NOT A CASE IN t0_sim.cpp. Applying strapBits on
+		// every row rather than only on a ReadWrite row is THE SAME FUNCTION.
+		// Access::ReadOnly already sets every bit of the mask, so `0xff | strap`
+		// is `0xff` for every strap, and the read/write arm is `strap` in both
+		// forms. Applying it on every row makes the field REACHABLE, not
+		// COVERED, and no runtime case can be red on it because it changes no
+		// behaviour at all.
 		//
 		// So the honest guard is a guard on the invariant the field exists
 		// for, and it lives here where it can see the arms. t0_sim.cpp case

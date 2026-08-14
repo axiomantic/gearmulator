@@ -14,8 +14,8 @@
  * from the CodecSource, and the egress pushes one frame into the CodecSink.
  * That is the whole of what the capacity rule depends on -- the call ORDER of
  * push, runFrames and pull, and one frame in and one frame out for each of the
- * block's frames -- and it is what makes this row runnable in Wave 3a instead
- * of waiting for Wave 3b.
+ * block's frames -- and it is what makes this row runnable without the rest of
+ * the chain.
  *
  * THE SINK IS PRIMED WITH L FRAMES, AND WITHOUT THAT THIS CHECK CANNOT FAIL
  * FOR THE PART IT EXISTS TO TEST. Design section 13.6.1 puts the lookahead in
@@ -236,7 +236,7 @@ int main()
 			kBlockCount * kLargestBlock, "every frame of every block was "
 			"pulled");
 
-		/* THE THREE COUNTERS ARE ZERO. Any one of them above zero is a defect
+		/* THE COUNTERS ARE ZERO. Any one of them above zero is a defect
 		 * report and not a tolerance. */
 		checkEqual(source.overflowFrames(), 0u,
 			"overflowFrames is zero: the source never refused a frame");

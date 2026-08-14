@@ -19,10 +19,10 @@
 // stop, the user is not told, and the fault reaches the ear rather than the
 // log.
 //
-// THIS TASK DECLARES THE POLICY AND WIRES NOTHING. Task PLG-5 wires it into
-// g2State.cpp, because plan section 7.4.2 gives g2JucePlugin/ to the plugin
-// track. Nothing here reads plugin state, opens a file or shows a window: the
-// decision is a value, and the caller acts on it.
+// THIS FILE DECLARES THE POLICY AND WIRES NOTHING. The wiring into g2State.cpp
+// belongs to the plugin track, because plan section 7.4.2 gives g2JucePlugin/
+// to that track. Nothing here reads plugin state, opens a file or shows a
+// window: the decision is a value, and the caller acts on it.
 //
 // THE THIRD ROW ANSWERS NOTHING HERE. Design section 7.7 owns the no-firmware
 // state and task BRD-10 declares its surface, so this file reports NoFirmware

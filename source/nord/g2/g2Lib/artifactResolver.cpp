@@ -80,10 +80,8 @@ namespace g2
 		// Concatenates a string literal with a runtime value to form one of
 		// the THREE messages design section 4.2 names. The wording is fixed by
 		// the design and must be word-for-word identical to the Python half in
-		// nmg2_tools/artifacts.py -- the only source of truth for these
-		// strings is the design section, but the only way to keep the two
-		// halves from drifting is to assert the wording in a test, and the test
-		// reads the wording from THIS file.
+		// nmg2_tools/artifacts.py. The only source of truth for these strings
+		// is the design section.
 		//
 		// The buffer must be large enough for the longest message. The
 		// longest is message 3 with a 4096-byte path: 79 bytes of fixed text

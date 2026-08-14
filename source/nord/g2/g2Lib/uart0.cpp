@@ -65,8 +65,7 @@
 // AGENTS.md name it UART0. The index is 4 either way.
 //
 // AGENTS.md CARRY-RULES (section 2.2): UART0 at MBAR+0x1C0, vector 0x42,
-// divider 0x36, 8N1; UART1 unused reads reset values; the 54 MHz clock
-// derived from the divider is REFUTED and must not return.
+// divider 0x36, 8N1; UART1 unused reads reset values.
 //
 // NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
 // Release and it defines NDEBUG.

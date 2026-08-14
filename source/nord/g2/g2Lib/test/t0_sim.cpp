@@ -43,11 +43,9 @@
 //
 // WHAT THE UNRESTRICTED CLASS DOES AND DOES NOT CLAIM. It claims that THIS
 // MODEL accepts every width at those offsets. IT DOES NOT CLAIM THAT THE REAL
-// PART DOES. An earlier revision of this file asserted "every other modelled
-// register carries no width restriction" and rested that on the manual saying
-// nothing. THAT REASONING STAYS WITHDRAWN, and the manual now confirms why it
-// had to be. The whole manual was searched on 2026-08-06. It states exactly
-// one access-width rule, section 14.3.7, and that rule is about the UART
+// PART DOES. A claim that "every other modelled register carries no width
+// restriction" cannot rest on the manual saying nothing. The manual states one
+// access-width rule, section 14.3.7, and that rule is about the UART
 // block. Chapters 9, 11 and 12 state none. The WIDTH columns of Table 9-5,
 // Table B-1 and Table 11-1 give the width of each REGISTER, not the widths a
 // bus access may use. So the manual cannot close this either way: it does not
@@ -190,10 +188,9 @@ namespace
 		//
 		// readOnlyBits IS 0 HERE ON PURPOSE, and it matches sim.cpp's row.
 		// Kind::ReadOnly already holds every bit, so a strap mask on this row
-		// changes nothing that any case group reads. The earlier revision set
-		// it to $01 and the value was DEAD DATA in both files. Case group 3
-		// carries the strap fact as behaviour instead, which is where it
-		// belongs.
+		// changes nothing that any case group reads: a strap mask on a
+		// read-only row is DEAD DATA in both files. Case group 3 carries the
+		// strap fact as behaviour instead, which is where it belongs.
 		{0x1d0,  8, Kind::ReadOnly,  true, 0x0e, true, 0x00, "UIPCR"},
 
 		{0x244, 16, Kind::ReadWrite, false, 0x0000, true, 0x0000, "PADDR"},
@@ -503,9 +500,8 @@ int main()
 	// WHAT THIS GROUP IS AND IS NOT. It constructs no Bus, it names no g2::
 	// symbol and it reads only this file's own table. It therefore CANNOT
 	// observe sim.cpp, and every assertion below is worded as a fact about
-	// THIS FILE. An earlier revision worded them as facts about the model -
-	// "the model covers 18 chip-select ... registers" - which was misleading:
-	// a register added to sim.cpp alone left every one of them green.
+	// THIS FILE. Wording them as facts about the model would be misleading:
+	// a register added to sim.cpp alone leaves every one of them green.
 	//
 	// The job it does do is real and worth keeping. Groups 4 and 5 divide the
 	// table by byteAccessOnly: group 4 SKIPS every restricted row and group 5

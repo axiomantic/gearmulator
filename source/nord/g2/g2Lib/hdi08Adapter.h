@@ -24,8 +24,7 @@
 //
 // THIS FILE CARRIES NO ADDRESS AND NO BASE TABLE. The adapter decodes
 // whatever offset the board presents through `Hdi08Decode`, which carries no
-// address either. The nine addresses of AGENTS.md section 3.1 appear nowhere
-// in g2Lib, in any spelling.
+// address either.
 
 #pragma once
 

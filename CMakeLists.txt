@@ -78,43 +78,23 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 #
 # The core lives in its own repository, axiomantic/mcf5307. It is DECLARED here
 # and POPULATED nowhere unless source/nord/g2/g2Lib/CMakeLists.txt turns
-# G2_LINK_MCF5307 on, which task BRD-23 does once task CPU-1 exports the target
-# mcf5307::mcf5307. A declaration that is never populated costs nothing.
+# G2_LINK_MCF5307 on. A declaration that is never populated costs nothing.
 #
 # Set G2_MCF5307_SOURCE_DIR to a sibling checkout to build against that instead
 # of a fetched tree. G2_MCF5307_GIT_TAG carries the pin.
 #
-# TASK BRD-23 WRITES THE PIN. Task BRD-0 created this declaration with the tag
-# EMPTY, because plan section 1.3 rule 1 forbids writing a tag that names
-# nothing and the mcf5307 repository held no CMake project at that wave. Task
-# CPU-1 created one, so the tag now names it.
-#
 # THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
-# clean configure, so BRD-23's check would measure a different core from one
-# run to the next and a green result would not be reproducible. The commit
-# below is verified to resolve on the remote with `git ls-remote`.
+# clean configure, so a check against the core would measure a different core
+# from one run to the next and a green result would not be reproducible.
 #
 # THE PIN IS ADVANCED BY HAND AND NOTHING IN THIS TREE DETECTS THAT IT IS
 # STALE. A configure here cannot see the upstream tip without a network call,
-# so the staleness of this line is a CI question and not a configure one. Two
-# consequences of the previous value, f9d3593, were MEASURED on macOS/arm64
-# before it was advanced to the value below:
+# so the staleness of this line is a CI question and not a configure one.
 #
-#   * The build STOPPED at 35% with `clang++: error: argument '-Ofast' is
-#     deprecated [-Werror,-Wdeprecated-ofast]` compiling
-#     `_deps/mcf5307-build/conformance/.../parse_check.cpp`. base.cmake appends
-#     `-Ofast` to the release flags of the whole build, three mcf5307 test
-#     targets carry `-Werror`, and a current Apple clang deprecates the flag.
-#     mcf5307 5627755 demotes that ONE diagnostic with a probed
-#     `-Wno-error=deprecated-ofast` and leaves every other warning fatal.
-#   * With `-- -k` the rest of the tree built and SEVEN tests were Not Run:
-#     abi_smoke, t0_corpus_parses and the five mcf5307_conformance_* groups.
-#
-# The value below is the mcf5307 tip of 2026-08-10. Beyond the build fix it
-# carries a124077, which repairs three live effective-address faults (absolute
-# long halves swapped, program-counter-relative base two bytes high, index word
-# size select read at bit 8 where the assembler writes bit 11), and the CPU-8
-# and CPU-9 instruction groups.
+# base.cmake appends `-Ofast` to the release flags of the whole build, mcf5307
+# test targets carry `-Werror`, and a current Apple clang deprecates the flag,
+# so a pin that predates mcf5307's probed `-Wno-error=deprecated-ofast` fails
+# to build on macOS/arm64.
 
 set(G2_MCF5307_SOURCE_DIR "" CACHE PATH "Build the MCF5307 core from this checkout instead of fetching it")
 set(G2_MCF5307_GIT_TAG "a1240775fc2f84f1d85b1de6bd31b355a4bfd369" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")

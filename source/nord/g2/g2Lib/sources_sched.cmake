@@ -3,11 +3,7 @@
 # Append every source name this track adds under source/nord/g2/g2Lib/ to
 # G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
 # file in this tree. See plan section 7.4.2.
-#
-# Created empty by task BRD-0.
 
-# SCH-4. frame.h is the single conversion point between g2::Frame and the two
-# dsp56k::Audio frame types; nothing else in g2Lib names a library frame type.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/frame.h)
@@ -19,12 +15,12 @@ list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/dspContext.h)
 
 # SCH-10. esaiFrame.* advances one whole ESAI frame in each direction. These
-# two calls are what replaces an EsaiClock: the scheduler drives the frame.
+# calls are what replaces an EsaiClock: the scheduler drives the frame.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.h)
 
-# SCH-15. codecQueues.* are the two bounded queues between the Device and the
+# SCH-15. codecQueues.* are the bounded queues between the Device and the
 # chain. Both carry the capacity lookaheadFrames + B.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/codecQueues.cpp
@@ -32,8 +28,7 @@ list(APPEND G2LIB_SOURCES
 
 # SCH-7. executor.h declares the Executor interface and the serial executor;
 # serialExecutor.cpp defines the serial one. It runs the jobs in order ON THE
-# CALLING THREAD and creates no thread: neither file names std::thread or
-# <thread>.
+# CALLING THREAD and creates no thread.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/executor.h
 	${CMAKE_CURRENT_SOURCE_DIR}/serialExecutor.cpp)
@@ -54,16 +49,15 @@ list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.h)
 
 # SCH-17. scheduler.h declares the Backend enum and the minimum Scheduler
-# factory for the single backend rule. SCH-19 opens scheduler.cpp and grows
-# the class. The header is listed here so the build system knows it; the
+# factory for the single backend rule. The header is listed here so the
+# build system knows it; the
 # implementation is inline in the header so scheduler.cpp does not yet
 # exist.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h)
 
 # SCH-12. cycleDebt.h declares the g2::runQuantum function template -- design
-# section 13.4.6's budget/want/debt block, the one shared block applied once
-# for a DSP context (SCH-11) and once for the MCU (SCH-30). It has no compiled
+# section 13.4.6's budget/want/debt block. It has no compiled
 # part; it is listed so that the file the sched track owns appears in the
 # target, exactly as SCH-4's frame.h and SCH-6's dspContext.h do.
 list(APPEND G2LIB_SOURCES

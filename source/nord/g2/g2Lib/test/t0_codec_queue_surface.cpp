@@ -12,9 +12,9 @@
  * THE ONE BEHAVIOURAL PROPERTY THIS ROW OWNS: CodecSink::push REFUSES WHEN
  * FULL AND THE FRAME ALREADY IN THE QUEUE IS UNCHANGED AFTERWARDS.
  *
- * An earlier design draft declared "overwrites oldest when full" while the
- * lookahead section said "when the queue is full, the scheduler stops". Those
- * two cannot both stand, and the overwrite is the one that had to go:
+ * Overwriting the oldest frame when full cannot stand beside the lookahead
+ * section's "when the queue is full, the scheduler stops", and the overwrite
+ * is the one that had to go:
  * overwriting silently discards a frame the host has already been told to
  * expect, which changes the real latency mid-session while the reported figure
  * stays constant. That is the exact failure the constant-latency requirement
@@ -323,8 +323,8 @@ int main()
 	 * starve.
 	 *
 	 * The counter exists because a starve and an overflow are the two
-	 * symmetric failures of the input side, and an earlier draft counted only
-	 * one of them. */
+	 * symmetric failures of the input side, and counting only one of them
+	 * leaves the other unwatched. */
 	{
 		g2::CodecSource source(capacityFrames);
 
@@ -356,10 +356,10 @@ int main()
 	/* ---------------- a short pull is counted as an underflow.
 	 *
 	 * underflowFrames is the number by which a pull's return fell short of its
-	 * request. It is the sink's under-supply counter, and an earlier draft had
-	 * none: the source counted both starvation and overflow while the sink
-	 * counted only overflow, so the one quadrant an under-sized sink capacity
-	 * actually lands in was the quadrant nothing watched. */
+	 * request. It is the sink's under-supply counter. Without it the source
+	 * counts both starvation and overflow while the sink counts only overflow,
+	 * and the one quadrant an under-sized sink capacity actually lands in is
+	 * the quadrant nothing watches. */
 	{
 		g2::CodecSink sink(capacityFrames);
 

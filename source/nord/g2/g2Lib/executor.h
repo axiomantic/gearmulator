@@ -16,10 +16,9 @@
  * The Executor itself neither reads nor reports a fault -- it has no state to
  * report one from.
  *
- * NO THREAD IS CREATED ANYWHERE IN THIS FILE OR IN serialExecutor.cpp, and
- * NEITHER <thread> NOR std::thread IS NAMED. The serial executor runs the jobs
- * in order ON THE CALLING THREAD. A discarded branch of this work gave the
- * Executor its own std::thread and a submit() that threw; both contradict the
+ * NO THREAD IS CREATED ANYWHERE IN THIS FILE OR IN serialExecutor.cpp. The
+ * serial executor runs the jobs in order ON THE CALLING THREAD. An Executor
+ * that owned a thread, or a submit() that threw, would contradict the
  * bit-exactness claim this design makes at the 96 kHz Q23 integer boundary,
  * and both are refused here. A parallel implementation is a SEPARATE class
  * (PERF-6) that satisfies this interface and reports isSerial() false.

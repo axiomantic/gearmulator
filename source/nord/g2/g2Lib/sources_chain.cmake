@@ -3,8 +3,6 @@
 # Append every source name this track adds under source/nord/g2/g2Lib/ to
 # G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
 # file in this tree. See plan section 7.4.2.
-#
-# Created empty by task BRD-0.
 
 # ----------------- CHN-3, SlotWriteView
 #
@@ -22,8 +20,5 @@ list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
 
 # ----------------- CHN-4/CHN-5, ChainTopology + the ChainAdapter class
 #
-# CHN-4 lays down chainAdapter.h; CHN-5 defines the class in chainAdapter.cpp
-# and is the first task to give the chain track a real translation unit, so it
-# is here that the header is joined by the .cpp. Both stay in the same source
-# group so the IDE shows them together.
+# Both stay in the same source group so the IDE shows them together.
 list(APPEND G2LIB_SOURCES chainAdapter.h chainAdapter.cpp)

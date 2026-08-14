@@ -56,10 +56,9 @@ namespace
 
 	// The reset-vector longwords. They are the SAME numbers the boot loader
 	// places in the real boot ROM but they are owned by this test and they
-	// have no Clavia byte behind them: the previous revision of this test
-	// read them through mcf5307_reset and was rewritten as a direct read
-	// against the model so the test stays T0 and runs with NMG2_ARTIFACTS
-	// unset.
+	// have no Clavia byte behind them. They are read directly against the
+	// model, rather than through mcf5307_reset, so the test stays T0 and runs
+	// with NMG2_ARTIFACTS unset.
 	constexpr uint32_t syntheticSp = 0x00080000;
 	constexpr uint32_t syntheticPc = 0x30000100;
 
