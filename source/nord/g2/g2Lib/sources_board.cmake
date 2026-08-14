@@ -22,7 +22,7 @@ list(APPEND G2LIB_SOURCES hdi08Decode.cpp)
 # ----------------- BRD-5, the anomaly log
 #
 # Header-only on purpose: BRD-5's Files: line names anomalyLog.h and no
-# translation unit. Listed here for the IDE source group, like flash.h above.
+# translation unit. Listed here for the IDE source group, like flash.h below.
 
 list(APPEND G2LIB_SOURCES anomalyLog.h)
 

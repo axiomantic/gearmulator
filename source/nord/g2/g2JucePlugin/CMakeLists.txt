@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.15)
 project(g2JucePlugin VERSION ${CMAKE_PROJECT_VERSION})
 
 # This directory belongs to the PLUGIN track. Every file under it is written by
-# a plugin-track task, with PROTO-8 and PROTO-9 as the one declared exception.
+# a plugin-track task, with PROTO-8 and PROTO-9 as the two declared exceptions.
 # See plan section 7.4.2.
 #
 # Task BRD-0 creates this file and the target g2JucePlugin.
