@@ -107,9 +107,9 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 # not read ignored paths, so build/ is out of scope.
 #
 # That scope is chosen against a measurement, not by taste. A literal walk of
-# the working tree finds the refuted MCU clock literal in FOUR vendored
-# third-party files -- freetype's and zlib's crc32.h tables, and two pcre/sljit
-# sources under dsp56300/wxWidgets -- where it is a coincidental substring of a
+# the working tree finds the refuted MCU clock literal in vendored third-party
+# files -- freetype's and zlib's crc32.h tables, and pcre/sljit sources under
+# dsp56300/wxWidgets -- where it is a coincidental substring of a
 # CRC constant and has nothing to do with any clock. A check scoped to the
 # literal tree could therefore never pass on a clone with submodules
 # initialised. This scope is the WIDEST one that still passes, and it covers
@@ -120,7 +120,7 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 # ---------------- WHAT IS NOT SOURCE, AND HOW IT IS FOUND
 #
 # THE SCAN MUST NOT READ BUILD OUTPUT, AND A DIRECTORY NAME IS NOT A RELIABLE
-# WAY TO TELL. This was measured rather than argued.
+# WAY TO TELL.
 #
 # `--untracked` covers untracked, non-ignored files. `.gitignore` ignores
 # /build/ and nothing else, so a build tree at that ONE path is out of scope and
@@ -128,10 +128,9 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 # tests it ran, and the failure message below PRINTS the refuted value in full.
 # So a second build tree, under any name but `build`, puts the literal into
 # <tree>/Testing/Temporary/LastTest.log and this case reports it as present:
-# THE CHECK'S OWN OUTPUT BECOMES ITS INPUT. Measured on this repository: with
-# the untracked build trees `build-baseline/` and `build-pins/` on disk, the
-# case reported five matches and every one of them was a log line -- one of them
-# a log of a run that had quoted the OTHER tree's log.
+# THE CHECK'S OWN OUTPUT BECOMES ITS INPUT. With an untracked build tree on
+# disk under any name but `build`, the case reports matches that are all log
+# lines -- one of them a log of a run that had quoted another tree's log.
 #
 # A check that passes because of what somebody called a directory is an
 # accident, not a check. The scope is therefore stated by a PROPERTY of the

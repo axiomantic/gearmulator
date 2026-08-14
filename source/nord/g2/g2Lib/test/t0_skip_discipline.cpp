@@ -9,12 +9,8 @@
 // REPO-7's check reads: "Every gated test the build carries prints
 // `SKIPPED: firmware artifact not available (NMG2_ARTIFACTS unset)`."
 //
-// MEASURED, at the moment REPO-7 and its dependencies are complete and nothing
-// later is built: the build carries THIRTY-TWO registered tests and ZERO of
-// them are gated. `ctest -N` lists 31 inherited upstream tests plus REPO-5's
-// `t0_artifact_resolver`, and `t0_artifact_resolver` is T0 -- it drives the
-// resolver directly and needs no artifact. A grep for NMG2_ARTIFACTS across
-// source/nord/ finds only REPO-5's own two files and this task's.
+// The clause quantifies over the gated tests the build carries. When no test
+// the build carries is gated, that set is EMPTY.
 //
 // A clause quantified over an EMPTY SET is vacuously true. Asserted as written,
 // it would pass without exercising one line of the skip discipline -- the exact

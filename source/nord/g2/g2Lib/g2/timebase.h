@@ -121,10 +121,9 @@
  * the two being derived from one symbol.
  *
  * Provisional 4, from the 24 kHz control rate that AGENTS.md section 2.2
- * records against the 96 kHz frame rate. An earlier revision carried 1 and
- * cited no authority for it. What is settled is that the machine HAS a 24 kHz
- * control rate; what is NOT settled is which bus carries it, and criterion (i)
- * is the measurement that answers that.                                     */
+ * records against the 96 kHz frame rate. What is settled is that the machine
+ * HAS a 24 kHz control rate; what is NOT settled is which bus carries it, and
+ * criterion (i) is the measurement that answers that.                       */
 #define G2_SECOND_BUS_FRAME_DIVIDER   4u         /* PROVISIONAL              */
 
 /* ---------------- the host-block to frame mapping

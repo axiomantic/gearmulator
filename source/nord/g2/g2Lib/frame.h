@@ -4,11 +4,7 @@
  * THE SPELLINGS ARE LOAD-BEARING. Both library frame types are nested inside
  * class Audio: the correct names are dsp56k::Audio::TxFrame and
  * dsp56k::Audio::RxFrame. `dsp56k::TxFrame` does not exist at namespace scope
- * and would not compile -- an earlier design draft used that name four times.
- *
- * NOTHING ELSE IN g2Lib NAMES A dsp56k FRAME TYPE. Confining the library type
- * to one conversion point in each direction is what limited the damage of
- * getting that type wrong to two signatures.
+ * and would not compile.
  */
 
 #pragma once
@@ -47,11 +43,9 @@ namespace g2
 	 * storage would read every negative Q23 value as a large positive number,
 	 * and it would do so with no error at any layer.
 	 *
-	 * An earlier design draft hoped both conversion bodies would "collapse to
-	 * a cast, and a static_assert in this header records that". That sentence
-	 * is DELETED rather than softened: there is no layout under which the
-	 * collapse is legal, and a static_assert that appeared to permit one would
-	 * be a loaded gun. This assertion says the opposite of that one. */
+	 * There is no layout under which collapsing either conversion body to a
+	 * cast is legal, and a static_assert that appeared to permit one would be
+	 * a loaded gun. This assertion says the opposite. */
 	static_assert(!std::is_same_v<std::remove_cv_t<dsp56k::TWord>, int32_t>,
 		"The library element is unsigned, so both conversions must do real "
 		"per-slot work. No reinterpreting cast is legal here.");
