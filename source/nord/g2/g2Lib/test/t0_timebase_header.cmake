@@ -1,6 +1,6 @@
 # t0_timebase_header.cmake -- the driver for task SCH-0's check.
 #
-# Run by ctest, not by the build. It performs three cases in order and fails if
+# Run by ctest, not by the build. It performs the cases below in order and fails if
 # ANY of them fails:
 #
 #   1. It compiles t0_timebase_header.c as C11. That is what proves the header

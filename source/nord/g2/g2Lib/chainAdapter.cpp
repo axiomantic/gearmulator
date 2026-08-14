@@ -2,7 +2,7 @@
  * Design sections 12.3 and 13.10.2.
  *
  * CHN-5 defines the whole public surface the CHN-4 header declares, and its
- * Check is exactly the properties a surface-task can own: the four
+ * Check is exactly the properties a surface-task can own: the
  * constructor arguments are stored and readable back; the audio chain
  * reports precisely dspCount + 1 mailboxes at every second-bus topology; and
  * every method on the declared surface has a definition, so taking its
@@ -11,7 +11,7 @@
  *
  *   advanceAll's count-then-clear-then-advance accounting ... CHN-7
  *   the transmit wrappers' written-flag rule ................. CHN-6
- *   the three counters' real storage and cadence ............. CHN-7, CHN-8
+ *   the counters' real storage and cadence ................... CHN-7, CHN-8
  *   the save-and-load round trip ............................. CHN-14
  *   the head/tail slot mappings and the Scheduler-driven four phase ... CHN-9
  *
@@ -42,10 +42,10 @@ namespace g2
 			Second
 		};
 
-		/* One ESAI receive/transmit frame of the chain carries eight slots
-		 * (section 12.3). The head/tail special cases -- two slots in at the
-		 * head, two out at the tail -- belong to the chain track; the uniform
-		 * 8-slot form is the one this surface carries. Frame::kSlots is the
+		/* One ESAI receive/transmit frame of the chain carries the slot count
+		 * section 12.3 states. The head/tail special cases -- slots in at the
+		 * head, out at the tail -- belong to the chain track; the uniform
+		 * form is the one this surface carries. Frame::kSlots is the
 		 * constant so the two cannot drift apart. */
 		constexpr unsigned kChainSlots = Frame::kSlots;
 
@@ -197,7 +197,7 @@ namespace g2
 				mailbox.advance();
 	}
 
-	/* ------------- the two codec edges. ---------------------------------------- */
+	/* ------------- the codec edges. -------------------------------------------- */
 
 	void ChainAdapter::injectCodecSource(const Frame& src) noexcept
 	{
@@ -220,7 +220,7 @@ namespace g2
 		 * WRITE frame, through egressFrame() and not through write(), which
 		 * only the producing DSP's transmit callback may call. The tail is
 		 * the last mailbox of the Line: mailbox N, whose write frame holds
-		 * the tail DSP's most recent transmit. The two codec edges carry no
+		 * the tail DSP's most recent transmit. The codec edges carry no
 		 * delay of their own, which is what the hardware does. */
 		if(m_audio.empty())
 		{
@@ -234,7 +234,7 @@ namespace g2
 		out.slot[1] = egress.slot[1];
 	}
 
-	/* ------------- the four callback factories. -------------------------------- */
+	/* ------------- the callback factories. ------------------------------------- */
 
 	EsaiReadRxCallback ChainAdapter::audioRxCallback(const unsigned position)
 	{
@@ -314,7 +314,7 @@ namespace g2
 			/* The second bus's topology is a parameter. On a Line or a Ring
 			 * the receive callback of position k reads mailbox k; on a
 			 * Broadcast every position reads the one shared mailbox. The
-			 * wiring table is section 12.3's and CHN-12 tests all three. */
+			 * wiring table is section 12.3's and CHN-12 tests them. */
 			const unsigned n = static_cast<unsigned>(this->m_second.size());
 			if(n == 0u)
 			{
@@ -335,7 +335,7 @@ namespace g2
 			/* CHN-8 PHASE-ERROR RULE, the second-bus half (sections 12.3,
 			 * 13.10.2). Increment AT MOST ONCE per callback - it is ONE
 			 * unwanted callback, so one increment even when both conditions
-			 * hold at once - when either of the two conditions is met:
+			 * hold at once - when either condition below is met:
 			 *   (a) the position has ALREADY delivered on this bus in this
 			 *       quantum (its second written flag is set at this instant;
 			 *       advanceAll clears the second flags only on the window
@@ -399,7 +399,7 @@ namespace g2
 		};
 	}
 
-	/* ------------- the three counters. ----------------------------------------- */
+	/* ------------- the counters. ----------------------------------------------- */
 
 	/* CHN-7 gives underrunFrames and secondBusUnderrunFrames their real
 	 * storage, fed by advanceAll's step 1 and step 2 (the two are separate

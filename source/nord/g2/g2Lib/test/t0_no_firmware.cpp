@@ -103,7 +103,7 @@ namespace
 	};
 
 	// THE EXPECTED MESSAGE IS WRITTEN OUT IN FULL ON PURPOSE. Design section 7.7
-	// item 3 asks for a message that names three things, and a test that built
+	// item 3 asks for a message that names several things, and a test that built
 	// the expected text with the same pieces the header uses would pass for a
 	// message that named none of them. Task REPO-5's own test carries the same
 	// reasoning for the same reason.
@@ -142,7 +142,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE MESSAGE CARRIES EACH OF THE THREE THINGS SECTION 7.7
+	// Case group 1. THE MESSAGE CARRIES EACH OF THE THINGS SECTION 7.7
 	// ITEM 3 NAMES.
 	//
 	// Case group 0 compares the whole text, which is the stronger assertion.

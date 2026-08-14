@@ -91,7 +91,7 @@ namespace
 	 * plan states as "the debt returns inside its rule 2 bound afterwards". */
 	constexpr int64_t kMaxDispatchCost = 40;
 
-	/* A context exposing exactly the four members the template needs: rate,
+	/* A context exposing exactly the members the template needs: rate,
 	 * acc, debt, longDispatchQuanta. Same shape as the synthetic context in
 	 * t0_cycle_debt (SCH-12); DspContext and McuContext carry these in the
 	 * same shapes, and this is the synthetic stand-in. */

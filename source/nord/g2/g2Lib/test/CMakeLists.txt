@@ -217,7 +217,7 @@ endforeach()
 # which is NOT mode 2: mode 2 is tests with no executables, this is executables
 # with no test.
 #
-# TWO CHECKS CARRY A DECLARABLE OPT-OUT, because a legitimate layout can trip
+# SOME CHECKS CARRY A DECLARABLE OPT-OUT, because a legitimate layout can trip
 # them and the only other exit would be editing this file while the directory is
 # blocked. Each suppresses exactly one check.
 #   - G2_GUARD_ALLOW_SCRIPT_ONLY_TESTS, set before this block, declares a

@@ -15,7 +15,7 @@ namespace g2
 		/* DEBUG ONLY, AND NOT THE PREDICATE OF ANY CHECK. The default build of
 		 * this tree is Release and defines NDEBUG, so neither assertion below
 		 * is in the shipped translation unit. t0_run_dsp_cycles_contract and
-		 * t0_run_dsp_cycles drive the two cases that decide this function and
+		 * t0_run_dsp_cycles drive the cases that decide this function and
 		 * neither reads an assertion. */
 		assert(dsp56k::g_useJIT &&
 			"m_cycles is written by the compiled block and not by the "

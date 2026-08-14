@@ -2,7 +2,7 @@
 # one.
 #
 # THIS MATRIX IS T0 ONLY, AND IT ALWAYS WILL BE. No T1 job, no T2 job and no
-# integer-comparison job runs here. All three need a firmware byte, and no
+# integer-comparison job runs here. All of them need a firmware byte, and no
 # public repository may hold a credential that could fetch one. Those jobs run
 # inside the private artifact repository instead. T0 only is what lets every job
 # here run on a pull request from a fork.
@@ -16,7 +16,7 @@
 # A merge of every track's branch touches this file in ZERO places.
 
 # CI is manual. Automatic push/pull_request runs were removed because the
-# three-OS matrix cost hours of runner time per push. Start a run from the
+# matrix cost hours of runner time per push. Start a run from the
 # Actions tab or with `gh workflow run`.
 
 name: CI
@@ -46,7 +46,7 @@ jobs:
           # cancelled job gives a lower bound and not a duration. That run is
           # cmake.yml, not this workflow. No equivalent measurement exists for
           # this workflow's own build.
-          # Uncomment the two lines below to restore the macOS job.
+          # Uncomment the lines below to restore the macOS job.
           # - target: macos-arm64
           #   runs-on: macos-14
           - target: linux-x86-64

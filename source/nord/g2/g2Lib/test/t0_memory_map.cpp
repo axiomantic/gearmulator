@@ -154,9 +154,9 @@ namespace
 		return config;
 	}
 
-	// The SAME layout with the three unrecorded bases moved somewhere else and
+	// The SAME layout with the unrecorded bases moved somewhere else and
 	// nothing else changed. Every assertion that pairs this with layoutA() is
-	// what proves the three parameters are read rather than ignored.
+	// what proves the parameters are read rather than ignored.
 	g2::MemoryMapConfig layoutB()
 	{
 		g2::MemoryMapConfig config = layoutA();

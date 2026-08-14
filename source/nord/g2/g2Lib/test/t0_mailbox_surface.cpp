@@ -1,6 +1,6 @@
 /* t0_mailbox_surface.cpp -- the check of task CHN-1. Design 12.3, 13.10.2.
  *
- * THE THREE PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
+ * THE PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
  *
  *  1. The ring holds EXACTLY hopFrames + 1 frames, asserted for hopFrames = 1
  *     and hopFrames = 2 against the object's OWN REPORTED depth (the depth()

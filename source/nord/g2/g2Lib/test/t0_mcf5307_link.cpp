@@ -78,7 +78,7 @@ namespace
 //
 // It CATCHES: a g2Lib that does not link the core. That failure lands at the
 // COMPILE step when the header is absent and at the LINK step when the header
-// is present and the symbol is not, and the two cases below are what force
+// is present and the symbol is not, and the cases below are what force
 // the linker to resolve the symbol at all.
 //
 // It CATCHES: a runtime entry point that does not return -- an aborting Nim

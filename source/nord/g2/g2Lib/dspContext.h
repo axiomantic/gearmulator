@@ -99,7 +99,7 @@ namespace g2
 		uint64_t   longDispatchQuanta;   /* the rule 4 counter, 13.4.6      */
 		dsp56k::DSP* dsp;     /* borrowed; the Scheduler owns the DSP set   */
 
-		/* THE FOUR MEMBERS BELOW EXIST BECAUSE THE SCHEDULER DRIVES THE ESAI
+		/* THE MEMBERS BELOW EXIST BECAUSE THE SCHEDULER DRIVES THE ESAI
 		 * FRAME. Without them the job body cannot name the port it must
 		 * advance, and it cannot decide whether this quantum is inside the
 		 * second bus's advance window. */
@@ -122,7 +122,7 @@ namespace g2
 		unsigned   secondBusFrameDivider;
 	};
 
-	/* THE TWO ASSERTIONS THAT MAKE THE RECOVERY LEGAL. They live here, at the
+	/* THE ASSERTIONS THAT MAKE THE RECOVERY LEGAL. They live here, at the
 	 * declaration site, so every consumer of this header carries them and not
 	 * the test alone. A release build removes an assert(); it does not remove
 	 * these. */

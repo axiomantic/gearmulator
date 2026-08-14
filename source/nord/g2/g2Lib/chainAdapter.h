@@ -2,7 +2,7 @@
  * Design sections 12.3 and 13.10.2.
  *
  * THIS HEADER LAYS DOWN THE DECLARATION, AND CHN-5 DEFINES THE CLASS.
- * The two chain tasks split the one file: CHN-4 owns `ChainTopology` and the
+ * The chain tasks split the one file: CHN-4 owns `ChainTopology` and the
  * inline `mailboxCount` constant expression that section 12.3 derives the
  * mailbox array sizes from, and CHN-5 defines the ChainAdapter class and its
  * whole public surface in chainAdapter.cpp. The class declaration lives here
@@ -84,8 +84,8 @@ namespace g2
 	 *             construction.
 	 *
 	 * CHN-4 declares this header with the constructor line and the inline
-	 * mailboxCount below. CHN-5 defines the whole public surface -- the four
-	 * phase methods, the per-position ESAI callbacks, the three counters and
+	 * mailboxCount below. CHN-5 defines the whole public surface -- the
+	 * phase methods, the per-position ESAI callbacks, the counters and
 	 * the state trio -- in chainAdapter.cpp and adds their declarations here.
 	 * The behavioural depth each later chain task adds is stated on the
 	 * individual member, so that this task lays the surface down without
@@ -208,7 +208,7 @@ namespace g2
 		bool audioWritten (unsigned position) const noexcept;
 		bool secondWritten(unsigned position) const noexcept;
 
-		/* ------------- The three counters.
+		/* ------------- The counters.
 		 *
 		 * underrunFrames counts, per position, quanta in which the audio
 		 * bus's transmit wrapper was not satisfied; secondBusUnderrunFrames
@@ -268,7 +268,7 @@ namespace g2
 		 *
 		 * m_audioEsai / m_secondEsai are the borrowed per-position Esai
 		 * pointers (owned by the DSP set), populated by attachEsai before
-		 * the four factories are produced. */
+		 * the factories are produced. */
 		std::vector<dsp56k::Esai*> m_audioEsai;
 		std::vector<dsp56k::Esai*> m_secondEsai;
 		std::vector<uint8_t>       m_audioWritten;

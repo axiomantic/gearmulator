@@ -2,7 +2,7 @@
  * Design sections 13.10.3 and 26.
  *
  * THE CONTRACT, NOT THE BOUND. SCH-9 covers the bound over 1,000 quanta; this
- * row covers the declared signature and the two cases that fix the shape of
+ * row covers the declared signature and the cases that fix the shape of
  * the loop.
  *
  * WHY THIS ADAPTER EXISTS AT ALL. dsp56k::DSP::exec is
@@ -11,7 +11,7 @@
  * call exists in the library. DSP::exec neither returns a cycle count nor
  * takes a budget, so dsp.exec(want) does not compile.
  *
- * THE TEST IS BEFORE THE exec(), NEVER AFTER IT, and the two cases below are
+ * THE TEST IS BEFORE THE exec(), NEVER AFTER IT, and the cases below are
  * what fix that:
  *
  *   A wantCycles of 0 EXECUTES NO exec() AT ALL. A test-after loop runs one
