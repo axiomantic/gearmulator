@@ -2,11 +2,16 @@
 //
 // Plan section 9.2, BRD-7. Design section 7.4.
 //
+// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
+// Release and it defines NDEBUG, so a bare assert() is removed and a check
+// built on one can never fail. Every case below reports through a counter and
+// the process exit status.
+//
 // The properties this test holds the model to:
 //   1. CS0 and CS2 are reachable for read at their configured bases, and the
 //      reads are big-endian (the ColdFire byte order).
-//   2. Longword 0 of the CS0 image is the test\'s synthetic stack pointer and
-//      longword 4 is the test\'s synthetic program counter. The reset vector
+//   2. Longword 0 of the CS0 image is the test's synthetic stack pointer and
+//      longword 4 is the test's synthetic program counter. The reset vector
 //      is whatever the loaded image carries.
 //   3. Reads of three different widths from the same address return the right
 //      bytes in the right order. A byte at the high address must be the high
@@ -17,7 +22,6 @@
 #include "../flash.h"
 #include "baseLib/logging.h"
 
-#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -25,6 +29,23 @@
 
 namespace
 {
+	int g_failures = 0;
+	int g_cases = 0;
+
+	template<typename T>
+	void checkEqual(const T& _actual, const T& _expected, const std::string& _what)
+	{
+		++g_cases;
+		if(_actual == _expected)
+		{
+			std::cout << "ok   " << _what << std::endl;
+			return;
+		}
+		std::cout << "FAIL " << _what << ": expected <" << _expected
+			<< ">, got <" << _actual << ">" << std::endl;
+		++g_failures;
+	}
+
 	// The CS0 and CS2 bases and sizes come from the test fixture: AGENTS.md
 	// section 2.2 records them as unrecorded, and section 1.3 rule 1 forbids
 	// writing them into a header.
@@ -47,21 +68,13 @@ namespace
 	// stdout (or OutputDebugString on Windows). Neither a std::cout.rdbuf
 	// redirect nor a C-stdout redirect can observe that. setLogFunc() is the
 	// mechanism baseLib provides for redirecting the messages, so the test
-	// installs a capture LogFunc and asserts on the captured text. If a
-	// future refactor drops or rewrites the rejection log, the capture
-	// function is never called with the expected text and the assertions
-	// below fail.
+	// installs a capture LogFunc and compares the captured text.
 	std::string g_capturedLog;
 
 	void captureLog(const std::string& _s)
 	{
 		g_capturedLog += _s;
 		g_capturedLog += '\n';
-	}
-
-	bool contains(const std::string& _haystack, const std::string& _needle)
-	{
-		return _haystack.find(_needle) != std::string::npos;
 	}
 }
 
@@ -102,34 +115,50 @@ int main()
 
 	// ---------------- reads
 
-	assert(flash.read32(kFixtureCs0Base    ) == syntheticSp);
-	assert(flash.read32(kFixtureCs0Base + 4) == syntheticPc);
+	checkEqual(flash.read32(kFixtureCs0Base    ), syntheticSp,
+		"longword 0 of the CS0 image reads back as the synthetic stack pointer");
+	checkEqual(flash.read32(kFixtureCs0Base + 4), syntheticPc,
+		"longword 4 of the CS0 image reads back as the synthetic program counter");
 
-	assert(flash.read8 (kFixtureCs2Base + 0x10) == 0x12);
-	assert(flash.read16(kFixtureCs2Base + 0x10) == 0x1234);
-	assert(flash.read32(kFixtureCs2Base + 0x10) == 0x12345678u);
+	checkEqual(uint32_t(flash.read8 (kFixtureCs2Base + 0x10)), uint32_t(0x12u),
+		"an 8-bit read at the CS2 offset returns the byte at that address");
+	checkEqual(uint32_t(flash.read16(kFixtureCs2Base + 0x10)), uint32_t(0x1234u),
+		"a 16-bit read is big-endian: the low address is the high byte");
+	checkEqual(flash.read32(kFixtureCs2Base + 0x10), uint32_t(0x12345678u),
+		"a 32-bit read is big-endian: the low address is the most significant byte");
 
 	// ---------------- writes are rejected; the bytes do not change, and the
 	// rejection is REPORTED with the address and the width
 	//
-	// The byte invariance above is necessary but not sufficient: a refactor
-	// that silently dropped the rejection log would keep every assertion
-	// green. Each write is therefore wrapped in a capture of
-	// baseLib::logging, and the captured text must name both 'Rejected' and
-	// the exact address of the write. The full message prefix also locks the
-	// access width -- the write8 message carries no width word, the write32
-	// message carries "32-bit" -- so a width routed to the wrong message
-	// fails here as well.
+	// Byte invariance alone cannot separate a rejection from a write that was
+	// never routed to the model at all, so each write is wrapped in a capture
+	// of baseLib::logging and the captured text is compared in full. The whole
+	// message is compared rather than a fragment of it, so the access width is
+	// pinned too: the write8 message carries no width word and the write32
+	// message carries "32-bit".
+
 	g_capturedLog.clear();
 	flash.write8(kFixtureCs0Base, 0xff);
-	assert(flash.read32(kFixtureCs0Base) == syntheticSp);
-	assert(contains(g_capturedLog, "Rejected write to read-only Flash at 0x30000000"));
+	checkEqual(flash.read32(kFixtureCs0Base), syntheticSp,
+		"an 8-bit write leaves the CS0 bytes unchanged");
+	checkEqual(g_capturedLog, std::string("Rejected write to read-only Flash at 0x30000000\n"),
+		"the 8-bit write is reported as rejected, naming the address");
 
 	g_capturedLog.clear();
 	flash.write32(kFixtureCs2Base + 0x10, 0u);
-	assert(flash.read32(kFixtureCs2Base + 0x10) == 0x12345678u);
-	assert(contains(g_capturedLog, "Rejected 32-bit write to read-only Flash at 0x20000010"));
+	checkEqual(flash.read32(kFixtureCs2Base + 0x10), uint32_t(0x12345678u),
+		"a 32-bit write leaves the CS2 bytes unchanged");
+	checkEqual(g_capturedLog, std::string("Rejected 32-bit write to read-only Flash at 0x20000010\n"),
+		"the 32-bit write is reported as rejected, naming the width and the address");
 
-	std::cout << "t0_flash passed" << std::endl;
+	if(g_failures)
+	{
+		std::cout << "t0_flash: " << g_failures << " of " << g_cases
+			<< " cases failed" << std::endl;
+		return 1;
+	}
+
+	std::cout << "t0_flash: " << g_cases << " of " << g_cases
+		<< " cases passed" << std::endl;
 	return 0;
 }
