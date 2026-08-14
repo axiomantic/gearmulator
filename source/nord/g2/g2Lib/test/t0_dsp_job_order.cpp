@@ -62,7 +62,7 @@ namespace g2
 
 /* THE TYPE IS PINNED, AND THAT IS A CHECK IN ITSELF. dspJob must satisfy the
  * Executor's JobFn exactly -- void(JobContext*) noexcept -- or it could not
- * fill one of the eight jobs the Scheduler builds. A signature drift is a
+ * fill one of the jobs the Scheduler builds. A signature drift is a
  * compile error at this line. */
 static_assert(std::is_same_v<g2::Executor::JobFn, decltype(&g2::dspJob)>,
 	"g2::dspJob must satisfy the Executor's JobFn.");

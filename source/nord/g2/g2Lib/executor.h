@@ -1,8 +1,8 @@
 /* executor.h -- the Executor interface and the serial executor. Task SCH-7.
  * Design sections 13.3 and 13.10.3.
  *
- * ONE METHOD: run these eight jobs and return when all of them have returned.
- * Three things that sentence left out are here -- an error channel, a statement
+ * ONE METHOD: run these jobs and return when all of them have returned.
+ * What that sentence left out is here -- an error channel, a statement
  * about re-entry, and a guarantee that no allocation happens for each quantum.
  *
  * THE JOB IS A PLAIN FUNCTION POINTER PLUS A TYPED CONTEXT POINTER. No

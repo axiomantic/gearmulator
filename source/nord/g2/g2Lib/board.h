@@ -135,7 +135,7 @@ namespace g2
 
 	// Concreteness as a compile-time property, so that "nothing derives from
 	// it, no virtual, neither copyable nor movable" cannot be silently lost.
-	// These five assertions name their mechanism and Board is declared final,
+	// These assertions name their mechanism and Board is declared final,
 	// which is what makes "nothing derives from it" a property at all.
 	static_assert(!std::is_polymorphic_v<Board>,
 	              "Board must be concrete: no virtual method and no vtable");

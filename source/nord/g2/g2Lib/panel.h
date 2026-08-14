@@ -57,17 +57,17 @@ namespace g2
 		// is the cheap way to make either outcome a change of body and not a
 		// change of two interfaces at once.
 		//
-		// THE SEAM IS FOUR MEMBERS AND NOTHING MORE, ALL PRESENT NOW WITH AN
-		// EMPTY BODY AND A ZERO-BYTE STATE. Section 13.5's order table lists
-		// the panel at position 0, before the MCU (the MCU reads what the
-		// panel produced), and section 23.1.1's seam row requires it to carry
-		// `tick(uint64_t frameIndex)` plus `stateSize`, `stateSave` and
-		// `stateLoad` today. The MVP panel computes nothing, so `tick` is an
-		// empty body and the state is zero bytes. A formally correct save or
+		// THE SEAM IS THE MEMBERS SECTION 23.1.1 NAMES AND NOTHING MORE, ALL
+		// PRESENT NOW WITH AN EMPTY BODY AND A ZERO-BYTE STATE. Section 13.5's
+		// order table lists the panel at position 0, before the MCU (the MCU
+		// reads what the panel produced), and section 23.1.1's seam row
+		// requires it to carry `tick(uint64_t frameIndex)` plus `stateSize`,
+		// `stateSave` and `stateLoad` today. The MVP panel computes nothing, so
+		// `tick` is an empty body and the state is zero bytes. A formally correct save or
 		// load of a zero-byte block writes nothing and reads nothing, which is
-		// what the three bodies below do.
+		// what the bodies below do.
 		//
-		// NO EXCEPTION AND NO ASSERT() IN ANY OF THE FOUR. The default build
+		// NO EXCEPTION AND NO ASSERT() IN ANY OF THEM. The default build
 		// is Release and it defines NDEBUG (see the correction log for the
 		// 2026-08-06 measurement), and design section 13.10 rule 2 forbids
 		// exceptions across the declared boundaries. Each body is `noexcept`
@@ -79,17 +79,17 @@ namespace g2
 		// is restated here because it is the thing that keeps this seam small.
 		// A context is a thing that carries a cycle budget, its own rational
 		// accumulator and its own cycle debt. The MVP panel computes nothing
-		// and consumes no emulated cycles, so it has none of the three and it
+		// and consumes no emulated cycles, so it has none of them and it
 		// has NO context index: `cycleDebt`, `longDispatchQuanta`,
 		// `contextFaulted` and `contextFault` accept `0 .. dspCount` and
 		// nothing else. No member here indexes those arrays. The `Executor`
-		// job array does not move either: it holds the eight DSP contexts, and
+		// job array does not move either: it holds the DSP contexts, and
 		// the panel and the MCU both run serially in the `Scheduler`, outside
-		// the `Executor`, so the count stays eight before and after this seam.
+		// the `Executor`, so the count is unchanged before and after this seam.
 		// THE BODIES ARE INLINE in this header on purpose, and the reason is
 		// the plan's own File: accounting. BRD-12 owns panel.cpp and its
 		// `Files:` line names it; BRD-13's `Files:` line names panel.h and
-		// t0_panel_seam.cpp only. A zero-byte body is four short functions
+		// t0_panel_seam.cpp only. These bodies are short functions
 		// that carry no data of their own, so defining them inline keeps them
 		// in the file the task owns and touches the file the previous task
 		// owns not at all.

@@ -113,7 +113,7 @@ namespace g2
 	 * copies is the one that goes stale. Task REPO-7's fixture builds its skip
 	 * line the same way for the same reason.
 	 *
-	 * The rest names the three things the requirement asks for: the exact file,
+	 * The rest names what the requirement asks for: the exact file,
 	 * on both platforms design section 7.2 accepts; the version those files
 	 * carry; and where the user gets them. IT ALSO SAYS THAT THE PLUGIN WILL NOT
 	 * LOOK AGAIN, which is requirement 4 made visible to the user rather than

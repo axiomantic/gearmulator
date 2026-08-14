@@ -22,7 +22,7 @@
 // THE CONSTRUCTION LOG LINE. The Board logs one line at construction naming
 // G2_MCU_CORE_CLOCK_HZ, the value 45,000,000, and criterion (j). This test
 // captures standard output across a Board construction and asserts the line
-// is emitted EXACTLY once, and that it names all four things. Measurement
+// is emitted EXACTLY once, and that it names them all. Measurement
 // register row 7 (plan section 4.1) owns the values: G2_MCU_CORE_CLOCK_HZ is
 // the 45,000,000 placeholder until SPK-9 reports, and no golden reference or
 // capture may be recorded until then -- the line exists so that a reader of

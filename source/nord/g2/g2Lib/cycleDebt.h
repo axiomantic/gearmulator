@@ -78,7 +78,7 @@ namespace g2
 	 * floors the result at zero so an idle period can never turn into a burst
 	 * in a later quantum. No floating point appears and no wall clock is read.
 	 *
-	 * Ctx must expose four members with these exact types:
+	 * Ctx must expose these members with these exact types:
 	 *
 	 *   Rational  rate;   the cycles-per-frame rational, section 13.4.1
 	 *   uint32_t  acc;    the rational accumulator, section 13.4.1
@@ -86,7 +86,7 @@ namespace g2
 	 *   uint64_t  longDispatchQuanta;   the rule 4 counter
 	 *
 	 * DspContext (SCH-6) and McuContext (SCH-30) both already carry exactly
-	 * these four, which is why the template compiles against both without a
+	 * these, which is why the template compiles against both without a
 	 * common base class.
 	 *
 	 * Run is invoked as run(static_cast<uint32_t>(want)) and returns the

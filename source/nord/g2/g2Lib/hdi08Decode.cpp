@@ -14,7 +14,7 @@
 // port i is selected when address bit (3 + i) is LOW and the machine carries
 // port i.
 //
-// TWO CONSEQUENCES FALL OUT OF THAT ONE LINE AND NEITHER IS A SPECIAL CASE.
+// THE CONSEQUENCES FALL OUT OF THAT ONE LINE AND NEITHER IS A SPECIAL CASE.
 // An offset of 0x7F8 drives every line high and selects nothing, which is what
 // AGENTS.md section 3.1 records. An offset of zero drives every line low and
 // selects every populated port, which is the broadcast the firmware uses. The

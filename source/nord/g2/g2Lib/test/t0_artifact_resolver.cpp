@@ -3,7 +3,7 @@
 //
 // Plan section 9.2, REPO-5. Design sections 4.2 and 18.5.
 //
-// THE THREE PROPERTIES THIS TEST HOLDS THE RESOLVER TO:
+// THE PROPERTIES THIS TEST HOLDS THE RESOLVER TO:
 //
 //   1. With NMG2_ARTIFACTS UNSET or EMPTY, resolve() returns an empty string
 //      and writes message 1 of design section 4.2 WORD FOR WORD.

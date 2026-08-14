@@ -25,7 +25,7 @@
  * deleted or renamed member is a compile error and plan section 7.7.1 classes
  * that as a build failure rather than a check report. The runtime half below
  * is what this registered program reports on: the pointer recovery the
- * executor performs, and that the ten members are ten distinct objects rather
+ * executor performs, and that the members are distinct objects rather
  * than names that alias one another.
  */
 
@@ -114,7 +114,7 @@ static_assert(offsetof(g2::DspContext, base) == 0,
 static_assert(std::is_same_v<decltype(g2::DspContext::base), g2::JobContext>,
 	"DspContext::base is a JobContext.");
 
-/* ================ DspContext -- the ten members beside `base`
+/* ================ DspContext -- the members beside `base`
  *
  * Each one by name and by type. This is the block a bare one-member struct
  * fails. */
@@ -184,7 +184,7 @@ int main()
 			"the executor's recovery idiom returns the original context");
 	}
 
-	/* ---------------- the ten members are ten distinct objects.
+	/* ---------------- the members are distinct objects.
 	 *
 	 * A distinct value is written into each and every one is read back. Two
 	 * members that shared storage -- a union, or one name declared twice --

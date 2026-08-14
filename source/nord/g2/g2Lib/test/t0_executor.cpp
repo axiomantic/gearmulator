@@ -1,9 +1,9 @@
 /* t0_executor.cpp -- the check of task SCH-7.
  * Design sections 13.3 and 13.10.3.
  *
- * FOUR THINGS, AND THEY FAIL IN DIFFERENT WAYS ON PURPOSE.
+ * THE THINGS BELOW FAIL IN DIFFERENT WAYS ON PURPOSE.
  *
- * THE SURFACE. The four declarations SCH-7 names are held by their fully
+ * THE SURFACE. The declarations SCH-7 names are held by their fully
  * qualified types: JobFn, Job, run and isSerial. A renamed method, a dropped
  * noexcept or a changed parameter list is a COMPILE error; a declared and
  * undefined method is a LINK error, because taking the address of a member
@@ -183,7 +183,7 @@ int main()
 			"the depth counter returns to zero after run");
 	}
 
-	/* ---------------- eight jobs, in order, on the calling thread. */
+	/* ---------------- the jobs, in order, on the calling thread. */
 	{
 		traceLength    = 0;
 		markerFailures = 0;

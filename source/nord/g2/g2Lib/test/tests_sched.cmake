@@ -119,8 +119,8 @@ add_test(NAME t0_frame_conversion COMMAND t0_frame_conversion)
 # The member list is a compile-time property, so most of this check is
 # static_assert and a deleted member is a build failure. Plan section 7.7.1
 # separates that from a check report, so the registered program also carries a
-# runtime half: the executor's pointer recovery, and that the ten members are
-# ten distinct objects.
+# runtime half: the executor's pointer recovery, and that the members are
+# distinct objects.
 
 add_executable(t0_dsp_context_layout
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_context_layout.cpp)
@@ -158,10 +158,10 @@ add_test(NAME t0_codec_queue_surface COMMAND t0_codec_queue_surface)
 
 # ---------------- SCH-7 - t0_executor
 #
-# An ordinary executable. The four declared names are held by their fully
+# An ordinary executable. The declared names are held by their fully
 # qualified types inside the translation unit, so the compiler and the linker
 # carry that half. What remains for ctest is the behaviour: the order of the
-# eight jobs, that every job ran on the CALLING thread, and that a refused
+# jobs, that every job ran on the CALLING thread, and that a refused
 # re-entry is counted. The re-entry count is an observable in every build type,
 # because the default build here is Release with NDEBUG and a check whose
 # predicate is "the debug build asserted" cannot fail in it.
@@ -227,7 +227,7 @@ add_test(NAME t0_block_table_harness COMMAND t0_block_table_harness
 #
 # An ordinary executable. SCH-15's t0_codec_queue_surface holds the declared
 # members and the refusal; this one drives the CAPACITY ARITHMETIC over 1,000
-# blocks and carries the negative cases that prove the three counters can fire.
+# blocks and carries the negative cases that prove the counters can fire.
 # The sink is primed with the lookahead, without which a capacity of B alone
 # would pass every assertion and the L + B rule would go untested.
 

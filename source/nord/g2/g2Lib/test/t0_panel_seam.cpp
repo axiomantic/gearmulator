@@ -12,11 +12,11 @@
 //
 // WHAT THIS TEST DOES NOT DO, AND WHY. It does not assert the scheduler's order
 // table, the context-index bounds of `cycleDebt` / `longDispatchQuanta` /
-// `contextFaulted` / `contextFault`, or that the `Executor` job array holds
-// eight contexts. Those are scheduler and executor tasks owned by the SCH and
+// `contextFaulted` / `contextFault`, or how many contexts the `Executor` job
+// array holds. Those are scheduler and executor tasks owned by the SCH and
 // DSP tracks (sections 13.5, 13.10.3); the panely-side half of each sentence is
 // stated in panel.h and the scheduler-side half is asserted by those tasks'
-// own tests. This test asserts the surface BRD-13 owns: the four members exist,
+// own tests. This test asserts the surface BRD-13 owns: the members exist,
 // are `noexcept`, and behave as an empty body with a zero-byte state, without
 // disturbing the panel's BusTarget display buffer.
 //

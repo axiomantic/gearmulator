@@ -2,7 +2,7 @@
 //
 // Plan section 13.1, BRD-3. Design sections 5.2.2, 6.4, 17 row 7.25.
 //
-// THE FOUR ASSERTIONS OF THE PLAN'S Check: LINE, EACH DRIVING THE BOARD'S OWN
+// THE ASSERTIONS OF THE PLAN'S Check: LINE, EACH DRIVING THE BOARD'S OWN
 // ARBITER AND READING THE ARGUMENTS IT PRESENTS.
 //
 //   1. A higher level beats a lower one.
