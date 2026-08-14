@@ -7,11 +7,11 @@
 # therefore declares exactly one job in its own file and adds its steps inside
 # that job.
 #
-# This file exists in ALL SEVEN repositories, because the four artifact-boundary
-# lint steps run in every one of them, and a step with no file to live in runs
+# This file exists in EVERY repository, because the artifact-boundary lint
+# steps run in every one of them, and a step with no file to live in runs
 # nowhere.
 #
-# THE FOUR STEPS CLOSE FOUR DIFFERENT HOLES AND NONE SUBSTITUTES FOR ANOTHER.
+# EACH STEP CLOSES A DIFFERENT HOLE AND NONE SUBSTITUTES FOR ANOTHER.
 #   no-private-submodule    stops the private repository's URL and commit
 #                           hashes being published.
 #   no-clavia-payload       stops a Clavia byte reaching a public tree as a
@@ -132,7 +132,7 @@ jobs:
       # "run" counts gated tests that EXECUTED THEIR BODY. A skipped test is not
       # a run test, which is what makes "a run that executed zero gated tests"
       # the condition run == 0. gatedFixture.h in the gearmulator fork carries
-      # the same three verdict tokens and the same rule, and t0_skip_discipline
+      # the same verdict tokens and the same rule, and t0_skip_discipline
       # is the check that proves the rule fires -- including the negative case,
       # that a job which ran one gated test does NOT print NOT VERIFIED.
       #
@@ -144,15 +144,15 @@ jobs:
       # writes gated-tests.counts at the root of the repository under test, with
       # one "name=integer" line per count. NO REPOSITORY PRODUCES THAT FILE
       # TODAY -- the first gated tests are T1 and T2, they run inside the private
-      # repository, and this file exists in all seven repositories. Until one
+      # repository, and this file exists in every repository. Until one
       # does, every repository prints NOT VERIFIED, WHICH IS THE TRUE ANSWER: no
       # gated test has been verified here. A step that printed PASS instead
       # would be the exact green tick design section 18.5 exists to prevent.
       #
       # The step does not fail the job. It reports. T1 and T2 are informational
       # tiers by design section 19.1 and the job that runs a gated test owns its
-      # own exit status; overloading this reporter's status would put the tier
-      # rule in two places.
+      # own exit status; overloading this reporter's status would duplicate the
+      # tier rule.
       - name: gated-test-summary
         run: |
           set -uo pipefail

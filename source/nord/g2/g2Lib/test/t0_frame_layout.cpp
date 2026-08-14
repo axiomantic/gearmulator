@@ -1,18 +1,18 @@
 /* t0_frame_layout.cpp -- the check of task SCH-4. Design section 13.10.1.
  *
- * Two things are asserted here and they fail in different ways on purpose.
+ * The things asserted below fail in different ways on purpose.
  *
  * THE LAYOUT PROPERTIES are asserted by static_assert inside frame.h, at the
  * declaration site, so that every consumer of the header carries them and not
  * only this test.
  *
- * THE FOUR SIGNATURES are asserted here, by taking the address of each
+ * THE SIGNATURES are asserted here, by taking the address of each
  * conversion overload THROUGH ITS FULLY QUALIFIED FUNCTION-POINTER TYPE. That
  * spelling is what makes a wrong signature a COMPILE error rather than a
  * silent match against some other overload: remove any one parameter from any
- * one of the four types below and no overload matches, so the initialiser
+ * one of the types below and no overload matches, so the initialiser
  * fails. A missing definition is then a LINK error, because main() calls
- * through all four.
+ * through them all.
  */
 
 #include "frame.h"

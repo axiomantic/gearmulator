@@ -72,7 +72,7 @@ namespace
 	 * scripts its overshoot strictly inside [1, kMaxDispatchCost). */
 	constexpr int64_t kMaxDispatchCost = 40;
 
-	/* A context exposing exactly the four members the template needs: rate,
+	/* A context exposing exactly the members the template needs: rate,
 	 * acc, debt, longDispatchQuanta. DspContext and McuContext both carry
 	 * these in the same shapes; this is the synthetic stand-in. */
 	struct DebtCtx
