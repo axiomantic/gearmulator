@@ -64,7 +64,7 @@ static_assert(noexcept(g2::ChainAdapter::mailboxCount(
 
 int main()
 {
-	/* The three static_asserts above are the whole of the check: they will
+	/* The static_asserts above are the whole of the check: they will
 	 * not run at runtime, they fail the BUILD. main exists only so the
 	 * registered ctest target has something to execute and to print the
 	 * result the way the other chain tests do. */

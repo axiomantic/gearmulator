@@ -8,8 +8,7 @@
  *   ASMJIT_FORCE_INLINE void exec() noexcept
  * -- no argument, no return value, ONE dispatch unit -- so no cycle-bounded run
  * call exists in the library at all. This is an adapter this project writes.
- * An earlier design draft asserted that DSP::exec returns a uint32_t and takes
- * a budget; a reader who trusted it would have written dsp.exec(want), which
+ * DSP::exec neither returns a cycle count nor takes a budget, so dsp.exec(want)
  * does not compile.
  *
  * THE RETURN NARROWS uint64_t TO uint32_t, and that is safe BY THE BOUND and

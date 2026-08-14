@@ -3,18 +3,13 @@ cmake_minimum_required(VERSION 3.15)
 project(g2JucePlugin VERSION ${CMAKE_PROJECT_VERSION})
 
 # This directory belongs to the PLUGIN track. Every file under it is written by
-# a plugin-track task, with PROTO-8 and PROTO-9 as the two declared exceptions.
+# a plugin-track task, with PROTO-8 and PROTO-9 as the declared exceptions.
 # See plan section 7.4.2.
 #
-# Task BRD-0 creates this file and the target g2JucePlugin.
-#
-# THE TARGET IS NOT YET A JUCE PLUGIN, AND BRD-0 CANNOT MAKE IT ONE. The
-# createJucePlugin() macro that every other product in this tree uses takes a
-# product name, a four-character plugin code, a binary-data target and a skin.
-# No task in the plan states any of those four values, and plan section 1.3
-# rule 1 forbids inventing a value. Task PLG-8, which creates g2Plugin.cpp,
-# converts this declaration to createJucePlugin() with the values the plugin
-# track supplies.
+# THE TARGET IS NOT YET A JUCE PLUGIN. The createJucePlugin() macro that every
+# other product in this tree uses takes a product name, a four-character plugin
+# code, a binary-data target and a skin. No task in the plan states those
+# values, and plan section 1.3 rule 1 forbids inventing a value.
 
 add_library(g2JucePlugin STATIC)
 
@@ -22,7 +17,7 @@ set(SOURCES)
 
 # The plugin track appends its own sources here. Until it does, the target
 # carries one translation unit GENERATED INTO THE BUILD TREE, for the same
-# reason g2Lib does: BRD-0 creates CMake files and no C++ source.
+# reason g2Lib does.
 if(NOT SOURCES)
 	set(G2_JUCE_PLUGIN_PLACEHOLDER ${CMAKE_CURRENT_BINARY_DIR}/g2JucePluginPlaceholder.cpp)
 	file(WRITE ${G2_JUCE_PLUGIN_PLACEHOLDER}

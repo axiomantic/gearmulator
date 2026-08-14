@@ -2,15 +2,15 @@
  *
  * THE CHECK ASSERTS THE FULL MEMBER LIST, AND NOT THE LAYOUT ALONE.
  *
- * An earlier revision of this task asserted the JobFault enumerators, that
- * JobContext holds one field, that `base` is first, is_standard_layout_v and
- * offsetof(DspContext, base) == 0. A struct declared as
+ * A check of the JobFault enumerators, that JobContext holds one field, that
+ * `base` is first, is_standard_layout_v and offsetof(DspContext, base) == 0 is
+ * not enough. A struct declared as
  *
  *     struct DspContext { JobContext base; };
  *
  * PASSES EVERY ONE OF THOSE, and dspJob cannot be written at all against that
- * struct. So this check asserts each of the ten members design section 13.10.3
- * declares beside `base`, BY NAME AND BY TYPE, with a static_assert on each.
+ * struct. So this check asserts the members design section 13.10.3 declares
+ * beside `base`, BY NAME AND BY TYPE, with a static_assert on each.
  *
  * A check that a bare one-member struct satisfies is not a weak check; it is a
  * check that cannot fail.

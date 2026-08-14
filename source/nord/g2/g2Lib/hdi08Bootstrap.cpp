@@ -102,9 +102,9 @@ namespace g2
 
 		case Status::Complete:
 			// A word after a completed load has no legal destination in the
-			// protocol. It is discarded. An earlier draft threw it away in
-			// silence, which reads as a branch nothing can reach; this comment
-			// is that branch made visible.
+			// protocol. It is discarded. Discarding it in silence reads as a
+			// branch nothing can reach; this comment is that branch made
+			// visible.
 			break;
 		}
 

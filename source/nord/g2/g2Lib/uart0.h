@@ -16,13 +16,11 @@
 //   * The transmitter buffer is the source for readMidiOut in the Device
 //     subclass (design section 14.5): a byte the firmware writes to UTB
 //     leaves the machine on the MIDI-out callback.
-//   * THE DIVIDER 0x36 IS OBSERVED AND IT STANDS, AND THE 54 MHz CLOCK
-//     ONCE DERIVED FROM IT IS REFUTED AND MUST NOT RETURN. The divider is a
+//   * THE DIVIDER 0x36 IS OBSERVED AND IT STANDS. The divider is a
 //     baud-rate-generator preload value and nothing more. This file names no
 //     clock-rate quantity and derives no clock from the divider, because the
 //     MCF5307 has two clock domains that can never be equal and no rate is
-//     established. AGENTS.md section 2.2 and the correction log own that
-//     record.
+//     established. AGENTS.md section 2.2 owns that record.
 //
 // CLEAN-ROOM. The register map and every access rule below are read from the
 // MCF5307 User's Manual, section 14. The same manual copy BRD-2's sim.cpp
@@ -106,8 +104,7 @@ namespace g2
 
 		// The observed baud-rate-generator divider, 0x36. It is DATA: it is
 		// stored as the firmware programmed it and it is NOT a clock rate.
-		// Nothing here derives a frequency from it. The 54 MHz figure once
-		// built on it is refuted and does not exist in this model.
+		// Nothing here derives a frequency from it.
 		static constexpr uint16_t gBaudDivider = 0x0036u;
 
 		// The 8N1 mode the firmware programs: 8 data bits, no parity, one

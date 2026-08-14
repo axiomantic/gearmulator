@@ -12,12 +12,11 @@
  *
  * WHERE THE CAP COMES FROM, AND WHY IT IS NOT THE BUILD'S.
  *
- * An earlier revision of this task asserted that no block exceeds "the
- * maxInstructionsPerBlock cap". Measurement register row 2 records that field
- * at the upstream default of 0, which means UNCAPPED -- verified in this tree
- * at source/dsp56300/source/dsp56kEmu/jitconfig.h:20 -- and DSP-12 ships that
- * configuration until SPK-6 reports. A BOUND OF "NO BLOCK EXCEEDS UNCAPPED"
- * HAS NO THRESHOLD AND PASSES FOR EVERY POSSIBLE MEASUREMENT, FOR EVER.
+ * The bound cannot be "the maxInstructionsPerBlock cap". Measurement register
+ * row 2 records that field at the upstream default of 0, which means UNCAPPED,
+ * and DSP-12 ships that configuration until SPK-6 reports. A BOUND OF "NO
+ * BLOCK EXCEEDS UNCAPPED" HAS NO THRESHOLD AND PASSES FOR EVERY POSSIBLE
+ * MEASUREMENT, FOR EVER.
  *
  * So the cap this row asserts against is kLongestBlockCap, supplied by this
  * fixture. The scratch configuration the harness walks under carries a FINITE

@@ -44,8 +44,8 @@ namespace g2
 
 		/* One ESAI receive/transmit frame of the chain carries eight slots
 		 * (section 12.3). The head/tail special cases -- two slots in at the
-		 * head, two out at the tail -- are task CHN-9's; the uniform 8-slot
-		 * form is the one this surface task lays down. Frame::kSlots is the
+		 * head, two out at the tail -- belong to the chain track; the uniform
+		 * 8-slot form is the one this surface carries. Frame::kSlots is the
 		 * constant so the two cannot drift apart. */
 		constexpr unsigned kChainSlots = Frame::kSlots;
 

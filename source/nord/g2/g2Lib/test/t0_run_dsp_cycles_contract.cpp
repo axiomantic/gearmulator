@@ -8,9 +8,8 @@
  * WHY THIS ADAPTER EXISTS AT ALL. dsp56k::DSP::exec is
  *   ASMJIT_FORCE_INLINE void exec() noexcept
  * -- no argument, no return value, ONE dispatch unit -- so no cycle-bounded run
- * call exists in the library. An earlier design draft asserted that DSP::exec
- * returns a uint32_t and takes a budget; a reader who trusted it would have
- * written dsp.exec(want), which does not compile.
+ * call exists in the library. DSP::exec neither returns a cycle count nor
+ * takes a budget, so dsp.exec(want) does not compile.
  *
  * THE TEST IS BEFORE THE exec(), NEVER AFTER IT, and the two cases below are
  * what fix that:

@@ -5,8 +5,7 @@
  * is a C header" a contract rather than a convention, and a contract that is
  * only asserted by the build cannot be reported by `ctest -R`. Plan section
  * 7.7.1 draws the same distinction. A C++ reference parameter anywhere in the
- * header -- the `uint32_t& acc` an earlier draft carried -- is a syntax error
- * in C, so the compile IS the assertion.
+ * header is a syntax error in C, so the compile IS the assertion.
  *
  * ------------------------------------------------------------------------
  * WHY TWO DECLARED MACROS ARE NOT ASSERTED HERE.
@@ -93,9 +92,9 @@ _Static_assert(_Generic(((Rational){0u, 0u}).den, uint32_t: 1, default: 0),
  * type.
  *
  * This is the C analogue of the address-of expressions SCH-4 uses. The
- * accumulator is a POINTER in both. An earlier draft wrote `uint32_t& acc`,
- * which does not compile in C at all -- and if it ever returns, the compile
- * fails here before these initialisers are even reached.
+ * accumulator is a POINTER in both. A `uint32_t&` accumulator does not compile
+ * in C at all, so the compile fails here before these initialisers are even
+ * reached.
  */
 
 static uint32_t (*const allocPtr)(Rational, uint32_t*) = &alloc;
