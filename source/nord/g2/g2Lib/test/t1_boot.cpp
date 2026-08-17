@@ -79,6 +79,15 @@ namespace
 	constexpr uint32_t g_displayStride = 298u;
 	constexpr uint32_t g_lineWidth     = 16u;
 
+	// The size a byte access presents to Board::onRead, IN THE CORE'S UNIT.
+	// mcf5307.h states it twice, once per callback typedef: `size` is a COUNT
+	// OF BYTES and never a width in bits. This file used to pass 8 -- the
+	// MemoryMap's unit -- and the callbacks forwarded it unconverted, which is
+	// the defect that made the firmware execute zero instructions. It is named
+	// rather than written as a bare 1 because a silent swap of one unit for
+	// another is that same defect.
+	constexpr int g_byte = 1;
+
 	// The two expected lines. Plan section 6.6.1 is their one home.
 	//
 	// LINE 0 CARRIES A TRAILING SPACE AND IT IS LOAD-BEARING. The stored string
@@ -271,7 +280,7 @@ namespace
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
-			const uint32_t byte = g2::Board::onRead(&_board, base + col, 8, &status);
+			const uint32_t byte = g2::Board::onRead(&_board, base + col, g_byte, &status);
 			out.push_back(char(byte & 0xffu));
 		}
 
@@ -399,7 +408,7 @@ namespace
 		for(uint32_t i = 0; i < 16u; ++i)
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
-			const uint32_t byte = g2::Board::onRead(&board, g_entryPc + i, 8, &status);
+			const uint32_t byte = g2::Board::onRead(&board, g_entryPc + i, g_byte, &status);
 
 			if(status != MCF5307_BUS_OK || uint8_t(byte & 0xffu) != code[i])
 				_result.readPathProven = false;
