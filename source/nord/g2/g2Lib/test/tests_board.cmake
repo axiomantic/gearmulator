@@ -445,3 +445,32 @@ foreach(lib 68kEmu dsp56kEmu baseLib)
 	endif()
 endforeach()
 
+
+# ----------------- BRD-8, the CS2 CFI query-mode protocol
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_cs2_cfi$
+#
+# UNGATED AND T0 ON PURPOSE. This is the check for the M3 CFI blocker that plan
+# section 6.6.9 specifies, so it belongs in the default suite: a gated test
+# cannot report on a blocker that gates the gate. BRD-8's other deliverable, the
+# gated T1 CS2 layout test, stays gated and is untouched by this block.
+#
+# THE T1 IDENTIFIER IS SPELLED OUT IN WORDS RATHER THAN WRITTEN AS A TOKEN ON
+# PURPOSE. The plan measures "is any T1 test registered here?" with a grep for
+# the bare prefix over this file and records the answer as zero. A mention of
+# the literal inside a COMMENT would turn that measurement into a false
+# positive, which is the failure shape where an absence and an unsearched file
+# produce the same output.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing
+# already uses for the same reason: it drives Board::onRead and Board::onWrite
+# with the real mcf5307 behind them, and g2Lib carries that link itself. NOTHING
+# HERE REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
+# written -- an unguarded reference is what the t0_mcf5307_link block warns about.
+
+add_executable(t0_cs2_cfi t0_cs2_cfi.cpp)
+target_link_libraries(t0_cs2_cfi PRIVATE g2Lib)
+set_property(TARGET t0_cs2_cfi PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_cs2_cfi COMMAND t0_cs2_cfi)
+set_tests_properties(t0_cs2_cfi PROPERTIES LABELS "UnitTest")
