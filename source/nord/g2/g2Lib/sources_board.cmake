@@ -53,6 +53,22 @@ list(APPEND G2LIB_SOURCES
 	uart0.cpp
 )
 
+# ----------------- BRD-20, the P-memory write funnel
+#
+# pmemFunnel.h declares the one function that writes DSP program memory and
+# pmemFunnel.cpp carries it. Both are listed: the header for the IDE source
+# group, and the translation unit because a build that compiles the test
+# without compiling this source fails at the LINK step on g2::writePMem.
+#
+# THE PAIR IS THE LINT'S ONLY ALLOW-LIST. `.github/workflows/track-board.yml`
+# fails when any other file under source/nord/g2/ names a P-memory write, so
+# moving either name out of this directory moves the allow-list with it.
+
+list(APPEND G2LIB_SOURCES
+	pmemFunnel.h
+	pmemFunnel.cpp
+)
+
 # ----------------- BRD-21, the Board class
 #
 # board.h declares the six-method surface the Scheduler uses -- runMcu,

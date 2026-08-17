@@ -6,9 +6,7 @@
 # adds its steps inside this job, in this file, and touches `ci.yml` in zero
 # places.
 #
-# Until the board track adds its lint step, this job exists to give that
-# step a file to live in and to give the caller a resolvable `uses:`
-# reference.
+# THIS JOB NOW ASSERTS ONE THING: task BRD-20's `pmem-funnel-lint`, below.
 
 name: track-board
 
@@ -24,5 +22,97 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: This track has no step yet
-        run: echo "track-board is empty. BRD-20 adds the pmem-funnel-lint step."
+
+      # BRD-20. Every P-memory write in the G2 goes through g2::writePMem, and
+      # that function is the only one that tells the just-in-time compiler a
+      # program word changed. A second write path leaves the compiler running
+      # code the firmware has already overwritten: nothing faults, nothing
+      # logs, and the wrong code just runs. This step is what stops the second
+      # path being added, because a rule that lives only in a comment is a rule
+      # a future contributor never reads.
+      #
+      # THE PREDICATE MATCHES CALLS, NOT MENTIONS. Each pattern requires an
+      # open parenthesis, so prose that discusses the funnel by name is not a
+      # violation. A mention is not a write path.
+      #
+      # THE SCOPE IS `source/nord/g2/` AND THAT IS DELIBERATE. The other device
+      # libraries in this repository (mqLib, xtLib, virusLib, nord/n2x) and the
+      # vendored `source/dsp56300` each carry their own P-memory write path and
+      # are not this track's to govern. A repository-wide rule would fail on
+      # code this task has no claim over.
+      #
+      # THE ALLOW-LIST IS TWO PATHS AND NOT A DIRECTORY. Widening it to a
+      # directory would let any new file in that directory write P memory,
+      # which is the rule inverted.
+      - name: pmem-funnel-lint
+        run: |
+          set -u
+
+          SCOPE="source/nord/g2"
+          FUNNEL_H="source/nord/g2/g2Lib/pmemFunnel.h"
+          FUNNEL_C="source/nord/g2/g2Lib/pmemFunnel.cpp"
+
+          PAT_NOTIFY='notifyProgramMemWrite[[:space:]]*\('
+          PAT_MEMSET='[.>]set[[:space:]]*\(.*MemArea_P'
+          PAT_MEMWRITEP='memWriteP[[:space:]]*\('
+
+          # These three harnesses assemble synthetic programs into P memory
+          # through dsp56k::DSP::memWriteP, which notifies the compiler itself,
+          # so the invariant's PURPOSE holds for them. They predate this lint
+          # and they belong to the scheduler and chain tracks, not to BRD-20.
+          # They are grandfathered for the memWriteP pattern ONLY.
+          #
+          # A GRANDFATHERED PATH THAT NO LONGER MATCHES IS AN ERROR TOO. An
+          # exception list that silently keeps entries for files that have
+          # moved or been fixed grows into an allow-list nobody audits.
+          GRANDFATHERED="
+          source/nord/g2/g2Lib/test/t0_block_table_harness.cpp
+          source/nord/g2/g2Lib/test/t0_run_dsp_cycles_contract.cpp
+          source/nord/g2/g2Lib/test/t0_run_dsp_cycles.cpp
+          "
+
+          status=0
+
+          # grep -r AND NOT git grep. git grep does not read untracked files,
+          # so its empty result is indistinguishable from an absence, and a
+          # lint whose silence can mean "did not look" is not a lint.
+          direct=$(grep -rnE "$PAT_NOTIFY|$PAT_MEMSET" "$SCOPE" \
+            | grep -v "^$FUNNEL_H:" \
+            | grep -v "^$FUNNEL_C:" || true)
+
+          if [ -n "$direct" ]; then
+            echo "pmem-funnel-lint: P memory is written outside the funnel."
+            echo "Only $FUNNEL_C may call notifyProgramMemWrite or set MemArea_P."
+            echo "$direct"
+            status=1
+          fi
+
+          memwritep=$(grep -rnE "$PAT_MEMWRITEP" "$SCOPE" \
+            | grep -v "^$FUNNEL_H:" \
+            | grep -v "^$FUNNEL_C:" || true)
+
+          new_memwritep="$memwritep"
+          for g in $GRANDFATHERED; do
+            new_memwritep=$(printf '%s\n' "$new_memwritep" | grep -v "^$g:" || true)
+          done
+
+          if [ -n "$new_memwritep" ]; then
+            echo "pmem-funnel-lint: DSP::memWriteP is a second P-memory write path."
+            echo "Call g2::writePMem instead."
+            echo "$new_memwritep"
+            status=1
+          fi
+
+          for g in $GRANDFATHERED; do
+            if ! printf '%s\n' "$memwritep" | grep -q "^$g:"; then
+              echo "pmem-funnel-lint: grandfathered path no longer matches: $g"
+              echo "Remove it from GRANDFATHERED in this file."
+              status=1
+            fi
+          done
+
+          if [ "$status" -eq 0 ]; then
+            echo "pmem-funnel-lint: g2::writePMem is the only P-memory write path."
+          fi
+
+          exit "$status"
