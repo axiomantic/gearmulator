@@ -16,6 +16,10 @@
 
 #include "hdi08Adapter.h"
 
+#include "dsp56kEmu/hdi08.h"
+
+#include <cassert>
+
 namespace g2
 {
 	Hdi08Adapter::Hdi08Adapter(const Hdi08Decode _decode)
@@ -110,5 +114,75 @@ namespace g2
 					static_cast<mc68k::PeriphAddress>(selection.portOffset + i), byte);
 			}
 		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Task BRD-17. Bounded, non-blocking control on the HDI08 transfer path.
+	//
+	// TWO DIFFERENT HDI08 MODELS LIVE IN THIS BUILD TREE AND THE TWO FUNCTIONS
+	// BELOW ARE ABOUT THE OTHER ONE. Everything above is `mc68k::Hdi08`, the
+	// HOST side, which is callback-driven and has no blocking wait. These two
+	// are about `dsp56k::HDI08`, the DSP side, in `dsp56300`. A reader who
+	// conflates the two will look for a blocking wait in `mc68k` and not find
+	// one.
+	//
+	// WHY A BOUND AT ALL. `dsp56k::HDI08::writeRX` pushes host words into
+	// `RingBuffer<TWord, 8192, true>`, and `push_back` on a FULL ring waits on a
+	// condition variable until a reader drains it. The G2 runs the MCU, the
+	// eight DSPs and the panel from ONE thread, so there is no reader to drain
+	// it and the wait never returns. That is a deadlock, not a slow path.
+	//
+	// THE BLOCKING PRIMITIVE IS THE SEMAPHORE, NOT `waitNotFull()`. On this
+	// ring `Lock` is true, and `RingBuffer::waitNotFull()` opens with
+	// `if constexpr(Lock) return;` -- it is INERT here. The wait that actually
+	// blocks is `m_writeSem.wait()` inside `push_back`, which is
+	// `SpscSemaphoreWithCount` and is condition-variable backed. Bounding the
+	// call is therefore the only control available from outside the class:
+	// there is no non-blocking push to call instead.
+	//
+	// THE COUNT IS RETURNED RATHER THAN LEFT ON AN OBJECT. A quantum's transfer
+	// is one call, the caller needs the count to know what it must re-offer next
+	// quantum, and a return value cannot be read stale. BRD-17's `Files:` line
+	// and the G-M3 file union both name this .cpp and neither names
+	// hdi08Adapter.h, so these are free functions and not members.
+
+	uint32_t hdi08QuantumWordBudget(const dsp56k::HDI08& _dsp)
+	{
+		// DERIVED FROM THE RING, NEVER WRITTEN AS A LITERAL. A number here would
+		// be a second definition of a buffer size `dsp56300` owns, and it would
+		// go stale silently the day that ring is resized. Half the capacity is
+		// the headroom rule: BRD-17 requires the per-quantum bound to sit BELOW
+		// the capacity, so that a quantum which moves its whole budget still
+		// leaves the DSP room to be pushed to again before it has drained.
+		return static_cast<uint32_t>(_dsp.rxData().capacity() / 2u);
+	}
+
+	uint32_t hdi08MoveWordsForQuantum(dsp56k::HDI08& _dsp, const dsp56k::TWord* _words,
+		const uint32_t _count)
+	{
+		uint32_t moved = _count;
+
+		const uint32_t budget = hdi08QuantumWordBudget(_dsp);
+		if(moved > budget)
+			moved = budget;
+
+		// THE BUDGET ALONE DOES NOT MAKE THIS NON-BLOCKING. A ring with less
+		// free space than the budget would still block on the push that fills
+		// it. The free-space clamp is the half that closes the deadlock; the
+		// budget is the half that stops one quantum from monopolising the ring.
+		const uint32_t freeSlots = static_cast<uint32_t>(_dsp.rxData().remaining());
+		if(moved > freeSlots)
+			moved = freeSlots;
+
+		// A DEBUG ASSERTION AS WELL, AND IT IS NOT THE CHECK'S PREDICATE.
+		// t0_hdi08_nonblocking asserts the same property with a runtime
+		// comparison, because a release build removes this line and the bound
+		// must be checked in a release build too.
+		assert(moved <= budget && moved <= freeSlots && "the bounded transfer would block");
+
+		if(moved)
+			_dsp.writeRX(_words, moved);
+
+		return moved;
 	}
 }
