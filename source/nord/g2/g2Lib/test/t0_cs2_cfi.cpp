@@ -285,6 +285,16 @@ namespace
 	// Board::onRead and Board::onWrite are the function pointers handed to the
 	// MCF5307 core, so they are what the firmware will drive. They are called
 	// here rather than busRead and busWrite for exactly that reason.
+	//
+	// AND THAT MAKES THE SIZE ARGUMENT THE CORE'S UNIT, WHICH IS A COUNT OF
+	// BYTES. mcf5307.h states it twice, once per callback typedef. The three
+	// constants below are named rather than written as bare 1 and 2, because
+	// this file used to pass 8 and 16 here -- the MemoryMap's unit -- and a
+	// silent swap of one unit for another is the defect the conversion in
+	// board.cpp exists to prevent.
+	constexpr int g_byte = 1;
+	constexpr int g_word = 2;
+
 	uint32_t boardRead(g2::Board& _board, const uint32_t _address, const int _size,
 		mcf5307_bus_status& _status)
 	{
@@ -307,7 +317,7 @@ namespace
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
 			bytes.push_back(static_cast<uint8_t>(
-				boardRead(_board, kCs2Base + kBlockStart + i, 8, status) & 0xffu));
+				boardRead(_board, kCs2Base + kBlockStart + i, g_byte, status) & 0xffu));
 		}
 		return toHex(bytes);
 	}
@@ -479,7 +489,7 @@ int main()
 		checkEqual(readBoardBlock(board), containerBlock,
 			"through the board: the container header answers before the command");
 
-		boardWrite(board, kCs2Base + kQueryEnterOffset, 16, kQueryEnterCommand, status);
+		boardWrite(board, kCs2Base + kQueryEnterOffset, g_word, kQueryEnterCommand, status);
 		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
 			"through the board: the 0x0098 write COMPLETES without a bus fault");
 		check(board.flash().cs2InQueryMode(),
@@ -487,7 +497,7 @@ int main()
 		checkEqual(readBoardBlock(board), queryBlock,
 			"through the board: the CFI table answers after the command");
 
-		boardWrite(board, kCs2Base, 16, kResetCommand, status);
+		boardWrite(board, kCs2Base, g_word, kResetCommand, status);
 		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
 			"through the board: the reset write COMPLETES without a bus fault");
 		check(!board.flash().cs2InQueryMode(),

@@ -167,9 +167,13 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		void   stateLoad(const void* src) noexcept;
 
-		/* THE BUS, AS THE CORE SEES IT. onRead and onWrite forward here, so
-		 * this is the routing itself; a caller may drive it without running a
-		 * program. */
+		/* THE BUS, AS THE MEMORY MAP SEES IT. onRead and onWrite forward here,
+		 * so this is the routing itself; a caller may drive it without running
+		 * a program.
+		 *
+		 * `_size` HERE IS A WIDTH IN BITS -- 8, 16 or 32 -- which is the
+		 * MemoryMap's unit and NOT the core's. The two callbacks below take the
+		 * core's unit and convert; this pair is below that conversion. */
 		uint32_t busRead(uint32_t _address, int _size, mcf5307_bus_status& _status);
 		void     busWrite(uint32_t _address, int _size, uint32_t _value,
 		                  mcf5307_bus_status& _status);
@@ -184,8 +188,20 @@ namespace g2
 		 * drives THESE, and they are reachable for exactly that reason.
 		 *
 		 * THEY ARE NOT A SECOND ROUTE INTO THE BOARD. Each one forwards to
-		 * busRead or busWrite and does nothing else, so there is one routing
-		 * path and this is its entry point rather than a parallel copy. */
+		 * busRead or busWrite and converts the one argument whose unit differs
+		 * between the two sides, and does nothing else, so there is one routing
+		 * path and this is its entry point rather than a parallel copy.
+		 *
+		 * `size` HERE IS A COUNT OF BYTES -- 1, 2 or 4 -- because that is what
+		 * mcf5307.h hands an mcf5307_read_fn and an mcf5307_write_fn, and these
+		 * two ARE that pair. It is NOT a width in bits. busRead and busWrite
+		 * above take bits, and the conversion between the two units happens
+		 * here and nowhere else. A CALLER THAT DRIVES THESE DIRECTLY -- which
+		 * is what every test of the routing should do, for the reason stated
+		 * above -- MUST THEREFORE SUPPLY 1, 2 OR 4. Any other value is refused
+		 * as MCF5307_BUS_SIZE_ILLEGAL, 8, 16 and 32 included: they are legal
+		 * widths in the OTHER unit and were silently accepted here before the
+		 * conversion existed, which is precisely the defect. */
 		static uint32_t onRead(void* user, uint32_t addr, int size,
 		                       mcf5307_bus_status* status);
 		static void     onWrite(void* user, uint32_t addr, int size,

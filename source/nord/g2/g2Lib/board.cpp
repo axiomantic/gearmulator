@@ -75,6 +75,46 @@ namespace g2
 {
 	namespace
 	{
+		/* THE UNIT CONVERSION OF THE BUS `size` ARGUMENT, AND THE ONLY PLACE IT
+		 * HAPPENS.
+		 *
+		 * THE TWO SIDES MEASURE THE SAME QUANTITY IN DIFFERENT UNITS, and both
+		 * say so in their own header. mcf5307.h states it twice, once per
+		 * callback typedef: `size` IS A COUNT OF BYTES -- 1, 2 or 4 -- which is
+		 * what a ColdFire SIZ[1:0] transfer size encodes. memoryMap.h states
+		 * that its own `_size` is a WIDTH IN BITS -- 8, 16 or 32. The two
+		 * readings disagree on EVERY access a core can make, so forwarding the
+		 * argument unconverted refuses all of them: the first instruction fetch
+		 * presents 2, the decode reads it as 2 bits, and the firmware executes
+		 * nothing.
+		 *
+		 * THE CONVERSION IS HERE AND NOT IN THE MemoryMap. This function sits at
+		 * the callback boundary -- the one place where the core's arguments
+		 * arrive -- so the core's unit stops at the boundary and everything
+		 * inside the library keeps the single unit it already had. Unifying the
+		 * library on bytes is the tidier end state and it is DELIBERATELY NOT
+		 * TAKEN HERE: it would rewrite every board test that supplies a width by
+		 * hand, and that churn is a separate decision.
+		 *
+		 * A SIZE THE ABI CANNOT PRODUCE MAPS TO ZERO, WHICH THE DECODE REFUSES.
+		 * That is the half without which this function would be a funnel: an
+		 * unknown size answered with a legal width would make every access
+		 * legal, including the 8, 16 and 32 that the unconverted callbacks used
+		 * to accept silently. Zero is a width no transfer produces, so the
+		 * SIZE_ILLEGAL line the decode logs cannot be mistaken for a real
+		 * access. A multiplication by eight would be shorter and would overflow
+		 * on a large argument; a total switch cannot. */
+		int busWidthBits(const int _sizeInBytes)
+		{
+			switch(_sizeInBytes)
+			{
+			case 1:  return 8;
+			case 2:  return 16;
+			case 4:  return 32;
+			default: return 0;
+			}
+		}
+
 		// The version word of the Board's own snapshot block. It exists so that
 		// a state file from a different revision is a named mismatch rather
 		// than a silent acceptance -- design section 18.10. The value is chosen
@@ -233,7 +273,7 @@ namespace g2
 	                       mcf5307_bus_status* const status)
 	{
 		mcf5307_bus_status local = MCF5307_BUS_OK;
-		const uint32_t value = static_cast<Board*>(user)->busRead(addr, size, local);
+		const uint32_t value = static_cast<Board*>(user)->busRead(addr, busWidthBits(size), local);
 		if(status)
 			*status = local;
 		return value;
@@ -243,7 +283,7 @@ namespace g2
 	                    const uint32_t value, mcf5307_bus_status* const status)
 	{
 		mcf5307_bus_status local = MCF5307_BUS_OK;
-		static_cast<Board*>(user)->busWrite(addr, size, value, local);
+		static_cast<Board*>(user)->busWrite(addr, busWidthBits(size), value, local);
 		if(status)
 			*status = local;
 	}

@@ -474,3 +474,26 @@ set_property(TARGET t0_cs2_cfi PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cs2_cfi COMMAND t0_cs2_cfi)
 set_tests_properties(t0_cs2_cfi PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- the unit of the core's `size` argument, proved end to end
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_bus_size_unit$
+#
+# T0 AND UNGATED. The test hand-encodes six MOVE instructions and needs no
+# firmware artifact of any kind, so it belongs in the default suite: the defect
+# it guards is what made the firmware execute zero instructions, and a gated
+# test cannot report on a blocker that gates the gate.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing
+# and t0_cs2_cfi already use: it drives Board::onRead and Board::onWrite with the
+# real mcf5307 core behind them, and g2Lib carries that link itself. NOTHING HERE
+# REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
+# written -- an unguarded reference is what the t0_mcf5307_link block warns about.
+
+add_executable(t0_bus_size_unit t0_bus_size_unit.cpp)
+target_link_libraries(t0_bus_size_unit PRIVATE g2Lib)
+set_property(TARGET t0_bus_size_unit PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_bus_size_unit COMMAND t0_bus_size_unit)
+set_tests_properties(t0_bus_size_unit PROPERTIES LABELS "UnitTest")
