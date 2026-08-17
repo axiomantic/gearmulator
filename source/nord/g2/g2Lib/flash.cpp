@@ -29,6 +29,47 @@ namespace g2
 			ss << "0x" << std::hex << std::setfill('0') << std::setw(8) << _addr;
 			return ss.str();
 		}
+
+		// The CFI command set, at byte offsets within the CS2 window. Offset
+		// 0xAA is word address 0x55, where the JEDEC standard puts query-enter.
+		constexpr uint32_t kCfiQueryEnterOffset  = 0x000000AAu;
+		constexpr uint16_t kCfiQueryEnterCommand = 0x0098u;
+
+		// 0xF0 is the AMD/Fujitsu reset. It is the ONLY exit command this model
+		// honours, because the model answers a Primary Vendor Command Set ID of
+		// 2 (AMD/Fujitsu Standard) and an AMD part does not reset on Intel's
+		// 0xFF read-array command. Honouring 0xFF as well would answer for a
+		// command set this device does not advertise, and would hide firmware
+		// that took the ID-of-1 branch. A real part accepts the reset at any
+		// address, so no offset is required here.
+		constexpr uint16_t kCfiResetCommand = 0x00F0u;
+
+		// What the CS2 device answers, per byte, while in query mode. The table
+		// covers CFI word addresses 0x10 to 0x14, which is byte offsets 0x20 to
+		// 0x29: the "QRY" signature in the low byte of each of the first three
+		// words, then the Primary Vendor Command Set ID. Every other offset
+		// falls through to the image, so query mode does not swallow the map.
+		//
+		// THE ID IS 2 AND ITS SOURCE IS THIS FILE'S OWN kErasedByte COMMENT --
+		// an AMD-style part -- so it is an IMPLICATION of the existing model
+		// and not a firmware measurement. The firmware accepts 1 or 2.
+		//
+		// THE ID's HIGH HALF IS THE BYTE AT 0x26 AND ITS LOW HALF THE BYTE AT
+		// 0x28, which is how the firmware combines them. A strict JEDEC part
+		// carries each datum in the LOW byte of its word, at 0x27 and 0x29,
+		// which is where this table puts Q, R and Y. The two placements
+		// disagree for the ID pair; the firmware's combination is what the
+		// probe actually branches on, so it is what this table satisfies.
+		constexpr uint32_t kCfiWindowFirst = 0x20u;
+		constexpr uint32_t kCfiWindowLast  = 0x29u;
+
+		constexpr uint8_t kCfiWindow[] = {
+			0x00, 0x51,   // word 0x10, 'Q'
+			0x00, 0x52,   // word 0x11, 'R'
+			0x00, 0x59,   // word 0x12, 'Y'
+			0x00, 0x00,   // word 0x13, the ID's high half at 0x26
+			0x02, 0x00,   // word 0x14, the ID's low half at 0x28
+		};
 	}
 
 	Flash::Flash(uint32_t _cs0Base, uint32_t _cs0Size, uint32_t _cs2Base, uint32_t _cs2Size)
@@ -38,6 +79,7 @@ namespace g2
 		, m_cs2Base(_cs2Base)
 		, m_cs2Size(_cs2Size)
 		, m_cs2(_cs2Size, kErasedByte)
+		, m_cs2QueryMode(false)
 	{
 	}
 
@@ -89,12 +131,22 @@ namespace g2
 		return _addr >= m_cs2Base && _addr < m_cs2Base + m_cs2Size;
 	}
 
+	bool Flash::cs2InQueryMode() const
+	{
+		return m_cs2QueryMode;
+	}
+
 	uint8_t Flash::read8(uint32_t _addr) const
 	{
 		if(containsCs0(_addr))
 			return m_cs0[_addr - m_cs0Base];
 		if(containsCs2(_addr))
-			return m_cs2[_addr - m_cs2Base];
+		{
+			const uint32_t offset = _addr - m_cs2Base;
+			if(m_cs2QueryMode && offset >= kCfiWindowFirst && offset <= kCfiWindowLast)
+				return kCfiWindow[offset - kCfiWindowFirst];
+			return m_cs2[offset];
+		}
 		// Outside both images. Returning 0xFF matches an erased device and
 		// is the same answer the AM29F family gives on a bus float.
 		return kErasedByte;
@@ -120,8 +172,25 @@ namespace g2
 		baseLib::logging::logToConsole("Rejected write to read-only Flash at " + formatAddressHex(_addr));
 	}
 
-	void Flash::write16(uint32_t _addr, uint16_t /*_value*/)
+	void Flash::write16(uint32_t _addr, uint16_t _value)
 	{
+		if(containsCs2(_addr))
+		{
+			const uint32_t offset = _addr - m_cs2Base;
+
+			if(offset == kCfiQueryEnterOffset && _value == kCfiQueryEnterCommand)
+			{
+				m_cs2QueryMode = true;
+				return;
+			}
+
+			if(_value == kCfiResetCommand)
+			{
+				m_cs2QueryMode = false;
+				return;
+			}
+		}
+
 		baseLib::logging::logToConsole("Rejected 16-bit write to read-only Flash at " + formatAddressHex(_addr));
 	}
 
