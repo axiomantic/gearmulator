@@ -4,46 +4,100 @@
  * unverified, so its literal is banned rather than tracked. The case asserts it
  * appears nowhere in this repository, and it matches every spelling of it.
  *
- * A single-spelling grep is a check that a one-character edit walks around: a
- * fixed-string search for the plain decimal form matches a header holding it
- * and matches neither the digit-separator form, which the compiler reads as the
- * same number, nor the exponent form. So the case matches the decimal form with
- * optional digit separators, the hexadecimal form in either letter case, and
- * the exponent forms, enumerated in one table.
+ * CASE 1, THE CORE CLOCK'S DOMAIN. The MCF5307 has two clock domains and the
+ * User's Manual section 4.2 documents no divide-by-one option, so PSTCLK is
+ * the bus clock times 2, 3 or 4 and the two can never be equal. The hazard
+ * this case exists to close is therefore a SUBSTITUTION: a bus-domain figure
+ * standing in the symbol that reaches a core-cycle budget.
  *
- * Every spelling carries a positive control: each pattern is first run against
- * a scratch file that holds that spelling, and it must match. Without that
- * half, a pattern with a typo in it reports "absent" for ever and the case can
- * never fail.
+ * THE PREDICATE BINDS TO THE SYMBOL AND NOT TO A LITERAL, and the difference
+ * decides the outcome in both directions. A tree-wide ban on one number
+ * forbids RECORDING A MEASUREMENT -- the bus clock is a real derived figure
+ * and it has to be writable somewhere -- while saying nothing at all about
+ * what the core-clock symbol carries. Bound to the symbol instead, the same
+ * intent reads: EVERY DEFINITION OF THE CORE-CLOCK SYMBOL CARRIES A FREQUENCY
+ * IN THE CORE-CLOCK DOMAIN. A bus figure recorded in a bus symbol passes; a
+ * bus figure standing in the core symbol does not.
  *
- * No grep can catch a value computed from other constants. The grep is the
- * cheap half; the rule that no shipped header carries the number is the half
- * that does the work.
+ * THE DOMAIN FLOOR IS DERIVED AND ITS TWO HALVES ARE NAMED AT THE CONSTANT.
+ * The bus-clock interval comes from the firmware and the divider floor from
+ * the manual; neither is invented here and neither is a catalog speed grade.
+ * The forbidden region therefore CONTAINS the whole bus-clock interval, so
+ * the substitution case is a corollary of the floor rather than a second
+ * rule.
  *
- * Case 2, the configure-time guard. The two MCU bus symbols are both 0u and
- * neither is derived, so a source that used either would compute with a zero. A
- * guard in g2Lib/CMakeLists.txt fails the configure step and names the symbol;
- * this test drives the negative case that proves it fires.
+ * A DEFINITION IS THE PREDICATE'S SUBJECT, NOT A MENTION. What a symbol
+ * carries is decided at `#define SYM value` and at `SYM = value`, so those
+ * two shapes are what the scan matches. A static assertion or a fixture that
+ * PINS the number is a mechanism that goes red on its own when the definition
+ * moves, and turning those red from here would only duplicate them.
+ *
+ * A SINGLE-SPELLING SCAN IS A CHECK THAT A ONE-CHARACTER EDIT WALKS AROUND,
+ * and that was MEASURED rather than argued: a fixed-string search for the
+ * plain decimal form matched a header holding it and matched NEITHER the
+ * digit-separator form, which the compiler reads as the same number, NOR the
+ * exponent form. Plan section 7.7 measurement 6 carries the transcript. So a
+ * value is RENDERED into every spelling a compiler accepts, and the scan and
+ * the parser are driven through each rendering in turn.
+ *
+ * EVERY SPELLING CARRIES FOUR CONTROLS, and each one closes a way the case
+ * could pass while proving nothing:
+ *
+ *   FLAGGED    the core symbol defined as the out-of-domain placeholder. The
+ *              scan must find it and the parser must read the value back
+ *              EXACTLY. Without this, a pattern with a typo reports "absent"
+ *              for ever and the case can never fail.
+ *   IN DOMAIN  the core symbol defined as a legal core frequency. The scan
+ *              must find it and the predicate must stay silent. Without this,
+ *              a predicate that flagged every definition would pass.
+ *   BUS SYMBOL the bus-clock symbol defined as the derived bus clock. The
+ *              scan must not find it at all.
+ *   SAME VALUE the core symbol defined as that SAME derived bus clock. The
+ *              scan must find it and the predicate must flag it. This is the
+ *              control that isolates the SYMBOL as the discriminator: without
+ *              it, the bus-symbol control could be passing because the
+ *              spelling went unmatched rather than because the symbol did.
+ *
+ * WHAT NO SCAN CAN CATCH is a value COMPUTED from other constants, and this
+ * file does not pretend otherwise. The scan is the cheap half. Measurement
+ * register row 7's rule -- that the core clock has no derived value until
+ * criterion (j) reports -- is the half that does the work.
+ *
+ * CASE 2, the configure-time guard. The two MCU BUS symbols are both 0u and
+ * neither is derived, so a source that used either would compute with a zero.
+ * BRD-0 installs a guard in g2Lib/CMakeLists.txt that fails the configure
+ * step and names the symbol. Section 7.4.2 gives that file to BRD-0, so THIS
+ * TASK DOES NOT EDIT IT: BRD-0 installs the mechanism and this task drives the
+ * negative case that proves it fires.
  *
  * The negative case adds a scratch use and asserts the configure step fails
  * naming the symbol. A control run without the scratch file asserts the guard
  * stays silent, so a guard that failed every configure for some other reason
  * would not be mistaken for a working one.
  *
- * Every needle in this file is assembled from fragments at run time, and that
- * is load-bearing twice over.
+ * EVERY NEEDLE AND EVERY FREQUENCY IN THIS FILE IS ASSEMBLED FROM FRAGMENTS
+ * AT RUN TIME, and that is load-bearing three times over.
  *
- *   1. Case 1 scans every file in this repository with no exclusion list, so a
- *      file that spelled the refuted value out in full would match itself, the
- *      case could never pass, and the usual repair -- excluding this file from
- *      its own scan -- would open exactly the hole the case exists to close.
- *   2. This file lives under source/nord/g2/, which is the tree the guard
- *      scans. A file that spelled either guarded symbol out in full would make
- *      the guard fire on the very test that proves it fires, and the whole
- *      project would stop configuring. The two symbols are therefore built from
- *      a shared prefix and a suffix and are never contiguous in this source.
+ *   1. Case 1 scans every file in this repository with no exclusion list, so
+ *      a file that spelled a guarded definition out in full would match
+ *      ITSELF, the case could never pass, and the usual repair -- excluding
+ *      this file from its own scan -- would open exactly the hole the case
+ *      exists to close.
+ *   2. THIS FILE LIVES UNDER source/nord/g2/, WHICH IS THE TREE BRD-0's GUARD
+ *      SCANS. A file that spelled either guarded symbol out in full would
+ *      make the guard fire on the very test that proves it fires, and the
+ *      whole project would stop configuring. The two symbols are therefore
+ *      built from a shared prefix and a suffix and are never contiguous in
+ *      this source.
+ *   3. TASK SCH-0's CHECK STILL BANS THE BUS CLOCK'S DECIMAL LITERAL
+ *      TREE-WIDE. Section 7.4.2 keeps each task to its own files, so this
+ *      task does not repair that ban; it works inside it, and every frequency
+ *      here is therefore a product of factors rather than a written-out
+ *      number. Repairing the second copy of the ban belongs to whoever owns
+ *      that check, and until then a plain decimal here turns it red.
  */
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -80,6 +134,72 @@ namespace
 	std::string busSymbol(const std::string& suffix)
 	{
 		return std::string("G2_MCU_") + "BUS_" + suffix;
+	}
+
+	std::string coreClockSymbol()
+	{
+		return std::string("G2_MCU_") + "CORE_" + "CLOCK_HZ";
+	}
+
+	/* ---------------- the core clock's domain, and where each half comes from
+	 *
+	 * THE BUS-CLOCK INTERVAL IS READ OUT OF THE FIRMWARE, not assumed. The
+	 * SDRAM refresh control field pins the refresh period to a whole number of
+	 * bus clocks, and at the JEDEC row interval that fixes the bus clock to a
+	 * band about one part in fifty wide. An independent UART divider lands
+	 * inside the same band from a MIDI baud rate, which is what makes it a
+	 * derivation rather than a coincidence. Spike criterion (j) owns the
+	 * figure; measurement register rows 5 and 6 carry it.
+	 *
+	 * THE DIVIDER FLOOR IS THE MANUAL's. Section 4.2 documents no
+	 * divide-by-one option, so the ratio is 2, 3 or 4 and the core clock is at
+	 * least twice the bus clock. That is the whole of what makes the two
+	 * separate symbols at all.
+	 *
+	 * The product is a FLOOR and never an estimate: no core clock this part
+	 * can run at is below it, and the bus-clock band lies entirely underneath
+	 * it, so a bus figure in the core symbol is caught by the floor without a
+	 * second rule.
+	 */
+	constexpr uint64_t kBusClockLowerBoundHz = 53248ull * 1000ull;
+	constexpr uint64_t kSmallestBusDivider   = 2ull;
+
+	uint64_t coreClockFloorHz()
+	{
+		return kBusClockLowerBoundHz * kSmallestBusDivider;
+	}
+
+	/* THE PREDICATE ITSELF, AND IT HAS EXACTLY ONE SITE. The controls and the
+	 * repository scan below both ask this function and neither restates the
+	 * comparison, so a mutation of the verdict cannot leave the controls green
+	 * while the scan goes blind. Measured: a second copy of this comparison
+	 * inside the scan was disabled with every control still passing. */
+	bool isBusDomainFigure(const uint64_t frequencyHz)
+	{
+		return frequencyHz < coreClockFloorHz();
+	}
+
+	/* The derived bus clock itself, which the controls below define into a bus
+	 * symbol and into the core symbol in turn. */
+	uint64_t derivedBusClockHz()
+	{
+		return 54ull * 1000ull * 1000ull;
+	}
+
+	/* The placeholder the core-clock symbol carries. It is a product for the
+	 * reason the file header gives and for no other. */
+	uint64_t placeholderCoreClockHz()
+	{
+		return 45ull * 1000ull * 1000ull;
+	}
+
+	/* A legal core frequency: the derived bus clock at a divider the manual
+	 * permits. The middle of the three is chosen so the value sits clear of
+	 * the floor rather than on it, which is what makes the IN DOMAIN control
+	 * a test of the comparison and not of its boundary. */
+	uint64_t inDomainCoreClockHz()
+	{
+		return derivedBusClockHz() * 3ull;
 	}
 
 	/* ---------------- running a child process and reading everything it says
@@ -202,12 +322,12 @@ namespace
 	 * The scan covers this repository's tracked files plus its untracked,
 	 * non-ignored ones. `.gitignore` ignores /build/, so a build tree at that
 	 * one path is out of scope -- and a build tree at ANY OTHER PATH is not.
-	 * A CTest log quotes the output of other tests, and one of those checks
-	 * prints the refuted value in full when it reports the value absent. So a
-	 * second build tree, at any name but `build`, puts the literal into
-	 * <tree>/Testing/Temporary/LastTest.log and this case reports it as
-	 * present. Measured: the case passed in `build` and failed in `build2`
-	 * with three matches, every one of them a log line.
+	 * A CTest log quotes the output of the tests it ran, and this case's own
+	 * diagnostic QUOTES THE DEFINITION LINE IT OBJECTS TO. So a second build
+	 * tree, at any name but `build`, puts that line into
+	 * <tree>/Testing/Temporary/LastTest.log and the next run reports it again,
+	 * on matches that are all log lines. The case would then be reporting its
+	 * own transcript.
 	 *
 	 * A check that passes because of a directory name is an accident, not a
 	 * check. The scope is therefore stated by a property of the directory and
@@ -258,88 +378,359 @@ namespace
 		return exclusions;
 	}
 
-	/* ---------------- the spelling table
+	/* ---------------- the spellings
 	 *
-	 * One row for each spelling the refuted value can take. `pattern` is the
-	 * extended regular expression the scan uses; `example` is a real string in
-	 * that spelling and it is what the positive control searches for. */
-	struct Spelling
+	 * A spelling is a WAY OF WRITING A FREQUENCY, so it is a renderer and not
+	 * a fixed string. The controls render three different values through every
+	 * spelling and the scan reads each rendering back, which is what makes the
+	 * spelling coverage a round trip rather than a claim.
+	 */
+	enum class Spelling
 	{
-		std::string name;
-		std::string pattern;
-		std::string example;
+		Decimal,
+		DecimalSeparated,
+		HexLower,
+		HexUpper,
+		ExponentInteger,
+		ExponentFractional,
+		Count
 	};
 
-	std::vector<Spelling> buildSpellingTable()
+	struct SpellingRow
 	{
-		const std::string d0 = "0";
-		const std::string d3 = "3";
-		const std::string d4 = "4";
-		const std::string d5 = "5";
-		const std::string d6 = "6";
-		const std::string d7 = "7";
-		const std::string d8 = "8";
-		const std::string d9 = "9";
+		Spelling    kind;
+		std::string name;
+	};
 
-		/* An optional C++14 digit separator between any two digits. The
-		 * compiler reads a separated literal as the same number, so a pattern
-		 * that did not allow one is walked around by a single edit. */
-		const std::string sep = "'?";
-
-		std::vector<Spelling> table;
-
-		/* ---- decimal: 5, 4 and six zeros, with optional separators. */
+	std::string spellingName(const Spelling spelling)
+	{
+		switch(spelling)
 		{
-			std::string pattern = d5 + sep + d4;
-			std::string plain   = d5 + d4;
-
-			for(int i = 0; i < 6; ++i)
-			{
-				pattern += sep + d0;
-				plain   += d0;
-			}
-
-			/* The same value in the separated spelling the compiler accepts,
-			 * so the control proves the optional separator really is optional
-			 * in both directions. */
-			std::string separated = d5 + d4;
-			for(int i = 0; i < 6; ++i)
-			{
-				if(i % 3 == 0)
-					separated += "'";
-				separated += d0;
-			}
-
-			table.push_back({ "the decimal form", pattern, plain });
-			table.push_back({ "the decimal form with digit separators",
-				pattern, separated });
+		case Spelling::Decimal:            return "the decimal form";
+		case Spelling::DecimalSeparated:   return "the decimal form with digit separators";
+		case Spelling::HexLower:           return "the hexadecimal form, lower-case prefix";
+		case Spelling::HexUpper:           return "the hexadecimal form, upper-case prefix";
+		case Spelling::ExponentInteger:    return "the exponent form, integer mantissa";
+		case Spelling::ExponentFractional: return "the exponent form, fractional mantissa";
+		case Spelling::Count:              break;
 		}
+		return "an unnamed spelling";
+	}
 
-		/* ---- hexadecimal, either letter case, optional leading zeros. */
+	/* THE TABLE IS THE ENUMERATION and not a second list beside it. A hand-kept
+	 * list can lose a row to an edit and go on passing with less coverage than
+	 * it claims, and nothing in the run would say so. */
+	std::vector<SpellingRow> buildSpellingTable()
+	{
+		std::vector<SpellingRow> table;
+
+		for(size_t i = 0; i < static_cast<size_t>(Spelling::Count); ++i)
 		{
-			const std::string digits =
-				d3 + sep + d3 + sep + d7 + sep + "[fF]" + sep + d9 + sep + d8
-				+ sep + d0;
-
-			const std::string pattern = d0 + "[xX]" + d0 + "*" + digits;
-
-			table.push_back({ "the hexadecimal form, lower-case prefix",
-				pattern, d0 + "x" + d3 + d3 + d7 + "F" + d9 + d8 + d0 });
-			table.push_back({ "the hexadecimal form, upper-case prefix",
-				pattern, d0 + "X" + d3 + d3 + d7 + "f" + d9 + d8 + d0 });
-		}
-
-		/* ---- the exponent forms. */
-		{
-			table.push_back({ "the exponent form, mantissa 54",
-				d5 + sep + d4 + "[eE][+]?" + d6,
-				d5 + d4 + "e" + d6 });
-			table.push_back({ "the exponent form, mantissa 5.4",
-				d5 + "[.]" + d4 + "[eE][+]?" + d7,
-				d5 + "." + d4 + "e" + d7 });
+			const Spelling kind = static_cast<Spelling>(i);
+			table.push_back({ kind, spellingName(kind) });
 		}
 
 		return table;
+	}
+
+	std::string decimalDigits(uint64_t value)
+	{
+		if(value == 0ull)
+			return "0";
+
+		std::string digits;
+		while(value != 0ull)
+		{
+			digits.insert(digits.begin(),
+				static_cast<char>('0' + static_cast<int>(value % 10ull)));
+			value /= 10ull;
+		}
+		return digits;
+	}
+
+	std::string hexDigits(uint64_t value, const bool upperCase)
+	{
+		static const char* const lower = "0123456789abcdef";
+		static const char* const upper = "0123456789ABCDEF";
+		const char* const alphabet = upperCase ? upper : lower;
+
+		if(value == 0ull)
+			return "0";
+
+		std::string digits;
+		while(value != 0ull)
+		{
+			digits.insert(digits.begin(),
+				alphabet[static_cast<size_t>(value & 0xfull)]);
+			value >>= 4;
+		}
+		return digits;
+	}
+
+	/* Every third digit from the right carries a C++14 separator. The compiler
+	 * reads the separated literal as the same number, so a scan that did not
+	 * allow one is walked around by a single edit. */
+	std::string withDigitSeparators(const std::string& digits)
+	{
+		std::string out;
+		const size_t count = digits.size();
+
+		for(size_t i = 0; i < count; ++i)
+		{
+			if(i != 0 && ((count - i) % 3) == 0)
+				out += '\'';
+			out += digits[i];
+		}
+		return out;
+	}
+
+	std::string render(const uint64_t value, const Spelling spelling)
+	{
+		const std::string digits = decimalDigits(value);
+
+		/* The significant digits, with the trailing zeros an exponent form
+		 * carries instead. */
+		std::string significant = digits;
+		while(significant.size() > 1 && significant.back() == '0')
+			significant.pop_back();
+
+		switch(spelling)
+		{
+		case Spelling::Decimal:
+			return digits;
+
+		case Spelling::DecimalSeparated:
+			return withDigitSeparators(digits);
+
+		case Spelling::HexLower:
+			return "0x" + hexDigits(value, false);
+
+		case Spelling::HexUpper:
+			return "0X" + hexDigits(value, true);
+
+		case Spelling::ExponentInteger:
+			return significant + "e"
+				+ decimalDigits(digits.size() - significant.size());
+
+		case Spelling::ExponentFractional:
+		{
+			const std::string fraction = significant.size() > 1
+				? significant.substr(1)
+				: std::string("0");
+
+			return significant.substr(0, 1) + "." + fraction + "e"
+				+ decimalDigits(digits.size() - 1);
+		}
+
+		case Spelling::Count:
+			break;
+		}
+
+		/* NO FALL-THROUGH TO A NEIGHBOUR'S RENDERING. A spelling with no case
+		 * of its own renders as a value no control asked for, so the exact
+		 * read-back turns red instead of quietly repeating another spelling's
+		 * coverage under a new name. */
+		return "0";
+	}
+
+	/* ---------------- reading a rendered frequency back
+	 *
+	 * The parser is EXACT and uses no floating point: an exponent form is
+	 * folded into the mantissa by powers of ten, and a mantissa that does not
+	 * fold to a whole number is REFUSED rather than rounded. A frequency this
+	 * check cannot read exactly is a frequency it must not judge.
+	 */
+	bool readFrequency(const std::string& text, size_t position,
+		uint64_t& value, size_t& end)
+	{
+		const size_t size = text.size();
+
+		if(position >= size || text[position] < '0' || text[position] > '9')
+			return false;
+
+		const bool hexadecimal = text[position] == '0'
+			&& position + 1 < size
+			&& (text[position + 1] == 'x' || text[position + 1] == 'X');
+
+		if(hexadecimal)
+		{
+			position += 2;
+
+			uint64_t accumulated = 0ull;
+			bool     any         = false;
+
+			while(position < size)
+			{
+				const char c = text[position];
+				int        digit;
+
+				if(c == '\'')             { ++position; continue; }
+				else if(c >= '0' && c <= '9') digit = c - '0';
+				else if(c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+				else if(c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+				else break;
+
+				accumulated = accumulated * 16ull + static_cast<uint64_t>(digit);
+				any = true;
+				++position;
+			}
+
+			if(!any)
+				return false;
+
+			value = accumulated;
+			end   = position;
+			return true;
+		}
+
+		uint64_t mantissa   = 0ull;
+		size_t   fractional = 0;
+
+		while(position < size
+			&& ((text[position] >= '0' && text[position] <= '9')
+				|| text[position] == '\''))
+		{
+			if(text[position] != '\'')
+				mantissa = mantissa * 10ull
+					+ static_cast<uint64_t>(text[position] - '0');
+			++position;
+		}
+
+		if(position < size && text[position] == '.')
+		{
+			++position;
+			while(position < size
+				&& ((text[position] >= '0' && text[position] <= '9')
+					|| text[position] == '\''))
+			{
+				if(text[position] != '\'')
+				{
+					mantissa = mantissa * 10ull
+						+ static_cast<uint64_t>(text[position] - '0');
+					++fractional;
+				}
+				++position;
+			}
+		}
+
+		uint64_t exponent = 0ull;
+
+		if(position < size && (text[position] == 'e' || text[position] == 'E'))
+		{
+			size_t cursor = position + 1;
+
+			if(cursor < size && text[cursor] == '+')
+				++cursor;
+
+			bool any = false;
+			while(cursor < size && text[cursor] >= '0' && text[cursor] <= '9')
+			{
+				exponent = exponent * 10ull
+					+ static_cast<uint64_t>(text[cursor] - '0');
+				any = true;
+				++cursor;
+			}
+
+			if(any)
+				position = cursor;
+		}
+		else if(fractional != 0)
+		{
+			/* A fraction with no exponent is not a whole frequency. */
+			return false;
+		}
+
+		if(exponent < fractional)
+			return false;
+
+		for(uint64_t i = 0ull; i < exponent - fractional; ++i)
+			mantissa *= 10ull;
+
+		value = mantissa;
+		end   = position;
+		return true;
+	}
+
+	/* ---------------- what the scan looks for
+	 *
+	 * The two shapes that DEFINE what a symbol carries, and no other. The
+	 * value alternatives are a superset of the spellings above: git grep
+	 * decides which LINES to report and readFrequency above is the authority
+	 * on what a reported line actually says.
+	 */
+	std::string definitionPattern(const std::string& symbol)
+	{
+		const std::string frequency =
+			"(0[xX][0-9a-fA-F']+"
+			"|[0-9][0-9']*([.][0-9']+)?[eE][+]?[0-9]+"
+			"|[0-9][0-9']*)";
+
+		return "(#[[:space:]]*define[[:space:]]+" + symbol + "[[:space:]]+"
+			"|" + symbol + "[[:space:]]*=[[:space:]]*)" + frequency;
+	}
+
+	/* Every frequency a line defines the symbol as.
+	 *
+	 * A LINE IS SEARCHED FOR EVERY OCCURRENCE and not for its first, because a
+	 * reported line may mention the symbol before it defines it. An occurrence
+	 * that is not followed by a frequency is not a definition and contributes
+	 * nothing -- which is what keeps a comparison such as `SYM == value` out
+	 * of the result, the second `=` being neither a space nor a digit. */
+	std::vector<uint64_t> definedFrequencies(const std::string& line,
+		const std::string& symbol)
+	{
+		std::vector<uint64_t> found;
+
+		size_t at = line.find(symbol);
+
+		while(at != std::string::npos)
+		{
+			size_t cursor = at + symbol.size();
+
+			while(cursor < line.size()
+				&& (line[cursor] == ' ' || line[cursor] == '\t'))
+				++cursor;
+
+			if(cursor < line.size() && line[cursor] == '='
+				&& (cursor + 1 >= line.size() || line[cursor + 1] != '='))
+			{
+				++cursor;
+				while(cursor < line.size()
+					&& (line[cursor] == ' ' || line[cursor] == '\t'))
+					++cursor;
+			}
+
+			uint64_t value = 0ull;
+			size_t   end   = 0;
+
+			if(readFrequency(line, cursor, value, end))
+				found.push_back(value);
+
+			at = line.find(symbol, at + symbol.size());
+		}
+
+		return found;
+	}
+
+	/* The non-empty lines of a command's output. */
+	std::vector<std::string> outputLines(const std::string& output)
+	{
+		std::vector<std::string> lines;
+		size_t                   start = 0;
+
+		while(start < output.size())
+		{
+			size_t end = output.find('\n', start);
+			if(end == std::string::npos)
+				end = output.size();
+
+			if(end != start)
+				lines.push_back(output.substr(start, end - start));
+
+			start = end + 1;
+		}
+
+		return lines;
 	}
 }
 
@@ -405,13 +796,189 @@ int main(const int argc, const char* const* const argv)
 	 * later configure of this tree, so it is removed before anything else. */
 	std::remove(scratchHeader.c_str());
 
-	/* ================ case 1: the refuted value, every spelling */
+	/* ================ case 1: the core clock's domain */
 	{
-		const std::vector<Spelling> table = buildSpellingTable();
+		const std::vector<SpellingRow> table = buildSpellingTable();
 
-		check(table.size() == 6,
-			"the spelling table holds every spelling this case claims");
+		const std::string coreSymbol = coreClockSymbol();
+		const std::string corePattern = definitionPattern(coreSymbol);
+		const uint64_t    floorHz = coreClockFloorHz();
 
+		printf("t0_clock_guard case 1: a core-clock definition below %s Hz is "
+			"a bus-domain figure in a core-domain symbol\n",
+			decimalDigits(floorHz).c_str());
+
+		/* The controls' scratch tree. It lives in the work directory, which is
+		 * inside the build tree and therefore outside the scan of the real
+		 * case below. */
+		const std::string controlDirectory = join(workDirectory, "spellings");
+		(void) runCommand(".", { cmakeExecutable, "-E", "make_directory",
+			controlDirectory });
+
+		/* One control run: write `text` into a scratch file, scan it with
+		 * `pattern`, and report whether the scan matched and what it read
+		 * back. */
+		struct ControlOutcome
+		{
+			bool                  ran     = false;
+			bool                  matched = false;
+			std::vector<uint64_t> values;
+		};
+
+		const auto runControl =
+			[&](const std::string& leaf, const std::string& text,
+				const std::string& pattern, const std::string& symbol)
+			{
+				const std::string file = join(controlDirectory, leaf);
+				writeTextFile(file, text + "\n");
+
+				const CommandResult result = runCommand(
+					controlDirectory,
+					{
+						gitExecutable, "grep", "--no-index", "-I",
+						"--line-number", "-E", "-e", pattern, "--", leaf
+					});
+
+				std::remove(file.c_str());
+
+				ControlOutcome outcome;
+				outcome.ran     = result.ran && result.exitCode <= 1;
+				outcome.matched = result.ran && result.exitCode == 0;
+
+				for(const std::string& line : outputLines(result.output))
+				{
+					const std::vector<uint64_t> values =
+						definedFrequencies(line, symbol);
+					outcome.values.insert(outcome.values.end(),
+						values.begin(), values.end());
+				}
+
+				return outcome;
+			};
+
+		for(size_t i = 0; i < table.size(); ++i)
+		{
+			const SpellingRow& spelling = table[i];
+			const std::string  index    = std::to_string(i);
+			const std::string  define   = "#define ";
+
+			/* ---- FLAGGED: the core symbol holding the placeholder. */
+			{
+				const uint64_t value = placeholderCoreClockHz();
+				const ControlOutcome outcome = runControl(
+					"flagged_" + index + ".txt",
+					define + coreSymbol + " " + render(value, spelling.kind),
+					corePattern, coreSymbol);
+
+				if(!outcome.ran)
+					fail("the FLAGGED control for " + spelling.name
+						+ " could not run at all");
+				else if(!outcome.matched)
+					fail("the scan does NOT find a core-clock definition "
+						"written in " + spelling.name + ", so it could never "
+						"report one (pattern: " + corePattern + ")");
+				else if(outcome.values.size() != 1
+					|| outcome.values.front() != value)
+					fail("the parser does not read " + spelling.name + " back "
+						"as " + decimalDigits(value) + " Hz");
+				else if(!isBusDomainFigure(outcome.values.front()))
+					fail("the predicate does NOT flag " + decimalDigits(value)
+						+ " Hz in the core-clock symbol, written in "
+						+ spelling.name + ", against a floor of "
+						+ decimalDigits(floorHz) + " Hz");
+			}
+
+			/* ---- IN DOMAIN: the core symbol holding a legal core clock. */
+			{
+				const uint64_t value = inDomainCoreClockHz();
+				const ControlOutcome outcome = runControl(
+					"in_domain_" + index + ".txt",
+					define + coreSymbol + " " + render(value, spelling.kind),
+					corePattern, coreSymbol);
+
+				if(!outcome.ran)
+					fail("the IN DOMAIN control for " + spelling.name
+						+ " could not run at all");
+				else if(!outcome.matched)
+					fail("the scan does NOT find a core-clock definition "
+						"written in " + spelling.name);
+				else if(outcome.values.size() != 1
+					|| outcome.values.front() != value)
+					fail("the parser does not read " + spelling.name + " back "
+						"as " + decimalDigits(value) + " Hz");
+				else if(isBusDomainFigure(outcome.values.front()))
+					fail("the predicate flags the legal core clock "
+						+ decimalDigits(value) + " Hz, written in "
+						+ spelling.name + ", so it would refuse a correct "
+						"measurement");
+			}
+
+			/* ---- BUS SYMBOL: the derived bus clock, recorded where it
+			 * belongs. The predicate must be silent, and this is the direction
+			 * a ban on the literal got wrong. */
+			{
+				const uint64_t    value  = derivedBusClockHz();
+				const std::string symbol = busSymbol("CLOCK_HZ");
+
+				const ControlOutcome outcome = runControl(
+					"bus_symbol_" + index + ".txt",
+					define + symbol + " " + render(value, spelling.kind),
+					corePattern, coreSymbol);
+
+				if(!outcome.ran)
+					fail("the BUS SYMBOL control for " + spelling.name
+						+ " could not run at all");
+				else if(outcome.matched)
+					fail("the scan reports the derived bus clock "
+						+ decimalDigits(value) + " Hz recorded in the "
+						"bus-clock symbol, written in " + spelling.name
+						+ ". A bus figure in a bus symbol is a measurement, "
+						"not a substitution.");
+			}
+
+			/* ---- SAME VALUE: that same bus clock in the core symbol. It is
+			 * what isolates the SYMBOL as the discriminator, because the value
+			 * and the spelling are held fixed against the control above. */
+			{
+				const uint64_t value = derivedBusClockHz();
+				const ControlOutcome outcome = runControl(
+					"same_value_" + index + ".txt",
+					define + coreSymbol + " " + render(value, spelling.kind),
+					corePattern, coreSymbol);
+
+				if(!outcome.ran)
+					fail("the SAME VALUE control for " + spelling.name
+						+ " could not run at all");
+				else if(!outcome.matched)
+					fail("the scan does NOT find the bus clock standing in the "
+						"core-clock symbol, written in " + spelling.name
+						+ ", so the pair of controls proves nothing about the "
+						"symbol");
+				else if(outcome.values.size() != 1
+					|| outcome.values.front() != value)
+					fail("the parser does not read " + spelling.name + " back "
+						"as " + decimalDigits(value) + " Hz");
+				else if(!isBusDomainFigure(outcome.values.front()))
+					fail("the predicate does NOT flag the bus clock "
+						+ decimalDigits(value) + " Hz standing in the "
+						"core-clock symbol, written in " + spelling.name);
+			}
+
+			printf("t0_clock_guard case 1: %s is read back exactly, flagged in "
+				"the core symbol and ignored in the bus symbol\n",
+				spelling.name.c_str());
+		}
+
+		/* ---- the real scan.
+		 *
+		 * THE SCOPE IS STATED. `git grep` here searches this repository's own
+		 * tracked files plus its untracked, non-ignored ones. It does NOT
+		 * recurse into submodules and it does not read ignored paths, so the
+		 * build tree at the ignored path is out of scope and a build tree at
+		 * any other path is excluded by the property below.
+		 *
+		 * The exclusions are REPORTED with the result, so the scope is never
+		 * invisible to whoever reads it. */
 		const std::vector<std::string> exclusions =
 			buildTreeExclusions(repositoryRoot, gitExecutable);
 
@@ -423,114 +990,57 @@ int main(const int argc, const char* const* const argv)
 
 		printf("t0_clock_guard case 1: %s\n", scopeReport.c_str());
 
-		/* The positive control's scratch tree. It lives in the work directory,
-		 * which is inside the build tree and therefore outside the scan of the
-		 * real case below. */
-		const std::string controlDirectory = join(workDirectory, "spellings");
-		(void) runCommand(".", { cmakeExecutable, "-E", "make_directory",
-			controlDirectory });
-
-		for(size_t i = 0; i < table.size(); ++i)
+		std::vector<std::string> scanArguments =
 		{
-			const Spelling& spelling = table[i];
+			gitExecutable, "grep", "-I", "--untracked",
+			"--line-number", "-E", "-e", corePattern
+		};
 
-			/* ---- the positive control.
-			 *
-			 * One file for each spelling, so a pattern that only matched some
-			 * other row's example would still be caught. */
-			const std::string controlLeaf =
-				"spelling_" + std::to_string(i) + ".txt";
-			const std::string controlFile = join(controlDirectory, controlLeaf);
+		if(!exclusions.empty())
+		{
+			scanArguments.push_back("--");
+			scanArguments.push_back(".");
+			for(const std::string& exclusion : exclusions)
+				scanArguments.push_back(exclusion);
+		}
 
-			writeTextFile(controlFile, spelling.example + "\n");
+		const CommandResult scan = runCommand(repositoryRoot, scanArguments);
 
-			const CommandResult control = runCommand(
-				controlDirectory,
+		/* git grep exits 0 when it MATCHED, 1 when it did not, and above 1 on
+		 * an error. Both 0 and 1 are outcomes here -- a tree with no core-clock
+		 * definition at all has nothing out of domain -- so the codes are read
+		 * explicitly rather than through a test that would score an error as a
+		 * pass. */
+		if(!scan.ran || scan.exitCode > 1)
+		{
+			fail("the core-clock scan could not run (exit code "
+				+ std::to_string(scan.exitCode) + "), so the case is unproven "
+				"rather than passed.\n" + scan.output);
+		}
+		else
+		{
+			for(const std::string& line : outputLines(scan.output))
+			{
+				for(const uint64_t value : definedFrequencies(line, coreSymbol))
 				{
-					gitExecutable, "grep", "--no-index", "-I",
-					"--line-number", "-E", "-e", spelling.pattern,
-					"--", controlLeaf
-				});
+					if(!isBusDomainFigure(value))
+					{
+						printf("t0_clock_guard case 1: %s Hz is in the "
+							"core-clock domain -- %s\n",
+							decimalDigits(value).c_str(), line.c_str());
+						continue;
+					}
 
-			std::remove(controlFile.c_str());
-
-			if(!control.ran)
-			{
-				fail("the positive control for " + spelling.name
-					+ " could not run at all");
-				continue;
+					fail("a core-clock symbol is defined as "
+						+ decimalDigits(value) + " Hz, which is below the "
+						"core-clock floor of " + decimalDigits(floorHz)
+						+ " Hz and therefore a bus-domain figure in a "
+						"core-domain symbol. Measurement register row 7 owns "
+						"the value and spike criterion (j) owns the "
+						"measurement that settles it.\n" + scopeReport + "\n"
+						+ line);
+				}
 			}
-
-			if(control.exitCode != 0)
-			{
-				fail("the pattern for " + spelling.name + " does NOT match "
-					"its own example, so the scan below could never fail "
-					"(pattern: " + spelling.pattern + ", exit code "
-					+ std::to_string(control.exitCode) + ")");
-				continue;
-			}
-
-			/* ---- the real case.
-			 *
-			 * The scope is stated. `git grep` here searches this repository's
-			 * own tracked files plus its untracked, non-ignored ones. It does
-			 * Not recurse into submodules and it does not read ignored paths,
-			 * so the build tree is out of scope.
-			 *
-			 * That scope is chosen against a measurement. A literal walk of
-			 * the working tree finds the decimal form in four VENDORED
-			 * third-party files, where it is a coincidental substring of a
-			 * checksum table and has nothing to do with any clock. A check
-			 * scoped to the literal tree could therefore never pass on a
-			 * clone with its submodules initialised. This scope is the widest
-			 * one that still passes and it covers every file this project
-			 * actually writes. */
-			std::vector<std::string> scanArguments =
-			{
-				gitExecutable, "grep", "-I", "--untracked",
-				"--line-number", "-E", "-e", spelling.pattern
-			};
-
-			if(!exclusions.empty())
-			{
-				scanArguments.push_back("--");
-				scanArguments.push_back(".");
-				for(const std::string& exclusion : exclusions)
-					scanArguments.push_back(exclusion);
-			}
-
-			const CommandResult scan = runCommand(repositoryRoot, scanArguments);
-
-			if(!scan.ran)
-			{
-				fail("the scan for " + spelling.name + " could not run, so "
-					"the case is unproven rather than passed");
-				continue;
-			}
-
-			/* git grep exits 0 when it MATCHED, 1 when it did not, and above 1
-			 * on an error. A match is the failure here, so the codes are read
-			 * explicitly rather than through a test that would score an error
-			 * as a pass. */
-			if(scan.exitCode == 0)
-			{
-				fail("the refuted MCU clock is present in this repository, in "
-					+ spelling.name + ". Design section 13.4.3 refutes it on "
-					"five independent grounds and it must never come back.\n"
-					+ scopeReport + "\n" + scan.output);
-				continue;
-			}
-
-			if(scan.exitCode != 1)
-			{
-				fail("the scan for " + spelling.name + " reported exit code "
-					+ std::to_string(scan.exitCode) + ", so the case is "
-					"unproven rather than passed.\n" + scan.output);
-				continue;
-			}
-
-			printf("t0_clock_guard case 1: %s is absent\n",
-				spelling.name.c_str());
 		}
 	}
 
