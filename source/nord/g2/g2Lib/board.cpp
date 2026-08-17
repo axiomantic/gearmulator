@@ -88,23 +88,6 @@ namespace g2
 		static_assert(g_quantaPerSofFrame != 0u,
 		              "A zero divisor would make every frame due");
 
-		/* The ISP1181 handle the SOF tick is delivered to.
-		 *
-		 * IT IS NULL, AND THAT IS A GAP IN THE PLAN RATHER THAN A CHOICE MADE
-		 * HERE. Design sections 5.2 and 9.4 give the Board an isp1181_ctx, but
-		 * the member that would hold it belongs in board.h, which task BRD-21
-		 * owns; BRD-22's Files: line names board.cpp alone, and no task in the
-		 * plan declares the handle. PROTO-4 creates g2Lib's ISP1181 bridge and
-		 * reaches the Board through nothing. Until an owner is assigned, the
-		 * divisor below is real and the device it advances is absent.
-		 *
-		 * The nil handle is defined behaviour and not an accident waiting to
-		 * happen: isp1181_tick advances nothing when it is given one, which is
-		 * the same contract every other entry point of that model carries. */
-		isp1181_ctx* boardUsbDevice() noexcept
-		{
-			return nullptr;
-		}
 	}
 
 	uint32_t Board::onRead(void*, const uint32_t, const int,
@@ -128,12 +111,26 @@ namespace g2
 
 	Board::Board()
 		: m_mcu(nullptr)
+		, m_usb(nullptr)
 	{
 		// The Nim runtime must be initialised before any mcf5307_ call. It is
 		// idempotent behind a latch, so the second Board in a process is safe.
 		mcf5307_runtime_init();
 		m_mcu = mcf5307_create(this, &Board::onRead, &Board::onWrite,
 		                       &Board::onInterruptAck);
+
+		/* The Board's own ISP1181, created here so its lifetime is exactly the
+		 * Board's and destroyed in the reverse order below.
+		 *
+		 * THE IRQ AND TX CALLBACKS ARE NULL, AND THAT IS STATED RATHER THAN
+		 * HIDDEN. The device signals service requests through irq and hands
+		 * outbound packets to tx, and the Board has nowhere to route either
+		 * yet: the interrupt presentation is task BRD-3's and the transport is
+		 * the TransportHub's, and neither is in this task's closure. Null is
+		 * DEFINED behaviour and not an oversight -- the model tests each
+		 * callback before it calls it -- so the device runs and its frame
+		 * number advances, which is what the SOF tick needs. */
+		m_usb = isp1181_create(this, nullptr, nullptr);
 
 		// The single MCU-clock placeholder line. Naming the macro AND the
 		// numeric value AND the word "placeholder" AND criterion (j) is what
@@ -146,6 +143,13 @@ namespace g2
 
 	Board::~Board()
 	{
+		// Reverse order of construction: the USB device was created last and
+		// is released first. Each pointer is cleared as it is released, so a
+		// second destruction cannot reach an already-released handle.
+		if(m_usb)
+			isp1181_destroy(m_usb);
+		m_usb = nullptr;
+
 		if(m_mcu)
 			mcf5307_destroy(m_mcu);
 		m_mcu = nullptr;
@@ -175,7 +179,7 @@ namespace g2
 		if(frameIndex % g_quantaPerSofFrame != 0u)
 			return;
 
-		isp1181_tick(boardUsbDevice(), 1u);
+		isp1181_tick(m_usb, 1u);
 	}
 
 	size_t Board::stateSize() const noexcept
