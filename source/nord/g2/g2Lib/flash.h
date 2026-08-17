@@ -36,6 +36,12 @@ namespace g2
 		bool containsCs0(uint32_t _addr) const;
 		bool containsCs2(uint32_t _addr) const;
 
+		// True while the CS2 device is in CFI query mode. The flag is a MEMBER
+		// and not a file-local static in flash.cpp, because a static would be
+		// process-global: two Boards would share one mode and a test that
+		// entered query mode would leak it into the next one.
+		bool cs2InQueryMode() const;
+
 		// Big-endian reads, matching the ColdFire byte order.
 		uint8_t  read8 (uint32_t _addr) const;
 		uint16_t read16(uint32_t _addr) const;
@@ -46,6 +52,13 @@ namespace g2
 		// this task. The model carries contents from reset, so whatever image
 		// was loaded is readable from the first cycle, but no call below ever
 		// changes the underlying bytes.
+		//
+		// TWO 16-BIT WRITES TO CS2 ARE COMMANDS RATHER THAN REJECTED WRITES,
+		// AND THEY STILL CHANGE NO BYTE. They select the CFI query mode, which
+		// the container header makes mandatory: the header occupies the exact
+		// offsets the CFI probe reads, so a model that STORED the signature
+		// would destroy the container the boot loader parses. Real hardware
+		// separates the two readings of those offsets only by mode.
 		void write8 (uint32_t _addr, uint8_t  _value);
 		void write16(uint32_t _addr, uint16_t _value);
 		void write32(uint32_t _addr, uint32_t _value);
@@ -58,5 +71,7 @@ namespace g2
 		uint32_t            m_cs2Base;
 		uint32_t            m_cs2Size;
 		std::vector<uint8_t> m_cs2;
+
+		bool                m_cs2QueryMode;
 	};
 }
