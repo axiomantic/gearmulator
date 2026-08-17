@@ -270,3 +270,22 @@ set_property(TARGET t0_board_surface PROPERTY FOLDER "G2/test")
 add_test(NAME t0_board_surface COMMAND t0_board_surface)
 set_tests_properties(t0_board_surface PROPERTIES LABELS "UnitTest")
 
+# ----------------- BRD-17, bounded non-blocking control on the HDI08 transfer path
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_nonblocking$
+#
+# TIMEOUT IS PART OF THE ASSERTION AND IS NOT HOUSEKEEPING. The defect this task
+# prevents is a blocking wait on a full dsp56k receive ring under a
+# single-threaded scheduler, which is a DEADLOCK and not a wrong answer. A build
+# whose bound is removed therefore hangs rather than returning a wrong count, and
+# a hung test reports neither pass nor fail. The timeout is what turns that
+# deadlock into a red, and the mutation runs recorded in the task report depend
+# on it.
+
+add_executable(t0_hdi08_nonblocking t0_hdi08_nonblocking.cpp)
+target_link_libraries(t0_hdi08_nonblocking PRIVATE g2Lib)
+set_property(TARGET t0_hdi08_nonblocking PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_hdi08_nonblocking COMMAND t0_hdi08_nonblocking)
+set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+
