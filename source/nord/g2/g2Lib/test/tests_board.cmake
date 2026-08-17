@@ -289,3 +289,42 @@ set_property(TARGET t0_hdi08_nonblocking PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_nonblocking COMMAND t0_hdi08_nonblocking)
 set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 120)
 
+# ----------------- BRD-22, the 1 kHz USB start-of-frame tick
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_sof_tick$
+#
+# THIS TARGET COMPILES board.cpp AND LINKS NO LIBRARY, and that is the
+# observation mechanism rather than a shortcut. The behaviour under test is a
+# call the Board makes OUT to isp1181_tick, and the shipped Board exposes no
+# way to observe it. The test therefore supplies its own definitions of the
+# mcf5307 entry points board.cpp uses, which requires that libmcf5307.a is
+# absent from this link: defining isp1181_tick while that archive is on the
+# link line is a duplicate-symbol error as soon as anything pulls the archive
+# member that also defines it. Linking g2Lib would put that archive on the
+# line through g2Lib's own PUBLIC link.
+#
+# The mcf5307 include directory is taken from the imported target's INTERFACE
+# property rather than linking it, so the header arrives and the archive does
+# not.
+#
+# THE EXECUTABLE IS DECLARED UNCONDITIONALLY AND ONLY THE INCLUDE DIRECTORY IS
+# GUARDED, which is the same discipline the t0_mcf5307_link block above states.
+# At G2_LINK_MCF5307=OFF the imported target does not exist, so naming it in a
+# generator expression fails the GENERATE step of any configure that turns the
+# option off -- and t0_clock_guard's control configure is exactly such a
+# configure, so an unguarded reference here turns that test red. Guarding the
+# target instead of the executable keeps BRD-23's negative case intact: at OFF
+# this target still builds and still fails at the COMPILE step on the missing
+# mcf5307.h, rather than passing by building nothing.
+
+add_executable(t0_sof_tick t0_sof_tick.cpp ../board.cpp)
+target_include_directories(t0_sof_tick PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+if(TARGET mcf5307::mcf5307)
+	target_include_directories(t0_sof_tick PRIVATE
+		$<TARGET_PROPERTY:mcf5307::mcf5307,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+set_property(TARGET t0_sof_tick PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_sof_tick COMMAND t0_sof_tick)
+set_tests_properties(t0_sof_tick PROPERTIES LABELS "UnitTest")
+
