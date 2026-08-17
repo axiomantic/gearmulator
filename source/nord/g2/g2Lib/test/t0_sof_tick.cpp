@@ -27,13 +27,33 @@
 //
 // HOW THE TICK IS OBSERVED, AND WHY THE TARGET LINKS NO LIBRARY. This
 // executable compiles board.cpp together with this file and supplies its own
-// definitions of the five mcf5307 C entry points board.cpp uses. That makes
+// definitions of the mcf5307 C entry points board.cpp uses. That makes
 // isp1181_tick observable without adding a test-only accessor to the shipped
 // Board, and it is the reason tests_board.cmake names ../board.cpp as a source
 // rather than linking g2Lib. Defining isp1181_tick while ALSO linking
 // libmcf5307.a is a duplicate-symbol link error the moment anything in the
 // link pulls the archive member that defines it, so the seam is taken by
-// owning the whole link line instead.
+// owning the whole link line instead. The Board now creates and destroys its
+// USB device, so isp1181_create and isp1181_destroy are supplied here too and
+// the same duplicate-symbol reasoning covers them.
+//
+// HOW THIS FILE MODELS HANDLE IDENTITY, AND WHY THE MODEL IS THE POINT. The
+// isp1181_create below hands back a DISTINCT, non-null handle on every call,
+// drawn from a token pool this file never clears -- so no two handles in the
+// whole process are equal, not even across runs. That is what separates the
+// assertion "the tick reached the CORRECT handle" from the strictly weaker
+// "the tick reached a CONSTANT handle". A stub that returned one address for
+// every call would collapse the two into the same statement and the
+// strengthening below would assert nothing new: a permanently nil handle
+// passes "constant" and fails "correct".
+//
+// THE NEGATIVE CASE DRIVES A WRONG HANDLE THROUGH THE SAME PREDICATE. Two
+// Boards are alive at once, each with its own device, and the ONE predicate
+// everyTickOfBoardCarried is run twice against the first Board's ticks: once
+// with that Board's own handle, which must hold, and once with the OTHER
+// Board's handle, which must NOT. Without the second run the predicate is
+// never observed to reject anything, and a predicate nobody has watched fail
+// is a claim rather than a mechanism.
 //
 // THE MODULUS APPEARS HERE AS THIS FILE'S OWN LITERAL. board.cpp derives it
 // from G2_FRAME_RATE_HZ; this file writes 96 out. A change that moves one and
@@ -44,6 +64,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -67,22 +88,102 @@ namespace
 		++g_failures;
 	}
 
+	// A single monotonic clock over every recorded call, whatever its kind. It
+	// is what makes "the tick happened between the create and the destroy" an
+	// assertion rather than an assumption about the order a reader imagines.
+	uint64_t g_seq = 0;
+
 	// One recorded call of isp1181_tick: the device handle it was given, the
-	// SOF frame count it was given, and the frame index the Board was being
-	// driven with at the moment of the call.
+	// SOF frame count it was given, the frame index the Board was being driven
+	// with at the moment of the call, which Board was being driven, and where
+	// the call sits in the recorded sequence.
 	struct SofCall
 	{
 		const isp1181_ctx* ctx;
 		uint32_t           sofFrames;
 		uint64_t           atFrameIndex;
+		int                fromBoard;
+		uint64_t           seq;
 	};
 
-	std::vector<SofCall> g_sofCalls;
-	uint64_t             g_drivingFrameIndex = 0;
+	// One recorded call of isp1181_create. The user pointer is recorded because
+	// it is the Board that must own the device, and a create that passed
+	// something else is a different defect from one that never happened.
+	struct CreateCall
+	{
+		const isp1181_ctx* ctx;
+		const void*        user;
+		uint64_t           seq;
+	};
+
+	// One recorded call of isp1181_destroy.
+	struct DestroyCall
+	{
+		const isp1181_ctx* ctx;
+		uint64_t           seq;
+	};
+
+	std::vector<SofCall>     g_sofCalls;
+	std::vector<CreateCall>  g_creates;
+	std::vector<DestroyCall> g_destroys;
+
+	uint64_t g_drivingFrameIndex = 0;
+	int      g_drivingBoard      = 0;
+
+	// The token pool isp1181_create draws its handles from. A deque is used
+	// because push_back leaves references to existing elements valid, so every
+	// handle stays live and distinct for the whole run.
+	//
+	// IT IS NEVER CLEARED, AND THAT IS DELIBERATE. Every handle this file hands
+	// out is distinct across the WHOLE process, so a Board that cached a handle
+	// belonging to an earlier run is caught instead of excused by an address
+	// the allocator happened to reuse.
+	std::deque<int> g_usbTokens;
 
 	// The token mcf5307_create hands back. Board only stores it and passes it
 	// back to mcf5307_exec and mcf5307_destroy, so any non-null address does.
 	int g_coreToken = 0;
+
+	// Clear the call records between runs. The token pool above is deliberately
+	// not among them.
+	void resetRecords()
+	{
+		g_sofCalls.clear();
+		g_creates.clear();
+		g_destroys.clear();
+	}
+
+	// TRUE when every tick recorded for Board `_tag` carried `_handle`, over a
+	// NON-EMPTY set of ticks. The emptiness clause is not decoration: without
+	// it the predicate is vacuously true for a Board that never ticked, and
+	// both the positive and the negative case below would pass against a Board
+	// that ticks never.
+	//
+	// THIS IS THE ONE PREDICATE BOTH CASES RUN. The negative case exists to
+	// watch it return false, which is the only thing that establishes it can.
+	bool everyTickOfBoardCarried(const int _tag, const isp1181_ctx* const _handle)
+	{
+		std::size_t seen = 0;
+		for(const auto& call : g_sofCalls)
+		{
+			if(call.fromBoard != _tag)
+				continue;
+			++seen;
+			if(call.ctx != _handle)
+				return false;
+		}
+		return seen != 0;
+	}
+
+	// How many times `_handle` was passed to isp1181_destroy.
+	std::size_t destroyCountOf(const isp1181_ctx* const _handle)
+	{
+		std::size_t n = 0;
+		for(const auto& call : g_destroys)
+			if(call.ctx == _handle)
+				++n;
+		return n;
+	}
 
 	std::string indicesToString(const std::vector<uint64_t>& _indices)
 	{
@@ -101,13 +202,16 @@ namespace
 	// SOF tick.
 	std::vector<uint64_t> sofIndicesOver(const uint64_t _quanta)
 	{
-		g_sofCalls.clear();
+		resetRecords();
+		g_drivingBoard = 0;
 
-		g2::Board board;
-		for(uint64_t i = 0; i < _quanta; ++i)
 		{
-			g_drivingFrameIndex = i;
-			board.tickSofIfDue(i);
+			g2::Board board;
+			for(uint64_t i = 0; i < _quanta; ++i)
+			{
+				g_drivingFrameIndex = i;
+				board.tickSofIfDue(i);
+			}
 		}
 
 		std::vector<uint64_t> indices;
@@ -115,6 +219,18 @@ namespace
 		for(const auto& call : g_sofCalls)
 			indices.push_back(call.atFrameIndex);
 		return indices;
+	}
+
+	// Drive one Board of a multi-Board run, tagging every tick it issues so the
+	// assertions can tell the two Boards' ticks apart.
+	void driveBoard(const int _tag, g2::Board& _board, const uint64_t _quanta)
+	{
+		g_drivingBoard = _tag;
+		for(uint64_t i = 0; i < _quanta; ++i)
+		{
+			g_drivingFrameIndex = i;
+			_board.tickSofIfDue(i);
+		}
 	}
 
 	// The frames a correct divisor ticks on, computed by STRIDING rather than
@@ -171,9 +287,28 @@ extern "C"
 		return 0u;
 	}
 
+	/* A DISTINCT, NON-NULL handle on every call, and never a repeat. This is
+	 * the whole reason the assertions below can say "correct" rather than only
+	 * "constant" -- see the file header. */
+	isp1181_ctx* isp1181_create(void* const user, isp1181_irq_fn,
+	                            isp1181_tx_fn)
+	{
+		g_usbTokens.push_back(0);
+		const auto handle =
+			reinterpret_cast<isp1181_ctx*>(&g_usbTokens.back());
+		g_creates.push_back(CreateCall{handle, user, g_seq++});
+		return handle;
+	}
+
+	void isp1181_destroy(isp1181_ctx* const ctx)
+	{
+		g_destroys.push_back(DestroyCall{ctx, g_seq++});
+	}
+
 	void isp1181_tick(isp1181_ctx* const ctx, const uint32_t sofFrames)
 	{
-		g_sofCalls.push_back(SofCall{ctx, sofFrames, g_drivingFrameIndex});
+		g_sofCalls.push_back(SofCall{ctx, sofFrames, g_drivingFrameIndex,
+		                             g_drivingBoard, g_seq++});
 	}
 }
 
@@ -202,30 +337,129 @@ int main()
 	// that fires on construction would be invisible to every case above.
 	checkCase(0, 0);
 
-	// Every tick advances the device by exactly one SOF frame, and every tick
-	// of one run reaches the SAME device handle. The second assertion is what
-	// separates a Board that owns one device from one that produces a fresh
-	// device for each tick.
+	// Every tick advances the device by exactly one SOF frame, every tick
+	// reaches the handle the Board's OWN isp1181_create returned, and that
+	// handle is created once and destroyed once around them.
 	{
 		const auto indices = sofIndicesOver(1000);
 		check(indices.size() == 11u, "the run under inspection issued 11 ticks");
 
-		bool allOneFrame  = true;
-		bool allSameDevice = true;
+		check(g_creates.size() == 1u,
+		      "one Board construction called isp1181_create exactly once, and it called it "
+		      + std::to_string(g_creates.size()) + " times");
+
+		const isp1181_ctx* const owned =
+			g_creates.size() == 1u ? g_creates.front().ctx : nullptr;
+
+		check(owned != nullptr, "the handle the Board was given is not null");
+
+		bool allOneFrame = true;
 		for(const auto& call : g_sofCalls)
-		{
 			if(call.sofFrames != 1u)
 				allOneFrame = false;
-			if(call.ctx != g_sofCalls.front().ctx)
-				allSameDevice = false;
-		}
-		// The emptiness clause is not decoration. Both loops above range over
-		// g_sofCalls, so both flags stay true when no tick was issued at all,
-		// and without this clause a Board that ticks NEVER passes both cases.
+		// The emptiness clause is not decoration. The loop above ranges over
+		// g_sofCalls, so the flag stays true when no tick was issued at all,
+		// and without this clause a Board that ticks NEVER passes the case.
 		check(!g_sofCalls.empty() && allOneFrame,
 		      "every tick advanced the device by exactly one SOF frame, over a non-empty run");
-		check(!g_sofCalls.empty() && allSameDevice,
-		      "every tick of one run reached the same device handle, over a non-empty run");
+
+		// THE STRENGTHENED ASSERTION. It read "every tick of one run reached
+		// the SAME device handle", which a permanently nil handle satisfies
+		// exactly as well as a correct one -- the Board exposed no correct
+		// handle to compare against, so constancy was all there was to assert.
+		// It now names the handle isp1181_create returned for THIS Board.
+		check(owned != nullptr && everyTickOfBoardCarried(0, owned),
+		      "every tick reached the handle isp1181_create returned for this Board");
+
+		check(g_destroys.size() == 1u,
+		      "the Board destroyed exactly one USB device, and it destroyed "
+		      + std::to_string(g_destroys.size()));
+		check(owned != nullptr && destroyCountOf(owned) == 1u,
+		      "the handle the Board was given was destroyed exactly once");
+
+		// The ticks sit strictly inside the device's lifetime. Without this a
+		// create that ran after the ticks, or a destroy that ran before them,
+		// satisfies every assertion above.
+		bool insideLifetime = !g_sofCalls.empty() && g_creates.size() == 1u
+		                      && g_destroys.size() == 1u;
+		if(insideLifetime)
+			for(const auto& call : g_sofCalls)
+				if(call.seq < g_creates.front().seq
+				   || call.seq > g_destroys.front().seq)
+					insideLifetime = false;
+		check(insideLifetime,
+		      "every tick happened after the create and before the destroy");
+	}
+
+	// TWO BOARDS ALIVE AT ONCE. Each owns its own device, and the NEGATIVE
+	// case drives a wrong handle through the same predicate the positive case
+	// trusts. This is the pair that makes "correct handle" mean more than
+	// "constant handle": with one Board in the process there is only one
+	// handle, and every wrong answer that is constant looks right.
+	{
+		resetRecords();
+		const void* addrA = nullptr;
+		const void* addrB = nullptr;
+		{
+			g2::Board a;
+			g2::Board b;
+			addrA = &a;
+			addrB = &b;
+			driveBoard(0, a, 200);
+			driveBoard(1, b, 200);
+		}
+
+		check(g_creates.size() == 2u,
+		      "two Boards called isp1181_create twice, and they called it "
+		      + std::to_string(g_creates.size()) + " times");
+
+		const isp1181_ctx* const handleA =
+			g_creates.size() == 2u ? g_creates[0].ctx : nullptr;
+		const isp1181_ctx* const handleB =
+			g_creates.size() == 2u ? g_creates[1].ctx : nullptr;
+
+		// Distinctness is ASSERTED and not assumed of the stub. If the two
+		// handles were equal every negative case below would be vacuous, and
+		// the test would report a strength it does not have.
+		check(handleA != nullptr && handleB != nullptr && handleA != handleB,
+		      "the two Boards were given two different non-null handles");
+
+		// EACH BOARD REGISTERED ITSELF AS ITS DEVICE'S OWNER. The user pointer
+		// is what the irq and tx callbacks will be handed when task BRD-3 and
+		// the TransportHub route them, so a Board that registered null or its
+		// neighbour would deliver another Board's interrupts. That defect is
+		// invisible in the tick record, which carries only the handle.
+		check(g_creates.size() == 2u && g_creates[0].user == addrA,
+		      "Board A registered itself as its device's user pointer");
+		check(g_creates.size() == 2u && g_creates[1].user == addrB,
+		      "Board B registered itself as its device's user pointer");
+
+		check(everyTickOfBoardCarried(0, handleA),
+		      "positive: every tick of Board A reached Board A's own handle");
+		check(everyTickOfBoardCarried(1, handleB),
+		      "positive: every tick of Board B reached Board B's own handle");
+
+		// THE NEGATIVE CASES. Same predicate, same recorded ticks, a WRONG
+		// handle -- and the predicate must reject. A predicate nobody has
+		// watched return false cannot be known to distinguish the correct
+		// handle from any other, which is the exact weakness this test was
+		// strengthened to remove.
+		check(!everyTickOfBoardCarried(0, handleB),
+		      "negative: Board A's ticks do NOT match Board B's handle");
+		check(!everyTickOfBoardCarried(1, handleA),
+		      "negative: Board B's ticks do NOT match Board A's handle");
+		check(!everyTickOfBoardCarried(0, nullptr),
+		      "negative: Board A's ticks do NOT match a nil handle");
+
+		// Both devices are released, each exactly once. An unbalanced pair
+		// leaks or double-destroys, and neither shows up in the tick record.
+		check(g_destroys.size() == 2u,
+		      "two Boards destroyed two USB devices, and they destroyed "
+		      + std::to_string(g_destroys.size()));
+		check(handleA != nullptr && destroyCountOf(handleA) == 1u,
+		      "Board A's handle was destroyed exactly once");
+		check(handleB != nullptr && destroyCountOf(handleB) == 1u,
+		      "Board B's handle was destroyed exactly once");
 	}
 
 	std::cout << (g_failures ? "FAILED " : "PASSED ")

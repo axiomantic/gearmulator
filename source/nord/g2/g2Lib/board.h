@@ -90,8 +90,8 @@ namespace g2
 		 * unconditionally, passing the authoritative virtual frame index, and
 		 * the Board tests frameIndex % 96 == 0 itself. THE REAL TICK IS TASK
 		 * BRD-22's (its Check is t0_sof_tick) and task BRD-22 owns board.cpp's
-		 * body of this method. This task declares the method so the Scheduler
-		 * surface is complete; the body here records the frame index only. */
+		 * body of this method. On each due frame it advances m_usb by exactly
+		 * one SOF frame. */
 		void tickSofIfDue(uint64_t frameIndex) noexcept;
 
 		/* The MCU context's determinism-relevant state, embedded in the
@@ -129,6 +129,13 @@ namespace g2
 		static void     onInterruptAck(void* user, int level, uint8_t vector);
 
 		mcf5307_ctx* m_mcu;
+
+		/* The ISP1181 USB device this Board owns. Design sections 5.2 and 9.4
+		 * put it on the Board, and tickSofIfDue is what advances it. The Board
+		 * creates it in the constructor and destroys it in the destructor, so
+		 * its lifetime is exactly the Board's; task BRD-22 owns both. */
+		isp1181_ctx* m_usb;
+
 		uint64_t     m_lastFrameIndex = 0;
 		bool         m_faulted        = false;
 	};
