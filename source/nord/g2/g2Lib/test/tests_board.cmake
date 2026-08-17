@@ -348,3 +348,100 @@ set_property(TARGET t0_pmem_funnel PROPERTY FOLDER "G2/test")
 add_test(NAME t0_pmem_funnel COMMAND t0_pmem_funnel)
 set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
 
+# ----------------- INT-1, the board composition (plan section 24.6 row W3-115)
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_board_routing$
+#
+# THE TEST LINKS g2Lib AND NAMES NO OTHER LIBRARY, which is t0_board_surface's
+# form and not t0_sof_tick's. The distinction is deliberate. t0_sof_tick
+# compiles ../board.cpp directly and DEFINES the mcf5307 entry points itself,
+# so it must keep libmcf5307.a off the link line. This test needs the OPPOSITE:
+# the real Flash, Panel, Latches, Hdi08Adapter, MemoryMap, Sim and Uart0, all of
+# which are g2Lib sources, plus the real board.cpp that composes them -- and
+# board.cpp is itself a g2Lib source. Linking g2Lib delivers every one of them
+# with the real mcf5307 behind it, which is the composition W3-115 asks for.
+#
+# NOTHING HERE REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and
+# adding one would be noise: this block is inert in the option-OFF configure
+# that t0_clock_guard runs as its control, exactly as t0_pmem_funnel's is.
+#
+# NMG2_ARTIFACTS is not read. Both flash images the test loads are byte patterns
+# the test file authors, so no Clavia byte reaches it and the tier stays T0.
+
+add_executable(t0_board_routing t0_board_routing.cpp)
+target_link_libraries(t0_board_routing PRIVATE g2Lib)
+set_property(TARGET t0_board_routing PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_board_routing COMMAND t0_board_routing)
+set_tests_properties(t0_board_routing PROPERTIES LABELS "UnitTest")
+
+# ----------------- INT-1 consequence: t0_sof_tick's include path
+#
+# THIS BLOCK IS APPENDED RATHER THAN FOLDED INTO t0_sof_tick's OWN BLOCK ABOVE,
+# because this file is written by more than one task and an edit inside another
+# task's block is how two writers lose each other's work. It adds one include
+# directory to an existing target and changes nothing else about it.
+#
+# WHY IT IS NEEDED. INT-1's composition makes board.h hold the seven units BY
+# VALUE, so board.h now includes hdi08Adapter.h, which includes "mc68k/hdi08.h".
+# Every consumer of board.h therefore needs the directory that resolves it.
+# t0_board_routing and t0_board_surface get it for free because they LINK g2Lib,
+# whose PUBLIC hardwareLib link exports it. t0_sof_tick does NOT link g2Lib: it
+# compiles ../board.cpp directly and defines the mcf5307 entry points itself, to
+# keep libmcf5307.a off its link line (its own block states why). That is still
+# correct and is not changed here -- it just leaves the target without the
+# include directory that board.h now requires.
+#
+# THE INCLUDE DIRECTORY IS TAKEN FROM hardwareLib's INTERFACE PROPERTY and the
+# target is NOT linked, so the header arrives and no archive joins the link. The
+# GUARD IS ON THE PROPERTY REFERENCE AND NOT ON THE EXECUTABLE, which is the
+# discipline the t0_mcf5307_link and t0_sof_tick blocks above both state: naming
+# a target that does not exist fails the GENERATE step of a configure that turns
+# the option off, and t0_clock_guard's control configure is exactly such a run.
+
+if(TARGET hardwareLib)
+	target_include_directories(t0_sof_tick PRIVATE
+		$<TARGET_PROPERTY:hardwareLib,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
+# ----------------- INT-1 consequence: t0_sof_tick's own sources
+#
+# THE COMPOSITION CHANGED WHAT ../board.cpp DEPENDS ON, and this is the second
+# half of that consequence. board.cpp now CONSTRUCTS the seven units and calls
+# into them, so a target that compiles board.cpp on its own must supply their
+# objects too. Before INT-1, board.cpp referenced no g2Lib symbol at all and
+# t0_sof_tick's two-source executable was complete.
+#
+# THIS DOES NOT WEAKEN WHAT t0_sof_tick's OWN BLOCK PROTECTS. That block keeps
+# libmcf5307.a off the link line, because the test DEFINES the mcf5307 entry
+# points itself and the archive would collide with them. None of the sources
+# below is an mcf5307 source and 68kEmu is not that archive, so the property is
+# untouched: the test still defines its own mcf5307 stubs and still links no
+# mcf5307 archive.
+#
+# 68kEmu IS LINKED because hdi08Adapter.cpp holds mc68k::Hdi08 instances by
+# value and needs their definitions. It is guarded on the same principle as the
+# include directory above.
+
+target_sources(t0_sof_tick PRIVATE
+	../flash.cpp
+	../panel.cpp
+	../latches.cpp
+	../hdi08Decode.cpp
+	../hdi08Adapter.cpp
+	../memoryMap.cpp
+	../sim.cpp
+	../uart0.cpp
+	../interruptController.cpp)
+
+# 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
+# class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
+# onto the link line. NONE of the three is the mcf5307 archive, so the property
+# t0_sof_tick's own block protects is untouched.
+
+foreach(lib 68kEmu dsp56kEmu baseLib)
+	if(TARGET ${lib})
+		target_link_libraries(t0_sof_tick PRIVATE ${lib})
+	endif()
+endforeach()
+

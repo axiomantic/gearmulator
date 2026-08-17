@@ -40,6 +40,28 @@
 // reference and no capture may be recorded until then. t0_board_surface
 // asserts the line is emitted exactly once per construction.
 
+// THE COMPOSITION, ADDED BY TASK INT-1 UNDER PLAN SECTION 24.6 ROW W3-115.
+// The bus callbacks below used to accept every access and return zero, and the
+// comment that described that shape is rewritten rather than left standing: the
+// board now routes every access through the BRD-1 MemoryMap to the seven units
+// W3-115 names. INT-1's scope in this file is the composition and nothing else.
+//
+// WHERE EVERY WINDOW COMES FROM. FOUR bases are recorded by AGENTS.md section
+// 2.2 and live as constants in memoryMap.h: CS1, CS3, CS5 and the SDRAM. CS0's,
+// CS2's and CS4's bases are recorded by NO AUTHORITY, and NO AUTHORITY RECORDS
+// A SIZE FOR ANY WINDOW. Plan section 1.3 rule 1 therefore makes every base and
+// every size CONFIGURATION, and BoardConfig below is how a caller supplies it.
+// THIS FILE INVENTS NO ADDRESS AND SHIPS NO DEFAULT LAYOUT, for the reason
+// memoryMap.h already gives: three of the eight bases have nothing to take a
+// default from. A default-constructed Board therefore answers NOWHERE, which is
+// the honest answer for a board nobody has configured.
+//
+// THE MBAR WINDOW IS SHARED BY TWO UNITS AND THE MemoryMap ATTACHES ONE TARGET
+// PER REGION, so a small router sits between them. The split is not a choice
+// made here: sim.cpp's DIVERGENCE note states it. The SIM answers MBAR+0x1D0
+// because the firmware reads it as a model strap and BRD-2's check requires it,
+// and BRD-4 "owns every other UART offset".
+
 #pragma once
 
 #include <cstddef>
@@ -48,8 +70,30 @@
 
 #include <mcf5307.h>
 
+#include "flash.h"
+#include "hdi08Adapter.h"
+#include "latches.h"
+#include "memoryMap.h"
+#include "panel.h"
+#include "sim.h"
+#include "uart0.h"
+
 namespace g2
 {
+	/* The whole board layout a caller supplies. It carries no default address
+	 * of its own: `memory` starts with every window absent (size zero), which
+	 * answers at no address at all, and a caller fills in the windows the
+	 * machine it is modelling actually has. */
+	struct BoardConfig
+	{
+		MemoryMapConfig memory;
+
+		/* The populated-port set of the HDI08 array. The expanded machine is
+		 * the default because AGENTS.md section 4.1 targets it; it reaches no
+		 * address unless the caller also gives CS1 a window. */
+		Hdi08Decode hdi08{g_hdi08ExpandedPorts};
+	};
+
 	// The Board. Concrete, final, neither copyable nor movable. Constructed by
 	// the Device subclass before the Scheduler and destroyed after it; the
 	// Scheduler borrows the Board and never destroys it.
@@ -64,6 +108,13 @@ namespace g2
 		 * Nim runtime once, and logs the G2_MCU_CORE_CLOCK_HZ placeholder line
 		 * exactly once. */
 		Board();
+
+		/* The composed board of task INT-1. It builds the seven units from
+		 * `_config`, attaches each to the region it answers, and points the
+		 * MCF5307 core's bus callbacks at the decode. Every base and every
+		 * size comes from `_config`; this class chooses none of them. */
+		explicit Board(const BoardConfig& _config);
+
 		~Board();
 
 		Board(const Board&)            = delete;
@@ -116,17 +167,136 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		void   stateLoad(const void* src) noexcept;
 
-	private:
-		/* The installed bus callbacks of the MCF5307 core. The real routing to
-		 * the CS0 to CS5 devices is the board-track integration that follows
-		 * this surface task; for the T0 surface these accept every access and
-		 * report success, which is the shape design section 5.2.1 requires for
-		 * a board that models no fault. */
+		/* THE BUS, AS THE CORE SEES IT. onRead and onWrite forward here, so
+		 * this is the routing itself; a caller may drive it without running a
+		 * program. */
+		uint32_t busRead(uint32_t _address, int _size, mcf5307_bus_status& _status);
+		void     busWrite(uint32_t _address, int _size, uint32_t _value,
+		                  mcf5307_bus_status& _status);
+
+		/* THE INSTALLED CALLBACKS, PUBLIC ON PURPOSE, AND THE REASON IS A
+		 * DEFECT THAT WAS MEASURED RATHER THAN IMAGINED. These are the exact
+		 * function pointers handed to mcf5307_create, so they are the path the
+		 * CORE takes. An earlier revision of this composition kept them private
+		 * and the check drove busRead instead; restoring the old
+		 * "return 0u with a bus-OK status" body into onRead then left the check
+		 * fully GREEN, because nothing exercised the forwarding. The check now
+		 * drives THESE, and they are reachable for exactly that reason.
+		 *
+		 * THEY ARE NOT A SECOND ROUTE INTO THE BOARD. Each one forwards to
+		 * busRead or busWrite and does nothing else, so there is one routing
+		 * path and this is its entry point rather than a parallel copy. */
 		static uint32_t onRead(void* user, uint32_t addr, int size,
 		                       mcf5307_bus_status* status);
 		static void     onWrite(void* user, uint32_t addr, int size,
 		                        uint32_t value, mcf5307_bus_status* status);
+
+		/* The units, so a caller can load the flash images, install the HDI08
+		 * callbacks the DSP side needs, feed UART0 and read each unit's own
+		 * log. The Board owns every one of them and hands out references
+		 * rather than copies: none of these types is copyable in a meaningful
+		 * sense and the Scheduler's callbacks point into them. */
+		Flash&        flash()   { return m_flash; }
+		Panel&        panel()   { return m_panel; }
+		Latches&      latches() { return m_latches; }
+		Hdi08Adapter& hdi08()   { return m_hdi08; }
+		Sim&          sim()     { return m_sim; }
+		Uart0&        uart0()   { return m_uart0; }
+		MemoryMap&    memory()  { return m_memory; }
+
+	private:
+		/* ONE FLASH OBJECT ANSWERS TWO WINDOWS, so it cannot be a BusTarget
+		 * itself: a BusTarget is attached to a single region and receives a
+		 * window-relative offset, while Flash addresses its two images
+		 * ABSOLUTELY and tells them apart by address. This adapter is the join.
+		 *
+		 * IT TAKES THE BASE FROM THE MemoryMap RATHER THAN KEEPING ITS OWN
+		 * COPY, and that is the whole reason it holds a reference instead of a
+		 * uint32_t. The decode has already subtracted the window base to make
+		 * the offset, and this adapter adds it back; if the two used separate
+		 * copies of that number, a mutation of either one would leave the pair
+		 * agreeing with itself and the test green. There is exactly one base
+		 * here, and it is the one the decode used. */
+		class FlashWindow final : public BusTarget
+		{
+		public:
+			FlashWindow(Flash& _flash, const MemoryMap& _map, const Region _region)
+				: m_flash(_flash), m_map(_map), m_region(_region) {}
+
+			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+
+		private:
+			uint32_t absolute(uint32_t _offset) const;
+
+			Flash&           m_flash;
+			const MemoryMap& m_map;
+			Region           m_region;
+		};
+
+		/* THE MBAR WINDOW CARRIES TWO UNITS AND THE DECODE ATTACHES ONE TARGET
+		 * PER REGION. This router is that one target, and it forwards the
+		 * MBAR-relative offset the decode produced without altering it, because
+		 * both units already expect an MBAR-relative offset.
+		 *
+		 * THE SPLIT IS sim.cpp's AND NOT THIS FILE'S. Its DIVERGENCE note says
+		 * the SIM answers MBAR+$1D0 because the firmware reads it as a model
+		 * strap and BRD-2's check requires it, and that BRD-4 owns every other
+		 * UART offset. That sentence is the whole rule below. */
+		class MbarRouter final : public BusTarget
+		{
+		public:
+			MbarRouter(Sim& _sim, Uart0& _uart0) : m_sim(_sim), m_uart0(_uart0) {}
+
+			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+
+		private:
+			// TRUE when the offset belongs to UART0's model rather than the
+			// SIM's. The one strap offset the SIM answers is excluded here and
+			// nowhere else, so the rule has a single site.
+			static bool isUartOwned(uint32_t _offset);
+
+			BusTarget& select(uint32_t _offset);
+
+			Sim&   m_sim;
+			Uart0& m_uart0;
+		};
+
+		// The strap offset the SIM answers inside the UART block. sim.cpp's
+		// register table carries it as UIPCR and its DIVERGENCE note is the
+		// authority for the SIM answering it.
+		static constexpr uint32_t g_simUartStrapOffset = 0x1D0u;
+
+		/* Attach every unit to the region it answers. It is called from the
+		 * constructor and takes nothing: an ABSENT window (size zero) decodes
+		 * to no region at all, so attaching unconditionally is what makes a
+		 * default-constructed Board answer nowhere without a second code path
+		 * that could disagree with this one. */
+		void attachUnits();
+
+		/* onRead and onWrite are declared in the public section above, with the
+		 * measured reason they are reachable. The acknowledge callback stays
+		 * private: nothing drives it yet and the interrupt presentation is task
+		 * BRD-3's. */
 		static void     onInterruptAck(void* user, int level, uint8_t vector);
+
+		/* DECLARATION ORDER IS INITIALISATION ORDER AND IT IS LOAD-BEARING
+		 * HERE. m_memory is declared before the adapters because they bind
+		 * references to it, and the units are declared before the adapters
+		 * that forward to them. */
+		MemoryMap    m_memory;
+
+		Flash        m_flash;
+		Panel        m_panel;
+		Latches      m_latches;
+		Hdi08Adapter m_hdi08;
+		Sim          m_sim;
+		Uart0        m_uart0;
+
+		FlashWindow  m_flashCs0;
+		FlashWindow  m_flashCs2;
+		MbarRouter   m_mbar;
 
 		mcf5307_ctx* m_mcu;
 
