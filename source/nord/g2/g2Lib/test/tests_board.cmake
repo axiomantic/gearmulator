@@ -328,3 +328,23 @@ set_property(TARGET t0_sof_tick PROPERTY FOLDER "G2/test")
 add_test(NAME t0_sof_tick COMMAND t0_sof_tick)
 set_tests_properties(t0_sof_tick PROPERTIES LABELS "UnitTest")
 
+# ----------------- BRD-20, the P-memory write funnel
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_pmem_funnel$
+#
+# THE TEST LINKS g2Lib AND NAMES NO OTHER LIBRARY. The funnel is a g2Lib
+# source, and the just-in-time compiler it must notify arrives through g2Lib's
+# own PUBLIC link of dsp56kEmu. Nothing here references mcf5307::mcf5307, so
+# no if(TARGET) guard is needed: this block is inert in the option-OFF
+# configure that t0_clock_guard runs as its control.
+#
+# NMG2_ARTIFACTS is not read. Every word the test puts into P memory is
+# assembled from text the test file authors, so no Clavia byte reaches it.
+
+add_executable(t0_pmem_funnel t0_pmem_funnel.cpp)
+target_link_libraries(t0_pmem_funnel PRIVATE g2Lib)
+set_property(TARGET t0_pmem_funnel PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_pmem_funnel COMMAND t0_pmem_funnel)
+set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
+
