@@ -10,8 +10,57 @@
 // determinism-relevant state, rather than calling a symbol that would not
 // link. The Nim blocks are appended here the day a cpu task exports them.
 //
-// The MCU-clock placeholder line is emitted to standard output so a test can
-// capture and count it.
+// THE BUS CALLBACKS ROUTE, AND THAT IS TASK INT-1's WRITE UNDER PLAN SECTION
+// 24.6 ROW W3-115. The paragraph that used to stand here said these callbacks
+// "accept every access and report MCF5307_BUS_OK" and deferred the routing to
+// a board-track integration it did not name. That is the M3 blocker W3-96
+// records: a core running against such a board fetches zero for ever. The
+// paragraph is REWRITTEN rather than left standing beside code that no longer
+// does what it describes.
+//
+// WHAT THE ROUTING IS. onRead and onWrite forward to busRead and busWrite,
+// which hand the access to the BRD-1 MemoryMap. The decode turns the address
+// into a region and a window-relative offset and calls the BusTarget attached
+// there. The seven units W3-115 names are attached like this:
+//
+//     CS0    the flash boot image, through FlashWindow
+//     CS1    the HDI08 array
+//     CS2    the flash main image, through FlashWindow
+//     CS4    the panel
+//     CS5    the latches
+//     MBAR   the SIM and UART0, through MbarRouter
+//
+// CS3 AND THE SDRAM GET NO TARGET, AND THAT IS DELIBERATE RATHER THAN
+// UNFINISHED. CS3 is the ISP1181 and the SDRAM is main memory; neither is one
+// of the seven units this task composes, and INT-1's own title is "boot the
+// firmware with a STUBBED CS3". A region with no target answers exactly as a
+// region with no window does -- see the unmapped note below.
+//
+// WHAT AN ADDRESS IN NO WINDOW DOES, AND WHY THIS FILE DOES NOT DECIDE IT.
+// memoryMap.cpp already fixes the answer: an access that decodes to no region,
+// or to a region with no target, reports MCF5307_BUS_UNMAPPED and writes one
+// log line, and design section 5.2.1 rule 2 is what ties the report and the
+// trace together. This task ROUTES to that decision and does not re-take it.
+// The blanket MCF5307_BUS_OK the old callbacks returned is the one answer that
+// is definitely wrong, because it makes an unmapped access indistinguishable
+// from a device that legitimately answered zero.
+//
+// THE STATE METHODS AND THE MISSING NIM BLOCKS, STATED RATHER THAN HIDDEN.
+// Design section 13.10 says stateSize/stateSave/stateLoad "embed the Nim
+// mcf5307_state_* and isp1181_state_* blocks of section 5.2". The pinned core
+// commit exports none of those C symbols. This task therefore serialises the
+// Board's own determinism-relevant state and documents the deviation rather
+// than stubbing a call to a symbol that would not link -- the same
+// documented-deviation route BRD-23 took for mcf5307_exec earlier in this
+// track. The Nim blocks are appended here the day a cpu task exports them.
+//
+// THE MCU CLOCK PLACEHOLDER LINE. The Board logs one line at construction that
+// names G2_MCU_CORE_CLOCK_HZ, states that the value 45,000,000 is a
+// placeholder, and names spike criterion (j) as its owner. It is emitted to
+// standard output so the surface test can capture and count it. It moved here
+// from SCH-3 at this revision, because it is written into g2Lib/board.cpp
+// and the board track owns this file; SCH-3 keeps the tree-wide grep, which is
+// a property of the tree and not of the Board.
 
 #include "board.h"
 
@@ -67,17 +116,135 @@ namespace g2
 
 	}
 
-	uint32_t Board::onRead(void*, const uint32_t, const int,
-	                       mcf5307_bus_status* const status)
+	uint32_t Board::FlashWindow::absolute(const uint32_t _offset) const
 	{
-		*status = MCF5307_BUS_OK;
-		return 0u;
+		/* THE BASE COMES FROM THE DECODE THAT PRODUCED THE OFFSET. The
+		 * MemoryMap subtracted window(_region).base to make _offset, and this
+		 * adds the SAME expression back. Keeping a second copy of the base in
+		 * this object would let a mutation of one copy leave the pair
+		 * self-consistent and every test green. */
+		return m_map.window(m_region).base + _offset;
 	}
 
-	void Board::onWrite(void*, const uint32_t, const int, const uint32_t,
-	                    mcf5307_bus_status* const status)
+	uint32_t Board::FlashWindow::read(const uint32_t _offset, const int _size,
+		mcf5307_bus_status& _status)
 	{
-		*status = MCF5307_BUS_OK;
+		_status = MCF5307_BUS_OK;
+
+		const uint32_t address = absolute(_offset);
+
+		switch(_size)
+		{
+		case 8:  return m_flash.read8(address);
+		case 16: return m_flash.read16(address);
+		case 32: return m_flash.read32(address);
+		default: break;
+		}
+
+		_status = MCF5307_BUS_SIZE_ILLEGAL;
+		return 0;
+	}
+
+	void Board::FlashWindow::write(const uint32_t _offset, const int _size,
+		const uint32_t _value, mcf5307_bus_status& _status)
+	{
+		_status = MCF5307_BUS_OK;
+
+		const uint32_t address = absolute(_offset);
+
+		/* THE FLASH MODEL IS READ-ONLY AND ITS OWN WRITE ENTRY POINTS LOG THE
+		 * REJECTION. They report no status, so the bus CYCLE completes and the
+		 * device ignores it, which is what a board that models no fault does
+		 * (design section 5.2.1). Reporting a fault here would be this file
+		 * inventing a policy BRD-7 did not state. */
+		switch(_size)
+		{
+		case 8:  m_flash.write8 (address, uint8_t (_value & 0xffu));   return;
+		case 16: m_flash.write16(address, uint16_t(_value & 0xffffu)); return;
+		case 32: m_flash.write32(address, _value);                     return;
+		default: break;
+		}
+
+		_status = MCF5307_BUS_SIZE_ILLEGAL;
+	}
+
+	bool Board::MbarRouter::isUartOwned(const uint32_t _offset)
+	{
+		// The one offset the SIM answers inside the UART block. sim.cpp's
+		// DIVERGENCE note is the authority and this is the only site that
+		// encodes it.
+		if(_offset == g_simUartStrapOffset)
+			return false;
+
+		if(_offset >= Uart0::gUart0Base && _offset < Uart0::gUart0Base + Uart0::gUartModuleSize)
+			return true;
+
+		return _offset >= Uart0::gUart1Base && _offset < Uart0::gUart1Base + Uart0::gUartModuleSize;
+	}
+
+	BusTarget& Board::MbarRouter::select(const uint32_t _offset)
+	{
+		if(isUartOwned(_offset))
+			return m_uart0;
+		return m_sim;
+	}
+
+	uint32_t Board::MbarRouter::read(const uint32_t _offset, const int _size,
+		mcf5307_bus_status& _status)
+	{
+		// The offset is already MBAR-relative and BOTH units expect it that
+		// way, so nothing is adjusted here.
+		return select(_offset).read(_offset, _size, _status);
+	}
+
+	void Board::MbarRouter::write(const uint32_t _offset, const int _size,
+		const uint32_t _value, mcf5307_bus_status& _status)
+	{
+		select(_offset).write(_offset, _size, _value, _status);
+	}
+
+	uint32_t Board::busRead(const uint32_t _address, const int _size,
+		mcf5307_bus_status& _status)
+	{
+		return m_memory.read(_address, _size, _status);
+	}
+
+	void Board::busWrite(const uint32_t _address, const int _size, const uint32_t _value,
+		mcf5307_bus_status& _status)
+	{
+		m_memory.write(_address, _size, _value, _status);
+	}
+
+	void Board::attachUnits()
+	{
+		m_memory.attach(Region::Cs0,  &m_flashCs0);
+		m_memory.attach(Region::Cs1,  &m_hdi08);
+		m_memory.attach(Region::Cs2,  &m_flashCs2);
+		m_memory.attach(Region::Cs4,  &m_panel);
+		m_memory.attach(Region::Cs5,  &m_latches);
+		m_memory.attach(Region::Mbar, &m_mbar);
+
+		// Region::Cs3 and Region::Sdram are left with no target on purpose;
+		// see the file header.
+	}
+
+	uint32_t Board::onRead(void* const user, const uint32_t addr, const int size,
+	                       mcf5307_bus_status* const status)
+	{
+		mcf5307_bus_status local = MCF5307_BUS_OK;
+		const uint32_t value = static_cast<Board*>(user)->busRead(addr, size, local);
+		if(status)
+			*status = local;
+		return value;
+	}
+
+	void Board::onWrite(void* const user, const uint32_t addr, const int size,
+	                    const uint32_t value, mcf5307_bus_status* const status)
+	{
+		mcf5307_bus_status local = MCF5307_BUS_OK;
+		static_cast<Board*>(user)->busWrite(addr, size, value, local);
+		if(status)
+			*status = local;
 	}
 
 	void Board::onInterruptAck(void*, const int, const uint8_t)
@@ -86,10 +253,33 @@ namespace g2
 		// here.
 	}
 
-	Board::Board()
-		: m_mcu(nullptr)
+	/* The unconfigured Board. It DELEGATES rather than repeating the body, so
+	 * there is one construction path and the placeholder line below cannot be
+	 * emitted twice or differ between the two forms. A default BoardConfig
+	 * leaves every window absent, so this Board answers at no address -- which
+	 * is what BRD-21's surface task always had, stated honestly instead of as
+	 * a blanket bus-OK. */
+	Board::Board() : Board(BoardConfig{})
+	{
+	}
+
+	Board::Board(const BoardConfig& _config)
+		: m_memory(_config.memory)
+		, m_flash(_config.memory.cs0.base, _config.memory.cs0.size,
+		          _config.memory.cs2.base, _config.memory.cs2.size)
+		, m_panel(_config.memory.cs4.size)
+		, m_latches(_config.memory.cs5.size)
+		, m_hdi08(_config.hdi08)
+		, m_flashCs0(m_flash, m_memory, Region::Cs0)
+		, m_flashCs2(m_flash, m_memory, Region::Cs2)
+		, m_mbar(m_sim, m_uart0)
+		, m_mcu(nullptr)
 		, m_usb(nullptr)
 	{
+		// Every unit is attached before the core exists, so no callback can
+		// reach a half-built decode.
+		attachUnits();
+
 		// The Nim runtime must be initialised before any mcf5307_ call. It is
 		// idempotent behind a latch, so the second Board in a process is safe.
 		mcf5307_runtime_init();
