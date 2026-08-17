@@ -44,6 +44,44 @@ namespace g2
 		};
 		static_assert(std::is_trivially_copyable_v<BoardState>,
 		              "BoardState must be POD so memcpy is well-defined");
+
+		// The USB Start-of-Frame rate. One SOF frame is 1 ms, which is what
+		// makes the ISP1181 the owner of the millisecond in design section 9.4.
+		constexpr uint64_t g_sofFrameRateHz = 1000u;
+
+		// The quanta in one SOF frame. It is DERIVED from the frame rate rather
+		// than written as 96, so the 96:1 relation moves with the one symbol
+		// that fixes it instead of being restated here. t0_sof_tick writes 96
+		// out as its own literal, so a change to either side turns that test
+		// red.
+		constexpr uint64_t g_quantaPerSofFrame =
+			G2_FRAME_RATE_HZ / g_sofFrameRateHz;
+
+		// The division must be exact, or the divisor below drifts against the
+		// millisecond it is supposed to model. A static_assert makes that a
+		// property the compiler enforces rather than one a reader keeps.
+		static_assert(G2_FRAME_RATE_HZ % g_sofFrameRateHz == 0u,
+		              "The frame rate must be a whole number of SOF frames");
+		static_assert(g_quantaPerSofFrame != 0u,
+		              "A zero divisor would make every frame due");
+
+		/* The ISP1181 handle the SOF tick is delivered to.
+		 *
+		 * IT IS NULL, AND THAT IS A GAP IN THE PLAN RATHER THAN A CHOICE MADE
+		 * HERE. Design sections 5.2 and 9.4 give the Board an isp1181_ctx, but
+		 * the member that would hold it belongs in board.h, which task BRD-21
+		 * owns; BRD-22's Files: line names board.cpp alone, and no task in the
+		 * plan declares the handle. PROTO-4 creates g2Lib's ISP1181 bridge and
+		 * reaches the Board through nothing. Until an owner is assigned, the
+		 * divisor below is real and the device it advances is absent.
+		 *
+		 * The nil handle is defined behaviour and not an accident waiting to
+		 * happen: isp1181_tick advances nothing when it is given one, which is
+		 * the same contract every other entry point of that model carries. */
+		isp1181_ctx* boardUsbDevice() noexcept
+		{
+			return nullptr;
+		}
 	}
 
 	uint32_t Board::onRead(void*, const uint32_t, const int,
@@ -101,7 +139,17 @@ namespace g2
 
 	void Board::tickSofIfDue(const uint64_t frameIndex) noexcept
 	{
+		/* THE BOARD OWNS THE TEST AND THE SCHEDULER NEVER MAKES IT. The
+		 * Scheduler calls this on every frame, unconditionally, and passes the
+		 * authoritative virtual frame index; the 96:1 relation is a property of
+		 * the USB device model rather than of the scheduler, so it is tested
+		 * here. Design section 9.4. */
 		m_lastFrameIndex = frameIndex;
+
+		if(frameIndex % g_quantaPerSofFrame != 0u)
+			return;
+
+		isp1181_tick(boardUsbDevice(), 1u);
 	}
 
 	size_t Board::stateSize() const noexcept
