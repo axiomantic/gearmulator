@@ -12,6 +12,17 @@
 // CS2 access before the banner is the OS's own CFI probe at 0x300042e6, which
 // task BRD-8's flash model answers.
 //
+// HOW IT DECIDES A BANNER APPEARED, AND WHY THAT IS NOT A READ OF THE CELLS.
+// The firmware clears all four displays to 0x20 SPACES before it composes
+// anything, so any predicate whose TRUE case a screenful of 0x20 satisfies is
+// empty, and one stood here. The signals this file measures instead are the
+// WRITES arriving at the SDRAM store -- counted only for bytes the clear cannot
+// produce -- and a LANDMARK COUNT of instruction fetches at the banner
+// function's first instruction. Neither can be satisfied by a byte that was
+// already in memory, and the landmark is POSITIVE, so a firmware that never
+// reaches the banner drives it to zero instead of satisfying it. The assertion
+// block near the bottom of this file records what each replaced.
+//
 // WHY IT DRIVES Board::onRead AND Board::onWrite RATHER THAN Board::busRead.
 // board.h records the measurement: an earlier revision of the composition kept
 // the callbacks private, the check drove busRead instead, and restoring the old
@@ -44,12 +55,12 @@
 #include "../board.h"
 #include "../memoryMap.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -99,6 +110,56 @@ namespace
 	// deriving its expectation from the same place the firmware got it.
 	const std::string g_expectedLine0 = "Nord Modular G2 ";
 	const std::string g_expectedLine1 = "Version 1.62 Exp";
+
+	// ------------------------------------------------- what "a banner" means here
+	//
+	// THE BYTE THE DISPLAY CLEAR WRITES. MEASURED: the OS clears all four
+	// displays to spaces at instruction 4,345,856, and 0x20 is the byte it
+	// stores. It is named because it is the ONE value a banner predicate must
+	// refuse to be satisfied by. A predicate reading "any byte >= 0x20" stood
+	// here and a blank screen satisfied it, since 0x20 >= 0x20; that predicate
+	// reported TRUE on a run whose landmark count at the banner function was
+	// zero, and four further assertions conjoined with it and inherited its
+	// emptiness.
+	constexpr uint8_t g_clearByte = 0x20u;
+
+	// TRUE for a byte the display CLEAR cannot produce and a zero-filled RAM
+	// cannot produce: a printable character that is not a space. Every character
+	// of `Nord Modular G2` is one of these; nothing the clear writes is, and
+	// nothing a freshly constructed Ram holds is.
+	constexpr bool isDisplayContent(const uint8_t _byte)
+	{
+		return _byte > g_clearByte && _byte < 0x7fu;
+	}
+
+	// The number of characters of the expected line 0 that are display CONTENT by
+	// the rule above, and the number that are not. BOTH ARE COMPUTED FROM THE
+	// LITERAL AND NEITHER IS WRITTEN AS A DIGIT ANYWHERE, so a change to the
+	// literal cannot leave a stale number behind. That is not a hypothetical: the
+	// first draft of this comment asserted the split by hand and got it wrong, and
+	// the control below -- which compares the observed counts against exactly
+	// these -- is what said so.
+	uint32_t contentCharacters(const std::string& _line)
+	{
+		uint32_t n = 0;
+		for(const char c : _line)
+		{
+			if(isDisplayContent(uint8_t(c)))
+				++n;
+		}
+		return n;
+	}
+
+	uint32_t clearCharacters(const std::string& _line)
+	{
+		uint32_t n = 0;
+		for(const char c : _line)
+		{
+			if(uint8_t(c) == g_clearByte)
+				++n;
+		}
+		return n;
+	}
 
 	// The two hard halts, each a `bra` to itself. Plan sections 6.6.8 and
 	// 6.6.3. They are DISTINCT failure modes at distinct addresses and a boot
@@ -177,6 +238,53 @@ namespace
 	public:
 		explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
 
+		/* THE BANNER OBSERVATION LIVES HERE, ON THE WRITE, AND NOT ON THE BYTES
+		 * THAT SURVIVE. Every SDRAM access the core makes arrives at this object,
+		 * so this is the firmware's own write path and not a second door.
+		 *
+		 * WHY THE WRITE AND NOT THE RESULTING CELLS. The defect this replaces was
+		 * an assertion satisfied by a value that was ALREADY THERE. A predicate
+		 * that reads cells back asks whether a value is present, which is the same
+		 * question in a different costume: it is green whenever the bytes happen to
+		 * be right, whoever put them there and whether or not anybody did. A
+		 * predicate over the write asks whether the firmware performed the
+		 * transaction, and no pre-existing memory content can satisfy it. Today
+		 * those two forms agree only by accident -- the harness's Ram is zero
+		 * filled and the image lands far below the display buffer -- and an
+		 * accident is not a mechanism.
+		 *
+		 * IT SEPARATES THE TWO BYTE VALUES THAT CAN ARRIVE rather than counting
+		 * writes, because "the cells were written" is exactly what the display
+		 * CLEAR does and exactly what must not count as a banner. */
+		void watchCells(const uint32_t _offset, const uint32_t _length)
+		{
+			m_watchOffset   = _offset;
+			m_watchLength   = _length;
+			m_contentWrites = 0;
+			m_clearWrites   = 0;
+		}
+
+		/* A LANDMARK COUNTER AT ONE ADDRESS. mcf5307.h states that an instruction
+		 * fetch presents a COUNT OF 2 BYTES at the instruction's own address, which
+		 * reaches a BusTarget as a 16-bit access at exactly that offset, so a
+		 * 16-bit read here is how the core executing that instruction is seen.
+		 *
+		 * THE ONE THING THAT COULD OVER-COUNT is a 16-bit DATA read of the same
+		 * code address, which nothing in the banner path does. The counter is not
+		 * taken on trust: a second watch sits at the reset PC, where the core
+		 * provably executes, and the assertion on it is what shows the mechanism
+		 * sees real instruction fetches on the very run being reported. */
+		void watchFetch(const uint32_t _offset) { m_fetches[_offset] = 0u; }
+
+		uint32_t contentWrites() const { return m_contentWrites; }
+		uint32_t clearWrites() const { return m_clearWrites; }
+
+		uint32_t fetches(const uint32_t _offset) const
+		{
+			const auto it = m_fetches.find(_offset);
+			return it == m_fetches.end() ? 0u : it->second;
+		}
+
 		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
 		{
 			_status = MCF5307_BUS_OK;
@@ -185,6 +293,13 @@ namespace
 			{
 				_status = MCF5307_BUS_SIZE_ILLEGAL;
 				return 0u;
+			}
+
+			if(_size == 16)
+			{
+				const auto it = m_fetches.find(_offset);
+				if(it != m_fetches.end())
+					++it->second;
 			}
 
 			const uint32_t count = uint32_t(_size) / 8u;
@@ -219,7 +334,9 @@ namespace
 				if(index >= m_bytes.size())
 					continue;
 				const int shift = int(8u * (count - 1u - i));
-				m_bytes[index] = uint8_t((_value >> shift) & 0xffu);
+				const auto byte = uint8_t((_value >> shift) & 0xffu);
+				m_bytes[index] = byte;
+				observeWrite(index, byte);
 			}
 		}
 
@@ -234,7 +351,29 @@ namespace
 		}
 
 	private:
+		// One byte that landed in the store, classified. A byte outside the watched
+		// span is not a display cell and counts as neither.
+		void observeWrite(const size_t _index, const uint8_t _byte)
+		{
+			if(m_watchLength == 0)
+				return;
+			if(_index < size_t(m_watchOffset) || _index >= size_t(m_watchOffset) + m_watchLength)
+				return;
+
+			if(isDisplayContent(_byte))
+				++m_contentWrites;
+			else if(_byte == g_clearByte)
+				++m_clearWrites;
+		}
+
 		std::vector<uint8_t> m_bytes;
+
+		uint32_t m_watchOffset   = 0;
+		uint32_t m_watchLength   = 0;
+		uint32_t m_contentWrites = 0;
+		uint32_t m_clearWrites   = 0;
+
+		std::map<uint32_t, uint32_t> m_fetches;
 	};
 
 	// ---------------------------------------------------------------- the harness
@@ -351,7 +490,20 @@ namespace
 	{
 		bool     imageLoaded    = false;
 		bool     readPathProven = false;
-		bool     bannerAppeared = false;
+
+		// The writes the firmware made into display 0 line 0, separated into the
+		// ones the display CLEAR cannot account for and the ones it can. See the
+		// Ram observation comment for why this is a write count and not a
+		// read-back.
+		uint32_t contentWrites  = 0;
+		uint32_t clearWrites    = 0;
+
+		// The landmark counters. `entryFetches` is at the reset PC, where the core
+		// provably executes, and it is the instrumentation's own control;
+		// `bannerEntries` is at the banner function and is the measurement.
+		uint32_t entryFetches   = 0;
+		uint32_t bannerEntries  = 0;
+
 		std::string line0;
 		std::string line1;
 		int      handshakePorts = 0;
@@ -425,9 +577,21 @@ namespace
 			return false;
 		}
 
+		/* THE WATCHES ARE INSTALLED HERE, AFTER THE READ-PATH PROOF AND BEFORE THE
+		 * CORE RUNS, so that every count below is the FIRMWARE's and none of it is
+		 * the harness's own traffic. The proof above reads sixteen BYTES at the
+		 * reset PC; a byte read is 8 bits and the landmark counter takes only
+		 * 16-bit accesses, so it could not have contaminated the count either way,
+		 * but a count whose emptiness depends on that coincidence is not one this
+		 * file is willing to report. */
+		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
+		ram.watchFetch(g_entryPc - g2::g_sdramBase);
+		ram.watchFetch(g_bannerFunction - g2::g_sdramBase);
+
 		mcf5307_reset(mcu, g_entrySp, g_entryPc);
 
-		// PHASE 1 -- run until the banner appears, or until the bound.
+		// PHASE 1 -- run until the firmware composes display content, or until the
+		// bound.
 		for(uint32_t i = 0; i < g_handshakeIterations; ++i)
 		{
 			_result.iterations = i + 1;
@@ -437,16 +601,13 @@ namespace
 			if(mcf5307_halted(mcu))
 				break;
 
-			const std::string line0 = readDisplayLine(board, 0, 0);
-
-			// The banner has appeared once display 0 line 0 holds anything
-			// printable. A buffer that starts as zeroes cannot satisfy this by
-			// already being right, which is the point: the RAM this harness
-			// supplies is zero-filled at construction and the expected text
-			// contains no NUL.
-			if(std::any_of(line0.begin(), line0.end(), [](const char c) { return uint8_t(c) >= 0x20; }))
+			/* THE LOOP LEAVES ON THE SAME PREDICATE THE ASSERTION USES, and that
+			 * matters as much as the assertion does: the previous exit condition
+			 * was the vacuous one, so the machine stopped the moment the display
+			 * CLEAR ran and the program counter was then sampled in the middle of
+			 * a boot that had not reached the banner. */
+			if(ram.contentWrites() > 0)
 			{
-				_result.bannerAppeared = true;
 				_result.pcAtBanner = mcf5307_get_reg(mcu, g_regPc);
 				break;
 			}
@@ -473,6 +634,11 @@ namespace
 		_result.handshakePorts = handshakePortCount(board);
 		_result.busLog = board.memory().log();
 
+		_result.contentWrites = ram.contentWrites();
+		_result.clearWrites   = ram.clearWrites();
+		_result.entryFetches  = ram.fetches(g_entryPc - g2::g_sdramBase);
+		_result.bannerEntries = ram.fetches(g_bannerFunction - g2::g_sdramBase);
+
 		mcf5307_destroy(mcu);
 		return true;
 	}
@@ -482,13 +648,126 @@ namespace
 		return _pc >= g_bannerFunction && _pc < g_bannerFunctionEnd;
 	}
 
+	// ------------------------------------------------------- the positive control
+	//
+	// THE PREDICATE'S FALSE CASE IS OBSERVED AND ITS TRUE CASE IS CONSTRUCTED,
+	// and the asymmetry is stated rather than hidden. The firmware currently
+	// stalls before the banner in an infinite spin polling the unmodelled M-Bus
+	// status register at MBAR+$28C, so no run available to this file reaches a
+	// real banner and the TRUE case cannot be observed. It is built instead: the
+	// expected bytes are driven into the display buffer through Board::onWrite --
+	// the exact static callback handed to mcf5307_create, so the same decode, the
+	// same region and the same store the core's own writes reach -- and the
+	// predicate is read back.
+	//
+	// WHAT THE CONTROLS PROVE. That the predicate answers FALSE for clear-shaped
+	// content and TRUE for banner-shaped content arriving by the firmware's own
+	// route, and that the landmark counter answers one address rather than its
+	// neighbour. A control that only showed the predicate reads memory would be
+	// worth nothing here, because the predicate it replaces read memory correctly
+	// and was still empty; each control below therefore separates the two shapes
+	// by an EXACT COUNT and not by a non-zero test.
+	//
+	// WHAT THEY DO NOT PROVE. Not that the real firmware, on a run that got
+	// there, would take this route -- the read-path proof and the reset-PC
+	// landmark, both measured on the real core in the same run, are what carry
+	// that. Not that these are the bytes the firmware would compose: plan section
+	// 6.6.1 is the authority for those and the two equality clauses are what hold
+	// the firmware to them. And not that the banner function's landmark would
+	// fire on a real entry, only that the counter is bound to that address.
+
+	// One Board with the harness's SDRAM attached and no firmware in it.
+	struct ControlRig
+	{
+		ControlRig() : board(makeConfig()), ram(g_sdramSize)
+		{
+			board.memory().attach(g2::Region::Sdram, &ram);
+			ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
+			ram.watchFetch(g_bannerFunction - g2::g_sdramBase);
+		}
+
+		// Drives one line into display 0 line 0 a byte at a time through the
+		// installed write callback.
+		void writeLine0(const std::string& _line)
+		{
+			for(uint32_t col = 0; col < g_lineWidth && col < _line.size(); ++col)
+			{
+				mcf5307_bus_status status = MCF5307_BUS_OK;
+				g2::Board::onWrite(&board, g_displayBase + col, g_byte, uint32_t(uint8_t(_line[col])), &status);
+			}
+		}
+
+		g2::Board board;
+		Ram       ram;
+	};
+
+	void runControls()
+	{
+		// CONTROL 1 -- CLEAR-SHAPED. Sixteen 0x20 spaces, which is byte for byte
+		// what the firmware's display clear writes. The predicate must count zero
+		// content here; the previous predicate counted this as a banner.
+		{
+			ControlRig rig;
+			rig.writeLine0(std::string(g_lineWidth, char(g_clearByte)));
+
+			check(rig.ram.contentWrites() == 0u && rig.ram.clearWrites() == g_lineWidth,
+			      "CONTROL clear-shaped: sixteen 0x20 spaces written into display 0 line 0 "
+			      "through Board::onWrite count 0 content writes and " + std::to_string(g_lineWidth) +
+			      " clear writes; counted " + std::to_string(rig.ram.contentWrites()) + " and " +
+			      std::to_string(rig.ram.clearWrites()));
+		}
+
+		// CONTROL 2 -- BANNER-SHAPED, the same cells by the same route.
+		{
+			ControlRig rig;
+			rig.writeLine0(g_expectedLine0);
+
+			const uint32_t expectedContent = contentCharacters(g_expectedLine0);
+			const uint32_t expectedClear   = clearCharacters(g_expectedLine0);
+
+			check(rig.ram.contentWrites() == expectedContent && rig.ram.clearWrites() == expectedClear,
+			      "CONTROL banner-shaped: " + escapedLine(g_expectedLine0) + " written by the same "
+			      "route counts " + std::to_string(expectedContent) + " content writes and " +
+			      std::to_string(expectedClear) + " clear writes; counted " +
+			      std::to_string(rig.ram.contentWrites()) + " and " +
+			      std::to_string(rig.ram.clearWrites()));
+
+			const std::string readBack = readDisplayLine(rig.board, 0, 0);
+
+			check(readBack == g_expectedLine0,
+			      "CONTROL banner-shaped: the same sixteen cells read back through Board::onRead "
+			      "equal " + escapedLine(g_expectedLine0) + "; read " + escapedLine(readBack));
+		}
+
+		// CONTROL 3 -- the landmark counter answers ONE address. A 2-byte read at
+		// the instruction before the banner function must not move it and one at
+		// the banner function must, so the count after both is exactly 1.
+		{
+			ControlRig rig;
+
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			g2::Board::onRead(&rig.board, g_bannerFunction - 2u, 2, &status);
+			g2::Board::onRead(&rig.board, g_bannerFunction, 2, &status);
+
+			const uint32_t counted = rig.ram.fetches(g_bannerFunction - g2::g_sdramBase);
+
+			check(counted == 1u,
+			      "CONTROL landmark: one 2-byte read at 0x3001B7FA and one at 0x3001B7FC leave "
+			      "the counter at 0x3001B7FC reading exactly 1, so it answers that address and "
+			      "not its neighbour; read " + std::to_string(counted));
+		}
+	}
+
 	void report(const BootResult& _r)
 	{
 		std::cout << "boot: iterations=" << _r.iterations
 		          << " readPathProven=" << (_r.readPathProven ? 1 : 0)
-		          << " bannerAppeared=" << (_r.bannerAppeared ? 1 : 0)
 		          << " halted=" << (_r.halted ? 1 : 0)
 		          << " faulted=" << (_r.faulted ? 1 : 0) << std::endl;
+		std::cout << "boot: display 0 line 0 writes: content=" << _r.contentWrites
+		          << " clear=" << _r.clearWrites << std::endl;
+		std::cout << "boot: landmark 16-bit fetches: 0x30000400=" << _r.entryFetches
+		          << " 0x3001B7FC=" << _r.bannerEntries << std::endl;
 		std::cout << "boot: pcAtBanner=0x" << std::hex << _r.pcAtBanner
 		          << " pcAfterBanner=0x" << _r.pcAfterBanner
 		          << " pcLater=0x" << _r.pcLater << std::dec << std::endl;
@@ -527,6 +806,11 @@ int main()
 			std::cout << "FAIL " << why << std::endl;
 			return false;
 		}
+
+		// THE CONTROLS RUN BEFORE THE BOOT so that a reader meets the proof that
+		// the banner predicate discriminates before meeting the number it
+		// produced. They need no firmware; they construct their own Board.
+		runControls();
 
 		BootResult result;
 
@@ -571,50 +855,81 @@ int main()
 		//
 		// W3-129 records that correct cells can be read off a machine that is
 		// stuck, so a green comparison alone does not show the firmware ran on
-		// past the banner. Row W3-144 then refuted the blocking premise: the
-		// spin at 0x30056E52 calls the flush at 0x3005687C from INSIDE its own
-		// body at 0x30056E7E, so it terminates with no timer, no scheduler and
-		// no interrupt. THIS TEST THEREFORE ASSERTS PROGRESS RATHER THAN
-		// ACCEPTING THE LIMITATION, and the three assertions below are what
-		// distinguish "reached the banner and continued" from "halted with the
-		// cells already correct":
+		// past the banner. Row W3-144 then refuted the blocking premise: the spin
+		// at 0x30056E52 calls the flush at 0x3005687C from INSIDE its own body at
+		// 0x30056E7E, so it terminates with no timer, no scheduler and no
+		// interrupt. THIS TEST THEREFORE ASSERTS PROGRESS RATHER THAN ACCEPTING
+		// THE LIMITATION.
 		//
-		//   1. the core is not halted, so it did not stop at either hard halt;
-		//   2. the program counter is at neither halt address, which names the
-		//      two failure modes plan sections 6.6.8 and 6.6.3 record;
-		//   3. the program counter has LEFT the banner function, so execution
-		//      returned to 0x3001B43E or beyond rather than sitting in the spin.
+		// WHAT USED TO STAND HERE, AND WHY EVERY LINE OF IT IS GONE. Five
+		// assertions conjoined `bannerAppeared`, which was set by "any byte >=
+		// 0x20 in display 0 line 0". The firmware clears all four displays to
+		// 0x20 spaces at instruction 4,345,856, and 0x20 >= 0x20, so a BLANK
+		// SCREEN set it. All five reported ok on a run whose landmark count at
+		// the banner function was zero. The conjunction had been added to rescue
+		// the last three from a different emptiness -- a core stopped at its entry
+		// point sits at neither halt address and is trivially outside the banner
+		// function -- and it rescued nothing, because the conjunct was empty too.
+		// Two emptinesses in series look exactly like a check.
 		//
-		// Assertion 3 is the one that cannot be satisfied by a machine that
-		// stopped with a correct buffer.
+		// THE SHAPE THE REPAIR TAKES. A conjunct is only worth its place if it can
+		// be FALSE, so each signal below is measured rather than inferred from a
+		// value that might already be sitting in memory:
+		//
+		//   - display content is counted ON THE WRITE, and only for bytes the
+		//     clear cannot produce, so no pre-existing byte can satisfy it;
+		//   - "the firmware got there" is a landmark count at the banner
+		//     function's first instruction, which is POSITIVE: never entering the
+		//     function drives it to zero rather than satisfying it, and that is
+		//     the defect in "has LEFT the banner function" that no conjunction
+		//     could have fixed;
+		//   - the landmark counter is itself controlled, at the reset PC, on this
+		//     same run.
 
-		// EACH OF THE FOUR REQUIRES THE BANNER TO HAVE APPEARED, AND THAT
-		// CONJUNCTION IS THE POINT RATHER THAN BELT AND BRACES. Written as bare
-		// predicates over the program counter, all three of the last three pass
-		// on a machine that never executed one useful instruction: a core that
-		// faulted at its entry point sits at neither halt address and is
-		// trivially outside the banner function, so it collects three green
-		// ticks for having done nothing. That is this project's signature defect
-		// -- an assertion satisfied by a value that was already there -- and it
-		// was OBSERVED on this very test before the conjunction was added.
-		check(result.bannerAppeared,
-		      "the firmware composed a banner into display 0 at all");
+		// THE INSTRUMENTATION FIRST, for the same reason the read path is checked
+		// before the two Check clauses: a zero landmark count must be read as "the
+		// firmware did not arrive" and never as "the counter did not look".
+		check(result.entryFetches > 0,
+		      "the landmark counter saw the core's own 16-bit instruction fetches at "
+		      "the reset PC 0x30000400, so a zero count at any other landmark is the "
+		      "firmware not arriving rather than the counter not looking; counted " +
+		      std::to_string(result.entryFetches));
 
-		check(result.bannerAppeared && !result.halted,
-		      "the banner appeared AND the core is still running rather than halted");
+		// THE BANNER, COUNTED ON THE WRITE. A blank display cannot satisfy this:
+		// the clear's 0x20 is excluded by construction and counted separately, so
+		// the two shapes are told apart rather than merged.
+		check(result.contentWrites > 0,
+		      "the firmware wrote at least one printable non-space character into "
+		      "display 0 line 0, which the display clear's 0x20 spaces cannot "
+		      "satisfy; counted " + std::to_string(result.contentWrites) +
+		      " content writes and " + std::to_string(result.clearWrites) +
+		      " clear writes");
 
-		check(result.bannerAppeared && result.pcLater != g_haltFlashGate,
-		      "the banner appeared AND the program counter is not at the "
-		      "flash-gate halt 0x3001BB4C");
+		// THE THREE PROGRESS CLAIMS. Each names one failure mode and each conjoins
+		// a signal that a core which never ran drives to zero.
+		check(result.bannerEntries > 0,
+		      "execution entered the banner function 0x3001B7FC; counted " +
+		      std::to_string(result.bannerEntries) + " fetches of its first instruction");
 
-		check(result.bannerAppeared && result.pcLater != g_haltModelByte,
-		      "the banner appeared AND the program counter is not at the "
-		      "model-byte halt 0x3001B86C");
+		check(result.bannerEntries > 0 && !insideBanner(result.pcLater),
+		      "execution entered the banner function 0x3001B7FC AND is no longer "
+		      "inside it, so the firmware returned past the banner rather than "
+		      "never arriving or stopping within it");
 
-		check(result.bannerAppeared && !insideBanner(result.pcLater),
-		      "the banner appeared AND the program counter has left the banner "
-		      "function 0x3001B7FC, so the firmware ran on past the banner "
-		      "rather than stopping inside it");
+		check(result.bannerEntries > 0 && !result.halted,
+		      "execution entered the banner function 0x3001B7FC AND the core has not "
+		      "halted");
+
+		// The two hard halts plan sections 6.6.8 and 6.6.3 record, merged into one
+		// claim. Kept as assertions rather than as report lines because a firmware
+		// can reach either one with display 0 line 0 already holding text, in which
+		// case no other assertion here names where it stopped; merged because two
+		// separate lines each said "not at THIS address" and a run stuck anywhere
+		// else collected a green tick from both.
+		check(result.bannerEntries > 0 &&
+		      result.pcLater != g_haltFlashGate && result.pcLater != g_haltModelByte,
+		      "execution entered the banner function 0x3001B7FC AND the run ended at "
+		      "neither hard halt (0x3001BB4C flash gate, 0x3001B86C model byte)");
 
 		return g_failures == 0;
 	});
