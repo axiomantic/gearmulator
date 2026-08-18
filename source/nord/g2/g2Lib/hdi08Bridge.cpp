@@ -50,6 +50,23 @@ namespace g2
 		});
 	}
 
+	/* NULL IS THE UNINSTALL AND NOT A HOLE. Every `mc68k::Hdi08` setter puts the
+	 * port's own default back when it is handed an empty function, so the port
+	 * returns to what it did before the bridge existed rather than to a callback
+	 * that cannot be called; `dsp56k::HDI08` leaves its transmit callback empty
+	 * instead and tests it before the one call it makes.
+	 *
+	 * THE INIT SLOT IS LEFT ALONE HERE FOR THE REASON IT IS LEFT ALONE ABOVE.
+	 * `Hdi08Adapter` owns that one and the bridge never wrote it. */
+	Hdi08Bridge::~Hdi08Bridge()
+	{
+		m_host.setWriteTxCallback(nullptr);
+		m_host.setRxEmptyCallback(nullptr);
+		m_host.setReadIsrCallback(nullptr);
+
+		m_dsp.setWriteTxCallback(nullptr);
+	}
+
 	void Hdi08Bridge::onBootWord(const uint32_t _word)
 	{
 		if(!m_boot.hdiWriteTX(dsp56k::TWord(_word)))
