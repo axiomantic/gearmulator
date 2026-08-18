@@ -43,7 +43,7 @@
  * EVERY SPELLING CARRIES FOUR CONTROLS, and each one closes a way the case
  * could pass while proving nothing:
  *
- *   FLAGGED    the core symbol defined as the out-of-domain placeholder. The
+ *   FLAGGED    the core symbol defined as an out-of-domain frequency. The
  *              scan must find it and the parser must read the value back
  *              EXACTLY. Without this, a pattern with a typo reports "absent"
  *              for ever and the case can never fail.
@@ -151,10 +151,11 @@ namespace
 	 * derivation rather than a coincidence. Spike criterion (j) owns the
 	 * figure; measurement register rows 5 and 6 carry it.
 	 *
-	 * THE DIVIDER FLOOR IS THE MANUAL's. Section 4.2 documents no
-	 * divide-by-one option, so the ratio is 2, 3 or 4 and the core clock is at
-	 * least twice the bus clock. That is the whole of what makes the two
-	 * separate symbols at all.
+	 * THE DIVIDER FLOOR IS 2 BECAUSE 2 HOLDS UNDER BOTH READINGS OF THE PART.
+	 * The MCF5307 manual's section 4.2 permits 2, 3 or 4 and no divide-by-one;
+	 * the MCF5407CAI162 the schematic reads at U14 multiplies CLKIN by 3. Two
+	 * is the weaker of the two claims and is therefore the one the floor is
+	 * built from, so the floor does not move when the part identity settles.
 	 *
 	 * The product is a FLOOR and never an estimate: no core clock this part
 	 * can run at is below it, and the bus-clock band lies entirely underneath
@@ -186,9 +187,10 @@ namespace
 		return 54ull * 1000ull * 1000ull;
 	}
 
-	/* The placeholder the core-clock symbol carries. It is a product for the
-	 * reason the file header gives and for no other. */
-	uint64_t placeholderCoreClockHz()
+	/* The FLAGGED control's frequency: a bus-domain figure, well under the
+	 * floor. It is a product for the reason the file header gives and for no
+	 * other. */
+	uint64_t outOfDomainCoreClockHz()
 	{
 		return 45ull * 1000ull * 1000ull;
 	}
@@ -862,9 +864,9 @@ int main(const int argc, const char* const* const argv)
 			const std::string  index    = std::to_string(i);
 			const std::string  define   = "#define ";
 
-			/* ---- FLAGGED: the core symbol holding the placeholder. */
+			/* ---- FLAGGED: the core symbol holding a bus-domain figure. */
 			{
-				const uint64_t value = placeholderCoreClockHz();
+				const uint64_t value = outOfDomainCoreClockHz();
 				const ControlOutcome outcome = runControl(
 					"flagged_" + index + ".txt",
 					define + coreSymbol + " " + render(value, spelling.kind),
