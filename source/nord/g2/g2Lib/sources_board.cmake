@@ -99,3 +99,17 @@ list(APPEND G2LIB_SOURCES
 	board.h
 	board.cpp
 )
+
+# ----------------- BRD-24, the M-Bus controller and the MAX1039 slave
+#
+# mbus.h declares the module at MBAR+0x280 and the byte-level slave seam it
+# drives; max1039.h declares the one slave on that bus. Both translation units
+# are listed: a build that compiles the test without compiling them fails at the
+# LINK step on g2::MBus and g2::Max1039.
+
+list(APPEND G2LIB_SOURCES
+	mbus.h
+	mbus.cpp
+	max1039.h
+	max1039.cpp
+)
