@@ -36,6 +36,13 @@ namespace g2
 	public:
 		Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp);
 
+		/* THE BRIDGE PLANTED THE CALLBACKS, SO THE BRIDGE REMOVES THEM. Both
+		 * ports outlive it -- the adapter's by the ownership rule below, the
+		 * DSP's because the set destroys its bridges before its slots -- and a
+		 * port left holding a closure over a destroyed bridge calls it on the
+		 * next word with nothing to report the fault. */
+		~Hdi08Bridge();
+
 		/* NEITHER COPYABLE NOR MOVABLE. The callbacks installed on the host port
 		 * capture `this`, so a copy or a move would leave the port driving the
 		 * pending backlog of an object the caller no longer holds. */
@@ -73,7 +80,24 @@ namespace g2
 		std::vector<dsp56k::TWord> m_pending;
 	};
 
-	// One bridge per slot, host port i to DSP i. The set takes ownership, so the
-	// bridges must not outlive the adapter whose ports they drive.
+	// One bridge per slot, host port i to DSP i. The set takes ownership.
+	//
+	// THE ADAPTER HAS TO OUTLIVE THE SET, and that direction is the destructor's
+	// and not the callbacks'. `~Hdi08Bridge` uninstalls through the port it was
+	// handed, so a set outliving its adapter dereferences a dead port.
+	//
+	// A SECOND ATTACH ON ONE SET IS REFUSED. The run gate borrows the pointer
+	// `DspSet::programLanded` answers for the whole run, and replacing the
+	// bridges would leave that pointer aimed at a destroyed one.
+	//
+	// A BRIDGED PORT FEEDS ITS BOOT CONSUMER UNTIL A PROGRAM HAS LANDED, AND
+	// SAYS NOTHING WHILE IT DOES. The first words a port takes are a count, an
+	// address and that many body words; they reach program memory and neither
+	// `dsp56k::HDI08` nor any return value, so a driver that skips the handshake
+	// has its word absorbed as boot input with nothing to read afterwards. No
+	// check here can refuse it: the mistaken word and the firmware's own first
+	// word are the same word on the same wire. `DspSet::programLanded` is the
+	// report that the handshake completed, and SCH-33's run gate is what keeps a
+	// slot that never completed one from executing.
 	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
 }

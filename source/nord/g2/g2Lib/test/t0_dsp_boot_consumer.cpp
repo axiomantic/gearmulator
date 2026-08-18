@@ -1,14 +1,13 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
 // EVERY DRIVEN WORD IS NON-ZERO, in the count and address headers and in the
-// body alike. Program memory is zero-filled, so a driven 0x000000 compares zero
-// against a default-zero read and passes whether the word crossed or not.
+// body alike. Program memory is zero-filled, so 0x000000 is not a value that
+// distinguishes anything there.
 //
 // THE POST-COMPLETION CASE IS PINNED TO THE RECEIVE PATH AND NOT TO PROGRAM
 // MEMORY. `dsp56k::DspBoot`'s Finished state swallows a word rather than
-// storing it, so "it did not land at P:A+N" is true of a correct build and of a
-// build that never swapped the host callback alike. Only the arrival on the
-// DSP's own receive path tells the two apart.
+// storing it, so no word reaches P:A+N for either side to read. The DSP's own
+// receive path is where a post-completion word does arrive.
 //
 // NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build type is
 // Release, which defines NDEBUG.
@@ -30,8 +29,22 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
+
+/* THE BRIDGE'S ADDRESS IS FIXED BY CONSTRUCTION, AND THIS IS WHAT PINS IT.
+ * `programLanded` hands out a pointer into the bridge, so a bridge that could be
+ * copied or moved would hand out an address a later relocation invalidates. The
+ * runtime case below compares one address against another, which no
+ * implementation that compiles can answer differently. */
+static_assert(!std::is_copy_constructible_v<g2::Hdi08Bridge>
+	&& !std::is_move_constructible_v<g2::Hdi08Bridge>
+	&& !std::is_copy_assignable_v<g2::Hdi08Bridge>
+	&& !std::is_move_assignable_v<g2::Hdi08Bridge>,
+	"Hdi08Bridge must be neither copyable nor movable: programLanded borrows its address.");
 
 namespace
 {
@@ -106,6 +119,10 @@ namespace
 		0x0a1101u, 0x0b2202u, 0x0c3303u, 0x0d4404u, 0x0e5505u
 	};
 	constexpr TWord g_wordAfterProgram = 0x0f6606u;
+
+	// HF2 and HF3 sit at bits 3 and 4 of the DSP's control register and of the
+	// host ISR alike, which is what makes the bridge's mirror a masked copy.
+	constexpr uint8_t g_hostFlagMask = mc68k::Hdi08::Hf2 | mc68k::Hdi08::Hf3;
 
 	TWord programWordCount()
 	{
@@ -278,6 +295,116 @@ namespace
 		checkEqualHex(programMemory(set.dsp(0), g_bootAddress), 0u,
 			"a program landed on one slot writes no program memory on another");
 	}
+
+	/* ---------------- group 4: a destroyed bridge leaves the port as it found it */
+
+	/* THE PORT'S OWN STATE IS THE SENTINEL, AND NOT THE DEAD BRIDGE. Reading a
+	 * destroyed object to see whether it was called is the very fault under test,
+	 * so the assertions read only what the port and the slot hold: an uninstalled
+	 * write-transmit callback leaves the word in the port's own transmit queue,
+	 * and an uninstalled receive drain leaves the host receive register empty. */
+	void aDestroyedBridgeLeavesNoCallbackBehind()
+	{
+		Slot slot;
+		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
+		mc68k::Hdi08& port = adapter.port(g_bridgedPort);
+
+		std::deque<uint32_t> transmitted;
+
+		{
+			g2::Hdi08Bridge bridge(port, slot.dsp, slot.hdi08());
+
+			driveBootHeaders(port, programWordCount());
+			driveProgramWords(port, g_program.size());
+
+			check(*bridge.programLanded(),
+				"the program landed on the bridge that is about to be destroyed");
+
+			port.pollTx(transmitted);
+			checkEqualCount(transmitted.size(), 0u,
+				"a bridge that is alive leaves no word in the port's own transmit queue");
+
+			/* THE CONTROL FOR THE FLAG MIRROR IS TAKEN WHILE THE BRIDGE IS ALIVE,
+			 * so the assertion after its destruction is a change and not a value
+			 * that was never there. */
+			slot.hdi08().writeControlRegister(g_hostFlagMask);
+			check((port.isr() & g_hostFlagMask) == g_hostFlagMask,
+				"a bridge that is alive mirrors the DSP's host flags into the port's status");
+		}
+
+		hostWriteWord(port, g_wordAfterProgram);
+
+		transmitted.clear();
+		port.pollTx(transmitted);
+		checkEqualCount(transmitted.size(), 1u,
+			"a word written after the bridge is destroyed stays in the port's own transmit queue");
+		if(transmitted.size() == 1u)
+		{
+			checkEqualHex(transmitted[0], g_wordAfterProgram,
+				"the word the port kept is the word written after the bridge was destroyed");
+		}
+		checkEqualCount(slot.hdi08().rxData().size(), 0u,
+			"a word written after the bridge is destroyed reaches no DSP receive path");
+
+		check((port.isr() & g_hostFlagMask) == 0,
+			"the DSP's host flags stop reaching the port's status once the bridge is destroyed");
+
+		check((port.isr() & mc68k::Hdi08::Rxdf) == 0,
+			"the host receive register is empty before the DSP transmits");
+
+		slot.hdi08().writeTX(g_wordAfterProgram);
+
+		check((port.isr() & mc68k::Hdi08::Rxdf) == 0,
+			"a DSP transmit after the bridge is destroyed reaches no host receive register");
+		check(slot.hdi08().hasTX(),
+			"the word the DSP transmitted after the bridge is destroyed is still on the DSP side");
+
+		/* THE EMPTY RECEIVE READ IS THE SECOND WAY BACK IN. A port that finds its
+		 * receive register empty asks for data, so the slot that answers that
+		 * question needs its own case. `HdiTXH` is the read side of the shared
+		 * byte register and is the first byte of a read sequence, which is the
+		 * one byte of the three that asks. */
+		checkEqualHex(port.read8(mc68k::PeriphAddress::HdiTXH), 0u,
+			"an empty receive read after the bridge is destroyed answers zero");
+		check(slot.hdi08().hasTX(),
+			"an empty receive read after the bridge is destroyed pulls no word off the DSP");
+	}
+
+	/* ---------------- group 5: a second attach on one set is refused */
+
+	void aSecondAttachOnOneSetIsRefused()
+	{
+		g2::DspSet set;
+		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
+
+		g2::attachHdi08Bridges(adapter, set);
+
+		const bool* const landedBefore = set.programLanded(g_landedSlot);
+		check(landedBefore != nullptr, "the first attach answers a flag on the slot under test");
+
+		bool refused = false;
+		try
+		{
+			g2::attachHdi08Bridges(adapter, set);
+		}
+		catch(const std::logic_error&)
+		{
+			refused = true;
+		}
+
+		check(refused, "a second attach on a set that already holds bridges is refused");
+		check(set.programLanded(g_landedSlot) == landedBefore,
+			"a refused second attach leaves the borrowed flag pointer where it was");
+
+		driveBootHeaders(adapter.port(static_cast<int>(g_landedSlot)), programWordCount());
+		driveProgramWords(adapter.port(static_cast<int>(g_landedSlot)), g_program.size());
+
+		if(landedBefore)
+		{
+			check(*landedBefore,
+				"the flag borrowed before the refused attach still answers for its own bridge");
+		}
+	}
 }
 
 int main()
@@ -285,6 +412,8 @@ int main()
 	aBootstrapPushLandsTheProgramAndPrimesTheCore();
 	anIncompleteLoadKeepsFeedingProgramMemory();
 	theSetPublishesAPerSlotLandedFlag();
+	aDestroyedBridgeLeavesNoCallbackBehind();
+	aSecondAttachOnOneSetIsRefused();
 
 	if(g_failures != 0)
 	{
