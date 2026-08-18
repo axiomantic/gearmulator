@@ -50,3 +50,14 @@ set_property(TARGET t0_dsp_boot_consumer PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_boot_consumer COMMAND t0_dsp_boot_consumer)
 set_tests_properties(t0_dsp_boot_consumer PROPERTIES LABELS "UnitTest")
+
+# ----------------- DSP-18, the CVR host-command interrupt path
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_cvr_irq$
+
+add_executable(t0_hdi08_cvr_irq t0_hdi08_cvr_irq.cpp)
+target_link_libraries(t0_hdi08_cvr_irq PRIVATE g2Lib)
+set_property(TARGET t0_hdi08_cvr_irq PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_hdi08_cvr_irq COMMAND t0_hdi08_cvr_irq)
+set_tests_properties(t0_hdi08_cvr_irq PROPERTIES LABELS "UnitTest")
