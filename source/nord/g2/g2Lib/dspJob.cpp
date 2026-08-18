@@ -47,13 +47,22 @@ namespace g2
 		if(c->frameIndex % c->secondBusFrameDivider == 0)
 			receiveDspFrame(*c->secondEsai);
 
-		/* 2. One quantum of the cycle-debt rule; runDspCycles fills the
-		 * ctx.run role. Adds no frame advance of its own. */
-		const auto run = [c](const uint32_t want) noexcept -> uint32_t
+		/* 2. One quantum of the cycle-debt rule, BEHIND THE RUN GATE. SCH-12's
+		 * template owns the block; runDspCycles (SCH-8) fills the ctx.run role.
+		 * Adds no frame advance of its own.
+		 *
+		 * A NULL pointer is NOT LANDED, and that direction is the whole of the
+		 * gate. Reading NULL as "landed" would run a slot whose program memory
+		 * is zero-filled -- and 0x000000 is a no-operation on this core, so
+		 * that slot faults nowhere and writes no log line. */
+		if(c->programLanded != nullptr && *c->programLanded)
 		{
-			return runDspCycles(*c->dsp, want);
-		};
-		(void) runQuantum(*c, run);
+			const auto run = [c](const uint32_t want) noexcept -> uint32_t
+			{
+				return runDspCycles(*c->dsp, want);
+			};
+			(void) runQuantum(*c, run);
+		}
 
 		/* 3. The transmit half of the frame, gated on the same window. */
 		transmitDspFrame(*c->audioEsai);
