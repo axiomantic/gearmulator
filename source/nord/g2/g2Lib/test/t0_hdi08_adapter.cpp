@@ -396,6 +396,67 @@ int main()
 		}
 	}
 
+	// -----------------------------------------------------------------------
+	// Case group 6. THE RX-EMPTY CALLBACK HAS A DEFAULT.
+	//
+	// `mc68k::Hdi08::readRX` calls the rx-empty callback on the first byte of a
+	// read sequence without testing it first, so a usable callback is part of
+	// the object's invariant rather than an optional decoration. A port holding
+	// an empty `std::function` therefore terminates the process on the first RX
+	// read instead of reading an empty register as zero, which is what the
+	// hardware does.
+	//
+	// AN EMPTY FUNCTION MUST BE SUBSTITUTED AND NOT STORED, so a caller that
+	// clears the callback and keeps the port alive does not re-arm the abort.
+	// That is why clearing is asserted apart from never installing: a
+	// constructor-only default would satisfy one and leave the other armed.
+	{
+		// ICR is zero on a fresh port, so HLEND is clear and TXH is the first
+		// byte of a read sequence -- the one byte that reaches the callback.
+		const auto firstRxByte = mc68k::PeriphAddress::HdiTXH;
+
+		// Case 6a -- nothing was ever installed.
+		{
+			mc68k::Hdi08 hdi08;
+
+			checkEqual(hdi08.read8(firstRxByte), uint32_t(0),
+				"a default-constructed port reads an empty RX register as zero");
+		}
+
+		// Case 6b -- the callback cleared with an empty function.
+		{
+			mc68k::Hdi08 hdi08;
+			hdi08.setRxEmptyCallback({});
+
+			checkEqual(hdi08.read8(firstRxByte), uint32_t(0),
+				"a port whose rx-empty callback was cleared reads an empty RX register as zero");
+		}
+
+		// Case 6c -- AN INSTALLED CALLBACK IS STILL THE ONE THAT RUNS. A default
+		// that swallowed the caller's own handler would satisfy 6a and 6b and be
+		// visible nowhere else.
+		{
+			mc68k::Hdi08 hdi08;
+
+			int calls = 0;
+			int needMoreDataCalls = 0;
+
+			hdi08.setRxEmptyCallback([&calls, &needMoreDataCalls](const bool _needMoreData)
+			{
+				++calls;
+				if(_needMoreData)
+					++needMoreDataCalls;
+			});
+
+			checkEqual(hdi08.read8(firstRxByte), uint32_t(0),
+				"an installed rx-empty callback that supplies no data still reads as zero");
+			checkEqual(uint32_t(calls), uint32_t(1),
+				"the installed rx-empty callback runs once for the read");
+			checkEqual(uint32_t(needMoreDataCalls), uint32_t(1),
+				"the installed rx-empty callback is told the RX register needs data");
+		}
+	}
+
 	if(g_failures)
 	{
 		std::cout << "t0_hdi08_adapter: " << g_failures << " of " << g_cases
