@@ -18,9 +18,14 @@
 //
 // WHAT THIS TEST IS AND IS NOT. It asserts that the two files PARSE, that they
 // carry what they are required to carry, and -- the point of the negative cases
-// -- that the parse is ABLE TO REJECT. It does not compare a value against the
-// build's constant. That is REPO-9's `t1_timebase_gate`, which is Wave 3b
-// because it reads `Scheduler::Config`, a type SCH-18 creates in Wave 3a.
+// -- that the parse is ABLE TO REJECT. It also compares every value the
+// committed golden.timebase records against the macro that DEFINES that value,
+// because a manifest whose shape is checked and whose values are not carries the
+// authority of a checked artifact while describing a state that has moved.
+//
+// IT DOES NOT REACH THE RUN PATH. Whether the Scheduler is built from those
+// macros is REPO-9's `t1_timebase_gate`, which is Wave 3b because it reads
+// `Scheduler::Config`, a type SCH-18 creates in Wave 3a.
 //
 // A NOTE ON THE NEGATIVE CASES. The plan asks for "a manifest with four lines
 // and one with six". A parse that merely counted lines would satisfy that by
@@ -37,6 +42,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "g2/timebase.h"
 
 #ifndef G2_REPOSITORY_ROOT
 #error "G2_REPOSITORY_ROOT must be defined by tests_repo.cmake. Without it this test would look for the manifests in the working directory, find nothing, and there would be no way to tell that from a manifest that is genuinely absent."
@@ -78,6 +85,34 @@ namespace
 		std::string symbol;
 		unsigned long long value = 0;
 	};
+
+	// The same five symbols as they are DEFINED, for the comparison against the
+	// same five as they are RECORDED.
+	//
+	// ONE TOKEN BECOMES BOTH COLUMNS, and that is the whole point: the number is
+	// never written here, so this table cannot become a third copy of it that
+	// drifts from the header in its turn. A macro that is renamed or deleted
+	// stops being an identifier and the compile fails, rather than a row
+	// quietly ceasing to match anything.
+
+	struct TimebaseConstant
+	{
+		std::string symbol;
+		unsigned long long value = 0;
+	};
+
+#define G2_MANIFEST_CONSTANT(_symbol) TimebaseConstant{ #_symbol, static_cast<unsigned long long>(_symbol) }
+
+	const std::vector<TimebaseConstant> g_definedTimebaseConstants =
+	{
+		G2_MANIFEST_CONSTANT(G2_DSP_CYCLES_PER_FRAME_NUM),
+		G2_MANIFEST_CONSTANT(G2_DSP_CYCLES_PER_FRAME_DEN),
+		G2_MANIFEST_CONSTANT(G2_MCU_CORE_CLOCK_HZ),
+		G2_MANIFEST_CONSTANT(G2_CHAIN_HOP_FRAMES),
+		G2_MANIFEST_CONSTANT(G2_SECOND_BUS_FRAME_DIVIDER)
+	};
+
+#undef G2_MANIFEST_CONSTANT
 
 	// Parses golden.timebase. Returns the entries, and appends one NAMED
 	// failure per defect to _failures. An empty _failures means the manifest is
@@ -334,6 +369,34 @@ int main()
 				return (_c >= '0' && _c <= '9') || (_c >= 'A' && _c <= 'Z') || _c == '_' || _c == ' ' || _c == '\n';
 			});
 			check(integersAndNamesOnly, "golden.timebase: every byte is a symbol character, a digit, a space or a newline");
+
+			// Every RECORDED value against the value its macro DEFINES. Both
+			// numbers are printed whichever way the comparison goes, because a
+			// drift report that names only the symbol sends its reader back to
+			// both files to find out which side moved.
+			for(const TimebaseConstant& defined : g_definedTimebaseConstants)
+			{
+				const auto recorded = std::find_if(entries.begin(), entries.end(),
+					[&](const TimebaseEntry& _e) { return _e.symbol == defined.symbol; });
+
+				const std::string what = "golden.timebase: " + defined.symbol + " matches g2/timebase.h (recorded " +
+					(recorded == entries.end() ? std::string("nothing") : std::to_string(recorded->value)) +
+					", defined " + std::to_string(defined.value) + ")";
+
+				check(recorded != entries.end() && recorded->value == defined.value, what);
+			}
+
+			// The comparison is CLOSED OVER THE REQUIRED SET. Without this, a
+			// sixth symbol added to the manifest and to the required set, and
+			// not to the table above, would be recorded and never compared --
+			// which is the silence this comparison exists to end, returning
+			// through the door the comparison itself left open.
+			for(const std::string& required : g_requiredTimebaseSymbols)
+			{
+				const bool compared = std::any_of(g_definedTimebaseConstants.begin(), g_definedTimebaseConstants.end(),
+					[&](const TimebaseConstant& _c) { return _c.symbol == required; });
+				check(compared, "golden.timebase: " + required + " is compared against g2/timebase.h and not only parsed");
+			}
 		}
 
 		// ================= artifacts.sha256, the committed file
