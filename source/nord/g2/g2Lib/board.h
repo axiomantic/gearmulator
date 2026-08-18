@@ -71,6 +71,7 @@
 
 #include <mcf5307.h>
 
+#include "dspSet.h"
 #include "flash.h"
 #include "hdi08Adapter.h"
 #include "latches.h"
@@ -230,6 +231,7 @@ namespace g2
 		MBus&         mbus()    { return m_mbus; }
 		Max1039&      adc()     { return m_adc; }
 		MemoryMap&    memory()  { return m_memory; }
+		DspSet&       dspSet()  { return m_dspSet; }
 
 	private:
 		/* ONE FLASH OBJECT ANSWERS TWO WINDOWS, so it cannot be a BusTarget
@@ -352,6 +354,15 @@ namespace g2
 
 		uint64_t     m_lastFrameIndex = 0;
 		bool         m_faulted        = false;
+
+		/* LAST, AND THAT POSITION IS DESTRUCTION ORDER AND NOT CONSTRUCTION
+		 * ORDER. The set borrows nothing at construction -- the bridges are
+		 * attached from the constructor BODY, after every member exists -- but
+		 * `~Hdi08Bridge` uninstalls through the host port it was handed, so a
+		 * set destroyed after m_hdi08 would dereference a dead port once per
+		 * slot. Members are destroyed in reverse declaration order, so any
+		 * position before m_hdi08 is a use-after-free at teardown. */
+		DspSet       m_dspSet;
 	};
 
 	// Concreteness as a compile-time property, so that "nothing derives from

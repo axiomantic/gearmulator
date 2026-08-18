@@ -535,3 +535,41 @@ set_tests_properties(t0_mbus PROPERTIES LABELS "UnitTest")
 target_sources(t0_sof_tick PRIVATE
 	../mbus.cpp
 	../max1039.cpp)
+
+# ----------------- BRD-26, the Board's own DspSet
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_board_dsp_set$
+#
+# T0 AND UNGATED. The test authors every word it drives, so no firmware artifact
+# reaches it.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement
+# t0_board_routing, t0_cs2_cfi, t0_bus_size_unit and t0_mbus already use: it
+# needs the real board.cpp composition with the real DspSet and Hdi08Bridge
+# behind it, and every one of those is a g2Lib source. NOTHING HERE REFERENCES
+# mcf5307::mcf5307, so no if(TARGET) guard is needed and none is written.
+
+add_executable(t0_board_dsp_set t0_board_dsp_set.cpp)
+target_link_libraries(t0_board_dsp_set PRIVATE g2Lib)
+set_property(TARGET t0_board_dsp_set PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_board_dsp_set COMMAND t0_board_dsp_set)
+set_tests_properties(t0_board_dsp_set PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- BRD-26 consequence: t0_sof_tick's own sources
+#
+# THE COMPOSITION GAINED A DspSet BY VALUE AND t0_sof_tick COMPILES ../board.cpp
+# ON ITS OWN, so it must supply that member's objects too. This block is
+# appended rather than folded into t0_sof_tick's own block above, for the reason
+# the INT-1 block already states: this file is written by more than one task and
+# an edit inside another task's block is how two writers lose each other's work.
+#
+# NEITHER SOURCE IS AN mcf5307 SOURCE, so the property t0_sof_tick's own block
+# protects -- no mcf5307 archive on its link line -- is untouched. No library
+# joins the link line either: dsp56kEmu is already on it through the INT-1
+# consequence block above.
+
+target_sources(t0_sof_tick PRIVATE
+	../dspSet.cpp
+	../hdi08Bridge.cpp)
