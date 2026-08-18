@@ -14,11 +14,11 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include "mc68k/hdi08.h"
 
+#include "dsp56kEmu/dspBootCode.h"
 #include "dsp56kEmu/types.h"
 
 namespace dsp56k
@@ -34,7 +34,7 @@ namespace g2
 	class Hdi08Bridge final
 	{
 	public:
-		Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::HDI08& _dsp);
+		Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp);
 
 		/* NEITHER COPYABLE NOR MOVABLE. The callbacks installed on the host port
 		 * capture `this`, so a copy or a move would leave the port driving the
@@ -44,7 +44,13 @@ namespace g2
 		Hdi08Bridge& operator=(const Hdi08Bridge&) = delete;
 		Hdi08Bridge& operator=(Hdi08Bridge&&) = delete;
 
+		/* BORROWED AND NOT COPIED. The scheduler's run gate holds a `const bool*`
+		 * for the whole run, so the flag has to be an object with an address and
+		 * not a predicate's return value. */
+		const bool* programLanded() const noexcept { return &m_programLanded; }
+
 	private:
+		void onBootWord(uint32_t _word);
 		void onHostWord(uint32_t _word);
 		void offerPendingToDsp();
 		void drainDspToHost();
@@ -53,12 +59,21 @@ namespace g2
 		mc68k::Hdi08&  m_host;
 		dsp56k::HDI08& m_dsp;
 
+		/* THE BOOT CONSUMER IS THE LIBRARY'S AND NOT `g2::Hdi08Bootstrap`. This
+		 * one primes the core -- the counter register, the address register, the
+		 * condition codes and the program counter -- and notifies the compiler of
+		 * every program-memory write. The G2 model does none of that, so a slot
+		 * loaded through it would hold the right words and never run them. */
+		dsp56k::DspBoot m_boot;
+
+		bool m_programLanded = false;
+
 		// What the bound would not let through yet. A dropped word is a silent
 		// failure; a deferred one is re-offered on the next transfer.
 		std::vector<dsp56k::TWord> m_pending;
 	};
 
-	// One bridge per slot, host port i to DSP i. The caller owns the returned
-	// bridges and they must outlive the adapter's use.
-	std::vector<std::unique_ptr<Hdi08Bridge>> attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
+	// One bridge per slot, host port i to DSP i. The set takes ownership, so the
+	// bridges must not outlive the adapter whose ports they drive.
+	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
 }
