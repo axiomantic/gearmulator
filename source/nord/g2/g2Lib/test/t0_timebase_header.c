@@ -47,14 +47,14 @@ _Static_assert(G2_DSP_CYCLES_PER_FRAME_NUM == 150000000u,
 _Static_assert(G2_DSP_CYCLES_PER_FRAME_DEN == 96000u,
 	"The DSP rational denominator is the frame rate, and it is fixed.");
 
-_Static_assert(G2_MCU_CYCLES_PER_FRAME_NUM == 45000000u,
+_Static_assert(G2_MCU_CYCLES_PER_FRAME_NUM == 162000000u,
 	"The MCU rational numerator is the CORE clock. Design 13.4.1, 13.4.3.");
 
 _Static_assert(G2_MCU_CYCLES_PER_FRAME_DEN == 96000u,
 	"The MCU rational denominator is the frame rate.");
 
-_Static_assert(G2_MCU_CORE_CLOCK_HZ == 45000000u,
-	"PLACEHOLDER, register row 7: the lowest in-spec catalog speed grade.");
+_Static_assert(G2_MCU_CORE_CLOCK_HZ == 162000000u,
+	"Register row 7: three times the CLKIN the schematic labels at U14.");
 
 _Static_assert(G2_CHAIN_HOP_FRAMES == 1u,
 	"H, provisional 1. Register row 9, owner SPK-3 criterion (d).");
@@ -65,13 +65,12 @@ _Static_assert(G2_SECOND_BUS_FRAME_DIVIDER == 4u,
 _Static_assert(G2_HOST_FRAMES_NUM == 96000u,
 	"The host-block mapping numerator is the frame rate. Design 14.1.1.");
 
-/* The refuted MCU clock must never come back. Register row 7 and design
- * section 13.4.3 record it as REFUTED rather than unverified. The grep case in
- * t0_timebase_header.cmake asserts the literal appears nowhere in this
- * repository; this assert closes the one place the literal would do real
- * damage, and it does so without writing the literal down. */
+/* 54,000,000 is the BUS clock, and the core symbol is the one place where
+ * standing it in would do real damage. The assert closes that place without
+ * writing the literal down, because t0_timebase_header.cmake still bans the
+ * literal tree-wide. */
 _Static_assert(G2_MCU_CORE_CLOCK_HZ != 54000u * 1000u,
-	"54,000,000 is REFUTED by five independent objections. Design 13.4.3.");
+	"54,000,000 is the bus clock, not the core clock.");
 
 /* ---------------- the declared shape of Rational.
  *
