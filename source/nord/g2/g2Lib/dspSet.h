@@ -51,7 +51,15 @@ namespace g2
 		 * struct copy, plus that slot's P, X and Y memory. IT DOES NOT COVER
 		 * THE PERIPHERALS, because the DSP library carries no save or load
 		 * member for a peripheral set, its ESAIs, its Dma, its Timers or its
-		 * host port. Restoring those needs new API in the dsp56300 fork. */
+		 * host port. Restoring those needs new API in the dsp56300 fork.
+		 *
+		 * IT DOES NOT COVER THE BRIDGES EITHER, so stateLoad REFUSES a set
+		 * that holds them and answers Status::BridgesAttached. A bridge carries
+		 * the landed flag the run gate borrows and a download cursor with no
+		 * accessor, and a load that restored the slots alone would leave a
+		 * correct program behind a gate that never opens. stateSave has no
+		 * return to refuse through, so a snapshot taken from a bridged set is
+		 * written and only an unbridged set may take it back. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;

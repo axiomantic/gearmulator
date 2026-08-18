@@ -8,6 +8,7 @@
 #include <cstring>
 #include <new>
 #include <stdexcept>
+#include <tuple>
 
 namespace g2
 {
@@ -146,6 +147,24 @@ namespace g2
 
 	Status DspSet::stateLoad(const void* const _src) noexcept
 	{
+		/* THE BRIDGES ARE OUTSIDE THE SNAPSHOT, AND REFUSING IS THE ONLY READING
+		 * OF THAT A CALLER CAN SEE. A bridge carries the landed flag the run gate
+		 * borrows and dsp56k::DspBoot's download cursor, and neither is written by
+		 * stateSave. Restoring the slots alone leaves a slot whose program memory
+		 * is right behind a gate that reads NOT landed, attachHdi08Bridges refuses
+		 * the second attach that would replace the bridges, and the machine is
+		 * then silently dead with no way back.
+		 *
+		 * COVERING THE FLAG INSTEAD WAS REFUSED. It would restore the completed
+		 * download and leave a download stopped part way silently wrong, because
+		 * the dsp56300 fork carries no accessor for DspBoot's cursor -- the same
+		 * reason the peripherals are outside the snapshot. A partial cover fails
+		 * quietly; this returns.
+		 *
+		 * THE GUARD IS BEFORE THE FIRST WRITE, so a refused load changes nothing. */
+		if(!m_bridges.empty())
+			return Status::BridgesAttached;
+
 		const auto* cursor = static_cast<const uint8_t*>(_src);
 
 		for(unsigned i = 0; i < dspCount(); ++i)
@@ -175,6 +194,18 @@ namespace g2
 	 * port driving a backlog its owner has dropped. */
 	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set)
 	{
+		/* THE SLOT COUNT AND THE PORT COUNT ARE TWO INDEPENDENT CONSTANTS, AND
+		 * NOTHING BUT THIS LINE TIES THEM. The loop below indexes the adapter with
+		 * a slot index, and Hdi08Adapter::port states that it asserts no bounds, so
+		 * a slot array that outgrew the port array would read past it and report
+		 * nothing. This assertion is inside the friend because m_slots is private
+		 * and its bound is the only compile-time spelling of the slot count. */
+		static_assert(std::tuple_size<decltype(DspSet::m_slots)>::value
+				== static_cast<size_t>(g_hdi08PortCount),
+			"the DSP set holds one slot for each HDI08 host port. attachHdi08Bridges "
+			"indexes the adapter with a slot index and Hdi08Adapter::port asserts no "
+			"bounds.");
+
 		/* A SECOND ATTACH IS REFUSED RATHER THAN MADE RE-ENTRANT. Replacing the
 		 * bridges would destroy the objects whose addresses the run gate already
 		 * borrowed through programLanded, and a borrowed pointer has no way to

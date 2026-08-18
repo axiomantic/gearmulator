@@ -35,7 +35,6 @@
 #include <functional>
 #include <iostream>
 #include <string>
-#include <type_traits>
 
 namespace
 {
@@ -174,7 +173,16 @@ namespace
 	 * destroyed in reverse declaration order, so the set outranking the adapter
 	 * in address IS the set dying while the ports it uninstalls from are still
 	 * alive. Reading the addresses through the two production accessors keeps
-	 * the assertion off any member this class does not already publish. */
+	 * the assertion off any member this class does not already publish.
+	 *
+	 * IT IS AN ADDRESS AND NOT THE TEARDOWN ITSELF, AND NO ASSERTION HERE CAN BE.
+	 * The property wanted is that no callback survives on a port; the Board owns
+	 * the ports, so they are gone with it and there is nothing left to read. The
+	 * reading is sound only while the two members share one access specifier --
+	 * an access specifier between them leaves their relative addresses
+	 * unspecified while destruction order still follows declaration order.
+	 * t0_dsp_boot_consumer takes the observation itself, against an adapter that
+	 * the test owns and that outlives the set. */
 	void theDspSetIsDestroyedBeforeTheAdapterItUninstallsFrom()
 	{
 		g2::Board board;
@@ -185,30 +193,12 @@ namespace
 		check(std::greater<const void*>{}(set, adapter),
 			"the DSP set is declared after the HDI08 adapter, so it is destroyed before it");
 	}
-
-	/* BRD-21's concreteness properties. board.h's own static_asserts are
-	 * compiled by this file's include of it; the run-time reads beside them are
-	 * the form t0_board_surface already uses for the same properties. */
-	void theBoardStaysConcreteWithTheNewMember()
-	{
-		check(!std::is_polymorphic_v<g2::Board>,
-			"Board is not polymorphic: no virtual method and no vtable");
-		check(!std::is_copy_constructible_v<g2::Board>,
-			"Board is not copy constructible");
-		check(!std::is_copy_assignable_v<g2::Board>,
-			"Board is not copy assignable");
-		check(!std::is_move_constructible_v<g2::Board>,
-			"Board is not move constructible");
-		check(!std::is_move_assignable_v<g2::Board>,
-			"Board is not move assignable");
-	}
 }
 
 int main()
 {
 	theBoardDeliversEveryPortsRuntimeWordToItsOwnDsp();
 	theDspSetIsDestroyedBeforeTheAdapterItUninstallsFrom();
-	theBoardStaysConcreteWithTheNewMember();
 
 	if(g_failures != 0)
 	{

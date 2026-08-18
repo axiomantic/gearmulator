@@ -49,6 +49,7 @@ namespace
 		g2::Status::BadLookahead,
 		g2::Status::BadDivider,
 		g2::Status::BadMaxHostBlock,
+		g2::Status::BridgesAttached,
 	};
 
 	constexpr size_t kRosterLength = sizeof(kRoster) / sizeof(kRoster[0]);
