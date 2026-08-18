@@ -48,6 +48,17 @@ namespace g2
 		// modelled. It is copied in, so the adapter does not outlive it.
 		explicit Hdi08Adapter(Hdi08Decode _decode);
 
+		/* NEITHER COPYABLE NOR MOVABLE, AND THE COMPILER IS WHAT SAYS SO. Each
+		 * port carries a callback holding a reference to its own element of
+		 * m_ports, so a copy or a move would produce an adapter whose ports
+		 * drive the registers of the ORIGINAL -- which compiles, runs, and is
+		 * wrong in a way nothing reports. Deleting the four members turns that
+		 * into a build error at the site that tried it. */
+		Hdi08Adapter(const Hdi08Adapter&) = delete;
+		Hdi08Adapter(Hdi08Adapter&&) = delete;
+		Hdi08Adapter& operator=(const Hdi08Adapter&) = delete;
+		Hdi08Adapter& operator=(Hdi08Adapter&&) = delete;
+
 		// BusTarget. _offset is relative to the base of the CS1 window, so a
 		// port and a register offset come out of BRD-15's decode and nothing
 		// here knows an absolute address.
