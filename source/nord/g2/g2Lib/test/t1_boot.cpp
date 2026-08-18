@@ -940,5 +940,5 @@ int main()
 	// read as a pass, but it must not fail the suite either: an artifact-less
 	// machine is a legitimate configuration. A run that DID execute and failed
 	// is a failure.
-	return counters.failed > 0 ? 1 : 0;
+	return g2::test::gatedExitCode(counters);
 }
