@@ -98,19 +98,24 @@ namespace
 		int count = 0;
 	};
 
-	std::array<Capture, g2::g_hdi08PortCount> captureAll(g2::Hdi08Adapter& _adapter)
+	// THE ARRAY IS THE CALLER'S, AND IT IS AN OUT-PARAMETER RATHER THAN A RETURN
+	// VALUE ON PURPOSE. The per-port lambdas outlive this call and hold a
+	// reference to whatever they were given. Returning a local by value would
+	// bind them to storage this function owns, which survives the return only
+	// while a compiler chooses NRVO -- an optimisation it is permitted to
+	// decline. Taking the caller's own object makes the lifetime a guarantee of
+	// the language instead.
+	void installCaptures(g2::Hdi08Adapter& _adapter, std::array<Capture, g2::g_hdi08PortCount>& _captures)
 	{
-		std::array<Capture, g2::g_hdi08PortCount> captures;
 		for(int p = 0; p < g2::g_hdi08PortCount; ++p)
 		{
 			_adapter.port(p).setWriteTxCallback(
-				[&captures, p](const uint32_t _word)
+				[&_captures, p](const uint32_t _word)
 				{
-					captures[p].word = _word;
-					++captures[p].count;
+					_captures[p].word = _word;
+					++_captures[p].count;
 				});
 		}
-		return captures;
 	}
 }
 
@@ -127,7 +132,8 @@ int main()
 	// port the address selects. The word's low 24 bits must arrive there and
 	// nowhere else.
 	{
-		std::array<Capture, g2::g_hdi08PortCount> captures = captureAll(adapter);
+		std::array<Capture, g2::g_hdi08PortCount> captures;
+		installCaptures(adapter, captures);
 
 		// One distinct word per port, so a word landing on the wrong port is
 		// visible in both the count and the value.
@@ -170,7 +176,8 @@ int main()
 	// An offset of zero drives every populated select low. A longword at
 	// register offset 4 pushes the same word to every port.
 	{
-		std::array<Capture, g2::g_hdi08PortCount> captures = captureAll(adapter);
+		std::array<Capture, g2::g_hdi08PortCount> captures;
+		installCaptures(adapter, captures);
 		for(Capture& c : captures) { c.word = 0; c.count = 0; }
 
 		const uint32_t word = 0x0055aaffu;
@@ -198,7 +205,8 @@ int main()
 	// and TXL one byte at a time must assemble the same word the longword
 	// store did, and the word must complete only when TXL is written.
 	{
-		std::array<Capture, g2::g_hdi08PortCount> captures = captureAll(adapter);
+		std::array<Capture, g2::g_hdi08PortCount> captures;
+		installCaptures(adapter, captures);
 
 		// Port 3, the address 0x110007b8 (register offset 0).
 		const uint32_t portBase = 0x110007b8u;
@@ -241,7 +249,8 @@ int main()
 	// completes with the low 16 bits of the value and a zero high byte. This
 	// is the same "word completes on TXL" rule seen from a third width.
 	{
-		std::array<Capture, g2::g_hdi08PortCount> captures = captureAll(adapter);
+		std::array<Capture, g2::g_hdi08PortCount> captures;
+		installCaptures(adapter, captures);
 		for(Capture& c : captures) { c.word = 0; c.count = 0; }
 
 		const uint32_t portBase = 0x110007f0u; // port 0.
@@ -270,7 +279,8 @@ int main()
 		g2::MemoryMap map(config);
 		map.attach(g2::Region::Cs1, &adapter);
 
-		std::array<Capture, g2::g_hdi08PortCount> captures = captureAll(adapter);
+		std::array<Capture, g2::g_hdi08PortCount> captures;
+		installCaptures(adapter, captures);
 		for(Capture& c : captures) { c.word = 0; c.count = 0; }
 
 		const uint32_t word = 0x00bead00u;
