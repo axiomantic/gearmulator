@@ -52,6 +52,8 @@
 
 #include "board.h"
 
+#include "hdi08Bridge.h"
+
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -295,6 +297,11 @@ namespace g2
 		// Every unit is attached before the core exists, so no callback can
 		// reach a half-built decode.
 		attachUnits();
+
+		/* The DSP side of the host ports, attached from the constructor BODY
+		 * rather than from the initialiser list: the call takes both members by
+		 * reference and each one has to be fully built first. */
+		attachHdi08Bridges(m_hdi08, m_dspSet);
 
 		// The Nim runtime must be initialised before any mcf5307_ call. It is
 		// idempotent behind a latch, so the second Board in a process is safe.
