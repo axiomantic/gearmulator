@@ -311,3 +311,25 @@ target_link_libraries(t0_dsp_job_order PRIVATE g2Lib)
 set_property(TARGET t0_dsp_job_order PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_job_order COMMAND t0_dsp_job_order)
+
+# ---------------- SCH-32 - t0_status_contract
+#
+# An ordinary executable. The compile-time half of the contract -- the scoping,
+# the non-conversion to int and the fixed underlying type -- is held by
+# static_asserts, so a violation there is a BUILD failure and this target is
+# what carries it. The run-time half -- the zero value, the roster against
+# Status::Count and the distinguishable failures -- reports through the test's
+# own failure counter, because the default build type is Release and Release
+# defines NDEBUG.
+#
+# It does NOT link g2Lib. status.h is a header with no compiled part and the
+# test reaches it through the include directory alone, so linking the library
+# would make this check wait on every other source in it without buying the
+# check anything.
+
+add_executable(t0_status_contract
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_status_contract.cpp)
+target_include_directories(t0_status_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_property(TARGET t0_status_contract PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_status_contract COMMAND t0_status_contract)
