@@ -1,28 +1,27 @@
 /* t0_dsp_run_gate.cpp -- the check of task SCH-33. Design 13.10.3, 13.4.6.
  *
- * THE GATE FAILS CLOSED, AND THAT DIRECTION IS WHAT THIS FILE PINS. A context
- * whose programLanded pointer is NULL is a slot whose program has NOT landed,
- * so an unwired gate stops the machine. The alternative -- read NULL as
- * "landed" and run -- is refused because program memory is zero-filled and
- * 0x000000 is a no-operation on this core: a slot released with an empty
- * program walks that memory, faults nowhere and writes no log line.
+ * THE GATE FAILS CLOSED. A context whose programLanded pointer is NULL is a
+ * slot whose program has NOT landed, so an unwired gate stops the machine. The
+ * alternative -- read NULL as "landed" and run -- is refused because program
+ * memory is zero-filled and 0x000000 is a no-operation on this core: a slot
+ * released with an empty program walks that memory, faults nowhere and writes
+ * no log line.
  *
- * WHY THE FIXTURE RUNS A REAL PROGRAM ON A REAL DSP. The closed cases assert
- * that the cycle counter DOES NOT MOVE, and a counter that could not have
- * moved whatever the gate did would assert nothing. So the fixture writes a
- * loop into program memory and drives one context, with a non-zero want,
- * through both gate states.
+ * WHY THE FIXTURE RUNS A REAL PROGRAM ON A REAL DSP: a cycle counter that
+ * stands still is evidence only from a fixture that could have moved it. So
+ * the fixture writes a loop into program memory and drives one context, with a
+ * non-zero want, through both gate states.
  *
- * THE OPEN CASE ASSERTS A BAND AND NEVER AN EQUALITY. runDspCycles tests the
- * counter BEFORE each exec(), so the last dispatch unit carries it past the
- * want. The upper half of the band is this fixture's own measured dispatch
- * unit, taken from the fixture for the reason t0_run_dsp_cycles states: the
- * shipped configuration leaves maxInstructionsPerBlock uncapped, so no bound
- * read from the build has a threshold.
+ * A BAND AND NEVER AN EQUALITY: runDspCycles tests the counter BEFORE each
+ * exec(), so the last dispatch unit carries it past the want. The upper half
+ * of the band is this fixture's own measured dispatch unit, taken from the
+ * fixture for the reason t0_run_dsp_cycles states: the shipped configuration
+ * leaves maxInstructionsPerBlock uncapped, so no bound read from the build has
+ * a threshold.
  *
  * THE JOB IS ENTERED THROUGH THE JobContext* RECOVERY THE EXECUTOR USES, and
- * not through a private helper, so the property is asserted at the call site
- * the Executor reaches.
+ * not through a private helper, so the path exercised is the one the Executor
+ * reaches.
  */
 
 #include "dspContext.h"
@@ -254,9 +253,10 @@ namespace
 	};
 
 	/* frameIndex 0 with a divider of 4 opens the second bus window, so both
-	 * ports advance and the closed cases assert the whole frame rather than
-	 * half of it. The debt is 0, so the want is a whole allocation and every
-	 * case below would run cycles if the gate let it. */
+	 * ports advance rather than the audio one alone. The debt is 0 rather than
+	 * a carried spike, because a debt-consumed quantum takes runQuantum's
+	 * want <= 0 branch and reaches no DSP, which would leave the gate with
+	 * nothing to move. */
 	g2::DspContext makeContext(Fixture& f, const bool* const programLanded)
 	{
 		g2::DspContext c{};
@@ -314,8 +314,6 @@ namespace
 		checkEqual(f.dsp.getInstructionCounter() - instructions, 0u,
 			"a slot whose program has not landed executes no instruction");
 
-		/* Step 2 is skipped WHOLE, not entered and short-circuited: the
-		 * allocation, the debt and the rule 4 counter all stand still. */
 		checkEqual(ctx.acc, 0u,
 			"a closed gate consumes no allocation");
 		checkEqual(static_cast<uint64_t>(ctx.debt), 0u,
@@ -345,10 +343,7 @@ int main()
 	driveClosed(&notLanded,
 		"a false programLanded advances the cycle counter by nothing");
 
-	/* ---------------- CASE 2, the gate OPEN.
-	 *
-	 * The same context with a pointee of true spends AT LEAST the want. The
-	 * case exists because a gate welded permanently shut satisfies case 1. */
+	/* ---------------- CASE 2, the gate OPEN. */
 	{
 		Fixture f;
 		f.setWordCounts();

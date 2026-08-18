@@ -314,10 +314,8 @@ add_test(NAME t0_dsp_job_order COMMAND t0_dsp_job_order)
 
 # ---------------- SCH-33 - t0_dsp_run_gate
 #
-# An ordinary executable. Unlike t0_dsp_job_order above, this check DOES reach
-# the DSP: the closed cases assert that the cycle counter stands still, which
-# says nothing unless the same fixture can move it, so the context carries a
-# live DSP running a scripted loop and this check needs a JIT backend.
+# An ordinary executable. Unlike t0_dsp_job_order above, the context here
+# carries a live DSP running a scripted loop, so this check needs a JIT backend.
 
 add_executable(t0_dsp_run_gate
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_run_gate.cpp)
