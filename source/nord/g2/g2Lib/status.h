@@ -29,6 +29,7 @@ namespace g2
 		BadLookahead,
 		BadDivider,
 		BadMaxHostBlock,
+		BridgesAttached,
 		Count
 	};
 }

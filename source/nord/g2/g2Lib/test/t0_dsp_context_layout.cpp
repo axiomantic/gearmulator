@@ -15,11 +15,11 @@
  * A check that a bare one-member struct satisfies is not a weak check; it is a
  * check that cannot fail.
  *
- * FOUR OF THE TEN EXIST BECAUSE THE SCHEDULER DRIVES THE ESAI FRAME, and each
- * carries its own named assertion: audioEsai, secondEsai, frameIndex and
- * secondBusFrameDivider. frameIndex is the one SCH-19 writes before
- * Executor::run and no job writes. DELETING frameIndex FROM DspContext MAKES
- * THIS CHECK FAIL, and that is the acceptance criterion.
+ * AUDIOESAI, SECONDESAI, FRAMEINDEX AND SECONDBUSFRAMEDIVIDER EXIST BECAUSE THE
+ * SCHEDULER DRIVES THE ESAI FRAME, and each carries its own named assertion.
+ * frameIndex is the one SCH-19 writes before Executor::run and no job writes.
+ * DELETING frameIndex FROM DspContext MAKES THIS CHECK FAIL, and that is the
+ * acceptance criterion.
  *
  * WHERE EACH HALF FAILS. The member list is a COMPILE-TIME property, so a
  * deleted or renamed member is a compile error and plan section 7.7.1 classes
@@ -34,6 +34,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <new>
 #include <type_traits>
 
 namespace
@@ -157,6 +159,22 @@ static_assert(std::is_same_v<decltype(g2::DspContext::secondBusFrameDivider),
 	"G2_SECOND_BUS_FRAME_DIVIDER. The job body advances the second bus only "
 	"when frameIndex % secondBusFrameDivider == 0.");
 
+/* THE GATE'S OWN MEMBER. t0_dsp_run_gate pins the same type because the gate is
+ * SCH-33's, and it is repeated here because this file is the one that claims to
+ * name every member. */
+static_assert(std::is_same_v<decltype(g2::DspContext::programLanded),
+		const bool*>,
+	"DspContext::programLanded -- borrowed, and NULL means NOT landed.");
+
+/* THE DEFAULT DIRECTION IS STRUCTURAL AND NOT CONVENTIONAL. programLanded
+ * carries a default member initializer, which is what makes `g2::DspContext c;`
+ * a closed gate rather than an indeterminate one. A member with an initializer
+ * gives the class a non-trivial default constructor, so this assertion is what
+ * a deleted initializer runs into. */
+static_assert(!std::is_trivially_default_constructible_v<g2::DspContext>,
+	"DspContext must carry a default member initializer, so a context declared "
+	"without braces reads NOT landed rather than indeterminate.");
+
 /* NO EsaiClock ANYWHERE. An EsaiClock cannot follow a rational
  * cycles-for-each-frame rate, so the scheduler drives the frame instead and
  * this context carries the two ports rather than a clock. The type is not even
@@ -234,6 +252,23 @@ int main()
 		 * twice, which is the specific confusion the second bus invites. */
 		check(context.audioEsai != context.secondEsai,
 			"audioEsai and secondEsai are two members, not one");
+	}
+
+	/* ---------------- a context declared WITHOUT braces closes the gate.
+	 *
+	 * THE STORAGE IS POISONED FIRST, so the read below is a value the
+	 * initializer wrote and not one the stack happened to hold. Every other
+	 * member stays 0xFF and none is read. */
+	{
+		alignas(g2::DspContext) unsigned char storage[sizeof(g2::DspContext)];
+		std::memset(storage, 0xFF, sizeof storage);
+
+		auto* const fresh = new (storage) g2::DspContext;
+
+		check(fresh->programLanded == nullptr,
+			"a context declared without braces reads NOT landed");
+
+		fresh->~DspContext();
 	}
 
 	/* ---------------- a zeroed context carries no fault.
