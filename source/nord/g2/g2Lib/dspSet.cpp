@@ -7,6 +7,7 @@
 
 #include <cstring>
 #include <new>
+#include <stdexcept>
 
 namespace g2
 {
@@ -174,7 +175,13 @@ namespace g2
 	 * port driving a backlog its owner has dropped. */
 	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set)
 	{
-		_set.m_bridges.clear();
+		/* A SECOND ATTACH IS REFUSED RATHER THAN MADE RE-ENTRANT. Replacing the
+		 * bridges would destroy the objects whose addresses the run gate already
+		 * borrowed through programLanded, and a borrowed pointer has no way to
+		 * learn that. Of the two failures only this one is visible. */
+		if(!_set.m_bridges.empty())
+			throw std::logic_error("attachHdi08Bridges: the set already holds bridges");
+
 		_set.m_bridges.reserve(_set.dspCount());
 
 		for(unsigned i = 0; i < _set.dspCount(); ++i)
