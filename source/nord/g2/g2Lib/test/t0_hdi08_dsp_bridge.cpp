@@ -130,13 +130,27 @@ namespace
 		return _dsp.rxData()[_index];
 	}
 
+	/* A BRIDGED PORT FEEDS ITS BOOT CONSUMER UNTIL A PROGRAM HAS LANDED, so the
+	 * runtime wire is not reachable before that. The load driven here is the
+	 * shortest one the protocol admits. */
+	constexpr TWord g_bootAddress = 0x000300u;
+	constexpr TWord g_bootBodyWord = 0x0b0071u;
+
+	void driveBootstrap(mc68k::Hdi08& _port)
+	{
+		hostWriteWord(_port, 1u);
+		hostWriteWord(_port, g_bootAddress);
+		hostWriteWord(_port, g_bootBodyWord);
+	}
+
 	/* ---------------- group 1: one bridged pair, both directions */
 
 	void aBridgedPairCarriesAWordEachWay()
 	{
 		Slot slot;
 		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
-		g2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.hdi08());
+		g2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.dsp, slot.hdi08());
+		driveBootstrap(adapter.port(g_bridgedPort));
 
 		// THE FAN-OUT CASE RUNS FIRST SO ITS EXPECTED RING SIZE IS ZERO RATHER
 		// THAN A DELTA. A bridge that fans every host word to every DSP passes
@@ -224,7 +238,8 @@ namespace
 	{
 		Slot slot;
 		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
-		g2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.hdi08());
+		g2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.dsp, slot.hdi08());
+		driveBootstrap(adapter.port(g_bridgedPort));
 
 		const size_t capacity = slot.hdi08().rxData().capacity();
 
@@ -268,12 +283,24 @@ namespace
 		g2::DspSet set;
 		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
 
-		const auto bridges = g2::attachHdi08Bridges(adapter, set);
-		checkEqualCount(bridges.size(), set.dspCount(),
-			"the installation creates one bridge per attached DSP");
+		g2::attachHdi08Bridges(adapter, set);
+
+		/* THE COUNT IS READ BACK THROUGH THE SET, WHICH OWNS THE BRIDGES. The
+		 * per-slot flag is the only handle the set publishes on one, so a slot
+		 * that answers it is a slot that got a bridge. */
+		for(unsigned i = 0; i < set.dspCount(); ++i)
+		{
+			check(set.programLanded(i) != nullptr,
+				"the installation creates a bridge on slot " + std::to_string(i));
+		}
+		check(set.programLanded(set.dspCount()) == nullptr,
+			"the installation creates no bridge past the last slot");
 
 		for(unsigned i = 0; i < set.dspCount(); ++i)
+		{
+			driveBootstrap(adapter.port(static_cast<int>(i)));
 			hostWriteWord(adapter.port(static_cast<int>(i)), slotWord(i));
+		}
 
 		for(unsigned i = 0; i < set.dspCount(); ++i)
 		{

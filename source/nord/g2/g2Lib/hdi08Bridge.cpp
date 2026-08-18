@@ -13,13 +13,19 @@ namespace g2
 		constexpr uint8_t g_hostFlagMask = mc68k::Hdi08::Hf2 | mc68k::Hdi08::Hf3;
 	}
 
-	Hdi08Bridge::Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::HDI08& _dsp)
+	Hdi08Bridge::Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp)
 		: m_host(_host)
 		, m_dsp(_dsp)
+		, m_boot(_core)
 	{
+		/* THE BOOT CONSUMER SITS IN FRONT OF THE RUNTIME PATH AND IS REPLACED BY
+		 * IT. The firmware pushes a program into every port before it speaks to
+		 * the DSP at all, so a bridge that forwarded the first words to the
+		 * receive path would leave program memory zero-filled -- and 0x000000 is
+		 * a no-operation, so the core would walk it and fault nowhere. */
 		m_host.setWriteTxCallback([this](const uint32_t _word)
 		{
-			onHostWord(_word);
+			onBootWord(_word);
 		});
 
 		/* The host asks for data both when it finds the receive register empty
@@ -41,6 +47,23 @@ namespace g2
 		m_dsp.setWriteTxCallback([this]
 		{
 			drainDspToHost();
+		});
+	}
+
+	void Hdi08Bridge::onBootWord(const uint32_t _word)
+	{
+		if(!m_boot.hdiWriteTX(dsp56k::TWord(_word)))
+			return;
+
+		m_programLanded = true;
+
+		/* THE ASSIGNMENT DESTROYS THE CLOSURE THIS CALL IS RUNNING INSIDE.
+		 * `mc68k::Hdi08` holds ONE write-transmit callback and assigns rather
+		 * than chains, so nothing that closure captured may be read afterwards
+		 * and this line is last for that reason. */
+		m_host.setWriteTxCallback([this](const uint32_t _runtimeWord)
+		{
+			onHostWord(_runtimeWord);
 		});
 	}
 

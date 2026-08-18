@@ -12,13 +12,22 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace g2
 {
+	class Hdi08Adapter;
+	class Hdi08Bridge;
+
 	class DspSet
 	{
 	public:
 		DspSet();
+
+		/* OUT OF LINE, BECAUSE THE BRIDGE IS INCOMPLETE HERE. Including
+		 * hdi08Bridge.h would put the host-side `mc68k::Hdi08` into the include
+		 * closure of every consumer of this header. */
+		~DspSet();
 
 		unsigned dspCount() const noexcept;
 
@@ -27,6 +36,12 @@ namespace g2
 
 		dsp56k::Peripherals56311&       peripherals(unsigned index) noexcept;
 		const dsp56k::Peripherals56311& peripherals(unsigned index) const noexcept;
+
+		/* The scheduler's run gate borrows this for the whole run, so it is a
+		 * pointer into the owning bridge and not a copied bool. NULL for a slot
+		 * with no bridge attached, which is the gate's own reading of "not
+		 * landed" and needs no agreement between the two sides. */
+		const bool* programLanded(unsigned index) const noexcept;
 
 		/* The trio BRD-21's Board and CHN-5's ChainAdapter already carry.
 		 * Those two return void from stateLoad because g2::Status did not
@@ -55,7 +70,16 @@ namespace g2
 
 		Slot& slot(unsigned index) const noexcept;
 
+		/* THE ONE INSTALLER, AND IT IS A FRIEND RATHER THAN A PUBLIC SETTER. A
+		 * setter would be a second way to populate this member, and a set holding
+		 * bridges nobody attached is a lifetime nobody checked. */
+		friend void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
+
 		dsp56k::DefaultMemoryValidator m_memoryValidator;
 		std::array<std::unique_ptr<Slot>, 8> m_slots;
+
+		/* DECLARED AFTER THE SLOTS SO IT IS DESTROYED BEFORE THEM. Each bridge
+		 * holds a reference into its slot's peripherals. */
+		std::vector<std::unique_ptr<Hdi08Bridge>> m_bridges;
 	};
 }

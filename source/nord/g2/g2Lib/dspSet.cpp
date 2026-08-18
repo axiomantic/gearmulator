@@ -63,6 +63,8 @@ namespace g2
 			slot = std::make_unique<Slot>(m_memoryValidator, g_secondBusFrameRateHz);
 	}
 
+	DspSet::~DspSet() = default;
+
 	unsigned DspSet::dspCount() const noexcept
 	{
 		return static_cast<unsigned>(m_slots.size());
@@ -94,6 +96,14 @@ namespace g2
 	const dsp56k::Peripherals56311& DspSet::peripherals(const unsigned _index) const noexcept
 	{
 		return slot(_index).peripherals;
+	}
+
+	const bool* DspSet::programLanded(const unsigned _index) const noexcept
+	{
+		if(_index >= m_bridges.size())
+			return nullptr;
+
+		return m_bridges[_index]->programLanded();
 	}
 
 	size_t DspSet::stateSize() const noexcept
@@ -156,18 +166,21 @@ namespace g2
 	}
 
 	/* THE INSTALL LIVES HERE RATHER THAN IN hdi08Bridge.cpp because this is the
-	 * construction point that holds both ends of the wire. */
-	std::vector<std::unique_ptr<Hdi08Bridge>> attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set)
+	 * construction point that holds both ends of the wire.
+	 *
+	 * THE SET KEEPS THEM RATHER THAN THE CALLER. The run gate reads a flag that
+	 * lives on a bridge, so a caller-owned vector would leave the set unable to
+	 * answer for its own slots; and a bridge outliving nothing but a local is a
+	 * port driving a backlog its owner has dropped. */
+	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set)
 	{
-		std::vector<std::unique_ptr<Hdi08Bridge>> bridges;
-		bridges.reserve(_set.dspCount());
+		_set.m_bridges.clear();
+		_set.m_bridges.reserve(_set.dspCount());
 
 		for(unsigned i = 0; i < _set.dspCount(); ++i)
 		{
-			bridges.emplace_back(new Hdi08Bridge(_adapter.port(static_cast<int>(i)),
-				_set.peripherals(i).getHDI08()));
+			_set.m_bridges.emplace_back(new Hdi08Bridge(_adapter.port(static_cast<int>(i)),
+				_set.dsp(i), _set.peripherals(i).getHDI08()));
 		}
-
-		return bridges;
 	}
 }
