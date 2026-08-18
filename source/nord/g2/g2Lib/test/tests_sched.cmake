@@ -312,6 +312,20 @@ set_property(TARGET t0_dsp_job_order PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_job_order COMMAND t0_dsp_job_order)
 
+# ---------------- SCH-33 - t0_dsp_run_gate
+#
+# An ordinary executable. Unlike t0_dsp_job_order above, this check DOES reach
+# the DSP: the closed cases assert that the cycle counter stands still, which
+# says nothing unless the same fixture can move it, so the context carries a
+# live DSP running a scripted loop and this check needs a JIT backend.
+
+add_executable(t0_dsp_run_gate
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_run_gate.cpp)
+target_link_libraries(t0_dsp_run_gate PRIVATE g2Lib)
+set_property(TARGET t0_dsp_run_gate PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_dsp_run_gate COMMAND t0_dsp_run_gate)
+
 # ---------------- SCH-32 - t0_status_contract
 #
 # An ordinary executable. The compile-time half of the contract -- the scoping,

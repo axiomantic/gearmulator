@@ -110,6 +110,13 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
+	/* The run gate in dspJob (SCH-33) reads a BORROWED flag on the context and
+	 * a value-initialised context carries NULL, which that gate reads as NOT
+	 * landed. The factory below points it at a landed slot, because the
+	 * property this file holds is the ORDER around step 2 -- including its
+	 * want <= 0 branch -- and not the gate. t0_dsp_run_gate holds the gate. */
+	const bool g_programLanded = true;
+
 	struct Fixture
 	{
 		dsp56k::Memory           memory;
@@ -217,6 +224,7 @@ int main()
 		c.secondEsai = &f.secondEsai;
 		c.frameIndex = frameIndex;
 		c.secondBusFrameDivider = divider;
+		c.programLanded = &g_programLanded;
 		return c;
 	};
 

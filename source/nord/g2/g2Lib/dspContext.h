@@ -112,6 +112,17 @@ namespace g2
 		 * so a job cannot observe another job's state. */
 		uint64_t   frameIndex;
 
+		/* Whether this slot's program has landed. BORROWED, and a POINTER
+		 * rather than a bool by value: the producer sets its own flag once the
+		 * firmware download completes, and a copy taken at construction could
+		 * never see that.
+		 *
+		 * NULL MEANS NOT LANDED. The job body reads it as the gate on step 2,
+		 * and the direction is chosen so that an unwired gate stops the slot
+		 * rather than running one whose program memory holds nothing but
+		 * no-operations. */
+		const bool* programLanded;   /* borrowed; NULL means NOT landed      */
+
 		/* Design section 12.3's D, from G2_SECOND_BUS_FRAME_DIVIDER. Fixed at
 		 * construction. The job body advances the second bus only when
 		 * frameIndex % secondBusFrameDivider == 0, which is the SAME window
