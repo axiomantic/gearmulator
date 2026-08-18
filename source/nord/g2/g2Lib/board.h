@@ -37,11 +37,12 @@
 // default from. A default-constructed Board therefore answers NOWHERE, which is
 // the honest answer for a board nobody has configured.
 //
-// THE MBAR WINDOW IS SHARED BY TWO UNITS AND THE MemoryMap ATTACHES ONE TARGET
-// PER REGION, so a small router sits between them. The split is not a choice
-// made here: sim.cpp's DIVERGENCE note states it. The SIM answers MBAR+0x1D0
-// because the firmware reads it as a model strap and BRD-2's check requires it,
-// and BRD-4 "owns every other UART offset".
+// THE MBAR WINDOW IS SHARED AND THE MemoryMap ATTACHES ONE TARGET PER REGION,
+// so a small router sits between the units that answer it. The SIM-and-UART
+// split is not a choice made here: sim.cpp's DIVERGENCE note states it. The SIM
+// answers MBAR+0x1D0 because the firmware reads it as a model strap and BRD-2's
+// check requires it, and BRD-4 "owns every other UART offset". The M-Bus module
+// answers its own register block, whose bound mbus.h carries.
 
 #pragma once
 
@@ -54,6 +55,8 @@
 #include "flash.h"
 #include "hdi08Adapter.h"
 #include "latches.h"
+#include "max1039.h"
+#include "mbus.h"
 #include "memoryMap.h"
 #include "panel.h"
 #include "sim.h"
@@ -73,6 +76,12 @@ namespace g2
 		 * the default because AGENTS.md section 4.1 targets it; it reaches no
 		 * address unless the caller also gives CS1 a window. */
 		Hdi08Decode hdi08{g_hdi08ExpandedPorts};
+
+		/* The one two-wire slave the machine carries. Its potentials start at
+		 * zero, because the only figure anyone has for this board is a schematic
+		 * annotation and a shipped default would make it look measured. A caller
+		 * that wants conversions supplies them. */
+		Max1039Config adc;
 	};
 
 	// The Board. Concrete, final, neither copyable nor movable. Constructed by
@@ -179,6 +188,8 @@ namespace g2
 		Hdi08Adapter& hdi08()   { return m_hdi08; }
 		Sim&          sim()     { return m_sim; }
 		Uart0&        uart0()   { return m_uart0; }
+		MBus&         mbus()    { return m_mbus; }
+		Max1039&      adc()     { return m_adc; }
 		MemoryMap&    memory()  { return m_memory; }
 
 	private:
@@ -211,19 +222,25 @@ namespace g2
 			Region           m_region;
 		};
 
-		/* THE MBAR WINDOW CARRIES TWO UNITS AND THE DECODE ATTACHES ONE TARGET
-		 * PER REGION. This router is that one target, and it forwards the
+		/* THE MBAR WINDOW IS SHARED AND THE DECODE ATTACHES ONE TARGET PER
+		 * REGION. This router is that one target, and it forwards the
 		 * MBAR-relative offset the decode produced without altering it, because
-		 * both units already expect an MBAR-relative offset.
+		 * every unit behind it already expects an MBAR-relative offset.
 		 *
-		 * THE SPLIT IS sim.cpp's AND NOT THIS FILE'S. Its DIVERGENCE note says
-		 * the SIM answers MBAR+$1D0 because the firmware reads it as a model
-		 * strap and BRD-2's check requires it, and that BRD-4 owns every other
-		 * UART offset. That sentence is the whole rule below. */
+		 * THE SIM-AND-UART SPLIT IS sim.cpp's AND NOT THIS FILE'S. Its
+		 * DIVERGENCE note says the SIM answers MBAR+$1D0 because the firmware
+		 * reads it as a model strap and BRD-2's check requires it, and that
+		 * BRD-4 owns every other UART offset. That sentence is the whole of the
+		 * second rule below.
+		 *
+		 * THE M-BUS ARM'S RANGE IS DISJOINT FROM BOTH UART BLOCKS, so the order
+		 * the branches are written in is a reading convenience rather than a
+		 * rule. */
 		class MbarRouter final : public BusTarget
 		{
 		public:
-			MbarRouter(Sim& _sim, Uart0& _uart0) : m_sim(_sim), m_uart0(_uart0) {}
+			MbarRouter(Sim& _sim, Uart0& _uart0, MBus& _mbus)
+				: m_sim(_sim), m_uart0(_uart0), m_mbus(_mbus) {}
 
 			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
 			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
@@ -234,10 +251,15 @@ namespace g2
 			// nowhere else, so the rule has a single site.
 			static bool isUartOwned(uint32_t _offset);
 
+			// TRUE when the offset belongs to the M-Bus module. The bound comes
+			// from mbus.h, so this file states no register address of its own.
+			static bool isMbusOwned(uint32_t _offset);
+
 			BusTarget& select(uint32_t _offset);
 
 			Sim&   m_sim;
 			Uart0& m_uart0;
+			MBus&  m_mbus;
 		};
 
 		// The strap offset the SIM answers inside the UART block. sim.cpp's
@@ -270,6 +292,12 @@ namespace g2
 		Hdi08Adapter m_hdi08;
 		Sim          m_sim;
 		Uart0        m_uart0;
+
+		/* The slave is declared BEFORE the controller that points at it, for
+		 * the same reason the units are declared before the adapters: the
+		 * controller binds its address at construction. */
+		Max1039      m_adc;
+		MBus         m_mbus;
 
 		FlashWindow  m_flashCs0;
 		FlashWindow  m_flashCs2;

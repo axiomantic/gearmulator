@@ -436,3 +436,41 @@ set_property(TARGET t0_bus_size_unit PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_bus_size_unit COMMAND t0_bus_size_unit)
 set_tests_properties(t0_bus_size_unit PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-24, the M-Bus controller and the MAX1039 slave
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_mbus$
+#
+# T0 AND UNGATED. The test needs no firmware artifact of any kind: it drives
+# the module the way the measured firmware drives it and asserts the interlock
+# the firmware requires, which is the M3 blocker that no static status byte can
+# satisfy.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement
+# t0_board_routing, t0_cs2_cfi and t0_bus_size_unit already use: its clause-3
+# cases drive Board::onRead and Board::onWrite with the real mcf5307 core behind
+# them, and g2Lib carries that link itself. NOTHING HERE REFERENCES
+# mcf5307::mcf5307, so no if(TARGET) guard is needed and none is written.
+
+add_executable(t0_mbus t0_mbus.cpp)
+target_link_libraries(t0_mbus PRIVATE g2Lib)
+set_property(TARGET t0_mbus PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mbus COMMAND t0_mbus)
+set_tests_properties(t0_mbus PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- BRD-24 consequence: t0_sof_tick's own sources
+#
+# THE COMPOSITION GAINED TWO UNITS AND t0_sof_tick COMPILES ../board.cpp ON ITS
+# OWN, so it must supply their objects too. This block is appended rather than
+# folded into the INT-1 block above, for the reason that block already states:
+# this file is written by more than one task and an edit inside another task's
+# block is how two writers lose each other's work.
+#
+# NEITHER SOURCE IS AN mcf5307 SOURCE, so the property t0_sof_tick's own block
+# protects -- no mcf5307 archive on its link line -- is untouched.
+
+target_sources(t0_sof_tick PRIVATE
+	../mbus.cpp
+	../max1039.cpp)
