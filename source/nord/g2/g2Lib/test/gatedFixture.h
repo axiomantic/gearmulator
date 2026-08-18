@@ -82,6 +82,30 @@ namespace g2
 			return true;
 		}
 
+		// The exit code a skipped run carries to ctest.
+		//
+		// ctest reads a process exit status and never a summary line, so a
+		// verdict that lives only in the text is a verdict ctest cannot act on.
+		// Exiting 0 on a skip is scored Passed, which is the same answer ctest
+		// gives a run that executed every gated body and verified the firmware.
+		//
+		// tests_int.cmake READS THIS NUMBER OUT OF THIS HEADER and hands it to
+		// SKIP_RETURN_CODE, and fails the configure when it cannot find it. The
+		// two spellings therefore cannot drift apart in silence.
+		constexpr int g_gatedSkipExitCode = 77;
+
+		// A run that executed no gated body is neither a pass nor a failure, and
+		// `run == 0` is tested FIRST for the same reason summaryLine tests it
+		// first: an artifact-less machine must not be failed, and must not be
+		// reported as having verified anything either.
+		inline int gatedExitCode(const GatedCounters& _counters)
+		{
+			if(_counters.run == 0)
+				return g_gatedSkipExitCode;
+
+			return _counters.failed > 0 ? 1 : 0;
+		}
+
 		// The summary line design section 18.5 step 3 requires, carrying the
 		// four counts, and step 4's rule:
 		//
