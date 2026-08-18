@@ -23,3 +23,19 @@ set_property(TARGET t0_dsp_attach PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_attach COMMAND t0_dsp_attach)
 set_tests_properties(t0_dsp_attach PROPERTIES LABELS "UnitTest")
+
+# ----------------- DSP-16, the host-port callback bridge
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_dsp_bridge$
+#
+# Constructs a real DSP behind ONE host port and asserts a word crosses in each
+# direction, that an unbridged pair carries nothing either way, that a word
+# driven at an unbridged port reaches no bridged DSP, and that the DSP's HF2 and
+# HF3 reach the host ISR.
+
+add_executable(t0_hdi08_dsp_bridge t0_hdi08_dsp_bridge.cpp)
+target_link_libraries(t0_hdi08_dsp_bridge PRIVATE g2Lib)
+set_property(TARGET t0_hdi08_dsp_bridge PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_hdi08_dsp_bridge COMMAND t0_hdi08_dsp_bridge)
+set_tests_properties(t0_hdi08_dsp_bridge PROPERTIES LABELS "UnitTest")

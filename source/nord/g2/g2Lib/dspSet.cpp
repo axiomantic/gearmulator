@@ -1,5 +1,8 @@
 #include "dspSet.h"
 
+#include "hdi08Adapter.h"
+#include "hdi08Bridge.h"
+
 #include "g2/timebase.h"
 
 #include <cstring>
@@ -150,5 +153,21 @@ namespace g2
 		}
 
 		return Status::Ok;
+	}
+
+	/* THE INSTALL LIVES HERE RATHER THAN IN hdi08Bridge.cpp because this is the
+	 * construction point that holds both ends of the wire. */
+	std::vector<std::unique_ptr<Hdi08Bridge>> attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set)
+	{
+		std::vector<std::unique_ptr<Hdi08Bridge>> bridges;
+		bridges.reserve(_set.dspCount());
+
+		for(unsigned i = 0; i < _set.dspCount(); ++i)
+		{
+			bridges.emplace_back(new Hdi08Bridge(_adapter.port(static_cast<int>(i)),
+				_set.peripherals(i).getHDI08()));
+		}
+
+		return bridges;
 	}
 }
