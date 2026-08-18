@@ -258,7 +258,7 @@ set_tests_properties(t0_uart0 PROPERTIES LABELS "UnitTest")
 # The surface test asserts concreteness two ways (the five static_asserts in
 # board.h at compile time, the same properties through <type_traits> at run
 # time), the six methods the Scheduler uses, and the single construction log
-# line that names G2_MCU_CORE_CLOCK_HZ, the placeholder value and criterion (j).
+# line that names G2_MCU_CORE_CLOCK_HZ, the derived value and criterion (j).
 #
 # NMG2_ARTIFACTS is not read: the test is T0 and constructs a Board that drives
 # no program, so no Clavia byte reaches it.

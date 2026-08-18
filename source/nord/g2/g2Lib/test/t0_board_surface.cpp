@@ -20,13 +20,23 @@
 // all.
 //
 // THE CONSTRUCTION LOG LINE. The Board logs one line at construction naming
-// G2_MCU_CORE_CLOCK_HZ, the value 45,000,000, and criterion (j). This test
-// captures standard output across a Board construction and asserts the line
-// is emitted EXACTLY once, and that it names them all. Measurement
-// register row 7 (plan section 4.1) owns the values: G2_MCU_CORE_CLOCK_HZ is
-// the 45,000,000 placeholder until SPK-9 reports, and no golden reference or
-// capture may be recorded until then -- the line exists so that a reader of
-// the whole point of the machine can see the placeholder standing.
+// G2_MCU_CORE_CLOCK_HZ, the value 162,000,000, the word "derived" and
+// criterion (j). This test captures standard output across a Board
+// construction and asserts the line is emitted EXACTLY once, and that it names
+// them all.
+//
+// THE VALUE IS PINNED AS A LITERAL HERE ON PURPOSE. Reading the macro instead
+// would make the assertion tautological: the line is printed FROM the macro,
+// so a test that compared against the macro would pass for any value the
+// header carried. The literal is what makes a change to timebase.h arrive as
+// a failure of this test rather than as a silent agreement. t0_timebase_header
+// pins the same number against the header itself.
+//
+// THE WORD IS "derived" AND NOT "measured". Measurement register row 7 (plan
+// section 4.1) still owns the value: the schematic's CLKIN label times the PLL
+// multiplier narrows it, and only a scope on CLKIN closes the row. A log line
+// claiming a measurement would be a false claim in the one place a reader
+// looks to learn what the number is worth.
 //
 // RUNMCU IS EXERCISED WITH A ZERO BUDGET ON PURPOSE. The pinned core commit
 // exports mcf5307_exec but is at the start of the cpu track, so executing an
@@ -122,10 +132,10 @@ int main()
 
 		check(countSubstring(out, "G2_MCU_CORE_CLOCK_HZ") == 1,
 		      "construction logs the G2_MCU_CORE_CLOCK_HZ name exactly once");
-		check(countSubstring(out, "45000000") == 1,
-		      "construction logs the placeholder value 45000000 exactly once");
-		check(countSubstring(out, "placeholder") == 1,
-		      "construction states the value is a placeholder exactly once");
+		check(countSubstring(out, "162000000") == 1,
+		      "construction logs the core clock value 162000000 exactly once");
+		check(countSubstring(out, "derived") == 1,
+		      "construction states the value is derived exactly once");
 		check(countSubstring(out, "(j)") >= 1,
 		      "construction names criterion (j) as the value's owner");
 	}
@@ -136,7 +146,7 @@ int main()
 	{
 		const std::string out = captureBoardConstructionOnce();
 		check(countSubstring(out, "G2_MCU_CORE_CLOCK_HZ") == 1,
-		      "each Board construction logs the placeholder line exactly once");
+		      "each Board construction logs the core-clock line exactly once");
 		check(countSubstring(out, "(j)") >= 1,
 		      "each Board construction names criterion (j)");
 	}
