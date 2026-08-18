@@ -12,14 +12,12 @@
 // the bound and asserts the count is NOT clamped. Either case alone cannot tell
 // a working bound from a stuck constant.
 //
-// No assertion in this file is a language assert(): the bound must be checked
-// in a release build as well as a debug build, and a release build removes an
-// assertion. The production code keeps a debug assertion as well; it is not
-// this check's predicate.
-//
-// The two declarations below are written out here rather than included, so a
-// mismatch with the definitions in hdi08Adapter.cpp is a LINK error and not a
-// silent pass.
+// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). BRD-17's own block requires
+// the bound to be checked in a release build as well as a debug build, and a
+// release build removes an assertion. The production code keeps a debug
+// assertion as well; it is not this check's predicate.
+
+#include "hdi08Adapter.h"
 
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/hdi08.h"
@@ -32,12 +30,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
-namespace g2
-{
-	uint32_t hdi08QuantumWordBudget(const dsp56k::HDI08& _dsp);
-	uint32_t hdi08MoveWordsForQuantum(dsp56k::HDI08& _dsp, const dsp56k::TWord* _words, uint32_t _count);
-}
 
 namespace
 {
