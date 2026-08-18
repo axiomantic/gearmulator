@@ -104,9 +104,9 @@ namespace
 
 	/* The run gate in dspJob (SCH-33) reads a BORROWED flag on the context and
 	 * a value-initialised context carries NULL, which that gate reads as NOT
-	 * landed. The factory below points it at a landed slot, because the
-	 * property this file holds is the ORDER around step 2 -- including its
-	 * want <= 0 branch -- and not the gate. t0_dsp_run_gate holds the gate. */
+	 * landed. The factory below points it at a landed slot rather than leaving
+	 * that default, because a closed gate skips step 2 whole and would leave no
+	 * step 2 to order anything around. */
 	const bool g_programLanded = true;
 
 	struct Fixture
@@ -292,6 +292,8 @@ int main()
 		checkOrder(f.order, { "a_rx", "s_rx", "a_tx", "s_tx" });
 		checkEqual(f.secondRx, 1u,
 			"a frameIndex exactly on the divider is inside the window");
+		checkEqual(in.longDispatchQuanta, 1u,
+			"step 2 took the want <= 0 branch on the divider itself");
 
 		f.resetBaseline();
 		g2::DspContext out = makeContext(f, 5u, 4u, 1000000);
@@ -300,6 +302,8 @@ int main()
 		checkOrder(f.order, { "a_rx", "a_tx" });
 		checkEqual(f.secondRx, 0u,
 			"a frameIndex one past the divider is outside the window");
+		checkEqual(out.longDispatchQuanta, 1u,
+			"step 2 took the want <= 0 branch one frame past the divider");
 	}
 
 	if(failures != 0)
