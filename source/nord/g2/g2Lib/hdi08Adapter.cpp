@@ -167,9 +167,11 @@ namespace g2
 	//
 	// THE COUNT IS RETURNED RATHER THAN LEFT ON AN OBJECT. A quantum's transfer
 	// is one call, the caller needs the count to know what it must re-offer next
-	// quantum, and a return value cannot be read stale. BRD-17's `Files:` line
-	// and the G-M3 file union both name this .cpp and neither names
-	// hdi08Adapter.h, so these are free functions and not members.
+	// quantum, and a return value cannot be read stale.
+	//
+	// FREE FUNCTIONS AND NOT MEMBERS OF Hdi08Adapter. That class owns the eight
+	// `mc68k` host ports; these two act on a `dsp56k::HDI08`, which it neither
+	// owns nor reaches. They are declared in hdi08Adapter.h.
 
 	uint32_t hdi08QuantumWordBudget(const dsp56k::HDI08& _dsp)
 	{
