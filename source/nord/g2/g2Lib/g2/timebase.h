@@ -53,23 +53,20 @@
 
 /* ---------------- the MCU clocks
  *
- * THE MCF5307 HAS TWO CLOCK DOMAINS AND THEY CAN NEVER BE EQUAL. The MCF5307
- * User's Manual section 4.2, page 4-1, documents no divide-by-one option:
+ * THE MCU HAS TWO CLOCK DOMAINS AND THEY CAN NEVER BE EQUAL, so the design
+ * names two symbols and the integer that relates them, and a bus-clock figure
+ * can never be substituted into a core-cycle budget by accident.
  *
- *     PSTCLK = CLKIN x 2          core clock, 33.3 MHz .. 90 MHz
- *     BCLKO  = PSTCLK/2           bus clock,  16.7 MHz .. 45 MHz
- *            | PSTCLK/3                       11.1 MHz .. 30 MHz
- *            | PSTCLK/4                        8.25 MHz .. 22.5 MHz
+ * The part is an MCF5407CAI162, read off the schematic at U14. Oscillator Y1
+ * is a 53.620 MHz can buffered by the 74AC14 at U26 into the net the drawing
+ * labels `CPU Ck 54MHz` at CLKIN, and into `DSP Ck` at every DSP's EXTAL. The
+ * internal PLL multiplies CLKIN by 3 for the core and the bus runs at CLKIN.
  *
- * So the design names two symbols and the integer that relates them, so that a
- * bus-clock figure can never be substituted into a core-cycle budget by
- * accident.
- *
- * THE TWO BUS SYMBOLS BELOW ARE UNMEASURED AND READ 0u. Measurement register
- * rows 5 and 6, owner SPK-9, spike criterion (j). A source that used either
- * one would compute with a zero, so g2Lib/CMakeLists.txt FAILS THE CONFIGURE
- * STEP if any file under source/nord/g2/ names either symbol. THIS FILE IS THE
- * ONE EXEMPT FILE, because it is their declaration site.
+ * THE TWO BUS SYMBOLS BELOW ARE NOT DERIVED HERE AND READ 0u. Measurement
+ * register rows 5 and 6, owner SPK-9, spike criterion (j). A source that used
+ * either one would compute with a zero, so g2Lib/CMakeLists.txt FAILS THE
+ * CONFIGURE STEP if any file under source/nord/g2/ names either symbol. THIS
+ * FILE IS THE ONE EXEMPT FILE, because it is their declaration site.
  *
  * That exemption is why their G2_STATIC_ASSERTs live here and not in
  * t0_timebase_header.c: the rule "one assertion for each declared macro" and
@@ -84,18 +81,16 @@
 /* PSTCLK/BCLKO. The manual permits 2, 3 or 4, and nothing else.             */
 #define G2_MCU_BUS_DIVIDER            0u         /* NOT DERIVED              */
 
-/* The core clock, PSTCLK. THIS IS THE ONLY ONE THAT MAY REACH mcf5307_exec's
+/* The core clock. THIS IS THE ONLY ONE THAT MAY REACH mcf5307_exec's
  * max_cycles.
  *
- * PLACEHOLDER, not a derivation: measurement register row 7. 45,000,000 is the
- * LOWEST IN-SPEC CATALOG CORE SPEED GRADE, and it is chosen for that property
- * and no other -- it is the only candidate that cannot overstate the machine.
- * The refuted 54,000,000 came from a UART divider reading and fails five
- * independent objections, including that it is not a catalog speed grade at
- * all. Design section 13.4.3 records all five. Its status is REFUTED and not
- * "not verified": an unverified value may turn out right, a refuted one will
- * not, and nothing may carry it forward.                                    */
-#define G2_MCU_CORE_CLOCK_HZ          45000000u  /* PLACEHOLDER              */
+ * Three times the 54 MHz the schematic itself labels at CLKIN. THE OSCILLATOR
+ * CAN IS RATED 53.620 MHz, so a strict reading of the part value gives
+ * 160,860,000 instead. The label is carried because it agrees with the
+ * MCF5407CAI162 speed grade exactly and the can's rating does not; the two are
+ * 0.7 per cent apart, which is close enough that only a scope on CLKIN
+ * separates them. Measurement register row 7 owns that until one is taken.  */
+#define G2_MCU_CORE_CLOCK_HZ          162000000u
 
 /* The MCU context's rational. THE NUMERATOR IS THE CORE CLOCK, NOT THE BUS
  * CLOCK.                                                                    */
@@ -154,12 +149,12 @@ G2_STATIC_ASSERT(G2_MCU_BUS_CLOCK_HZ == 0u,
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER == 0u,
 	"PSTCLK/BCLKO is UNMEASURED. Register row 6, owner SPK-9 criterion (j).");
 
-/* The manual documents no divide-by-one option, so 1 is illegal for the bus
- * divider whatever criterion (j) returns. This assertion outlives the two
- * above and is the reason the core clock and the bus clock are separate
- * symbols at all. */
+/* 1 is illegal for the bus divider whatever criterion (j) returns: the MCF5307
+ * manual permits only 2, 3 or 4, and the MCF5407 the schematic reads at U14
+ * multiplies CLKIN by 3. This assertion outlives the two above and is the
+ * reason the core clock and the bus clock are separate symbols at all. */
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER != 1u,
-	"The MCF5307 has no divide-by-one option. UM section 4.2, page 4-1.");
+	"Neither reading of the part has a divide-by-one option.");
 
 /* ---------------- Rational
  *
