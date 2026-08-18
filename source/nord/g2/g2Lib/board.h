@@ -32,13 +32,13 @@
 // copied, or participate in dynamic dispatch. The five static_asserts name
 // their mechanism so that a test cannot pass by asserting nothing.
 //
-// THE MCU CLOCK PLACEHOLDER LOG. The Board logs one line at construction that
-// names G2_MCU_CORE_CLOCK_HZ, states that the value 45,000,000 is a
-// PLACEHOLDER, and names spike criterion (j) as its owner. Measurement
-// register row 7 (plan section 4.1) owns all of this: G2_MCU_CORE_CLOCK_HZ is
-// the lowest in-spec catalog speed grade until SPK-9 reports, and no golden
-// reference and no capture may be recorded until then. t0_board_surface
-// asserts the line is emitted exactly once per construction.
+// THE MCU CORE CLOCK LOG. The Board logs one line at construction that names
+// G2_MCU_CORE_CLOCK_HZ, states that the value is DERIVED and not
+// scope-measured, and names spike criterion (j) as its owner. Measurement
+// register row 7 (plan section 4.1) still owns it: the derivation -- the
+// schematic's CLKIN label times the PLL multiplier -- narrows the value, and a
+// scope on CLKIN is what closes the row. t0_board_surface asserts the line is
+// emitted exactly once per construction.
 
 // THE COMPOSITION, ADDED BY TASK INT-1 UNDER PLAN SECTION 24.6 ROW W3-115.
 // The bus callbacks below used to accept every access and return zero, and the
@@ -114,8 +114,8 @@ namespace g2
 		 * of them is part of the surface the Scheduler uses, so the design
 		 * declares no type for them and this task supplies a default
 		 * constructor. It creates the MCF5307 core context, initialises the
-		 * Nim runtime once, and logs the G2_MCU_CORE_CLOCK_HZ placeholder line
-		 * exactly once. */
+		 * Nim runtime once, and logs the G2_MCU_CORE_CLOCK_HZ line exactly
+		 * once. */
 		Board();
 
 		/* The composed board of task INT-1. It builds the seven units from

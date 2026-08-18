@@ -6,8 +6,8 @@
 // WHAT THIS FILE IS. board.cpp owns the Board's lifetime and its six-method
 // surface. The Check of BRD-21 is t0_board_surface: concreteness (final,
 // non-polymorphic, non-copyable, non-movable), the six methods the Scheduler
-// uses, and the single construction log line that names the MCU clock
-// placeholder and its owner. The bodies below are the T0 minimum that makes
+// uses, and the single construction log line that names the MCU core clock
+// and its owner. The bodies below are the T0 minimum that makes
 // every method real and callable; the board-track integration that follows
 // (the CS0 to CS5 devices, the TransportHub, the real memory routing) widens
 // the constructor and the bodies, and BRD-22 owns the real tickSofIfDue.
@@ -56,13 +56,15 @@
 // documented-deviation route BRD-23 took for mcf5307_exec earlier in this
 // track. The Nim blocks are appended here the day a cpu task exports them.
 //
-// THE MCU CLOCK PLACEHOLDER LINE. The Board logs one line at construction that
-// names G2_MCU_CORE_CLOCK_HZ, states that the value 45,000,000 is a
-// placeholder, and names spike criterion (j) as its owner. It is emitted to
-// standard output so the surface test can capture and count it. It moved here
-// from SCH-3 at this revision, because it is written into g2Lib/board.cpp
-// and the board track owns this file; SCH-3 keeps the tree-wide grep, which is
-// a property of the tree and not of the Board.
+// THE MCU CORE CLOCK LINE. The Board logs one line at construction that names
+// G2_MCU_CORE_CLOCK_HZ, states that the value is DERIVED -- the schematic's
+// CLKIN label times the PLL multiplier, agreeing with the MCF5407CAI162 speed
+// grade -- and not scope-measured, and names spike criterion (j) as its owner.
+// Measurement register row 7 (plan section 4.1) still owns the value: the
+// derivation narrows it, a scope on CLKIN closes it. The line is emitted to
+// standard output so the surface test can capture and count it. It lives in
+// g2Lib/board.cpp because the board track owns this file; SCH-3 keeps the
+// tree-wide grep, which is a property of the tree and not of the Board.
 
 #include "board.h"
 
@@ -302,7 +304,7 @@ namespace g2
 	}
 
 	/* The unconfigured Board. It DELEGATES rather than repeating the body, so
-	 * there is one construction path and the placeholder line below cannot be
+	 * there is one construction path and the core-clock line below cannot be
 	 * emitted twice or differ between the two forms. A default BoardConfig
 	 * leaves every window absent, so this Board answers at no address -- which
 	 * is what BRD-21's surface task always had, stated honestly instead of as
@@ -349,12 +351,16 @@ namespace g2
 		 * number advances, which is what the SOF tick needs. */
 		m_usb = isp1181_create(this, nullptr, nullptr);
 
-		// The single MCU-clock placeholder line. Naming the macro AND the
-		// numeric value AND the word "placeholder" AND criterion (j) is what
-		// the Check requires and what t0_board_surface asserts.
+		// The single MCU core-clock line. Naming the macro AND the numeric
+		// value AND how the value was arrived at AND criterion (j) is what the
+		// Check requires and what t0_board_surface asserts. The value is
+		// streamed from the macro and never written here as a literal, so the
+		// line cannot drift from timebase.h.
 		std::cout << "board: G2_MCU_CORE_CLOCK_HZ = "
 		          << G2_MCU_CORE_CLOCK_HZ
-		          << " is a placeholder value; owner spike criterion (j)"
+		          << " is derived from the schematic CLKIN label and the PLL"
+		             " multiplier, and is not scope-measured;"
+		             " owner spike criterion (j)"
 		          << std::endl;
 	}
 
