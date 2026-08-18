@@ -464,3 +464,29 @@ set_tests_properties(t0_board_dsp_set PROPERTIES LABELS "UnitTest")
 target_sources(t0_sof_tick PRIVATE
 	../dspSet.cpp
 	../hdi08Bridge.cpp)
+
+
+# ----------------- DSP-8 consequence: t0_sof_tick's own sources
+#
+# ../dspSet.cpp GAINED A CALL INTO THE CHAIN ADAPTER AND t0_sof_tick COMPILES
+# THAT SOURCE ON ITS OWN, so it must supply the adapter's objects too. Without
+# them the link fails on g2::ChainAdapter::attachEsai and the four callback
+# factories, and the directory's compile-failure fixture takes every test here
+# with it. This block is appended rather than folded into t0_sof_tick's own
+# block above, for the reason the INT-1 block already states: this file is
+# written by more than one task and an edit inside another task's block is how
+# two writers lose each other's work.
+#
+# THE OTHER TWO SOURCES FOLLOW THE FIRST. ../chainAdapter.cpp holds Mailbox
+# objects by value and calls fromEsaiFrame and toEsaiFrame, so ../mailbox.cpp
+# and ../frame.cpp come with it.
+#
+# NONE IS AN mcf5307 SOURCE, so the property t0_sof_tick's own block protects
+# -- no mcf5307 archive on its link line -- is untouched. No library joins the
+# link line either: dsp56kEmu is already on it through the INT-1 consequence
+# block above.
+
+target_sources(t0_sof_tick PRIVATE
+	../chainAdapter.cpp
+	../mailbox.cpp
+	../frame.cpp)

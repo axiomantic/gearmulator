@@ -61,3 +61,27 @@ set_property(TARGET t0_hdi08_cvr_irq PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_hdi08_cvr_irq COMMAND t0_hdi08_cvr_irq)
 set_tests_properties(t0_hdi08_cvr_irq PROPERTIES LABELS "UnitTest")
+
+# ----------------- DSP-8, the chain carries a frame
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_chain_data_flow$
+#
+# Drives an eight-slot DSP set through a chain adapter, installs the Rx/Tx pair
+# on every ESAI of every slot, and asserts that a frame injected at slot i's
+# audio ESAI arrives at slot i + 1's audio ESAI while slot i + 1's second-bus
+# ESAI receives nothing from that injection.
+#
+# TIMEOUT IS PART OF THE ASSERTION AND IS NOT HOUSEKEEPING, for the reason
+# BRD-17's t0_hdi08_nonblocking states above. Peripherals56311 reaches
+# dsp56k::Audio's ring-buffer constructor, so an ESAI carries a default receive
+# callback that pops an input ring on a real semaphore (audio.cpp,
+# ringbuffer.h). A run that reaches that callback does not return, and a run
+# that does not return reports neither pass nor fail. The timeout is what turns
+# it into a result.
+
+add_executable(t0_chain_data_flow t0_chain_data_flow.cpp)
+target_link_libraries(t0_chain_data_flow PRIVATE g2Lib)
+set_property(TARGET t0_chain_data_flow PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_chain_data_flow COMMAND t0_chain_data_flow)
+set_tests_properties(t0_chain_data_flow PROPERTIES LABELS "UnitTest" TIMEOUT 120)
