@@ -25,6 +25,25 @@ namespace g2
 	Hdi08Adapter::Hdi08Adapter(const Hdi08Decode _decode)
 		: m_decode(_decode)
 	{
+		/* THE PORT ANSWERS ITS OWN INIT REQUEST, AND THAT IS WHY THIS SITS HERE
+		 * RATHER THAN ON WHATEVER LATER OWNS THE DSP BEHIND THE PORT. Clearing
+		 * INIT is the host interface's own hardware reporting that the
+		 * initialisation it was asked for has finished; it does not depend on
+		 * what is wired to the far side of the port, and a port with nothing
+		 * behind it must still answer or a host polling the bit never leaves
+		 * the loop. `mc68k::Hdi08::write8` stores the byte and clears nothing,
+		 * so the callback is the seam that models the hardware.
+		 *
+		 * THE CALLBACK HOLDS A REFERENCE INTO m_ports, WHICH IS WHY THIS CLASS
+		 * DELETES ITS COPY AND MOVE. See hdi08Adapter.h. */
+		for(mc68k::Hdi08& port : m_ports)
+		{
+			port.setInitHdi08Callback([&port]
+			{
+				port.icr(uint8_t(port.icr() & ~uint8_t(mc68k::Hdi08::Init)));
+				port.isr(uint8_t(port.isr() | mc68k::Hdi08::Txde | mc68k::Hdi08::Trdy));
+			});
+		}
 	}
 
 	bool Hdi08Adapter::isLegalWidth(const int _size) const
