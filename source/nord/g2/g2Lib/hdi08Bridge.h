@@ -66,6 +66,12 @@ namespace g2
 		mc68k::Hdi08&  m_host;
 		dsp56k::HDI08& m_dsp;
 
+		/* THE CORE IS HELD AND NOT ONLY FORWARDED. A host command arrives as a
+		 * vector for the core's own interrupt queue, and `dsp56k::DspBoot`
+		 * keeps its `DSP&` private with no accessor, so the constructor's
+		 * reference has to be kept here or the bridge has no route back. */
+		dsp56k::DSP& m_core;
+
 		/* THE BOOT CONSUMER IS THE LIBRARY'S AND NOT `g2::Hdi08Bootstrap`. This
 		 * one primes the core -- the counter register, the address register, the
 		 * condition codes and the program counter -- and notifies the compiler of

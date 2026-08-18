@@ -2,6 +2,7 @@
 
 #include "hdi08Adapter.h"
 
+#include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/hdi08.h"
 
 namespace g2
@@ -16,6 +17,7 @@ namespace g2
 	Hdi08Bridge::Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp)
 		: m_host(_host)
 		, m_dsp(_dsp)
+		, m_core(_core)
 		, m_boot(_core)
 	{
 		/* THE BOOT CONSUMER SITS IN FRONT OF THE RUNTIME PATH AND IS REPLACED BY
@@ -44,6 +46,20 @@ namespace g2
 			return mirrorDspHostFlags(_isr);
 		});
 
+		/* THE BYTE IS PASSED THROUGH AND NOT RE-DERIVED. The host port has
+		 * already computed `(_val & Hv) << 1` and the written byte is not in
+		 * scope here, so any arithmetic on this side would be a second
+		 * derivation of a value that is already the vector.
+		 *
+		 * `injectInterruptImmediate` IS REFUSED. It runs the vector
+		 * synchronously inside the MCU bus cycle that stored the CVR, which
+		 * re-enters the deterministic scheduler's own quantum accounting, and
+		 * it drops the vector in silence when the mask is up. */
+		m_host.setWriteIrqCallback([this](const uint8_t _vector)
+		{
+			m_core.injectInterrupt(_vector);
+		});
+
 		m_dsp.setWriteTxCallback([this]
 		{
 			drainDspToHost();
@@ -63,6 +79,7 @@ namespace g2
 		m_host.setWriteTxCallback(nullptr);
 		m_host.setRxEmptyCallback(nullptr);
 		m_host.setReadIsrCallback(nullptr);
+		m_host.setWriteIrqCallback(nullptr);
 
 		m_dsp.setWriteTxCallback(nullptr);
 	}
