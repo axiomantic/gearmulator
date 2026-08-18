@@ -5,11 +5,48 @@
 // test also checks the same properties through the type traits at run time, so
 // the test is not green merely because the header happened to be empty.
 //
-// runMcu is exercised with a zero budget on purpose. Executing an unreset MCU
-// context could drive unspecified early-core behaviour; a zero cycle budget
-// executes no instruction and returns immediately, which proves runMcu
-// compiles, links and returns its uint32_t without depending on the core's
-// early behaviour.
+// WHAT THIS TEST IS. Task BRD-21 is the keystone `The Board class` of the
+// board track, and its Check is a SURFACE test: it asserts the shape the
+// Scheduler will consume, and the one behavioural fact BRD-21 owns (the
+// construction log line). The deep behaviour of the Board -- the real bus
+// routing, the real 96:1 USB tick, the Nim state blocks -- belongs to the
+// later board-track integration, and this test does not reach for any of it.
+//
+// THE CONCRETENESS IS CHECKED TWO WAYS, because the plan says the assertions
+// "name their mechanism". board.h carries five static_asserts that make
+// "concrete, not copyable, not movable" a COMPILE-TIME property, so the file
+// would not compile if the class lost one of those properties; this test
+// ALSO checks the same properties through the type traits at run time, so the
+// test is not green merely because the header happened to be empty. Board is
+// declared final, which is what makes "nothing derives from it" a property at
+// all.
+//
+// THE CONSTRUCTION LOG LINE. The Board logs one line at construction naming
+// G2_MCU_CORE_CLOCK_HZ, the value 162,000,000, the word "derived" and
+// criterion (j). This test captures standard output across a Board
+// construction and asserts the line is emitted EXACTLY once, and that it names
+// them all.
+//
+// THE VALUE IS PINNED AS A LITERAL HERE ON PURPOSE. Reading the macro instead
+// would make the assertion tautological: the line is printed FROM the macro,
+// so a test that compared against the macro would pass for any value the
+// header carried. The literal is what makes a change to timebase.h arrive as
+// a failure of this test rather than as a silent agreement. t0_timebase_header
+// pins the same number against the header itself.
+//
+// THE WORD IS "derived" AND NOT "measured". Measurement register row 7 (plan
+// section 4.1) still owns the value: the schematic's CLKIN label times the PLL
+// multiplier narrows it, and only a scope on CLKIN closes the row. A log line
+// claiming a measurement would be a false claim in the one place a reader
+// looks to learn what the number is worth.
+//
+// RUNMCU IS EXERCISED WITH A ZERO BUDGET ON PURPOSE. The pinned core commit
+// exports mcf5307_exec but is at the start of the cpu track, so executing an
+// unreset MCU context could drive unspecified early-core behaviour. A zero
+// cycle budget means no instruction is executed and the core returns
+// immediately, which proves runMcu compiles, links and returns its uint32_t
+// cycles-without aborting the process, without depending on the core's early
+// behaviour. The budgeted execution of a real program is later integration.
 
 #include "board.h"
 
@@ -97,10 +134,10 @@ int main()
 
 		check(countSubstring(out, "G2_MCU_CORE_CLOCK_HZ") == 1,
 		      "construction logs the G2_MCU_CORE_CLOCK_HZ name exactly once");
-		check(countSubstring(out, "45000000") == 1,
-		      "construction logs the placeholder value 45000000 exactly once");
-		check(countSubstring(out, "placeholder") == 1,
-		      "construction states the value is a placeholder exactly once");
+		check(countSubstring(out, "162000000") == 1,
+		      "construction logs the core clock value 162000000 exactly once");
+		check(countSubstring(out, "derived") == 1,
+		      "construction states the value is derived exactly once");
 		check(countSubstring(out, "(j)") >= 1,
 		      "construction names criterion (j) as the value's owner");
 	}
@@ -111,7 +148,7 @@ int main()
 	{
 		const std::string out = captureBoardConstructionOnce();
 		check(countSubstring(out, "G2_MCU_CORE_CLOCK_HZ") == 1,
-		      "each Board construction logs the placeholder line exactly once");
+		      "each Board construction logs the core-clock line exactly once");
 		check(countSubstring(out, "(j)") >= 1,
 		      "each Board construction names criterion (j)");
 	}
