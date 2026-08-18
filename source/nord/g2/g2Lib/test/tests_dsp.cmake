@@ -39,3 +39,14 @@ set_property(TARGET t0_hdi08_dsp_bridge PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_hdi08_dsp_bridge COMMAND t0_hdi08_dsp_bridge)
 set_tests_properties(t0_hdi08_dsp_bridge PROPERTIES LABELS "UnitTest")
+
+# ----------------- DSP-17, the bootstrap consumer behind the host port
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_dsp_boot_consumer$
+
+add_executable(t0_dsp_boot_consumer t0_dsp_boot_consumer.cpp)
+target_link_libraries(t0_dsp_boot_consumer PRIVATE g2Lib)
+set_property(TARGET t0_dsp_boot_consumer PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_dsp_boot_consumer COMMAND t0_dsp_boot_consumer)
+set_tests_properties(t0_dsp_boot_consumer PROPERTIES LABELS "UnitTest")
