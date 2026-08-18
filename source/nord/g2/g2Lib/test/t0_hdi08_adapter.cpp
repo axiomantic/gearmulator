@@ -287,6 +287,114 @@ int main()
 			"a write through the MemoryMap pushes the word");
 	}
 
+	// -----------------------------------------------------------------------
+	// Case group 5. THE INIT BIT CLEARS ITSELF.
+	//
+	// A DSP56300 host port drives ICR's INIT bit low again once the interface
+	// initialisation it requested has completed, so a host that writes INIT and
+	// polls for it to clear is polling for the DSP's hardware and not for its
+	// own store. `mc68k::Hdi08::write8` stores the byte verbatim and clears
+	// nothing; the port that owns the register has to answer through the init
+	// callback, which is the seam the Nord Lead 2X uses for the same reason.
+	//
+	// EVERY ASSERTION BELOW IS AN EXACT REGISTER VALUE AND NOT A BIT TEST. The
+	// two shapes this must tell apart -- INIT cleared, and INIT cleared along
+	// with bits the host set in the same byte -- differ only in the bits a
+	// masked test would discard.
+	{
+		const g2::Hdi08Decode initDecode(g2::g_hdi08ExpandedPorts);
+		g2::Hdi08Adapter initAdapter(initDecode);
+
+		// The byte the OS writes: INIT alone, with HREQ and TREQ clear.
+		const uint32_t icrInitOnly = mc68k::Hdi08::Init;
+
+		// The ISR a port reads before and after initialisation. Txde stands in
+		// both because `Hdi08::isr()` raises it on every read; Trdy is the bit
+		// the initialisation adds, so the two bytes differ by exactly it.
+		const uint32_t isrBeforeInit = mc68k::Hdi08::Txde;
+		const uint32_t isrAfterInit  = mc68k::Hdi08::Txde | mc68k::Hdi08::Trdy;
+
+		// Case 5a -- one selected port. 0x110007b8 selects port 3, which is the
+		// port the firmware's own initialisation loop reaches first.
+		{
+			const uint32_t portBase = 0x110007b8u;
+			const int portIndex = 3;
+
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			initAdapter.write(portBase - g2::g_cs1Base, 8, icrInitOnly, status);
+
+			checkEqual(status, uint32_t(MCF5307_BUS_OK), "the ICR init write completes OK");
+
+			checkEqual(initAdapter.port(portIndex).icr(), uint32_t(0),
+				"an ICR write of INIT alone reads back with INIT cleared");
+			checkEqual(initAdapter.port(portIndex).isr(), isrAfterInit,
+				"the initialised port raises Trdy beside Txde");
+
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+			{
+				if(p == portIndex)
+					continue;
+				checkEqual(initAdapter.port(p).isr(), isrBeforeInit,
+					std::string("a single-port ICR init leaves port ") + std::to_string(p)
+						+ " uninitialised");
+			}
+		}
+
+		// Case 5b -- ONLY INIT CLEARS. The host sets HF0 and TREQ in the same
+		// byte and both must survive, so a clear that took the whole register or
+		// the wrong bit is visible here and nowhere else.
+		{
+			const uint32_t portBase = 0x110007f0u; // port 0.
+			const int portIndex = 0;
+
+			const uint32_t written = mc68k::Hdi08::Init | mc68k::Hdi08::Hf0 | mc68k::Hdi08::Treq;
+			const uint32_t expected = mc68k::Hdi08::Hf0 | mc68k::Hdi08::Treq;
+
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			initAdapter.write(portBase - g2::g_cs1Base, 8, written, status);
+
+			checkEqual(initAdapter.port(portIndex).icr(), expected,
+				"an ICR write of INIT with HF0 and TREQ clears INIT and keeps the rest");
+		}
+
+		// Case 5c -- an ICR write WITHOUT init changes no status bit. The clear
+		// must be the port answering an initialisation request and not something
+		// every ICR write does.
+		{
+			const uint32_t portBase = 0x110005f8u; // port 6.
+			const int portIndex = 6;
+
+			const uint32_t written = mc68k::Hdi08::Hf1;
+
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			initAdapter.write(portBase - g2::g_cs1Base, 8, written, status);
+
+			checkEqual(initAdapter.port(portIndex).icr(), written,
+				"an ICR write without INIT is stored verbatim");
+			checkEqual(initAdapter.port(portIndex).isr(), isrBeforeInit,
+				"an ICR write without INIT raises no Trdy");
+		}
+
+		// Case 5d -- THE BROADCAST INITIALISES ALL EIGHT. CS1 offset zero drives
+		// every populated select low, which is how one store initialises the
+		// whole array.
+		{
+			const g2::Hdi08Decode broadcastDecode(g2::g_hdi08ExpandedPorts);
+			g2::Hdi08Adapter broadcastAdapter(broadcastDecode);
+
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			broadcastAdapter.write(0u, 8, icrInitOnly, status);
+
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+			{
+				checkEqual(broadcastAdapter.port(p).icr(), uint32_t(0),
+					std::string("the broadcast ICR init clears INIT at port ") + std::to_string(p));
+				checkEqual(broadcastAdapter.port(p).isr(), isrAfterInit,
+					std::string("the broadcast ICR init raises Trdy at port ") + std::to_string(p));
+			}
+		}
+	}
+
 	if(g_failures)
 	{
 		std::cout << "t0_hdi08_adapter: " << g_failures << " of " << g_cases
