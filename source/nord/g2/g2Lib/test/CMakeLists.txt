@@ -17,11 +17,45 @@ cmake_minimum_required(VERSION 3.15)
 # frame they captured passes only while the compiler chooses to elide. Disabling
 # it turns that lifetime into something this directory checks rather than
 # something a compiler grants. C++17's guaranteed prvalue elision is unaffected,
-# so correct code is not slowed or broken by it. MSVC has no such spelling, and
-# the flag is C++-only, hence the language-and-id condition rather than a bare
-# option. It precedes every include below because add_compile_options reaches
-# only targets declared after it.
+# so correct code is not slowed or broken by it. The flag is C++-only and its
+# spelling differs per compiler, hence the language-and-id condition rather than
+# a bare option. It precedes every include below because add_compile_options
+# reaches only targets declared after it.
 add_compile_options("$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-elide-constructors>")
+
+# MSVC spells it /Zc:nrvo-, introduced in VS 2022 17.4. cl KEEPS COMPILING
+# through an unrecognised option, reporting only warning D9002, so an
+# unconditional flag would be ignored in silence on an older toolchain and this
+# directory would advertise a guard it does not have - the very defect the flag
+# above exists to catch. Both conditions below must therefore hold: the version
+# test does not depend on the CMake release carrying a D9002 pattern in
+# check_cxx_compiler_flag's FAIL_REGEX list, and the probe does not depend on
+# the version table. A gap is REPORTED, never taken in silence.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+	set(_g2_nrvo_gap "")
+
+	if(MSVC_VERSION LESS 1934)
+		set(_g2_nrvo_gap "MSVC_VERSION ${MSVC_VERSION} is below 1934, the VS 2022 17.4 that introduced /Zc:nrvo-")
+	else()
+		include(CheckCXXCompilerFlag)
+		check_cxx_compiler_flag("/Zc:nrvo-" G2_TEST_HAVE_ZC_NRVO)
+
+		if(NOT G2_TEST_HAVE_ZC_NRVO)
+			set(_g2_nrvo_gap "this compiler did not accept /Zc:nrvo-")
+		endif()
+	endif()
+
+	if(_g2_nrvo_gap)
+		message(WARNING
+			"g2Lib/test: copy elision stays ENABLED because ${_g2_nrvo_gap}. A test whose "
+			"callbacks outlive the frame they captured passes here on elision rather than "
+			"being checked.")
+	else()
+		add_compile_options("$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:nrvo->")
+	endif()
+
+	unset(_g2_nrvo_gap)
+endif()
 
 include(tests_board.cmake)
 include(tests_sched.cmake)
