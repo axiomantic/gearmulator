@@ -16,6 +16,7 @@
 
 namespace g2
 {
+	class ChainAdapter;
 	class Hdi08Adapter;
 	class Hdi08Bridge;
 
@@ -83,6 +84,13 @@ namespace g2
 		 * bridges nobody attached is a lifetime nobody checked. */
 		friend void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
 
+		/* THE OTHER INSTALLER, IN THE SAME SHAPE AND FOR THE SAME REASON. A
+		 * constructor parameter was rejected: every declaration of a DspSet in
+		 * this tree default-constructs it, the Board's own member among them,
+		 * and a parameter breaks all of them where a free function breaks
+		 * none. */
+		friend void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set);
+
 		dsp56k::DefaultMemoryValidator m_memoryValidator;
 		std::array<std::unique_ptr<Slot>, 8> m_slots;
 
@@ -90,4 +98,10 @@ namespace g2
 		 * holds a reference into its slot's peripherals. */
 		std::vector<std::unique_ptr<Hdi08Bridge>> m_bridges;
 	};
+
+	/* DECLARED AT NAMESPACE SCOPE AS WELL AS BEFRIENDED. A friend declaration
+	 * alone is reachable only through argument-dependent lookup, so a caller
+	 * naming it qualified would not find it. attachHdi08Bridges carries the
+	 * same pair, its namespace-scope half in hdi08Bridge.h. */
+	void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set);
 }
