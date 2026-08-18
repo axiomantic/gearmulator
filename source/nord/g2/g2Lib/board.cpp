@@ -30,7 +30,7 @@
 //     CS2    the flash main image, through FlashWindow
 //     CS4    the panel
 //     CS5    the latches
-//     MBAR   the SIM and UART0, through MbarRouter
+//     MBAR   the SIM, UART0 and the M-Bus, through MbarRouter
 //
 // CS3 AND THE SDRAM GET NO TARGET, AND THAT IS DELIBERATE RATHER THAN
 // UNFINISHED. CS3 is the ISP1181 and the SDRAM is main memory; neither is one
@@ -223,8 +223,15 @@ namespace g2
 		return _offset >= Uart0::gUart1Base && _offset < Uart0::gUart1Base + Uart0::gUartModuleSize;
 	}
 
+	bool Board::MbarRouter::isMbusOwned(const uint32_t _offset)
+	{
+		return _offset >= MBus::g_base && _offset < MBus::g_base + MBus::g_size;
+	}
+
 	BusTarget& Board::MbarRouter::select(const uint32_t _offset)
 	{
+		if(isMbusOwned(_offset))
+			return m_mbus;
 		if(isUartOwned(_offset))
 			return m_uart0;
 		return m_sim;
@@ -311,9 +318,11 @@ namespace g2
 		, m_panel(_config.memory.cs4.size)
 		, m_latches(_config.memory.cs5.size)
 		, m_hdi08(_config.hdi08)
+		, m_adc(_config.adc)
+		, m_mbus(&m_adc)
 		, m_flashCs0(m_flash, m_memory, Region::Cs0)
 		, m_flashCs2(m_flash, m_memory, Region::Cs2)
-		, m_mbar(m_sim, m_uart0)
+		, m_mbar(m_sim, m_uart0, m_mbus)
 		, m_mcu(nullptr)
 		, m_usb(nullptr)
 	{
