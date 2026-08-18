@@ -1,5 +1,6 @@
 #include "dspSet.h"
 
+#include "chainAdapter.h"
 #include "hdi08Adapter.h"
 #include "hdi08Bridge.h"
 
@@ -219,6 +220,38 @@ namespace g2
 		{
 			_set.m_bridges.emplace_back(new Hdi08Bridge(_adapter.port(static_cast<int>(i)),
 				_set.dsp(i), _set.peripherals(i).getHDI08()));
+		}
+	}
+
+	/* THE INSTALL LIVES HERE FOR THE REASON attachHdi08Bridges DOES: this is
+	 * the construction point that holds both ends of the wire. The adapter
+	 * keeps only borrowed ESAI pointers and hands out callables that borrow
+	 * it, so nothing is owned on either side and nothing is stored here. */
+	void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set)
+	{
+		/* EVERY POSITION IS ATTACHED BEFORE THE FIRST FACTORY RUNS, which is
+		 * the order chainAdapter.h states: a position's transmit wrapper reads
+		 * the ESAI it was given from its first fire, and a wrapper produced
+		 * ahead of the attach carries a null one for the whole run. */
+		for(unsigned i = 0; i < _set.dspCount(); ++i)
+		{
+			dsp56k::Peripherals56311& p = _set.peripherals(i);
+			_adapter.attachEsai(i, p.getEsai(), p.getEsai1());
+		}
+
+		/* THE PAIR AND NOT setCallback. mqLib, xtLib and nord/n2x install a
+		 * single listener through Audio::setCallback; the chain needs the two
+		 * directions separately, which is what the adapter's four factories
+		 * return. */
+		for(unsigned i = 0; i < _set.dspCount(); ++i)
+		{
+			dsp56k::Peripherals56311& p = _set.peripherals(i);
+
+			p.getEsai().setReadRxCallback(_adapter.audioRxCallback(i));
+			p.getEsai().setWriteTxCallback(_adapter.audioTxCallback(i));
+
+			p.getEsai1().setReadRxCallback(_adapter.secondRxCallback(i));
+			p.getEsai1().setWriteTxCallback(_adapter.secondTxCallback(i));
 		}
 	}
 }
