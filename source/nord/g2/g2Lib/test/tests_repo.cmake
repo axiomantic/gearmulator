@@ -41,8 +41,14 @@ set_tests_properties(t0_skip_discipline PROPERTIES LABELS "UnitTest")
 # find nothing and be indistinguishable from a manifest that is genuinely
 # absent.
 
+# The test also compares each recorded value against the macro that defines it,
+# so it needs g2/timebase.h. AN INCLUDE DIRECTORY RATHER THAN g2Lib: the header
+# is macros and static inline functions and needs no library, and linking one
+# would put a T0 text test behind the whole board's compile.
+
 add_executable(t0_manifest_parses t0_manifest_parses.cpp)
 target_compile_definitions(t0_manifest_parses PRIVATE G2_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}")
+target_include_directories(t0_manifest_parses PRIVATE ${CMAKE_CURRENT_LIST_DIR}/..)
 set_property(TARGET t0_manifest_parses PROPERTY FOLDER "G2")
 
 add_test(NAME t0_manifest_parses COMMAND t0_manifest_parses)
