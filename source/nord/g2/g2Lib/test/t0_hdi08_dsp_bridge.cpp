@@ -277,10 +277,15 @@ namespace
 		return 0x0a0000u | ((_slot + 1u) * 0x0101u);
 	}
 
+	/* THE ADAPTER IS DECLARED BEFORE THE SET, AND THAT ORDER IS THE ONE
+	 * hdi08Bridge.h STATES AND Board KEEPS. Locals are destroyed in reverse
+	 * declaration order and `~Hdi08Bridge` uninstalls through the host port it
+	 * was handed, so a set declared first would reach a destroyed port once per
+	 * slot. */
 	void theSetIsBridgedPortForPort()
 	{
-		g2::DspSet set;
 		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
+		g2::DspSet set;
 
 		g2::attachHdi08Bridges(adapter, set);
 

@@ -34,6 +34,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 /* THE BRIDGE'S ADDRESS IS FIXED BY CONSTRUCTION, AND THIS IS WHAT PINS IT.
  * `programLanded` hands out a pointer into the bridge, so a bridge that could be
@@ -159,6 +160,11 @@ namespace
 		return " at index " + std::to_string(_i);
 	}
 
+	std::string onPort(const unsigned _port)
+	{
+		return " on port " + std::to_string(_port);
+	}
+
 	/* ---------------- group 1: one push, one landed program */
 
 	void aBootstrapPushLandsTheProgramAndPrimesTheCore()
@@ -240,8 +246,14 @@ namespace
 
 	constexpr unsigned g_landedSlot = 5;
 
+	/* THE ADAPTER IS DECLARED BEFORE THE SET, AND THAT ORDER IS THE ONE
+	 * hdi08Bridge.h STATES AND Board KEEPS. Locals are destroyed in reverse
+	 * declaration order and `~Hdi08Bridge` uninstalls through the host port it
+	 * was handed, so a set declared first would reach a destroyed port once per
+	 * slot. */
 	void theSetPublishesAPerSlotLandedFlag()
 	{
+		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
 		g2::DspSet set;
 
 		check(set.programLanded(0) == nullptr,
@@ -249,7 +261,6 @@ namespace
 		check(set.programLanded(set.dspCount()) == nullptr,
 			"a set answers null for a slot index past its last");
 
-		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
 		g2::attachHdi08Bridges(adapter, set);
 
 		for(unsigned i = 0; i < set.dspCount(); ++i)
@@ -372,10 +383,11 @@ namespace
 
 	/* ---------------- group 5: a second attach on one set is refused */
 
+	/* The adapter is declared before the set for the reason stated above. */
 	void aSecondAttachOnOneSetIsRefused()
 	{
-		g2::DspSet set;
 		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
+		g2::DspSet set;
 
 		g2::attachHdi08Bridges(adapter, set);
 
@@ -405,6 +417,127 @@ namespace
 				"the flag borrowed before the refused attach still answers for its own bridge");
 		}
 	}
+
+	/* ---------------- group 6: a destroyed set leaves every port as it found it
+	 *
+	 * THE ADAPTER OUTLIVES THE SET, AND THAT IS WHAT MAKES THE PORTS READABLE
+	 * AFTERWARDS. The same observation cannot be taken from a Board: a Board owns
+	 * both, so its ports are gone by the time its set has finished dying, and the
+	 * only reading left there is the declaration order t0_board_dsp_set asserts.
+	 *
+	 * THE CONTROL IS TAKEN ON THE LIVING SET, so each assertion after the
+	 * destruction is a change and not a value that was never there. */
+	void aDestroyedSetLeavesNoCallbackBehindOnAnyPort()
+	{
+		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
+
+		{
+			g2::DspSet set;
+			g2::attachHdi08Bridges(adapter, set);
+
+			for(unsigned i = 0; i < set.dspCount(); ++i)
+			{
+				mc68k::Hdi08& port = adapter.port(static_cast<int>(i));
+
+				driveBootHeaders(port, programWordCount());
+				driveProgramWords(port, g_program.size());
+
+				const bool* const landed = set.programLanded(i);
+				check(landed != nullptr && *landed,
+					"the program landed before the set is destroyed" + onPort(i));
+
+				std::deque<uint32_t> alive;
+				hostWriteWord(port, g_wordAfterProgram);
+				port.pollTx(alive);
+				checkEqualCount(alive.size(), 0u,
+					"a set that is alive leaves no word in the port's own transmit queue"
+						+ onPort(i));
+
+				set.peripherals(i).getHDI08().writeControlRegister(g_hostFlagMask);
+				check((port.isr() & g_hostFlagMask) == g_hostFlagMask,
+					"a set that is alive mirrors the DSP's host flags into the port's status"
+						+ onPort(i));
+			}
+		}
+
+		for(int i = 0; i < g2::g_hdi08PortCount; ++i)
+		{
+			mc68k::Hdi08& port = adapter.port(i);
+			const unsigned slot = static_cast<unsigned>(i);
+
+			std::deque<uint32_t> transmitted;
+			hostWriteWord(port, g_wordAfterProgram);
+			port.pollTx(transmitted);
+
+			checkEqualCount(transmitted.size(), 1u,
+				"a word written after the set is destroyed stays in the port's own "
+				"transmit queue" + onPort(slot));
+			if(transmitted.size() == 1u)
+			{
+				checkEqualHex(transmitted[0], g_wordAfterProgram,
+					"the word the port kept is the word written after the set was destroyed"
+						+ onPort(slot));
+			}
+
+			check((port.isr() & g_hostFlagMask) == 0,
+				"the DSP's host flags stop reaching the port's status once the set is "
+				"destroyed" + onPort(slot));
+		}
+	}
+
+	/* ---------------- group 7: a snapshot does not carry the bridges' state
+	 *
+	 * WHAT THE SNAPSHOT LEAVES OUT. dspSet.cpp walks the slots and nothing else,
+	 * so `m_programLanded` and `dsp56k::DspBoot`'s download cursor are outside
+	 * it. A post-boot snapshot restored into a set whose bridges are fresh would
+	 * carry the right program memory behind a gate that never opens, and
+	 * attachHdi08Bridges refuses the second attach that would replace the
+	 * bridges, so nothing could reopen it. */
+	void aStateLoadIntoASetHoldingBridgesIsRefused()
+	{
+		g2::Hdi08Adapter adapter{g2::Hdi08Decode(g2::g_hdi08ExpandedPorts)};
+		g2::DspSet set;
+
+		std::vector<uint8_t> snapshot(set.stateSize());
+		set.stateSave(snapshot.data());
+
+		check(set.stateLoad(snapshot.data()) == g2::Status::Ok,
+			"a set holding no bridges takes back the snapshot it wrote");
+
+		g2::attachHdi08Bridges(adapter, set);
+
+		check(set.stateLoad(snapshot.data()) == g2::Status::BridgesAttached,
+			"a set holding bridges refuses a snapshot that carries none of their state");
+
+		const bool* const landed = set.programLanded(g_landedSlot);
+		check(landed != nullptr && !*landed,
+			"the slot under test has not landed a program before the push");
+
+		driveBootHeaders(adapter.port(static_cast<int>(g_landedSlot)), programWordCount());
+		driveProgramWords(adapter.port(static_cast<int>(g_landedSlot)), g_program.size());
+
+		check(landed != nullptr && *landed,
+			"the slot under test has landed its program before the refused load");
+
+		/* THE SNAPSHOT PREDATES THE PUSH, so a load that ran at all would zero the
+		 * program memory the push filled. The reads below are what separates a
+		 * refusal from a load that reported one and copied anyway. */
+		check(set.stateLoad(snapshot.data()) == g2::Status::BridgesAttached,
+			"a set holding bridges refuses the load once a program has landed too");
+
+		check(landed != nullptr && *landed,
+			"a refused load leaves a landed slot landed");
+
+		for(size_t i = 0; i < g_program.size(); ++i)
+		{
+			checkEqualHex(programMemory(set.dsp(g_landedSlot), g_bootAddress + TWord(i)),
+				g_program[i],
+				"a refused load leaves the slot's program memory where it was" + atIndex(i));
+		}
+
+		checkEqualHex(set.dsp(g_landedSlot).getPC().toWord(), g_bootAddress,
+			"a refused load leaves the slot's program counter where the push primed it");
+	}
 }
 
 int main()
@@ -414,6 +547,8 @@ int main()
 	theSetPublishesAPerSlotLandedFlag();
 	aDestroyedBridgeLeavesNoCallbackBehind();
 	aSecondAttachOnOneSetIsRefused();
+	aDestroyedSetLeavesNoCallbackBehindOnAnyPort();
+	aStateLoadIntoASetHoldingBridgesIsRefused();
 
 	if(g_failures != 0)
 	{
