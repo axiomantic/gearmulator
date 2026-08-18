@@ -13,6 +13,16 @@ cmake_minimum_required(VERSION 3.15)
 # set_tests_properties line and in a ctest run's Label Time Summary, so check it
 # against a freshly generated manifest and never against a found one.
 
+# Copy elision is PERMITTED, not required, so a test whose callbacks outlive the
+# frame they captured passes only while the compiler chooses to elide. Disabling
+# it turns that lifetime into something this directory checks rather than
+# something a compiler grants. C++17's guaranteed prvalue elision is unaffected,
+# so correct code is not slowed or broken by it. MSVC has no such spelling, and
+# the flag is C++-only, hence the language-and-id condition rather than a bare
+# option. It precedes every include below because add_compile_options reaches
+# only targets declared after it.
+add_compile_options("$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-elide-constructors>")
+
 include(tests_board.cmake)
 include(tests_sched.cmake)
 include(tests_chain.cmake)
