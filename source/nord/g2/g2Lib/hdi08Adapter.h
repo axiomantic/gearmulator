@@ -35,6 +35,18 @@
 
 #include "mc68k/hdi08.h"
 
+#include "dsp56kEmu/types.h"
+
+/* `dsp56k::HDI08` IS FORWARD-DECLARED RATHER THAN INCLUDED. board.h includes
+ * this header, so including dsp56kEmu/hdi08.h here would put the DSP-side
+ * HDI08 into the include closure of every board consumer. The two free
+ * functions at the foot of this file take it by reference and need no complete
+ * type; a caller that acts on one includes that header itself. */
+namespace dsp56k
+{
+	class HDI08;
+}
+
 namespace g2
 {
 	// The board-side face of the HDI08 array. It presents the BusTarget every
@@ -79,4 +91,19 @@ namespace g2
 		Hdi08Decode m_decode;
 		std::array<mc68k::Hdi08, g_hdi08PortCount> m_ports;
 	};
+
+	/* THE TWO FUNCTIONS BELOW ACT ON THE DSP SIDE, NOT ON THE `mc68k::Hdi08`
+	 * THE CLASS ABOVE HOLDS. A reader who conflates the two looks for a
+	 * blocking wait in `mc68k` and finds none. `dsp56k::HDI08::writeRX` pushes
+	 * host words into a ring whose push waits on a semaphore once the ring is
+	 * full, and the G2 drives the MCU, the DSPs and the panel from ONE thread,
+	 * so nothing is left to drain it and that wait never returns. Both bounds
+	 * below exist to keep the push off it. */
+
+	// The words one quantum may offer, derived from the ring capacity.
+	uint32_t hdi08QuantumWordBudget(const dsp56k::HDI08& _dsp);
+
+	// Moves at most the budget and at most the ring's free space, and returns
+	// what it moved, which is the count the caller must re-offer next quantum.
+	uint32_t hdi08MoveWordsForQuantum(dsp56k::HDI08& _dsp, const dsp56k::TWord* _words, uint32_t _count);
 }

@@ -19,13 +19,8 @@
 // the bound to be checked in a release build as well as a debug build, and a
 // release build removes an assertion. The production code keeps a debug
 // assertion as well; it is not this check's predicate.
-//
-// THE TWO DECLARATIONS BELOW ARE WRITTEN OUT HERE RATHER THAN INCLUDED.
-// BRD-17's `Files:` line and the G-M3 file union (plan section 7.2.2) both name
-// `g2Lib/hdi08Adapter.cpp` and neither names `g2Lib/hdi08Adapter.h`, so this
-// task adds no declaration to that header. A mismatch between these
-// declarations and the definitions in hdi08Adapter.cpp is a LINK error, not a
-// silent pass.
+
+#include "hdi08Adapter.h"
 
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/hdi08.h"
@@ -38,12 +33,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
-namespace g2
-{
-	uint32_t hdi08QuantumWordBudget(const dsp56k::HDI08& _dsp);
-	uint32_t hdi08MoveWordsForQuantum(dsp56k::HDI08& _dsp, const dsp56k::TWord* _words, uint32_t _count);
-}
 
 namespace
 {
