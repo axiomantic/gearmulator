@@ -18,10 +18,10 @@
  * k == hopFrames. THE HOP DEPTH IS VARIED rather than fixed, so the step count
  * is taken from the adapter and not from a literal.
  *
- * WHY EVERY PORT IS PROGRAMMED BEFORE ANY TRAFFIC, AND WHY THE THREE FRAME
- * CALLS' RETURN VALUES ARE READ. Esai::readRX answers 0 for a receiver whose
- * RCR bit is clear (esai.cpp), transmitDspFrame answers 0 with no enabled
- * transmitter and receiveDspFrame answers 0 with no enabled receiver
+ * WHY EVERY PORT IS PROGRAMMED BEFORE ANY TRAFFIC, AND WHY EVERY FRAME CALL'S
+ * RETURN VALUE IS READ. Esai::readRX answers 0 for a receiver whose RCR bit is
+ * clear (esai.cpp), transmitDspFrame answers 0 with no enabled transmitter and
+ * receiveDspFrame answers 0 with no enabled receiver
  * (esaiFrame.cpp). Those returns are the observable that separates a port that
  * ran from one that was never enabled.
  *
@@ -131,9 +131,27 @@ int main()
 				"the injected sample is non-zero (a zero compares equal against "
 				"a default-zero read whether it crossed or not)", round, i);
 
+			/* THE WRITTEN FLAG IS THE ONLY READING HERE THAT SEPARATES AN
+			 * ATTACHED POSITION FROM AN UNATTACHED ONE, AND IT IS READ THROUGH
+			 * THE ADAPTER THE INSTALLER WAS HANDED. A transmit wrapper whose
+			 * position holds no borrowed Esai pointer reads no M_TUE bit and
+			 * pins the flag to zero, yet still performs the mailbox write -- so
+			 * every arrival assertion below stays green while the ESAI attach is
+			 * absent. Reading the flag CLEAR first and SET after makes this a
+			 * transition rather than a standing truth, so a flag pinned high
+			 * fails as loudly as one pinned low. Both readings are taken before
+			 * the advance loop, because advanceAll clears the audio flags. */
+			check(!adapter.audioWritten(i),
+				"the transmitting position's audio written flag is clear before its "
+				"transmit frame runs", round, i);
+
 			source.writeTX(0u, sample);
 			checkEqual(g2::transmitDspFrame(source), source.getTxWordCount() + 1u,
 				"the injecting transmit frame ran", round, i);
+
+			check(adapter.audioWritten(i),
+				"the transmitting position's audio written flag is set once its "
+				"transmit frame has run (the position's ESAI reached the adapter)", round, i);
 
 			for(unsigned step = 0; step < adapter.hopFrames(); ++step)
 				adapter.advanceAll(frameIndex++);
