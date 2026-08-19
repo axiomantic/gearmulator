@@ -64,6 +64,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <type_traits>
 
 #include "chainAdapter.h"
 #include "executor.h"
@@ -181,6 +182,16 @@ namespace g2
 		 * use workers inside run(), which returns only when every job has. */
 		void runFrames(size_t _frames) noexcept;
 
+		/* A Scheduler is neither copied nor moved. It installs callbacks that
+		 * capture `this` into ESAIs the Board owns, and those callbacks are
+		 * not re-pointed by a copy or a move -- so a second object would hold
+		 * a ChainAdapter nothing is wired to. The static_asserts below the
+		 * class are what keep this true. */
+		Scheduler(const Scheduler&)            = delete;
+		Scheduler& operator=(const Scheduler&) = delete;
+		Scheduler(Scheduler&&)                 = delete;
+		Scheduler& operator=(Scheduler&&)      = delete;
+
 	private:
 		/* Private. SCH-19 wires the Executor and the Board in, so the
 		 * constructor that takes them is its concern; `create` is the only
@@ -230,17 +241,33 @@ namespace g2
 		 * reads the SAME value, and it advances once for each quantum. */
 		uint64_t m_frameIndex = 0;
 
-		/* THE TWO CODEC EDGE FRAMES. SCH-16 owns the queues that fill and drain
-		 * them; this object owns the two calls the chain needs and nothing
-		 * else. Both phases run on every quantum: the play/boot regime split is
-		 * SCH-22's and no regime member exists yet. */
-		Frame m_codecSource{};
-		Frame m_codecSink{};
-
-		/* THE JOB ARRAY, BUILT ONCE. `Job::ctx` points at each context's
+		/* NO CODEC-QUEUE MEMBER AND NO CODEC `Frame` MEMBER STANDS HERE, and
+		 * that is deliberate rather than unfinished. The ingress and the egress
+		 * are PLAY REGIME ONLY; this class carries no regime member, so it is
+		 * the boot machine by construction and a quantum of it runs the swap
+		 * and the run phase alone. SCH-22 adds the regime, the two adapter
+		 * calls and the queue members that feed them, in one place.
+		 *
+		 * THE JOB ARRAY, BUILT ONCE. `Job::ctx` points at each context's
 		 * LEADING JobContext, which dspContext.h's two static_asserts are what
 		 * make legal. */
 		DspContext    m_contexts[kJobCount]{};
 		Executor::Job m_jobs[kJobCount]{};
 	};
+
+	/* NEITHER COPYABLE NOR MOVABLE, as a compile-time property so that it
+	 * cannot be silently lost. The hazard is specific: a copy would duplicate
+	 * the by-value ChainAdapter while the Board's ESAIs stay bound to the
+	 * ORIGINAL's callbacks, so the copy would run quanta against mailboxes
+	 * nothing reads -- silently dead, with no diagnostic anywhere. The two
+	 * reference members already suppress assignment; they do not suppress
+	 * construction, which is why the four are deleted explicitly. */
+	static_assert(!std::is_copy_constructible_v<Scheduler>,
+	              "Scheduler must not be copy constructible");
+	static_assert(!std::is_copy_assignable_v<Scheduler>,
+	              "Scheduler must not be copy assignable");
+	static_assert(!std::is_move_constructible_v<Scheduler>,
+	              "Scheduler must not be move constructible");
+	static_assert(!std::is_move_assignable_v<Scheduler>,
+	              "Scheduler must not be move assignable");
 }
