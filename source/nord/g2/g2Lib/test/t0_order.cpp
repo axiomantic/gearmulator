@@ -4,11 +4,18 @@
  * turns whole quanta. Design section 13.5 fixes the order inside one:
  *
  *     swap     ChainAdapter::advanceAll(frameIndex)
- *     ingress  ChainAdapter::injectCodecSource(frame)
+ *     ingress  ChainAdapter::injectCodecSource(frame)      PLAY REGIME ONLY
  *     run      0  Panel::tick(frameIndex)
  *              1  Board::tickSofIfDue(frameIndex), then Board::runMcu(...)
  *              2  DSP 0 .. DSP 7, ascending
- *     egress   ChainAdapter::extractCodecSink(frame)
+ *     egress   ChainAdapter::extractCodecSink(frame)       PLAY REGIME ONLY
+ *
+ * THE TWO PLAY-ONLY PHASES ARE NOT ASSERTED HERE AND THAT IS NOT AN OMISSION.
+ * A Scheduler of this task carries no regime member, so it is the boot machine
+ * by construction and its quantum is FIVE records -- Swap, Panel, Sof, Mcu,
+ * Dsp -- each carrying that quantum's frame index. SCH-22 owns the regime, the
+ * two calls and the codec queues behind them, and its own check is where their
+ * order is established. Nothing in this file says whether either ever runs.
  *
  * THE OBSERVATION SEAMS ARE THREE AND THE CHECK OPENS NO OTHER. The injected
  * Executor is handed the job array, so every DspContext is legally reachable
@@ -221,16 +228,19 @@ namespace
 		_esai.writeTransmitControlRegister((1u << dsp56k::Esai::M_TE0) | (1u << dsp56k::Esai::M_TE2));
 	}
 
-	/* The seven phases of one quantum, in design section 13.5's order. */
+	/* THE FIVE UNCONDITIONAL PHASES OF ONE QUANTUM, in design section 13.5's
+	 * order. The ingress and the egress are NOT here: both are PLAY REGIME
+	 * ONLY, a Scheduler built by this task carries no regime member and is the
+	 * boot machine by construction, and SCH-22 is the task that adds the
+	 * regime, the two calls and the codec queues that feed them. A sequence
+	 * naming either would assert an observable this task cannot produce. */
 	constexpr g2::TracePhase kQuantum[] =
 	{
 		g2::TracePhase::Swap,
-		g2::TracePhase::Ingress,
 		g2::TracePhase::Panel,
 		g2::TracePhase::Sof,
 		g2::TracePhase::Mcu,
-		g2::TracePhase::Dsp,
-		g2::TracePhase::Egress
+		g2::TracePhase::Dsp
 	};
 
 	constexpr size_t kPhasesPerQuantum = sizeof(kQuantum) / sizeof(kQuantum[0]);
@@ -359,7 +369,16 @@ namespace
 		/* THE THREE ZEROED MEMBERS, READ AT THE FIRST DISPATCH -- before any
 		 * job body has run. SCH-12's debt loop reads the accumulator before it
 		 * ever writes one, so an indeterminate value here is a defect no later
-		 * reading could separate from a legitimate one. */
+		 * reading could separate from a legitimate one.
+		 *
+		 * THESE THREE ARE TRACED AND NOT DEMONSTRATED, AND SAYING SO IS THE
+		 * POINT. The mechanism is the value initialiser on Scheduler's context
+		 * array, so no mutation of the constructor can make them fail: deleting
+		 * explicit zero writes leaves them green, and MEASURED HERE, so does
+		 * deleting the value initialiser itself -- the freshly allocated pages
+		 * the Scheduler lands on read zero anyway, which is luck and not a
+		 * guarantee. What they still catch is a constructor that writes a
+		 * NON-zero value into one of the three. */
 		const RecordingExecutor::Record& first = _executor.record(0);
 
 		for(unsigned i = 0; i < g2::kJobCount && first.count == g2::kJobCount; ++i)
@@ -605,6 +624,177 @@ namespace
 			checkEqual(sink.readRX(0u), sample, what);
 		}
 	}
+
+	/* ---------------------------------------------------------------------
+	 * CASE 6. THE SECOND BUS'S TOPOLOGY IS THE Config's AND NOT A LITERAL.
+	 *
+	 * THE TWO TOPOLOGIES DIFFER AT EXACTLY ONE PAIR. A Ring gives the second
+	 * bus dspCount mailboxes and position k writes (k + 1) mod N, so the tail
+	 * writes the head's; a Line gives it dspCount + 1 and position k writes
+	 * k + 1, so the tail writes a mailbox nothing reads and the head reads a
+	 * mailbox nothing writes. Every other adjacent pair behaves identically.
+	 * THE WRAP IS THEREFORE THE WHOLE DISCRIMINATOR, and case 5 above already
+	 * asserts its PRESENCE at the default Ring.
+	 *
+	 * WHY THE SEVEN ADJACENT PAIRS ARE ASSERTED HERE TOO, and it is not
+	 * decoration: they are what stops the wrap's absence from passing
+	 * vacuously. A Scheduler that installed no chain callbacks at all would
+	 * deliver nothing anywhere, and an absence assertion alone would call that
+	 * a Line. The seven arrivals say the bus is running; the eighth says it is
+	 * running as a Line.
+	 *
+	 * THE MUTATION AND ITS RED: hand the adapter a literal ChainTopology::Ring
+	 * and position 7's frame reaches position 0, so the wrap assertion fails.
+	 */
+	void caseSecondBusTopologyForwarded(g2::Board& _board, g2::Executor& _executor)
+	{
+		g2::Scheduler::Config config;
+		config.secondBusTopology = g2::ChainTopology::Line;
+
+		g2::Status status{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, _executor, _board, status);
+
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
+			"a Line second bus is accepted (no rejection row constrains this field)");
+
+		if(!scheduler)
+		{
+			check(false, "the Line-topology case has a Scheduler");
+			return;
+		}
+
+		g2::DspSet& set = _board.dspSet();
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			enableSecondTransmitter(set.peripherals(i).getEsai1());
+			enableReceiver(set.peripherals(i).getEsai1());
+		}
+
+		/* Frame index 0 is a window quantum, so this settles the second bus at
+		 * a known phase before anything is primed into it. */
+		scheduler->runFrames(1);
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& source = set.peripherals(i).getEsai1();
+
+			const dsp56k::TWord sample = 0x500000u + i + 1u;
+
+			source.writeTX(0u, 0u);
+			source.writeTX(2u, sample);
+			checkEqual(g2::transmitDspFrame(source), source.getTxWordCount() + 1u,
+				"the priming second-bus transmit frame ran on the Line");
+			source.writeTX(2u, 0u);
+		}
+
+		/* Frame indices 1, 2, 3 and 4. The last is the next advance window, so
+		 * the job bodies' own receive frames latch what the swap delivered. */
+		scheduler->runFrames(4);
+
+		for(unsigned i = 0; i + 1u < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& sink = set.peripherals(i + 1u).getEsai1();
+
+			const dsp56k::TWord sample = 0x500000u + i + 1u;
+
+			char what[256];
+			std::snprintf(what, sizeof(what),
+				"on a Line, position %u's second-bus frame reached position %u", i, i + 1u);
+			checkEqual(sink.readRX(0u), sample, what);
+		}
+
+		/* THE ONE ASSERTION THE TWO TOPOLOGIES DISAGREE ON. A stale reading
+		 * cannot fake this pass: position 0's second-bus receive register
+		 * still holds case 5's Ring-delivered sample on entry, so a quantum
+		 * that never reached it leaves a NON-zero value here. */
+		checkEqual(set.peripherals(0).getEsai1().readRX(0u), 0u,
+			"on a Line, position 7's second-bus frame does NOT wrap to position 0");
+	}
+
+	/* ---------------------------------------------------------------------
+	 * CASE 7. THE Config's SECOND-BUS DIVIDER AND ITS DSP RATE REACH EVERY
+	 * CONTEXT, asserted at values that are NOT the build constants.
+	 *
+	 * WHY A SECOND Scheduler RATHER THAN THE ONE CASE 2 DRIVES. Case 2 reads
+	 * both members off contexts built from a DEFAULT Config, where each field
+	 * already equals the build constant it came from -- so a Scheduler that
+	 * wrote G2_SECOND_BUS_FRAME_DIVIDER, or the two G2_DSP_CYCLES_PER_FRAME
+	 * macros, straight into the context satisfies it. The comparison is
+	 * against a constant equal to itself and it discriminates nothing.
+	 *
+	 * A divider of 2 needs Config::testOverride, which is the escape from the
+	 * equality row and nothing else; the DSP rate needs no override, because
+	 * the only rational the factory rejects is one with a zero denominator.
+	 *
+	 * THE MUTATIONS AND THEIR RED: write 4u (or the divider macro) into
+	 * DspContext::secondBusFrameDivider and this case fails at every position;
+	 * write the two DSP-rate macros into DspContext::rate and it fails at
+	 * every position.
+	 */
+	void caseConfigValuesReachContexts(g2::Board& _board)
+	{
+		RecordingExecutor executor;
+
+		g2::Scheduler::Config config;
+		config.secondBusFrameDivider = 2;
+		config.testOverride          = true;
+		config.dspRate               = { 12345u, 67u };
+
+		check(config.secondBusFrameDivider != G2_SECOND_BUS_FRAME_DIVIDER,
+			"the driven divider differs from the build constant (a case that drove "
+			"the constant would compare it against itself)");
+		check(config.dspRate.num != G2_DSP_CYCLES_PER_FRAME_NUM
+			&& config.dspRate.den != G2_DSP_CYCLES_PER_FRAME_DEN,
+			"the driven DSP rate differs from the build constants in both terms");
+
+		g2::Status status{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, executor, _board, status);
+
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
+			"a divider of 2 with the override taken, and a non-default DSP rate, are accepted");
+
+		if(!scheduler)
+		{
+			check(false, "the non-default Config yields a Scheduler");
+			return;
+		}
+
+		scheduler->runFrames(1);
+
+		checkEqual(executor.runs(), 1u, "the non-default Config's quantum dispatched once");
+
+		if(executor.runs() != 1)
+			return;
+
+		const RecordingExecutor::Record& r = executor.record(0);
+
+		checkEqual(r.count, g2::kJobCount, "the job array holds exactly kJobCount jobs");
+
+		if(r.count != g2::kJobCount)
+			return;
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			char what[256];
+
+			std::snprintf(what, sizeof(what),
+				"context %u carries the Config's NON-DEFAULT second-bus divider", i);
+			checkEqual(r.ctx[i]->secondBusFrameDivider, config.secondBusFrameDivider, what);
+
+			std::snprintf(what, sizeof(what),
+				"context %u carries the Config's NON-DEFAULT DSP rate numerator", i);
+			checkEqual(r.ctx[i]->rate.num, config.dspRate.num, what);
+
+			std::snprintf(what, sizeof(what),
+				"context %u carries the Config's NON-DEFAULT DSP rate denominator", i);
+			checkEqual(r.ctx[i]->rate.den, config.dspRate.den, what);
+		}
+	}
 }
 
 int main()
@@ -660,6 +850,8 @@ int main()
 	{
 		caseHopForwarded(board, executor);
 		caseSecondBusForwarded(board, executor);
+		caseSecondBusTopologyForwarded(board, executor);
+		caseConfigValuesReachContexts(board);
 	}
 
 	if(g_failures != 0)

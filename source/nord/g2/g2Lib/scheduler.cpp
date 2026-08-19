@@ -225,8 +225,6 @@ namespace g2
 	{
 		DspSet& set = _board.dspSet();
 
-		attachChainCallbacks(m_chain, set);
-
 		/* `dspCount` HAS ALREADY BEEN VETTED AGAINST kJobCount by the table
 		 * above, so the two bounds cannot disagree here. */
 		for(unsigned i = 0; i < static_cast<unsigned>(kJobCount); ++i)
@@ -237,11 +235,13 @@ namespace g2
 			c.position              = i;
 			c.rate                  = _config.dspRate;
 
-			/* ZEROED RATHER THAN LEFT INDETERMINATE. SCH-12's debt loop reads
-			 * the accumulator before it ever writes one. */
-			c.acc                   = 0;
-			c.debt                  = 0;
-			c.longDispatchQuanta    = 0;
+			/* THE ACCUMULATOR, THE CYCLE DEBT AND THE LONG-DISPATCH COUNTER
+			 * ARE ZERO, AND THE `{}` ON m_contexts IS WHAT MAKES THEM ZERO --
+			 * this loop deliberately writes none of the three. SCH-12's debt
+			 * loop reads the accumulator before it ever writes one, so the
+			 * zero is required; writing it here as well would read like the
+			 * guarantee without being it, and no mutation of such a write
+			 * could go red. */
 
 			/* BORROWED FROM THE BOARD'S SET, one slot for each position. */
 			c.dsp                   = &set.dsp(i);
@@ -261,6 +261,13 @@ namespace g2
 			m_jobs[i].fn  = &dspJob;
 			m_jobs[i].ctx = &c.base;
 		}
+
+		/* LAST, AND THE ORDER IS LOAD-BEARING. This call publishes callbacks
+		 * that capture `this` into ESAIs the Board owns, so every member the
+		 * callbacks reach must already hold its final value when it runs.
+		 * Publishing a half-built object is the one ordering error here that
+		 * no compiler reports. */
+		attachChainCallbacks(m_chain, set);
 	}
 
 	void Scheduler::mark(const TracePhase _phase, const uint64_t _frameIndex) const noexcept
@@ -272,11 +279,17 @@ namespace g2
 	/* ONE QUANTUM IS DESIGN SECTION 13.5's ORDER AND THIS IS ITS ONLY SITE.
 	 *
 	 *     swap     ChainAdapter::advanceAll(frameIndex)
-	 *     ingress  ChainAdapter::injectCodecSource(frame)
+	 *     ingress  ChainAdapter::injectCodecSource(frame)      PLAY REGIME ONLY
 	 *     run      0  Panel::tick(frameIndex)
 	 *              1  Board::tickSofIfDue(frameIndex), then Board::runMcu(...)
 	 *              2  DSP 0 .. DSP 7, ascending
-	 *     egress   ChainAdapter::extractCodecSink(frame)
+	 *     egress   ChainAdapter::extractCodecSink(frame)       PLAY REGIME ONLY
+	 *
+	 * THE TWO PLAY-ONLY PHASES ARE SCH-22's AND NOT THIS FUNCTION'S. This class
+	 * has no regime member, so it is the boot machine by construction, and the
+	 * boot regime runs the swap and the run phase only. The trace of one
+	 * quantum is therefore five records -- Swap, Panel, Sof, Mcu, Dsp -- and
+	 * SCH-22 adds the two calls, the two records and the queues behind them.
 	 *
 	 * THE PANEL AND THE MCU RUN SERIALLY HERE, OUTSIDE THE EXECUTOR, which is
 	 * why the job array holds the eight DSP contexts and nothing else.
@@ -298,9 +311,6 @@ namespace g2
 			mark(TracePhase::Swap, frameIndex);
 			m_chain.advanceAll(frameIndex);
 
-			mark(TracePhase::Ingress, frameIndex);
-			m_chain.injectCodecSource(m_codecSource);
-
 			mark(TracePhase::Panel, frameIndex);
 			m_board.panel().tick(frameIndex);
 
@@ -309,17 +319,19 @@ namespace g2
 			mark(TracePhase::Sof, frameIndex);
 			m_board.tickSofIfDue(frameIndex);
 
-			/* THE ALLOCATION ALONE. The MCU's budget/want/debt block is
-			 * SCH-30's; `runMcu` already takes a cycle budget and returns what
-			 * it spent, and nothing here yet carries that return. */
+			/* THE ALLOCATION ALONE, AND THE ARGUMENT RULE IS PROVISIONAL.
+			 * `wantCycles` is the rational allocation for ONE frame: nothing
+			 * is subtracted from it, nothing is carried back and the return
+			 * value is discarded. SCH-30 supersedes it -- it declares an
+			 * McuContext carrying rate, acc, debt and longDispatchQuanta,
+			 * makes the argument the budget MINUS the carried debt and feeds
+			 * the return into that debt -- and no check here asserts anything
+			 * about the MCU's cycle accounting. */
 			mark(TracePhase::Mcu, frameIndex);
-			(void) m_board.runMcu(alloc(m_mcuRate, &m_mcuAcc));
+			(void) m_board.runMcu(alloc(m_mcuRate, &m_mcuAcc));   /* PROVISIONAL */
 
 			mark(TracePhase::Dsp, frameIndex);
 			m_executor.run(m_jobs, kJobCount);
-
-			mark(TracePhase::Egress, frameIndex);
-			m_chain.extractCodecSink(m_codecSink);
 
 			++m_frameIndex;
 		}
