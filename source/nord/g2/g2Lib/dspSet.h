@@ -84,13 +84,6 @@ namespace g2
 		 * bridges nobody attached is a lifetime nobody checked. */
 		friend void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
 
-		/* THE OTHER INSTALLER, IN THE SAME SHAPE AND FOR THE SAME REASON. A
-		 * constructor parameter was rejected: every declaration of a DspSet in
-		 * this tree default-constructs it, the Board's own member among them,
-		 * and a parameter breaks all of them where a free function breaks
-		 * none. */
-		friend void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set);
-
 		dsp56k::DefaultMemoryValidator m_memoryValidator;
 		std::array<std::unique_ptr<Slot>, 8> m_slots;
 
@@ -99,9 +92,18 @@ namespace g2
 		std::vector<std::unique_ptr<Hdi08Bridge>> m_bridges;
 	};
 
-	/* DECLARED AT NAMESPACE SCOPE AS WELL AS BEFRIENDED. A friend declaration
-	 * alone is reachable only through argument-dependent lookup, so a caller
-	 * naming it qualified would not find it. attachHdi08Bridges carries the
-	 * same pair, its namespace-scope half in hdi08Bridge.h. */
+	/* DECLARED AT NAMESPACE SCOPE AND DELIBERATELY NOT BEFRIENDED. The
+	 * namespace-scope declaration is required: a friend declaration alone is
+	 * reachable only through argument-dependent lookup, so a caller naming it
+	 * qualified would not find it. Friendship is not, and this is where the
+	 * other installer differs rather than matching. This one reaches the set
+	 * through the public dspCount() and peripherals() accessors only;
+	 * attachHdi08Bridges is a friend because it populates m_bridges and reads
+	 * the bound of m_slots.
+	 *
+	 * A constructor parameter was rejected for the same reason it was there:
+	 * every declaration of a DspSet in this tree default-constructs it, the
+	 * Board's own member among them, and a parameter breaks all of them where
+	 * a free function breaks none. */
 	void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set);
 }
