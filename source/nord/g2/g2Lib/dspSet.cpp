@@ -241,8 +241,8 @@ namespace g2
 
 		/* THE PAIR AND NOT setCallback. mqLib, xtLib and nord/n2x install a
 		 * single listener through Audio::setCallback; the chain needs the two
-		 * directions separately, which is what the adapter's four factories
-		 * return. */
+		 * directions separately, which is what the adapter's per-direction
+		 * callback factories return. */
 		for(unsigned i = 0; i < _set.dspCount(); ++i)
 		{
 			dsp56k::Peripherals56311& p = _set.peripherals(i);

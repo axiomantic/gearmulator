@@ -105,20 +105,32 @@ namespace
 	constexpr int g_bridgedPort = 2;
 	constexpr int g_unbridgedPort = 5;
 
-	/* `V` IS CHOSEN RATHER THAN ARBITRARY, AND THE TWO static_asserts BELOW ARE
-	 * WHAT FIX IT. It has to put the port's computed vector below `Vba_IRQA`
-	 * while leaving every re-derivation a bridge could perform -- a second
-	 * shift, the command bit left in, a vector base folded in -- at or above
-	 * it. Nothing in prose here is the source of that; the asserts are. */
+	/* `V` IS CHOSEN RATHER THAN ARBITRARY, AND THE static_asserts BELOW ARE
+	 * WHAT FIX IT -- TO A RANGE, NOT TO A VALUE. Each one carries a single
+	 * clause, so a failure names the premise that broke, and each one can be
+	 * falsified on its own by some byte.
+	 *
+	 * WHAT THEY DO NOT CONSTRAIN, SAID HERE SO NO READER TAKES MORE FROM THEM.
+	 * Of the re-derivations this check catches, only the second shift is pinned
+	 * by the choice of `V`. The rest are at or above `Vba_IRQA` for EVERY byte
+	 * rather than for this one: the raw CVR value always carries `Hc` and so
+	 * can never fall below the base, and any vector the first assert admits,
+	 * plus `Vba_Host_Command`, is already above it. Asserting them would add a
+	 * clause that no choice of `V` could falsify, which reads as a constraint
+	 * and is not one. They are caught by the check at run time all the same;
+	 * they are simply not what this byte is chosen for. More than one byte
+	 * satisfies the set below, and the partition does not separate the ones it
+	 * admits -- the same residue the file header prices. */
 	constexpr uint8_t g_hostVector = 0x07;
 	constexpr uint8_t g_expectedVector = uint8_t((g_hostVector & mc68k::Hdi08::Hv) << 1);
 
 	static_assert(g_expectedVector < dsp56k::Vba_IRQA,
 		"the host vector under test must fall below Vba_IRQA or the pump can never drain");
-	static_assert(uint8_t(g_expectedVector << 1) >= dsp56k::Vba_IRQA
-		&& uint8_t(g_hostVector | mc68k::Hdi08::Hc) >= dsp56k::Vba_IRQA
-		&& uint8_t(g_expectedVector + dsp56k::Vba_Host_Command) >= dsp56k::Vba_IRQA,
-		"every re-derivation this check is meant to catch must land at or above Vba_IRQA");
+	static_assert((g_hostVector & mc68k::Hdi08::Hc) == 0,
+		"the constant is the vector field alone -- writeHostCommand supplies the Hc bit");
+	static_assert(uint8_t(g_expectedVector << 1) >= dsp56k::Vba_IRQA,
+		"a second shift of the computed vector must land at or above Vba_IRQA or that "
+		"re-derivation would drain and pass");
 
 	constexpr TWord g_bootAddress = 0x000240u;
 
