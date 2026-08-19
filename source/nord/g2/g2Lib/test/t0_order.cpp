@@ -1,0 +1,673 @@
+/* t0_order.cpp -- the check of task SCH-19. Design sections 13.5 and 13.10.5.
+ *
+ * WHAT ONE QUANTUM IS, AND WHAT THIS FILE OBSERVES OF IT. Scheduler::runFrames
+ * turns whole quanta. Design section 13.5 fixes the order inside one:
+ *
+ *     swap     ChainAdapter::advanceAll(frameIndex)
+ *     ingress  ChainAdapter::injectCodecSource(frame)
+ *     run      0  Panel::tick(frameIndex)
+ *              1  Board::tickSofIfDue(frameIndex), then Board::runMcu(...)
+ *              2  DSP 0 .. DSP 7, ascending
+ *     egress   ChainAdapter::extractCodecSink(frame)
+ *
+ * THE OBSERVATION SEAMS ARE THREE AND THE CHECK OPENS NO OTHER. The injected
+ * Executor is handed the job array, so every DspContext is legally reachable
+ * through Job::ctx -- dspContext.h's two static_asserts sanction exactly that
+ * recovery. Board::dspSet() is a PUBLIC accessor, so the cores and the ESAI
+ * ports the contexts are supposed to borrow are reachable for an ADDRESS
+ * comparison. Neither reaches the phases that run serially in the Scheduler,
+ * so Config::trace carries those, and it is the one member SCH-19 adds.
+ *
+ * WHY THE TRACE CARRIES A SEPARATE TAG FOR THE START-OF-FRAME TICK. Design
+ * section 13.5 orders `tickSofIfDue` IMMEDIATELY BEFORE `runMcu`. Board is
+ * final with no virtual member, so no test double substitutes for it and the
+ * adjacency has no other decider; folding the two into one tag would leave an
+ * ordered imperative with nothing able to report it.
+ *
+ * WHAT THIS FILE DOES NOT ESTABLISH, SAID PLAINLY RATHER THAN LEFT TO A READER.
+ * It does not establish that a DSP ran. Every slot's run gate is shut here --
+ * no firmware is downloaded, so every bridge's landed flag is false and
+ * dspJob's step 2 is skipped for all eight -- and the trace records DISPATCH
+ * and not EXECUTION. The wiring case below is what a shut gate still
+ * discriminates: the pointer the gate reads is non-null and is the BRIDGE's
+ * own flag, by address. A per-slot cycle counter that advances is the honest
+ * observable for execution and it needs an open gate, which needs a completed
+ * firmware download; neither is this task's.
+ *
+ * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION, so
+ * this file reports identically under NDEBUG and without it.
+ */
+
+#include "board.h"
+#include "chainAdapter.h"
+#include "dspContext.h"
+#include "esaiFrame.h"
+#include "executor.h"
+#include "scheduler.h"
+#include "status.h"
+
+#include "dsp56kEmu/dsp.h"
+#include "dsp56kEmu/esai.h"
+#include "dsp56kEmu/peripherals56311.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+
+namespace
+{
+	int g_failures = 0;
+	int g_cases    = 0;
+
+	void check(const bool _condition, const char* const _what)
+	{
+		++g_cases;
+
+		if(_condition)
+			return;
+
+		std::printf("FAIL %s\n", _what);
+		++g_failures;
+	}
+
+	void checkEqual(const uint64_t _observed, const uint64_t _expected, const char* const _what)
+	{
+		++g_cases;
+
+		if(_observed == _expected)
+			return;
+
+		std::printf("FAIL %s: observed %llu, expected %llu\n", _what,
+			static_cast<unsigned long long>(_observed), static_cast<unsigned long long>(_expected));
+		++g_failures;
+	}
+
+	void checkSame(const void* const _observed, const void* const _expected, const char* const _what)
+	{
+		++g_cases;
+
+		if(_observed == _expected)
+			return;
+
+		std::printf("FAIL %s: observed %p, expected %p\n", _what, _observed, _expected);
+		++g_failures;
+	}
+
+	const char* phaseName(const g2::TracePhase _phase)
+	{
+		switch(_phase)
+		{
+		case g2::TracePhase::Swap:    return "swap";
+		case g2::TracePhase::Ingress: return "ingress";
+		case g2::TracePhase::Panel:   return "panel";
+		case g2::TracePhase::Sof:     return "sof";
+		case g2::TracePhase::Mcu:     return "mcu";
+		case g2::TracePhase::Dsp:     return "dsp";
+		case g2::TracePhase::Egress:  return "egress";
+		}
+		return "?";
+	}
+
+	/* THE TRACE SINK. It records the phase tag and the frame index of every
+	 * phase, in the order the Scheduler emits them, and it grows no storage
+	 * inside a noexcept callback. */
+	class RecordingTrace final : public g2::TraceSink
+	{
+	public:
+		static constexpr size_t kMax = 256;
+
+		void onPhase(const g2::TracePhase _phase, const uint64_t _frameIndex) noexcept override
+		{
+			if(m_count < kMax)
+			{
+				m_phase[m_count] = _phase;
+				m_frame[m_count] = _frameIndex;
+			}
+			++m_count;
+		}
+
+		size_t         count()             const { return m_count; }
+		g2::TracePhase phase(const size_t i) const { return m_phase[i]; }
+		uint64_t       frame(const size_t i) const { return m_frame[i]; }
+		void           clear()                   { m_count = 0; }
+
+	private:
+		size_t         m_count = 0;
+		g2::TracePhase m_phase[kMax]{};
+		uint64_t       m_frame[kMax]{};
+	};
+
+	/* THE INJECTED EXECUTOR. It RUNS every job -- an Executor that did not
+	 * would not be one -- and it records, BEFORE each job body runs, the whole
+	 * of the context that body is about to see. Reading the members after the
+	 * body would confuse what the Scheduler wired with what the job did. */
+	class RecordingExecutor final : public g2::Executor
+	{
+	public:
+		static constexpr size_t kMaxRuns = 32;
+
+		struct Record
+		{
+			size_t             count = 0;
+			const g2::DspContext* ctx[g2::kJobCount]{};
+			unsigned           position[g2::kJobCount]{};
+			uint64_t           frameIndex[g2::kJobCount]{};
+			uint32_t           acc[g2::kJobCount]{};
+			int64_t            debt[g2::kJobCount]{};
+			uint64_t           longDispatchQuanta[g2::kJobCount]{};
+			g2::JobFault       fault[g2::kJobCount]{};
+		};
+
+		void run(const Job* const _jobs, const size_t _count) noexcept override
+		{
+			if(m_runs < kMaxRuns)
+			{
+				Record& r = m_record[m_runs];
+				r.count = _count;
+
+				for(size_t i = 0; i < _count && i < g2::kJobCount; ++i)
+				{
+					const auto* const c = reinterpret_cast<const g2::DspContext*>(_jobs[i].ctx);
+
+					r.ctx[i]                = c;
+					r.position[i]           = c->position;
+					r.frameIndex[i]         = c->frameIndex;
+					r.acc[i]                = c->acc;
+					r.debt[i]               = c->debt;
+					r.longDispatchQuanta[i] = c->longDispatchQuanta;
+					r.fault[i]              = c->base.fault;
+				}
+			}
+
+			++m_runs;
+
+			for(size_t i = 0; i < _count; ++i)
+				_jobs[i].fn(_jobs[i].ctx);
+		}
+
+		bool isSerial() const noexcept override { return true; }
+
+		size_t        runs()               const { return m_runs; }
+		const Record& record(const size_t i) const { return m_record[i]; }
+
+	private:
+		size_t m_runs = 0;
+		Record m_record[kMaxRuns]{};
+	};
+
+	/* THE CLOCK CONTROL REGISTERS ARE PROGRAMMED FOR A ONE-SLOT FRAME, which
+	 * is what lets readRX(0) report slot 0. Copied from t0_chain_data_flow,
+	 * which drives the same peripheral for the same reason. */
+	void enableTransmitter(dsp56k::Esai& _esai)
+	{
+		_esai.writeTransmitClockControlRegister(0);
+		_esai.writeTransmitControlRegister(1u << dsp56k::Esai::M_TE0);
+	}
+
+	void enableReceiver(dsp56k::Esai& _esai)
+	{
+		_esai.writeReceiveClockControlRegister(0);
+		_esai.writeReceiveControlRegister(1u << dsp56k::Esai::M_RE0);
+	}
+
+	/* THE SECOND BUS TRANSMITS ON TX2 AND NOT ON TX0 (frame.h's register
+	 * table), so its transmitter has to be enabled as well as TX0's -- an
+	 * enabled-but-unwritten transmitter raises M_TUE on every frame, and the
+	 * written-flag rule reads that bit. */
+	void enableSecondTransmitter(dsp56k::Esai& _esai)
+	{
+		_esai.writeTransmitClockControlRegister(0);
+		_esai.writeTransmitControlRegister((1u << dsp56k::Esai::M_TE0) | (1u << dsp56k::Esai::M_TE2));
+	}
+
+	/* The seven phases of one quantum, in design section 13.5's order. */
+	constexpr g2::TracePhase kQuantum[] =
+	{
+		g2::TracePhase::Swap,
+		g2::TracePhase::Ingress,
+		g2::TracePhase::Panel,
+		g2::TracePhase::Sof,
+		g2::TracePhase::Mcu,
+		g2::TracePhase::Dsp,
+		g2::TracePhase::Egress
+	};
+
+	constexpr size_t kPhasesPerQuantum = sizeof(kQuantum) / sizeof(kQuantum[0]);
+
+	/* ---------------------------------------------------------------------
+	 * CASE 1. The order of one quantum, and of two consecutive ones.
+	 *
+	 * The whole sequence is asserted position by position against the table
+	 * above, which is what makes "a trace that omits the swap fails" a
+	 * property of this check rather than a sentence about it: an omission
+	 * shifts every later tag and the first comparison reports it.
+	 */
+	void caseOrder(RecordingTrace& _trace, RecordingExecutor& _executor, g2::Scheduler& _scheduler)
+	{
+		_scheduler.runFrames(2);
+
+		checkEqual(_trace.count(), 2u * kPhasesPerQuantum,
+			"two quanta emit exactly two quanta of phases");
+
+		if(_trace.count() != 2u * kPhasesPerQuantum)
+			return;
+
+		for(size_t q = 0; q < 2; ++q)
+		{
+			for(size_t p = 0; p < kPhasesPerQuantum; ++p)
+			{
+				const size_t at = q * kPhasesPerQuantum + p;
+
+				char what[256];
+
+				std::snprintf(what, sizeof(what), "quantum %zu phase %zu is %s (observed %s)",
+					q, p, phaseName(kQuantum[p]), phaseName(_trace.phase(at)));
+				check(_trace.phase(at) == kQuantum[p], what);
+
+				std::snprintf(what, sizeof(what), "quantum %zu phase %s carries frame index %zu",
+					q, phaseName(kQuantum[p]), q);
+				checkEqual(_trace.frame(at), q, what);
+			}
+		}
+
+		checkEqual(_executor.runs(), 2u, "two quanta dispatch the job array exactly twice");
+	}
+
+	/* ---------------------------------------------------------------------
+	 * CASE 2. The eight DSP bodies are dispatched ascending, and every context
+	 * is wired to the Board's own set BY ADDRESS.
+	 *
+	 * THE ADDRESS COMPARISON IS THE ONE THAT DISCRIMINATES THE RESCOPE. A
+	 * Scheduler holding a DSP set of its own would satisfy every other
+	 * assertion in this file and fail exactly these three, because the two
+	 * sets' cores and ports sit at different addresses.
+	 */
+	void caseContexts(const RecordingExecutor& _executor, g2::Board& _board, const g2::Scheduler::Config& _config)
+	{
+		if(_executor.runs() < 2)
+		{
+			check(false, "the job array was dispatched at least twice");
+			return;
+		}
+
+		g2::DspSet& set = _board.dspSet();
+
+		for(size_t q = 0; q < 2; ++q)
+		{
+			const RecordingExecutor::Record& r = _executor.record(q);
+
+			checkEqual(r.count, g2::kJobCount, "the job array holds exactly kJobCount jobs");
+
+			if(r.count != g2::kJobCount)
+				continue;
+
+			for(unsigned i = 0; i < g2::kJobCount; ++i)
+			{
+				char what[256];
+
+				std::snprintf(what, sizeof(what), "quantum %zu job %u is chain position %u (observed %u)",
+					q, i, i, r.position[i]);
+				checkEqual(r.position[i], i, what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u carries this quantum's frame index", q, i);
+				checkEqual(r.frameIndex[i], q, what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u borrows the BOARD's core for that slot", q, i);
+				checkSame(r.ctx[i]->dsp, &set.dsp(i), what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u borrows the BOARD's audio ESAI for that slot", q, i);
+				checkSame(r.ctx[i]->audioEsai, &set.peripherals(i).getEsai(), what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u borrows the BOARD's second-bus ESAI for that slot", q, i);
+				checkSame(r.ctx[i]->secondEsai, &set.peripherals(i).getEsai1(), what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u carries the Config's second-bus divider", q, i);
+				checkEqual(r.ctx[i]->secondBusFrameDivider, _config.secondBusFrameDivider, what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u carries the Config's DSP rate numerator", q, i);
+				checkEqual(r.ctx[i]->rate.num, _config.dspRate.num, what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u carries the Config's DSP rate denominator", q, i);
+				checkEqual(r.ctx[i]->rate.den, _config.dspRate.den, what);
+
+				/* THE RUN GATE'S OWN WIRING, AND IT IS BOTH HALVES. Non-null
+				 * alone would pass against a pointer at anything at all; the
+				 * address is what ties it to the bridge whose download
+				 * completes. Omit the write and all eight read null. */
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u carries a NON-NULL landed-flag pointer", q, i);
+				check(r.ctx[i]->programLanded != nullptr, what);
+
+				std::snprintf(what, sizeof(what),
+					"quantum %zu context %u borrows the BOARD's landed flag for that slot", q, i);
+				checkSame(r.ctx[i]->programLanded, set.programLanded(i), what);
+
+				std::snprintf(what, sizeof(what), "quantum %zu context %u reports no fault", q, i);
+				checkEqual(static_cast<uint64_t>(r.fault[i]),
+					static_cast<uint64_t>(g2::JobFault::None), what);
+			}
+		}
+
+		/* THE THREE ZEROED MEMBERS, READ AT THE FIRST DISPATCH -- before any
+		 * job body has run. SCH-12's debt loop reads the accumulator before it
+		 * ever writes one, so an indeterminate value here is a defect no later
+		 * reading could separate from a legitimate one. */
+		const RecordingExecutor::Record& first = _executor.record(0);
+
+		for(unsigned i = 0; i < g2::kJobCount && first.count == g2::kJobCount; ++i)
+		{
+			char what[256];
+
+			std::snprintf(what, sizeof(what), "context %u enters its first quantum with a zero accumulator", i);
+			checkEqual(first.acc[i], 0u, what);
+
+			std::snprintf(what, sizeof(what), "context %u enters its first quantum with zero cycle debt", i);
+			checkEqual(static_cast<uint64_t>(first.debt[i]), 0u, what);
+
+			std::snprintf(what, sizeof(what), "context %u enters its first quantum with a zero long-dispatch counter", i);
+			checkEqual(first.longDispatchQuanta[i], 0u, what);
+		}
+	}
+
+	/* ---------------------------------------------------------------------
+	 * CASE 3. A FRAME CROSSES THE CHAIN, which is the only assertion in this
+	 * file that reports whether the chain-callback installer ran.
+	 *
+	 * WHY NOT THE WRITTEN FLAG OR THE UNDERRUN COUNTER. Every run gate is shut
+	 * here, so no DSP writes a transmit register on its own and every
+	 * position's written flag is false in a correct build and in an
+	 * uninstalled one alike; the underrun counter rises once per position per
+	 * quantum in both worlds for the same reason. The crossing separates them,
+	 * because the installer is the ONLY thing that binds a position's ESAI to
+	 * the adapter's mailboxes.
+	 *
+	 * WHY IT ALSO REPORTS THE ADAPTER'S dspCount. The audio bus is a Line of
+	 * dspCount + 1 mailboxes; a wrong count truncates the array and the higher
+	 * positions stop crossing, so driving EVERY adjacent pair is what makes
+	 * that argument's forwarding observable rather than assumed.
+	 */
+	void caseChainCrossing(g2::Board& _board, g2::Scheduler& _scheduler)
+	{
+		g2::DspSet& set = _board.dspSet();
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			enableTransmitter(set.peripherals(i).getEsai());
+			enableReceiver(set.peripherals(i).getEsai());
+		}
+
+		/* One distinct sample for each source position, primed into the
+		 * mailbox by the check's own transmit frame, then the transmit
+		 * register CLEARED so that the quantum's own transmit for that
+		 * position carries a zero and cannot be mistaken for the arrival. */
+		for(unsigned i = 0; i + 1u < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& source = set.peripherals(i).getEsai();
+
+			const dsp56k::TWord sample = 0x200000u + i + 1u;
+
+			check(sample != 0u,
+				"the injected sample is non-zero (a zero compares equal against a "
+				"default-zero read whether it crossed or not)");
+
+			source.writeTX(0u, sample);
+			checkEqual(g2::transmitDspFrame(source), source.getTxWordCount() + 1u,
+				"the priming transmit frame ran");
+			source.writeTX(0u, 0u);
+		}
+
+		_scheduler.runFrames(1);
+
+		for(unsigned i = 0; i + 1u < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& sink = set.peripherals(i + 1u).getEsai();
+
+			const dsp56k::TWord sample = 0x200000u + i + 1u;
+
+			char what[256];
+			std::snprintf(what, sizeof(what),
+				"the frame injected at position %u's audio ESAI crossed to position %u's in one quantum",
+				i, i + 1u);
+			checkEqual(sink.readRX(0u), sample, what);
+		}
+	}
+
+	/* ---------------------------------------------------------------------
+	 * CASE 4. THE HOP DEPTH REACHES THE ADAPTER'S MAILBOXES.
+	 *
+	 * A mailbox is a ring of hopFrames + 1 frames, so a frame written at the
+	 * head first reaches the read cell after exactly hopFrames swaps. At a hop
+	 * of 2 the sample is therefore ABSENT after one quantum and PRESENT after
+	 * two, and both halves are asserted: the absence is what a Scheduler that
+	 * handed the adapter the build constant instead of the Config's value
+	 * would fail.
+	 */
+	void caseHopForwarded(g2::Board& _board, g2::Executor& _executor)
+	{
+		g2::Scheduler::Config config;
+		config.hopFrames    = 2;
+		config.testOverride = true;
+
+		g2::Status status{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, _executor, _board, status);
+
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
+			"a hop of 2 with the override taken is accepted");
+
+		if(!scheduler)
+		{
+			check(false, "a hop of 2 with the override taken yields a Scheduler");
+			return;
+		}
+
+		g2::DspSet& set = _board.dspSet();
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			enableTransmitter(set.peripherals(i).getEsai());
+			enableReceiver(set.peripherals(i).getEsai());
+		}
+
+		const unsigned      source = 3;
+		const dsp56k::TWord sample = 0x3A0000u;
+
+		dsp56k::Esai& from = set.peripherals(source).getEsai();
+		dsp56k::Esai& to   = set.peripherals(source + 1u).getEsai();
+
+		/* THE ABSENT READING BELOW CANNOT BE A LEFTOVER FROM CASE 3. This
+		 * Scheduler owns a NEW ChainAdapter whose mailboxes are all zero, and
+		 * the sink's own receive frame runs inside the first quantum and
+		 * latches what that adapter holds. */
+		from.writeTX(0u, sample);
+		checkEqual(g2::transmitDspFrame(from), from.getTxWordCount() + 1u,
+			"the priming transmit frame ran at a hop of 2");
+		from.writeTX(0u, 0u);
+
+		scheduler->runFrames(1);
+		checkEqual(to.readRX(0u), 0u,
+			"at a hop of 2 the frame has NOT crossed after one quantum");
+
+		scheduler->runFrames(1);
+		checkEqual(to.readRX(0u), sample,
+			"at a hop of 2 the frame HAS crossed after two quanta");
+	}
+
+	/* ---------------------------------------------------------------------
+	 * CASE 5. THE SECOND BUS'S TOPOLOGY AND ITS FRAME DIVIDER REACH THE
+	 * ADAPTER, which are the two of the four chain arguments the audio bus
+	 * cannot report: the audio chain is fixed to a Line at every topology, and
+	 * it advances on every quantum whatever the divider says.
+	 *
+	 * THE DIVIDER. A frame primed into a second-bus mailbox may not move on a
+	 * NON-window quantum and must have moved by the next window one. Both
+	 * halves are asserted, and the first is the discriminating one: an adapter
+	 * built with a divider of 1 advances the second bus every quantum and
+	 * delivers the frame early.
+	 *
+	 * THE TOPOLOGY. On a Ring the tail position writes the head's mailbox, so
+	 * position 7's frame arrives at position 0. On a Line it would write a
+	 * ninth mailbox that nothing reads, and position 0 would read a mailbox
+	 * nothing writes. The wrap is therefore the assertion that separates the
+	 * two, and it is why every position is driven rather than one.
+	 *
+	 * WHY THE "NOT YET" READING TAKES ITS OWN RECEIVE FRAME. The job body
+	 * receives on the second bus only inside the advance window, so on a
+	 * non-window quantum nothing latches and the receive registers would still
+	 * hold the previous window's value. The check drives receiveDspFrame itself
+	 * to make the reading current, exactly as t0_chain_data_flow does.
+	 */
+	void caseSecondBusForwarded(g2::Board& _board, g2::Executor& _executor)
+	{
+		g2::Scheduler::Config config;
+
+		g2::Status status{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, _executor, _board, status);
+
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
+			"the default Config is accepted for the second-bus case");
+
+		if(!scheduler)
+		{
+			check(false, "the second-bus case has a Scheduler");
+			return;
+		}
+
+		g2::DspSet& set = _board.dspSet();
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			enableSecondTransmitter(set.peripherals(i).getEsai1());
+			enableReceiver(set.peripherals(i).getEsai1());
+		}
+
+		/* Frame index 0 is a window quantum, so this settles the second bus at
+		 * a known phase before anything is primed into it. */
+		scheduler->runFrames(1);
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& source = set.peripherals(i).getEsai1();
+
+			const dsp56k::TWord sample = 0x400000u + i + 1u;
+
+			source.writeTX(0u, 0u);
+			source.writeTX(2u, sample);
+			checkEqual(g2::transmitDspFrame(source), source.getTxWordCount() + 1u,
+				"the priming second-bus transmit frame ran");
+			source.writeTX(2u, 0u);
+		}
+
+		/* Frame index 1: NOT a window quantum. */
+		scheduler->runFrames(1);
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& sink = set.peripherals((i + 1u) % g2::kJobCount).getEsai1();
+
+			char what[256];
+
+			std::snprintf(what, sizeof(what),
+				"the second-bus receive frame of position %u ran off the window",
+				static_cast<unsigned>((i + 1u) % g2::kJobCount));
+			checkEqual(g2::receiveDspFrame(sink), sink.getRxWordCount() + 1u, what);
+
+			std::snprintf(what, sizeof(what),
+				"position %u's second-bus frame has NOT reached position %u off the advance window",
+				i, static_cast<unsigned>((i + 1u) % g2::kJobCount));
+			checkEqual(sink.readRX(0u), 0u, what);
+		}
+
+		/* Frame indices 2, 3 and 4. The last is the next window quantum. */
+		scheduler->runFrames(3);
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& sink = set.peripherals((i + 1u) % g2::kJobCount).getEsai1();
+
+			const dsp56k::TWord sample = 0x400000u + i + 1u;
+
+			char what[256];
+			std::snprintf(what, sizeof(what),
+				"position %u's second-bus frame reached position %u on the next advance window",
+				i, static_cast<unsigned>((i + 1u) % g2::kJobCount));
+			checkEqual(sink.readRX(0u), sample, what);
+		}
+	}
+}
+
+int main()
+{
+	std::printf("t0_order: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
+
+	/* THE BOARD IS DECLARED FIRST AND EVERY Scheduler BELOW IS A LOCAL OR A
+	 * unique_ptr DECLARED AFTER IT. SCH-19's rule is that the Board OUTLIVES
+	 * the Scheduler: the factory hands the Scheduler the Board's own DSP set
+	 * and every context borrows a core, two ESAI ports and a landed flag owned
+	 * by a slot of it. Declaration order is what enforces that at a call site,
+	 * and it is the only thing that does -- the factory says in as many words
+	 * that it cannot check the lifetime of the referent. */
+	g2::Board          board;
+	RecordingExecutor  executor;
+	RecordingTrace     trace;
+
+	g2::Scheduler::Config config;
+	config.trace = &trace;
+
+	g2::Status status{};
+
+	const std::unique_ptr<g2::Scheduler> scheduler =
+		g2::Scheduler::create(config, executor, board, status);
+
+	if(!dsp56k::g_useJIT)
+	{
+		/* In an interpreter build no Scheduler can be created at all, which is
+		 * SCH-17's rule and not a skip this check invents. Asserting the
+		 * refusal is the only claim this file may make in such a build. */
+		check(scheduler == nullptr, "an interpreter build yields no Scheduler");
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::BadBackend),
+			"an interpreter build reports BadBackend");
+	}
+	else
+	{
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
+			"the default Config is accepted");
+
+		if(scheduler == nullptr)
+		{
+			check(false, "the default Config yields a Scheduler");
+		}
+		else
+		{
+			caseOrder(trace, executor, *scheduler);
+			caseContexts(executor, board, config);
+			caseChainCrossing(board, *scheduler);
+		}
+	}
+
+	if(dsp56k::g_useJIT)
+	{
+		caseHopForwarded(board, executor);
+		caseSecondBusForwarded(board, executor);
+	}
+
+	if(g_failures != 0)
+	{
+		std::printf("t0_order: %d failure(s) in %d case(s)\n", g_failures, g_cases);
+		return 1;
+	}
+
+	std::printf("t0_order: all %d cases passed\n", g_cases);
+	return 0;
+}
