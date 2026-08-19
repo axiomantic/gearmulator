@@ -1,5 +1,9 @@
-/* scheduler.cpp -- the Scheduler factory and the construction rejections.
- * Task SCH-18. Design sections 13.10 rule 4, 13.4.5, 13.6, 13.6.2 and 13.10.5.
+/* scheduler.cpp -- the Scheduler factory, the construction rejections, and the
+ * quantum. Tasks SCH-18 and SCH-19. Design sections 13.5, 13.10 rule 4,
+ * 13.4.5, 13.6, 13.6.2 and 13.10.5.
+ *
+ * SCH-18 OWNS THE FILE AND THE TABLE; SCH-19 OWNS WHAT IS BUILT ONCE THE TABLE
+ * HAS PASSED -- the constructor below `create`, and `runFrames`.
  *
  * `Scheduler::create` is the SINGLE REJECTION POINT. Every rejectable value
  * arrives through `Scheduler::Config`, so no other site has to repeat any of
@@ -40,6 +44,12 @@
 
 namespace g2
 {
+	/* SCH-11 defines the DSP job body in dspJob.cpp and no header declares it.
+	 * The declaration is here rather than in a new header because this is its
+	 * only production caller: the job array below is the one place a pointer to
+	 * it is taken. */
+	void dspJob(JobContext* _ctx) noexcept;
+
 	namespace
 	{
 		/* Above this the framework silently truncates the reported latency and
@@ -66,12 +76,11 @@ namespace g2
 	std::unique_ptr<Scheduler> Scheduler::create(const Config& _config, Executor& _executor, Board& _board,
 		Status& _outStatus)
 	{
-		/* SCH-19 wires both into the constructed object. SCH-18 rejects on the
-		 * Config alone, so neither is read here and neither is validated: a
-		 * reference cannot be null, and whether the referent outlives the
-		 * Scheduler is a lifetime rule this factory cannot check. */
-		(void) _executor;
-		(void) _board;
+		/* NEITHER IS READ BEFORE THE TABLE HAS RUN. SCH-18 rejects on the Config
+		 * alone, and neither reference is validated: a reference cannot be
+		 * null, and whether the referent outlives the Scheduler is a lifetime
+		 * rule this factory cannot check. SCH-19's constructor, below the
+		 * table, is where both are wired in. */
 
 		if(_config.framesPerQuantum != kFixedFramesPerQuantum)
 		{
@@ -184,6 +193,135 @@ namespace g2
 		}
 
 		_outStatus = Status::Ok;
-		return std::unique_ptr<Scheduler>(new Scheduler);
+		return std::unique_ptr<Scheduler>(new Scheduler(_config, _executor, _board));
+	}
+
+	/* THE SCHEDULER DRIVES THE BOARD'S OWN DSP SET AND CONSTRUCTS NONE, and
+	 * that is a decision with four reasons rather than a convenience.
+	 *
+	 *   1. The Board's set is the BRIDGED one -- board.cpp holds the only
+	 *      production call of attachHdi08Bridges -- and a bridge carries the
+	 *      landed flag the run gate borrows.
+	 *   2. attachHdi08Bridges REFUSES a second attach, so a second set could
+	 *      not be bridged after the fact.
+	 *   3. The factory already receives the Board by reference, so the set
+	 *      costs no new argument, no new member and no new lifetime.
+	 *   4. dspSet.h answers NULL for a slot with no bridge, and SCH-33's gate
+	 *      reads NULL as NOT LANDED -- so every slot of a Scheduler-owned set
+	 *      would stay shut for the life of the program while every check here
+	 *      stayed green.
+	 *
+	 * THE CHAIN CALLBACKS ARE INSTALLED HERE AND NOWHERE ELSE, because this is
+	 * the one object that holds BOTH ends of that wire: the ChainAdapter it
+	 * owns and the set it drives. The Board attaches the HDI08 bridges and does
+	 * not touch the chain callbacks. */
+	Scheduler::Scheduler(const Config& _config, Executor& _executor, Board& _board)
+		: m_executor(_executor)
+		, m_board(_board)
+		, m_trace(_config.trace)
+		, m_chain(_config.dspCount, _config.hopFrames, _config.secondBusTopology,
+			_config.secondBusFrameDivider)
+		, m_mcuRate(_config.mcuRate)
+	{
+		DspSet& set = _board.dspSet();
+
+		attachChainCallbacks(m_chain, set);
+
+		/* `dspCount` HAS ALREADY BEEN VETTED AGAINST kJobCount by the table
+		 * above, so the two bounds cannot disagree here. */
+		for(unsigned i = 0; i < static_cast<unsigned>(kJobCount); ++i)
+		{
+			DspContext& c = m_contexts[i];
+
+			c.base.fault            = JobFault::None;
+			c.position              = i;
+			c.rate                  = _config.dspRate;
+
+			/* ZEROED RATHER THAN LEFT INDETERMINATE. SCH-12's debt loop reads
+			 * the accumulator before it ever writes one. */
+			c.acc                   = 0;
+			c.debt                  = 0;
+			c.longDispatchQuanta    = 0;
+
+			/* BORROWED FROM THE BOARD'S SET, one slot for each position. */
+			c.dsp                   = &set.dsp(i);
+			c.audioEsai             = &set.peripherals(i).getEsai();
+			c.secondEsai            = &set.peripherals(i).getEsai1();
+
+			c.frameIndex            = m_frameIndex;
+
+			/* THE RUN GATE'S POINTER, BORROWED AND NEVER COPIED. The producer
+			 * sets its own flag when the download completes, and a value taken
+			 * here could never see it. NULL for a slot with no bridge, which
+			 * SCH-33's gate already reads as NOT LANDED. */
+			c.programLanded         = set.programLanded(i);
+
+			c.secondBusFrameDivider = _config.secondBusFrameDivider;
+
+			m_jobs[i].fn  = &dspJob;
+			m_jobs[i].ctx = &c.base;
+		}
+	}
+
+	void Scheduler::mark(const TracePhase _phase, const uint64_t _frameIndex) const noexcept
+	{
+		if(m_trace != nullptr)
+			m_trace->onPhase(_phase, _frameIndex);
+	}
+
+	/* ONE QUANTUM IS DESIGN SECTION 13.5's ORDER AND THIS IS ITS ONLY SITE.
+	 *
+	 *     swap     ChainAdapter::advanceAll(frameIndex)
+	 *     ingress  ChainAdapter::injectCodecSource(frame)
+	 *     run      0  Panel::tick(frameIndex)
+	 *              1  Board::tickSofIfDue(frameIndex), then Board::runMcu(...)
+	 *              2  DSP 0 .. DSP 7, ascending
+	 *     egress   ChainAdapter::extractCodecSink(frame)
+	 *
+	 * THE PANEL AND THE MCU RUN SERIALLY HERE, OUTSIDE THE EXECUTOR, which is
+	 * why the job array holds the eight DSP contexts and nothing else.
+	 *
+	 * NO ALLOCATION HAPPENS IN THIS FUNCTION. The adapter, the contexts and the
+	 * job array are all built once, at construction. */
+	void Scheduler::runFrames(const size_t _frames) noexcept
+	{
+		for(size_t f = 0; f < _frames; ++f)
+		{
+			const uint64_t frameIndex = m_frameIndex;
+
+			/* THE FRAME INDEX REACHES EVERY CONTEXT BEFORE Executor::run, AND
+			 * NO JOB WRITES IT. It is a copy and not a pointer, so a job cannot
+			 * observe another job's state through it. */
+			for(auto& c : m_contexts)
+				c.frameIndex = frameIndex;
+
+			mark(TracePhase::Swap, frameIndex);
+			m_chain.advanceAll(frameIndex);
+
+			mark(TracePhase::Ingress, frameIndex);
+			m_chain.injectCodecSource(m_codecSource);
+
+			mark(TracePhase::Panel, frameIndex);
+			m_board.panel().tick(frameIndex);
+
+			/* IMMEDIATELY BEFORE runMcu, design section 13.5. The Board owns
+			 * the due test and this call is unconditional. */
+			mark(TracePhase::Sof, frameIndex);
+			m_board.tickSofIfDue(frameIndex);
+
+			/* THE ALLOCATION ALONE. The MCU's budget/want/debt block is
+			 * SCH-30's; `runMcu` already takes a cycle budget and returns what
+			 * it spent, and nothing here yet carries that return. */
+			mark(TracePhase::Mcu, frameIndex);
+			(void) m_board.runMcu(alloc(m_mcuRate, &m_mcuAcc));
+
+			mark(TracePhase::Dsp, frameIndex);
+			m_executor.run(m_jobs, kJobCount);
+
+			mark(TracePhase::Egress, frameIndex);
+			m_chain.extractCodecSink(m_codecSink);
+
+			++m_frameIndex;
+		}
 	}
 }
