@@ -355,8 +355,16 @@ add_test(NAME t0_status_contract COMMAND t0_status_contract)
 # scheduler.cpp, and because the check constructs a real Board and the serial
 # Executor to satisfy the widened signature.
 #
-# It runs in a release build as well as a debug build. Nothing in it is an
-# assert() and nothing in it catches an exception, so NDEBUG changes no case.
+# NDEBUG CHANGES NO CASE IN IT, and that is a property of how the check is
+# written rather than one this registration exercises. Nothing in it is an
+# assert() and nothing in it catches an exception, so the status out-param is the
+# whole observable in either build type.
+#
+# WHAT THIS REGISTRATION DOES NOT COVER: the generator here is single-config and
+# the tree is configured Debug, so this add_test names one build type and can
+# name no other. A second tree configured -DCMAKE_BUILD_TYPE=Release, or a
+# multi-config generator, running this same registration is what would cover the
+# release half. This file configures no such tree.
 #
 # The Backend::Interpreter row is unconditional; the success cases are
 # conditional on dsp56k::g_useJIT, for the reason t0_backend_rule already
