@@ -146,13 +146,16 @@ namespace g2
 		 * that passes for the wrong reason, and one whose silence would look
 		 * exactly like a correct answer.
 		 *
-		 * THE WIDTH IS NOT BOUND BY ANY CHECK AND CANNOT BE, and saying so is
-		 * part of the decision. While the count row above holds, no Config that
-		 * reaches this line can carry a wrapped delay, so narrowing the sum to
-		 * `unsigned` changes no observable of this factory. The width earns its
-		 * place only against a future reordering of the rows -- which is the one
-		 * event that would make it observable, and the one this file cannot
-		 * test for itself. */
+		 * A WRAPPED DELAY IS NOT THE ONLY WAY PAST 32 BITS. The count row bounds
+		 * `dspCount`, but nothing bounds `hopFrames` or `lookaheadFrames` once
+		 * the override is taken, so those two terms alone carry the sum over 32
+		 * bits while every earlier row is satisfied and no subtraction has
+		 * wrapped. Narrowing this sum accepts such a Config.
+		 *
+		 * WHAT THE WIDTH DOES NOT ESTABLISH: it bounds neither term. It holds
+		 * the widest sum two 32-bit members can produce here and nothing beyond
+		 * that, so widening `Config`'s own members puts this line back in
+		 * question rather than inheriting the guarantee. */
 		{
 			const uint64_t chainDelay = static_cast<uint64_t>(_config.dspCount - 1u) * _config.hopFrames;
 			const uint64_t total      = chainDelay + kDelayCodecFrames + _config.lookaheadFrames;

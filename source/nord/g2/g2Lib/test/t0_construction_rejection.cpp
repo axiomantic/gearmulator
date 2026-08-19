@@ -14,20 +14,19 @@
  * rows from each other, and a status alone does not establish that no object
  * was handed back. Either half on its own leaves a defect it cannot name.
  *
- * THE ORDER OF THE CHECKS INSIDE THE FACTORY IS PINNED HERE, AND ONE ROW
- * REQUIRES IT. A `dspCount` of 0 is a legal input to two rows at once: the DSP
- * count row rejects it, and `D_chain = (N - 1) * hopFrames` is unsigned, so at
- * a count of 0 the subtraction wraps and the lookahead bound is exceeded by the
- * same Config. The factory reports the FIRST failing row in the order the plan
- * writes the table, and the count row is the sixth of that table while the
- * lookahead row is the eighth, so the answer is `BadDspCount`.
+ * ONE CONFIG CAN FAIL TWO ROWS AT ONCE, AND WHICH ONE ANSWERS IS A DECISION.
+ * A `dspCount` of 0 is such a Config: the DSP count row rejects it, and
+ * `D_chain = (N - 1) * hopFrames` is unsigned, so at a count of 0 the
+ * subtraction wraps and the lookahead bound is exceeded by the same Config. The
+ * factory reports the FIRST failing row in the order the plan writes the table,
+ * and the count row is the sixth of that table while the lookahead row is the
+ * eighth, so the answer is `BadDspCount`.
  *
- * THAT SECOND ROW IS REACHED ONLY BECAUSE THE FACTORY ACCUMULATES THE SUM IN 64
- * BITS. In 32 bits the wrapped delay plus a small `L` wraps a SECOND time and
- * lands back UNDER the bound, so the bound would be satisfied rather than
- * exceeded and the two rows would not overlap at all. The width therefore
- * decides whether the ordering question exists, and the case below asserts the
- * premise at the width the factory uses rather than assuming it.
+ * THE OVERLAP ITSELF DEPENDS ON THE WIDTH THE SUM IS ACCUMULATED AT. In 32 bits
+ * the wrapped delay plus a small `L` wraps a SECOND time and lands back UNDER
+ * the bound, so the two rows would not overlap at all. The width is a premise of
+ * the overlap rather than a detail of it, which is why it is written down beside
+ * the value it governs rather than left to the reader.
  *
  * WHAT THIS FILE DOES NOT ESTABLISH. It does not establish that the Config
  * defaults are the machine's shipped configuration. Two of them,
@@ -240,6 +239,24 @@ int main()
 		checkAccepted(executor, board, config, "hop 2 and divider 1 with the override taken");
 	}
 
+	/* ---------------- row 5 again, WITH THE OVERRIDE LEFT UNNAMED.
+	 *
+	 * Row 5 above writes `false` into the field, so it holds whatever the
+	 * struct's initialiser says. This case drives the same hop of 2 and names
+	 * nothing but the hop, so what it holds is the DEFAULT: a caller that never
+	 * mentions the escape is held to the build constants.
+	 *
+	 * WHAT THIS DOES NOT ESTABLISH: it fixes the initialiser and not the field.
+	 * A caller that names the override is a different Config and this case says
+	 * nothing about it. */
+	{
+		g2::Scheduler::Config config;
+		config.hopFrames = G2_CHAIN_HOP_FRAMES + 1u;
+
+		checkRejected(executor, board, config, g2::Status::BadHopFrames,
+			"hopFrames unequal to the build constant with the override left unnamed");
+	}
+
 	/* ---------------- row 6: the DSP count is fixed at 8.
 	 *
 	 * The job array is exactly 8 and holds the DSP contexts only, so every other
@@ -284,12 +301,15 @@ int main()
 	/* ---------------- the same ordering rule, WITHOUT the accumulator width in
 	 * the premise.
 	 *
-	 * The case above holds only while the factory accumulates in 64 bits: in 32
-	 * bits the wrapped delay plus the default lookahead of 1 wraps back to 0,
-	 * the bound is satisfied, and a factory that ran the bound first would still
-	 * answer BadDspCount by falling through. A lookahead this far above the
-	 * bound exceeds it in EITHER width, so this case pins the order and nothing
-	 * else -- and the two together separate the order from the arithmetic. */
+	 * The case above rests on the 64-bit accumulation: in 32 bits the wrapped
+	 * delay plus the default lookahead of 1 wraps back to 0 and the bound is
+	 * satisfied, so at that lookahead the order and the arithmetic are not
+	 * separable. The lookahead below is far enough above the bound to exceed it
+	 * in EITHER width, which is why the value is chosen here rather than left at
+	 * the default.
+	 *
+	 * WHAT THIS DOES NOT ESTABLISH: it fixes the order alone and says nothing
+	 * about the width the factory accumulates at. */
 	{
 		g2::Scheduler::Config config;
 		config.dspCount        = 0;
@@ -336,6 +356,39 @@ int main()
 
 		config.lookaheadFrames = static_cast<unsigned>(headroom) + 1u;
 		checkRejected(executor, board, config, g2::Status::BadLookahead, "a lookahead one frame ABOVE the bound");
+	}
+
+	/* ---------------- row 8 at a chain delay that needs more than 32 bits.
+	 *
+	 * The override removes the equality row, which is the only thing bounding
+	 * `hopFrames` at all, so a Config can reach the bound carrying a chain delay
+	 * above 32 bits while every earlier row still holds -- the count is 8 and no
+	 * subtraction wraps. The two premises below are asserted because they
+	 * DISAGREE: the same Config is above the bound in 64 bits and lands back
+	 * under it in 32.
+	 *
+	 * THE HOP IS CHOSEN SO THAT `(N - 1) * hopFrames` LANDS JUST ABOVE 2^32 AND
+	 * THE LOOKAHEAD STAYS AT ITS DEFAULT. A large lookahead would carry the sum
+	 * past the bound on its own and the chain term would then be free to be any
+	 * value at all; at this hop the term itself is what crosses.
+	 *
+	 * WHAT THIS DOES NOT ESTABLISH: it fixes the width of the sum and the shape
+	 * of the chain term, and nothing about the range of either input. The
+	 * factory refuses no hop and no lookahead for being large on its own. */
+	{
+		g2::Scheduler::Config config;
+		config.testOverride = true;
+		config.hopFrames    = 0x24924925u;
+
+		check(chainDelay(config) + kDelayCodec + config.lookaheadFrames > kLookaheadBound,
+			"the chosen hop does put the 64-bit sum above the lookahead bound");
+
+		check(static_cast<unsigned>(chainDelay(config)) + static_cast<unsigned>(kDelayCodec)
+				+ config.lookaheadFrames <= static_cast<unsigned>(kLookaheadBound),
+			"the same Config lands back UNDER the bound when the sum is accumulated in 32 bits");
+
+		checkRejected(executor, board, config, g2::Status::BadLookahead,
+			"a chain delay above 2^32 with the override taken");
 	}
 
 	/* ---------------- row 9: the maximum host block.
