@@ -48,13 +48,14 @@ list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.h)
 
-# SCH-17. scheduler.h declares the Backend enum and the minimum Scheduler
-# factory for the single backend rule. The header is listed here so the
-# build system knows it; the
-# implementation is inline in the header so scheduler.cpp does not yet
-# exist.
+# SCH-17 and SCH-18. scheduler.h declares the Backend enum, Scheduler::Config
+# and the create() factory; scheduler.cpp defines the factory and holds the
+# construction rejections. SCH-18 opens the translation unit rather than
+# SCH-19, because section 7.4.2 gives a path to the first writer in the Depends
+# chain and SCH-19 is not inside SCH-18's closure.
 list(APPEND G2LIB_SOURCES
-	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h)
+	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h
+	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.cpp)
 
 # SCH-12. cycleDebt.h declares the g2::runQuantum function template -- design
 # section 13.4.6's budget/want/debt block. It has no compiled

@@ -345,3 +345,26 @@ target_include_directories(t0_status_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 set_property(TARGET t0_status_contract PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_status_contract COMMAND t0_status_contract)
+
+# ---------------- SCH-18 - t0_construction_rejection
+#
+# An ordinary executable. Every rejectable value arrives through
+# Scheduler::Config, so the check drives one Config for each row of the plan's
+# rejection table and asserts BOTH halves of the row: a null return AND the
+# exact g2::Status. It links g2Lib because the factory now lives in
+# scheduler.cpp, and because the check constructs a real Board and the serial
+# Executor to satisfy the widened signature.
+#
+# It runs in a release build as well as a debug build. Nothing in it is an
+# assert() and nothing in it catches an exception, so NDEBUG changes no case.
+#
+# The Backend::Interpreter row is unconditional; the success cases are
+# conditional on dsp56k::g_useJIT, for the reason t0_backend_rule already
+# records above.
+
+add_executable(t0_construction_rejection
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_construction_rejection.cpp)
+target_link_libraries(t0_construction_rejection PRIVATE g2Lib)
+set_property(TARGET t0_construction_rejection PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_construction_rejection COMMAND t0_construction_rejection)
