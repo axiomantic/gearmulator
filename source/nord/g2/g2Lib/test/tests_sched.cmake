@@ -335,3 +335,22 @@ target_link_libraries(t0_construction_rejection PRIVATE g2Lib)
 set_property(TARGET t0_construction_rejection PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_construction_rejection COMMAND t0_construction_rejection)
+
+# ---------------- SCH-19 - t0_order
+#
+# An ordinary executable. It links g2Lib because the whole check drives a real
+# Board, a real DSP set and the real ChainAdapter through Scheduler::runFrames;
+# the check supplies only the two objects the factory already takes by
+# injection -- an Executor and, through Config::trace, a TraceSink.
+#
+# NDEBUG CHANGES NO CASE IN IT. Nothing in it is an assert() and nothing in it
+# catches an exception, so the failure counter is the whole observable in either
+# build type. WHAT THIS REGISTRATION DOES NOT COVER: the generator here is
+# single-config and the tree is configured Debug, so this add_test names one
+# build type and can name no other.
+
+add_executable(t0_order ${CMAKE_CURRENT_SOURCE_DIR}/t0_order.cpp)
+target_link_libraries(t0_order PRIVATE g2Lib)
+set_property(TARGET t0_order PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_order COMMAND t0_order)
