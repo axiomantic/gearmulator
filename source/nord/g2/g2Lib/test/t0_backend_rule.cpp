@@ -25,7 +25,10 @@
  * in the test log without a separate device.
  */
 
+#include "board.h"
+#include "executor.h"
 #include "scheduler.h"
+#include "status.h"
 
 #include "dsp56kEmu/dsp.h"
 
@@ -53,6 +56,14 @@ int main()
 	std::printf("t0_backend_rule: g_useJIT = %s\n",
 		dsp56k::g_useJIT ? "true" : "false");
 
+	/* The factory's remaining arguments. SCH-18 widened the signature to
+	 * `(const Config&, Executor&, Board&, Status&)`, and this check still
+	 * reads only the return value: the status is written and deliberately
+	 * not asserted, for the reason the header comment above gives. */
+	g2::SerialExecutor executor;
+	g2::Board          board;
+	g2::Status         status{};
+
 	/* ---------------- case 1: backend == Backend::Jit
 	 *
 	 * The conditional result. The design says the rule is structural, so
@@ -66,7 +77,7 @@ int main()
 		g2::Scheduler::Config cfg;
 		cfg.backend = g2::Backend::Jit;
 
-		std::unique_ptr<g2::Scheduler> s = g2::Scheduler::create(cfg);
+		std::unique_ptr<g2::Scheduler> s = g2::Scheduler::create(cfg, executor, board, status);
 
 		if(dsp56k::g_useJIT)
 		{
@@ -90,7 +101,7 @@ int main()
 		g2::Scheduler::Config cfg;
 		cfg.backend = g2::Backend::Interpreter;
 
-		std::unique_ptr<g2::Scheduler> s = g2::Scheduler::create(cfg);
+		std::unique_ptr<g2::Scheduler> s = g2::Scheduler::create(cfg, executor, board, status);
 
 		check(s == nullptr, "Backend::Interpreter returns null");
 	}
