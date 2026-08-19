@@ -372,13 +372,27 @@ namespace
 		 * reading could separate from a legitimate one.
 		 *
 		 * THESE THREE ARE TRACED AND NOT DEMONSTRATED, AND SAYING SO IS THE
-		 * POINT. The mechanism is the value initialiser on Scheduler's context
-		 * array, so no mutation of the constructor can make them fail: deleting
-		 * explicit zero writes leaves them green, and MEASURED HERE, so does
-		 * deleting the value initialiser itself -- the freshly allocated pages
-		 * the Scheduler lands on read zero anyway, which is luck and not a
-		 * guarantee. What they still catch is a constructor that writes a
-		 * NON-zero value into one of the three. */
+		 * POINT. Nothing this file can mutate reaches them. They are read at
+		 * the FIRST dispatch, before any job body has run, so no write by
+		 * dspJob can reach them whatever it does -- and dspJob writes these
+		 * three only through runQuantum, inside its step 2, behind the run
+		 * gate, which is shut for all eight slots in every case in this file
+		 * (MEASURED with a probe inside the gate: it opens zero times in a
+		 * whole run). The constructor deliberately writes none of the three
+		 * either, so the value initialiser on Scheduler's context array is the
+		 * only mechanism that puts a zero there and no mutation of the
+		 * constructor can make them fail.
+		 *
+		 * DELETING THAT VALUE INITIALISER ALSO LEAVES THEM GREEN, AND NOT FOR
+		 * THE REASON A READER WOULD GUESS. It is not that the Scheduler lands
+		 * on fresh pages: MEASURED, with a block of exactly sizeof(Scheduler)
+		 * filled with 0xA5 and freed immediately before, the Scheduler lands on
+		 * THAT SAME ADDRESS and the three still read zero on entry to the
+		 * constructor. This platform's allocator zeroes the block, which is a
+		 * property of this platform and not a guarantee of anything.
+		 *
+		 * What they still catch is a constructor that writes a NON-zero value
+		 * into one of the three. */
 		const RecordingExecutor::Record& first = _executor.record(0);
 
 		for(unsigned i = 0; i < g2::kJobCount && first.count == g2::kJobCount; ++i)
@@ -412,8 +426,24 @@ namespace
 	 * dspCount + 1 mailboxes; a wrong count truncates the array and the higher
 	 * positions stop crossing, so driving EVERY adjacent pair is what makes
 	 * that argument's forwarding observable rather than assumed.
+	 *
+	 * THE QUANTUM COUNT IS DERIVED FROM THE Config AND IS NOT A LITERAL. A
+	 * mailbox is a ring of hopFrames + 1 frames and one quantum performs
+	 * exactly one swap, so the count IS the hop. G2_CHAIN_HOP_FRAMES is marked
+	 * PROVISIONAL at g2/timebase.h, so a literal agrees with the derivation at
+	 * today's value and disagrees at tomorrow's -- MEASURED: with the constant
+	 * moved to 2 and the count still written as the literal 1, every crossing
+	 * below reports a zero arrival. The check cannot reach the adapter, so it
+	 * derives from the Config it supplied, which is the same number.
+	 * t0_chain_data_flow derives the same step count from adapter.hopFrames()
+	 * for the same reason.
+	 *
+	 * THE LIMIT OF THAT DERIVATION. It keeps this case honest when the
+	 * provisional constant moves; it establishes nothing about the hop the
+	 * ADAPTER was handed, because this Config's hop IS the constant. Case 4 is
+	 * where that forwarding is separated, at a hop the constant does not carry.
 	 */
-	void caseChainCrossing(g2::Board& _board, g2::Scheduler& _scheduler)
+	void caseChainCrossing(g2::Board& _board, g2::Scheduler& _scheduler, const g2::Scheduler::Config& _config)
 	{
 		g2::DspSet& set = _board.dspSet();
 
@@ -443,7 +473,7 @@ namespace
 			source.writeTX(0u, 0u);
 		}
 
-		_scheduler.runFrames(1);
+		_scheduler.runFrames(_config.hopFrames);
 
 		for(unsigned i = 0; i + 1u < g2::kJobCount; ++i)
 		{
@@ -453,8 +483,8 @@ namespace
 
 			char what[256];
 			std::snprintf(what, sizeof(what),
-				"the frame injected at position %u's audio ESAI crossed to position %u's in one quantum",
-				i, i + 1u);
+				"the frame injected at position %u's audio ESAI crossed to position %u's in "
+				"hopFrames (%u) quanta", i, i + 1u, _config.hopFrames);
 			checkEqual(sink.readRX(0u), sample, what);
 		}
 	}
@@ -626,6 +656,117 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
+	 * CASE 5b. THE SECOND-BUS DIVIDER AT ITS OTHER ORDERED CONFIGURATION, AND
+	 * IT IS THE ARM THAT MAKES THE ARGUMENT'S FORWARDING OBSERVABLE.
+	 *
+	 * WHY CASE 5 ALONE COULD NOT REPORT IT. Case 5 drives the DEFAULT Config,
+	 * whose divider IS G2_SECOND_BUS_FRAME_DIVIDER -- so a Scheduler that
+	 * handed the adapter that macro instead of the Config's value satisfies it
+	 * at every position. MEASURED against this file as it stood WITHOUT this
+	 * case: with the macro substituted for Config::secondBusFrameDivider at the
+	 * adapter's construction, every case in it stayed green. The comparison was
+	 * against a constant equal to itself.
+	 *
+	 * WHY THE CONTEXT MEMBER DOES NOT COVER IT EITHER. Case 7 asserts
+	 * DspContext::secondBusFrameDivider at a non-default value, which is the
+	 * value the JOB reads. The adapter's own copy is what the SWAP reads, and
+	 * the two are separate forwardings of one Config field: the mutation above
+	 * moves the swap's copy and leaves every context's untouched.
+	 *
+	 * THE DISCRIMINATOR IS A CADENCE. The swap advances the second bus only on
+	 * a quantum whose frame index is a multiple of the divider. Frame index 1
+	 * is such a quantum at a divider of 1 and is not one at the shipped 4, so
+	 * a frame primed after the settling quantum crosses here and does not
+	 * cross in case 5. THE MUTATION AND ITS RED: hand the adapter
+	 * G2_SECOND_BUS_FRAME_DIVIDER instead of the Config's value and this
+	 * crossing stops happening, because the adapter then skips the quantum the
+	 * Config asked it to advance on.
+	 *
+	 * A DIVIDER OF 1 NEEDS Config::testOverride, which is the escape from the
+	 * equality row and nothing else; measurement register row 10 requires the
+	 * value in any case.
+	 *
+	 * THE QUANTUM COUNT IS DERIVED AND NOT A LITERAL, for the reason case 3
+	 * states: every quantum is an advance window at a divider of 1, so the
+	 * count is the hop and nothing else.
+	 *
+	 * THE LIMIT. This reports the divider the SWAP reads and says nothing about
+	 * the one each CONTEXT reads; those are two forwardings of one Config field
+	 * and case 7 is where the second is asserted. It says nothing about a DSP
+	 * having run either -- every run gate is shut here, as it is everywhere in
+	 * this file.
+	 */
+	void caseSecondBusDividerOneForwarded(g2::Board& _board, g2::Executor& _executor)
+	{
+		g2::Scheduler::Config config;
+		config.secondBusFrameDivider = 1;
+		config.testOverride          = true;
+
+		check(config.secondBusFrameDivider != G2_SECOND_BUS_FRAME_DIVIDER,
+			"the driven divider differs from the build constant (an arm that drove "
+			"the constant would compare it against itself)");
+
+		g2::Status status{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, _executor, _board, status);
+
+		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
+			"a divider of 1 with the override taken is accepted");
+
+		if(!scheduler)
+		{
+			check(false, "a divider of 1 with the override taken yields a Scheduler");
+			return;
+		}
+
+		g2::DspSet& set = _board.dspSet();
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			enableSecondTransmitter(set.peripherals(i).getEsai1());
+			enableReceiver(set.peripherals(i).getEsai1());
+		}
+
+		/* Frame index 0 is a window quantum at EVERY divider, so this settles
+		 * the second bus at a phase both arms share. */
+		scheduler->runFrames(1);
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& source = set.peripherals(i).getEsai1();
+
+			const dsp56k::TWord sample = 0x600000u + i + 1u;
+
+			source.writeTX(0u, 0u);
+			source.writeTX(2u, sample);
+			checkEqual(g2::transmitDspFrame(source), source.getTxWordCount() + 1u,
+				"the priming second-bus transmit frame ran at a divider of 1");
+			source.writeTX(2u, 0u);
+		}
+
+		/* Frame index 1 onwards. NOT a window quantum at the shipped divider
+		 * of 4; every one of them IS a window at a divider of 1, so the hop is
+		 * the whole count and the job bodies' own receive frames latch what
+		 * each swap delivered. */
+		scheduler->runFrames(config.hopFrames);
+
+		for(unsigned i = 0; i < g2::kJobCount; ++i)
+		{
+			dsp56k::Esai& sink = set.peripherals((i + 1u) % g2::kJobCount).getEsai1();
+
+			const dsp56k::TWord sample = 0x600000u + i + 1u;
+
+			char what[256];
+			std::snprintf(what, sizeof(what),
+				"at a divider of 1, position %u's second-bus frame reached position %u on a "
+				"quantum the shipped divider would have skipped",
+				i, static_cast<unsigned>((i + 1u) % g2::kJobCount));
+			checkEqual(sink.readRX(0u), sample, what);
+		}
+	}
+
+	/* ---------------------------------------------------------------------
 	 * CASE 6. THE SECOND BUS'S TOPOLOGY IS THE Config's AND NOT A LITERAL.
 	 *
 	 * THE TWO TOPOLOGIES DIFFER AT EXACTLY ONE PAIR. A Ring gives the second
@@ -706,10 +847,18 @@ namespace
 			checkEqual(sink.readRX(0u), sample, what);
 		}
 
-		/* THE ONE ASSERTION THE TWO TOPOLOGIES DISAGREE ON. A stale reading
-		 * cannot fake this pass: position 0's second-bus receive register
-		 * still holds case 5's Ring-delivered sample on entry, so a quantum
-		 * that never reached it leaves a NON-zero value here. */
+		/* THE ONE ASSERTION THE TWO TOPOLOGIES DISAGREE ON, AND ITS
+		 * NON-VACUITY COMES FROM THE SEVEN ARRIVALS ABOVE AND NOT FROM A STALE
+		 * READING. A carried reading cannot be relied on here: whatever a
+		 * previous case left in position 0's second-bus receive register is
+		 * gone by this point, because this case's own settling quantum runs
+		 * dspJob for all eight slots and receiveDspFrame latches for any ESAI
+		 * with an enabled receiver -- MEASURED, that register holds the
+		 * previous case's sample on entry and reads zero once the settling
+		 * quantum has run. So a zero here would also be produced by a bus that
+		 * delivered nothing anywhere, and it is the seven arrivals against
+		 * distinct non-zero samples that rule that out: they say the bus is
+		 * running, and this one says it is running as a Line. */
 		checkEqual(set.peripherals(0).getEsai1().readRX(0u), 0u,
 			"on a Line, position 7's second-bus frame does NOT wrap to position 0");
 	}
@@ -842,7 +991,7 @@ int main()
 		{
 			caseOrder(trace, executor, *scheduler);
 			caseContexts(executor, board, config);
-			caseChainCrossing(board, *scheduler);
+			caseChainCrossing(board, *scheduler, config);
 		}
 	}
 
@@ -850,6 +999,7 @@ int main()
 	{
 		caseHopForwarded(board, executor);
 		caseSecondBusForwarded(board, executor);
+		caseSecondBusDividerOneForwarded(board, executor);
 		caseSecondBusTopologyForwarded(board, executor);
 		caseConfigValuesReachContexts(board);
 	}

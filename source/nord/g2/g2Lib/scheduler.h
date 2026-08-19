@@ -18,12 +18,14 @@
  *    that carries one. A null sink records nothing and is the default, so a
  *    production Scheduler pays one null check for each phase of each quantum.
  *    IT IS PRODUCTION SURFACE WHOSE ONLY CONSUMER IS A CHECK, and it is here
- *    because the swap, the ingress, the panel, the start-of-frame tick, the
- *    MCU and the egress all run SERIALLY in the Scheduler, outside the
- *    Executor -- so the order they run in has no other decider. The
- *    alternative was four accessors, one for each thing a check must reach,
- *    and four pieces of surface that only move the wall are a worse object
- *    than one seam that makes a real mutation go red.
+ *    because the swap, the panel, the start-of-frame tick and the MCU all run
+ *    SERIALLY in the Scheduler, outside the Executor -- so the order they run
+ *    in has no other decider. Those phases and the Executor dispatch are the
+ *    whole of a quantum here: the ingress and the egress are PLAY REGIME ONLY,
+ *    this class carries no regime member, and SCH-22 is what adds them and
+ *    their two records. The alternative was four accessors, one for each thing
+ *    a check must reach, and four pieces of surface that only move the wall are
+ *    a worse object than one seam that makes a real mutation go red.
  *
  * 5. SCH-19's `runFrames`, the quantum entry point, and the private
  *    constructor that wires the Executor and the Board in.
