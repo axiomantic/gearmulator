@@ -85,3 +85,32 @@ set_property(TARGET t0_chain_data_flow PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_chain_data_flow COMMAND t0_chain_data_flow)
 set_tests_properties(t0_chain_data_flow PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+
+# ----------------- DSP-19, dynamicFastInterrupts on every slot's JitConfig
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_dynamic_fast_interrupts$
+#
+# Drives a bit-test spin, loaded from a committed program, through the DSPs a
+# g2::DspSet built. Three arms: the spin BELOW the fast-interrupt boundary
+# through DSP::exec(), the same spin AT the boundary, and the first arm again
+# through DSP::execInterpreter(). The observable is the PROGRAM COUNTER'S
+# POSITION; an assertion on retired instructions is satisfied by the defect.
+#
+# THE PATH OF THE COMMITTED PROGRAM IS PASSED ON THE COMMAND LINE, on SCH-14's
+# precedent above: a path the check had to guess would be a path the check could
+# get wrong in silence.
+#
+# THE REGISTRATION IS UNCONDITIONAL WHILE THE ROW READS dsp56k::g_useJIT AT RUN
+# TIME, which is the shape t0_backend_rule, t0_order and t0_construction_rejection
+# already carry. Where this row differs: those three have an opposite property to
+# assert on an interpreter build and this one has none, so it FAILS there rather
+# than skipping, and it prints the build mode on its first line so that outcome
+# is traceable to a configuration without a second device.
+
+add_executable(t0_dynamic_fast_interrupts t0_dynamic_fast_interrupts.cpp)
+target_link_libraries(t0_dynamic_fast_interrupts PRIVATE g2Lib)
+set_property(TARGET t0_dynamic_fast_interrupts PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_dynamic_fast_interrupts COMMAND t0_dynamic_fast_interrupts
+	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/bit_test_spin.asm)
+set_tests_properties(t0_dynamic_fast_interrupts PROPERTIES LABELS "UnitTest")

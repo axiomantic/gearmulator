@@ -6,6 +6,9 @@
 
 #include "g2/timebase.h"
 
+#include "dsp56kEmu/jit.h"
+#include "dsp56kEmu/jitconfig.h"
+
 #include <cstring>
 #include <new>
 #include <stdexcept>
@@ -58,6 +61,28 @@ namespace g2
 		, peripherals(_secondBusFrameRateHz)
 		, dsp(memory, &peripherals, &peripherals.ySpace())
 	{
+		/* THE G2 EXECUTES CODE IN THE INTERRUPT REGION AS REGULAR JUMPS, which
+		 * is the case jitconfig.h's own comment names for this field. At the
+		 * upstream default JitBlock::emit compiles every block entered below
+		 * Vba_End under JitOps::FastInterruptMode::Static, which SKIPS the
+		 * block's fall-through program-counter seed; braIfBitTestMem then writes
+		 * the program counter only on its TAKEN path, so a conditional bit-test
+		 * spin down there re-enters its own block for ever.
+		 *
+		 * IT IS A READ-MODIFY-WRITE AND NOT A FRESH JitConfig, so every field
+		 * this one does not name keeps whatever the library or a later task
+		 * chose for it. n2xdsp.cpp carries the same shape.
+		 *
+		 * IT SITS IN THE SLOT CONSTRUCTOR because that runs once for each DSP
+		 * with that DSP already fully built, which is what makes this a
+		 * per-slot property rather than a property of the set.
+		 *
+		 * THE LIMIT: this configures the just-in-time compiler and nothing else.
+		 * It makes a correct waveform OBSERVABLE to a compiled guest; it
+		 * produces none. */
+		dsp56k::JitConfig config = dsp.getJit().getConfig();
+		config.dynamicFastInterrupts = true;
+		dsp.getJit().setConfig(config);
 	}
 
 	DspSet::DspSet()
