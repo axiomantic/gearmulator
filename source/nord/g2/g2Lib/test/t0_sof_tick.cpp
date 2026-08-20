@@ -287,6 +287,35 @@ extern "C"
 		return 0u;
 	}
 
+	/* The core entry points the Board's handle to its own core forwards to.
+	 * Nothing here drives that handle, so each answers the value mcf5307.h
+	 * defines for a context that can do nothing: no register holds a value, a
+	 * write to one does not succeed, and a core that never ran is neither
+	 * halted nor faulted. */
+	void mcf5307_reset(mcf5307_ctx*, uint32_t, uint32_t)
+	{
+	}
+
+	uint32_t mcf5307_get_reg(const mcf5307_ctx*, int)
+	{
+		return 0u;
+	}
+
+	int mcf5307_set_reg(mcf5307_ctx*, int, uint32_t)
+	{
+		return 0;
+	}
+
+	int mcf5307_halted(const mcf5307_ctx*)
+	{
+		return 0;
+	}
+
+	int mcf5307_faulted(const mcf5307_ctx*)
+	{
+		return 0;
+	}
+
 	/* A DISTINCT, NON-NULL handle on every call, and never a repeat. This is
 	 * the whole reason the assertions below can say "correct" rather than only
 	 * "constant" -- see the file header. */
