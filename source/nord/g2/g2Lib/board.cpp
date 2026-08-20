@@ -347,12 +347,53 @@ namespace g2
 	{
 		if(!m_mcu)
 			return 0u;
-		return mcf5307_exec(m_mcu, wantCycles);
+
+		const uint32_t cycles = mcf5307_exec(m_mcu, wantCycles);
+
+		/* THE FAULT BIT IS TAKEN FROM THE CORE RATHER THAN DECIDED HERE. It is
+		 * read back on the same call that advanced the core, so the answer
+		 * faulted() gives cannot drift from the machine it describes. */
+		m_faulted = mcf5307_faulted(m_mcu) != 0;
+
+		return cycles;
 	}
 
 	bool Board::faulted() const noexcept
 	{
 		return m_faulted;
+	}
+
+	void Board::resetMcu(const uint32_t initialSp, const uint32_t initialPc) noexcept
+	{
+		if(!m_mcu)
+			return;
+
+		mcf5307_reset(m_mcu, initialSp, initialPc);
+
+		/* The reset clears the core's own fault, so a bit left standing here
+		 * would report a machine that no longer exists. */
+		m_faulted = false;
+	}
+
+	uint32_t Board::mcuReg(const int index) const noexcept
+	{
+		if(!m_mcu)
+			return 0u;
+		return mcf5307_get_reg(m_mcu, index);
+	}
+
+	bool Board::setMcuReg(const int index, const uint32_t value) noexcept
+	{
+		if(!m_mcu)
+			return false;
+		return mcf5307_set_reg(m_mcu, index, value) != 0;
+	}
+
+	bool Board::mcuHalted() const noexcept
+	{
+		if(!m_mcu)
+			return false;
+		return mcf5307_halted(m_mcu) != 0;
 	}
 
 	void Board::tickSofIfDue(const uint64_t frameIndex) noexcept

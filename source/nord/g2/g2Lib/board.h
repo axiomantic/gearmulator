@@ -6,7 +6,7 @@
 // never touches anything else on the Board:
 //
 //     runMcu(uint32_t) -> uint32_t    one quantum of the MCU context
-//     faulted()                       true when the MCF5307 core has halted
+//     faulted()                       TRUE when an instruction TRAPPED
 //     tickSofIfDue(uint64_t)          the 1 kHz USB start-of-frame tick
 //     stateSize / stateSave / stateLoad
 //
@@ -105,16 +105,51 @@ namespace g2
 		 * widens at the call site. */
 		uint32_t runMcu(uint32_t wantCycles) noexcept;
 
-		/* True when the MCF5307 core has halted, and that is the only condition
-		 * it reports. The C ABI exports no halt getter at the pinned core
-		 * commit, so the fault bit is held on the Board. */
+		/* TRUE when the MCF5307 core stopped because an instruction TRAPPED --
+		 * a bus error, an illegal instruction word, an illegal effective address
+		 * for the opcode, an illegal operand size or a divide by zero.
+		 *
+		 * FAULT AND HALT ARE DIFFERENT FLAGS AND THIS METHOD REPORTS THE FAULT,
+		 * which is what its name says. mcf5307.h is the authority: a valid
+		 * opcode with no implemented semantics halts WITHOUT faulting, and a
+		 * faulted core is always also halted. mcuHalted() below is the wider
+		 * condition. */
 		bool faulted() const noexcept;
 
-		/* The 1 kHz USB start-of-frame tick. The Board owns the test: the
-		 * Scheduler calls this on every frame, unconditionally, passing the
-		 * authoritative virtual frame index, and the Board tests
-		 * frameIndex % 96 == 0 itself. The body here records the frame index
-		 * only. */
+		/* THE HANDLE TO THE CORE THIS BOARD ALREADY OWNS. Each of these
+		 * forwards to the matching mcf5307_ call and does nothing else, which is
+		 * what runMcu above already does against mcf5307_exec. A Board whose
+		 * core pointer is nil answers a defined value rather than dereferencing
+		 * it, in the shape runMcu uses for that case.
+		 *
+		 * NO CREATE AND NO DESTROY IS PUBLISHED. The Board's lifetime already
+		 * owns both, and a second pair would be a second core -- which is the
+		 * shape this handle exists to make unnecessary.
+		 *
+		 * mcuReg and setMcuReg take the register file's own index: 0 to 7 are
+		 * d0 to d7, 8 to 15 are a0 to a7, 16 is the status register and 17 is
+		 * the program counter. mcf5307.h owns that mapping and this class
+		 * restates none of it. setMcuReg answers FALSE for an out-of-range index
+		 * and for a nil core, which is what the C call already answers. */
+		void     resetMcu(uint32_t initialSp, uint32_t initialPc) noexcept;
+		uint32_t mcuReg(int index) const noexcept;
+		bool     setMcuReg(int index, uint32_t value) noexcept;
+
+		/* TRUE when the core will run no further instruction until the next
+		 * reset. It is the strictly WIDER condition of the two the core reports:
+		 * every faulted core is halted and a halted core need not be faulted, so
+		 * this is the one a caller asking "may I run more" must ask, and
+		 * faulted() is the one a caller asking "did this instruction trap" must
+		 * ask. */
+		bool mcuHalted() const noexcept;
+
+		/* The 1 kHz USB start-of-frame tick of design section 9.4. The Board
+		 * owns the test: the Scheduler calls this on every frame,
+		 * unconditionally, passing the authoritative virtual frame index, and
+		 * the Board tests frameIndex % 96 == 0 itself. THE REAL TICK IS TASK
+		 * BRD-22's (its Check is t0_sof_tick) and task BRD-22 owns board.cpp's
+		 * body of this method. On each due frame it advances m_usb by exactly
+		 * one SOF frame. */
 		void tickSofIfDue(uint64_t frameIndex) noexcept;
 
 		/* The MCU context's determinism-relevant state, embedded in the

@@ -18,10 +18,9 @@
 // by adding more callers of the same kind; it is caught by making the real one
 // drive.
 //
-// So this test drives the real one. A real mcf5307 core, created against a real
-// g2::Board through Board::onRead and Board::onWrite -- the exact function
-// pointers the Board itself installs -- executes a real instruction of each of
-// the three widths, and the assertions are about what ARRIVED AT THE UNIT and
+// SO THIS TEST DRIVES THE REAL ONE. The Board's OWN core, reset and stepped
+// through the Board's own methods, executes a real instruction of each of the
+// three widths, and the assertions are about what ARRIVED AT THE UNIT and
 // what LANDED IN THE REGISTERS. A test that only checked that 1 maps to 8 would
 // be checking the conversion's arithmetic against itself; it would pass against
 // a board whose conversion is right and whose forwarding is broken, and it
@@ -228,7 +227,7 @@ namespace
 	 *     3284   move.w d4,(a1)     a word  write at the data window + 4
 	 *     2485   move.l d5,(a2)     a long  write at the data window + 8
 	 *
-	 * The address registers are loaded through mcf5307_set_reg rather than by
+	 * The address registers are loaded through Board::setMcuReg rather than by
 	 * instructions, so that a decode this core does not implement cannot be
 	 * mistaken for the bus defect under test. */
 	constexpr uint16_t g_program[] =
@@ -373,26 +372,23 @@ int main()
 	// PART 1 -- the real core, driving the real board.
 	// ==================================================================
 	{
-		/* THE CORE IS POINTED AT Board::onRead AND Board::onWrite, the exact
-		 * pair the Board hands to mcf5307_create for its own context. The
-		 * Board's own context is private and cannot be reset or read from
-		 * here, so this test creates a second one against the same callbacks
-		 * and the same Board -- which is what the boot harness does, and for
-		 * the same reason. */
-		mcf5307_ctx* mcu = mcf5307_create(&board, &g2::Board::onRead, &g2::Board::onWrite, nullptr);
-		check(mcu != nullptr, "the core is created against the board's own callbacks");
+		/* THE BOARD'S OWN CORE IS THE ONE THAT RUNS, reached through the handle
+		 * the Board publishes. It already sits behind Board::onRead and
+		 * Board::onWrite -- they are the exact pair the Board hands to
+		 * mcf5307_create for it -- so the path under test is unchanged, and a
+		 * core this file built would have been a second core beside the one the
+		 * Board owns. */
+		board.resetMcu(g_stackTop, g_codeBase);
 
-		mcf5307_reset(mcu, g_stackTop, g_codeBase);
-
-		check(mcf5307_set_reg(mcu, 8,  g_dataBase)      == 1, "a0 is loaded with the data window base");
-		check(mcf5307_set_reg(mcu, 9,  g_dataBase + 4u) == 1, "a1 is loaded with the data window base + 4");
-		check(mcf5307_set_reg(mcu, 10, g_dataBase + 8u) == 1, "a2 is loaded with the data window base + 8");
-		check(mcf5307_set_reg(mcu, 0,  g_regFill)       == 1, "d0 starts all-ones");
-		check(mcf5307_set_reg(mcu, 1,  g_regFill)       == 1, "d1 starts all-ones");
-		check(mcf5307_set_reg(mcu, 2,  g_regFill)       == 1, "d2 starts all-ones");
-		check(mcf5307_set_reg(mcu, 3,  g_storeByte)     == 1, "d3 holds the byte the program stores");
-		check(mcf5307_set_reg(mcu, 4,  g_storeWord)     == 1, "d4 holds the word the program stores");
-		check(mcf5307_set_reg(mcu, 5,  g_storeLong)     == 1, "d5 holds the longword the program stores");
+		check(board.setMcuReg(8,  g_dataBase),      "a0 is loaded with the data window base");
+		check(board.setMcuReg(9,  g_dataBase + 4u), "a1 is loaded with the data window base + 4");
+		check(board.setMcuReg(10, g_dataBase + 8u), "a2 is loaded with the data window base + 8");
+		check(board.setMcuReg(0,  g_regFill),       "d0 starts all-ones");
+		check(board.setMcuReg(1,  g_regFill),       "d1 starts all-ones");
+		check(board.setMcuReg(2,  g_regFill),       "d2 starts all-ones");
+		check(board.setMcuReg(3,  g_storeByte),     "d3 holds the byte the program stores");
+		check(board.setMcuReg(4,  g_storeWord),     "d4 holds the word the program stores");
+		check(board.setMcuReg(5,  g_storeLong),     "d5 holds the longword the program stores");
 
 		/* Stepping, with a bound. The loop stops when the program counter
 		 * reaches the instruction after the last one, so the core never runs
@@ -400,9 +396,9 @@ int main()
 		 * The bound is what makes a core that makes no progress terminate;
 		 * the assertion after the loop is what makes it FAIL. */
 		int steps = 0;
-		while(steps < 64 && mcf5307_get_reg(mcu, 17) != g_codeEnd && mcf5307_halted(mcu) == 0)
+		while(steps < 64 && board.mcuReg(17) != g_codeEnd && !board.mcuHalted())
 		{
-			(void)mcf5307_exec(mcu, 1);
+			(void)board.runMcu(1);
 			++steps;
 		}
 
@@ -411,10 +407,10 @@ int main()
 		 * the unconverted board produces -- leaves the program counter at the
 		 * entry point and the fault flag set, so both of these are red in that
 		 * state rather than vacuously green. */
-		checkEqual(mcf5307_get_reg(mcu, 17), g_codeEnd,
+		checkEqual(board.mcuReg(17), g_codeEnd,
 		           "the core executed the whole program and stopped after the last instruction");
-		checkEqual(uint32_t(mcf5307_faulted(mcu)), 0u,
-		           "no access in the program faulted");
+		check(!board.faulted(),
+		      "no access in the program faulted");
 
 		// ------------------------------------------------------------------
 		// WHAT ARRIVED AT THE UNIT. This is the sequence a correct conversion
@@ -455,13 +451,13 @@ int main()
 		// CONSUMED. Both are needed: a board that reported the right width and
 		// returned the wrong number of bytes would satisfy the record and fail
 		// here.
-		checkEqual(mcf5307_get_reg(mcu, 0),
+		checkEqual(board.mcuReg(0),
 		           (g_regFill & 0xFFFFFF00u) | uint32_t(g_dataByte),
 		           "the byte read replaced exactly the low byte of d0");
-		checkEqual(mcf5307_get_reg(mcu, 1),
+		checkEqual(board.mcuReg(1),
 		           (g_regFill & 0xFFFF0000u) | (uint32_t(g_dataWord0) << 8) | uint32_t(g_dataWord1),
 		           "the word read replaced exactly the low word of d1");
-		checkEqual(mcf5307_get_reg(mcu, 2),
+		checkEqual(board.mcuReg(2),
 		           (uint32_t(g_dataLong0) << 24) | (uint32_t(g_dataLong1) << 16)
 		         | (uint32_t(g_dataLong2) << 8)  |  uint32_t(g_dataLong3),
 		           "the longword read replaced the whole of d2");
@@ -480,8 +476,6 @@ int main()
 		checkEqual(data.peek(10u), (g_storeLong >> 8)  & 0xffu, "the longword store wrote data + 10");
 		checkEqual(data.peek(11u),  g_storeLong        & 0xffu, "the longword store wrote data + 11");
 		checkEqual(data.peek(12u), 0u,                          "the longword store left data + 12 alone");
-
-		mcf5307_destroy(mcu);
 	}
 
 	// ==================================================================

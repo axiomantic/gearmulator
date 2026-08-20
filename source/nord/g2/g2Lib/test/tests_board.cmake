@@ -491,3 +491,24 @@ target_sources(t0_sof_tick PRIVATE
 	../chainAdapter.cpp
 	../mailbox.cpp
 	../frame.cpp)
+
+
+# ----------------- BRD-28, the Board's handle to its own MCU core
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_board_mcu_handle$
+#
+# T0 AND UNGATED. The test hand-encodes the program it runs and needs no
+# firmware artifact of any kind.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement the board
+# tests above already use: it resets and steps the Board's own core through the
+# Board's methods, and g2Lib carries the mcf5307 link itself. NOTHING HERE
+# REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
+# written.
+
+add_executable(t0_board_mcu_handle t0_board_mcu_handle.cpp)
+target_link_libraries(t0_board_mcu_handle PRIVATE g2Lib)
+set_property(TARGET t0_board_mcu_handle PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_board_mcu_handle COMMAND t0_board_mcu_handle)
+set_tests_properties(t0_board_mcu_handle PROPERTIES LABELS "UnitTest")
