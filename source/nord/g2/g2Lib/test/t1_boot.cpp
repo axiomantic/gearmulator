@@ -58,8 +58,12 @@
 #include "../scheduler.h"
 #include "../status.h"
 
+#include "dsp56kBase/logging.h"
+
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -81,6 +85,72 @@ namespace
 		}
 		std::cout << "FAIL " << _what << std::endl;
 		++g_failures;
+	}
+
+	// ------------------------------------------------ the ESAI underrun log filter
+	//
+	// dsp56kEmu's Esai::writeSlotToFrame calls LOG() once per transmit slot whose
+	// data was never written, and LOG() goes to the console through
+	// Logging::g_logToConsole. The hook this filter installs is the emulator's own
+	// Logging::setLogFunc, so NOTHING in the vendored tree is patched to get here.
+	//
+	// THE LIMIT, AND IT IS THE WHOLE POINT OF THIS BLOCK. The underruns are REAL
+	// and they are EXPECTED in the boot regime: nothing drains the ESAIs until the
+	// codec queues arrive with task SCH-22, so every frame the Scheduler turns
+	// latches empty slots. This filter hides the REPETITION of that condition and
+	// nothing else -- it does not stop the underruns, and a green quiet run is NOT
+	// evidence that the ESAIs are being drained. Once SCH-22 lands, a run that
+	// still reports them is reporting a defect, and the kept lines below are what
+	// makes that visible without re-reading a suppressed log.
+	//
+	// EVERY OTHER LINE IS FORWARDED UNCHANGED, including any underrun line the
+	// library ever emits with different wording. The match is one message text.
+	// mc68k keeps its own sink and its own stream -- mc68k::logToConsole writes to
+	// stderr and this filter never sees it -- so the core's diagnostics are
+	// untouched here by construction rather than by intent.
+	//
+	// TO TURN IT OFF: set G2_LOG_ESAI_UNDERRUN in the environment. With it set this
+	// file installs no log function at all, and the run's output is byte for byte
+	// what the library produces on its own.
+	const char* const g_underrunMessage = "ESAI transmit underrun";
+
+	// The first few are kept so the message, its written mask and its enabled mask
+	// stay readable. The Executor interface admits a parallel implementation, so
+	// the counter is atomic rather than trusting today's SerialExecutor.
+	constexpr uint64_t g_underrunLinesKept = 4;
+
+	std::atomic<uint64_t> g_underrunLines{0};
+
+	void filterLog(const std::string& _s)
+	{
+		if(_s.find(g_underrunMessage) != std::string::npos &&
+		   g_underrunLines.fetch_add(1) >= g_underrunLinesKept)
+			return;
+
+		std::cout << _s << '\n';
+	}
+
+	void installLogFilter()
+	{
+		if(std::getenv("G2_LOG_ESAI_UNDERRUN"))
+			return;
+
+		Logging::setLogFunc(&filterLog);
+	}
+
+	// The count is REPORTED rather than discarded, so "the log was silenced" stays
+	// a statement about volume and not about evidence.
+	void reportSuppressedLogLines()
+	{
+		const uint64_t seen = g_underrunLines.load();
+
+		if(seen <= g_underrunLinesKept)
+			return;
+
+		std::cout << "note " << (seen - g_underrunLinesKept) << " further \""
+		          << g_underrunMessage << "\" lines were suppressed; set "
+		             "G2_LOG_ESAI_UNDERRUN to see every one of them"
+		          << std::endl;
 	}
 
 	// ---------------------------------------------------------------- section 6.6
@@ -888,6 +958,10 @@ namespace
 
 int main()
 {
+	// BEFORE ANYTHING RUNS, so that no emitter escapes the filter by being
+	// constructed early. See its definition for what it hides and how to stop it.
+	installLogFilter();
+
 	g2::EnvArtifactResolver resolver;
 	g2::test::GatedCounters counters;
 
@@ -1053,6 +1127,8 @@ int main()
 
 		return g_failures == 0;
 	});
+
+	reportSuppressedLogLines();
 
 	std::cout << g2::test::summaryLine(counters) << std::endl;
 
