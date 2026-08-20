@@ -574,6 +574,27 @@ namespace
 	 * non-window quantum nothing latches and the receive registers would still
 	 * hold the previous window's value. The check drives receiveDspFrame itself
 	 * to make the reading current, exactly as t0_chain_data_flow does.
+	 *
+	 * THE QUANTUM COUNTS ARE DERIVED FROM THE Config AND ARE NOT LITERALS, AND
+	 * THE PRODUCT IS WHERE A LITERAL WENT WRONG. A quantum swaps at its own
+	 * frame index, the swap advances the second bus only on a frame index the
+	 * divider divides, and the mailbox is a ring of hopFrames + 1 frames -- so
+	 * the frame reaches the read cell after hopFrames of THOSE ADVANCES, not
+	 * after hopFrames quanta. The arrival is therefore on the
+	 * hopFrames * secondBusFrameDivider-th quantum counted from the settling
+	 * quantum's successor. The settling quantum itself stays a literal 1: frame
+	 * index 0 is a window at every divider and is keyed to neither field.
+	 *
+	 * THE LIMIT, AND IT IS TWO. Deriving from this Config keeps the arm honest
+	 * when a provisional constant moves; it establishes NOTHING about the hop or
+	 * the divider the ADAPTER was handed, because this arm drives the default
+	 * Config where both fields ARE the build constants and the comparison is a
+	 * constant against itself. Case 4 separates the hop's forwarding and case 5b
+	 * the divider's, each at a value the constant does not carry. And the
+	 * off-window probe below exists only while the divider is at least 2: at 1
+	 * every quantum is a window, the non-arrival has nothing to assert, and no
+	 * arithmetic rescues it -- that arm would then need its own testOverride
+	 * Config, and this sentence is what says so instead of a red suite.
 	 */
 	void caseSecondBusForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
@@ -638,8 +659,9 @@ namespace
 			checkEqual(sink.readRX(0u), 0u, what);
 		}
 
-		/* Frame indices 2, 3 and 4. The last is the next window quantum. */
-		scheduler->runFrames(3);
+		/* The remainder of the arrival count, the off-window probe above having
+		 * spent the first of those quanta. */
+		scheduler->runFrames(config.hopFrames * config.secondBusFrameDivider - 1u);
 
 		for(unsigned i = 0; i < g2::kJobCount; ++i)
 		{
@@ -786,6 +808,13 @@ namespace
 	 *
 	 * THE MUTATION AND ITS RED: hand the adapter a literal ChainTopology::Ring
 	 * and position 7's frame reaches position 0, so the wrap assertion fails.
+	 *
+	 * THE QUANTUM COUNT IS DERIVED, by the ring-of-advances reasoning case 5
+	 * states. This arm asserts no non-arrival, so it spends none of the count on
+	 * an off-window probe and drives the whole product.
+	 *
+	 * THE LIMIT is case 5's first one: this arm drives the default hop and the
+	 * default divider, so the derivation reports neither field's forwarding.
 	 */
 	void caseSecondBusTopologyForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
@@ -831,9 +860,10 @@ namespace
 			source.writeTX(2u, 0u);
 		}
 
-		/* Frame indices 1, 2, 3 and 4. The last is the next advance window, so
-		 * the job bodies' own receive frames latch what the swap delivered. */
-		scheduler->runFrames(4);
+		/* The arrival count, counted from the settling quantum's successor. Its
+		 * last quantum is an advance window, so the job bodies' own receive
+		 * frames latch what the swap delivered. */
+		scheduler->runFrames(config.hopFrames * config.secondBusFrameDivider);
 
 		for(unsigned i = 0; i + 1u < g2::kJobCount; ++i)
 		{
