@@ -40,7 +40,10 @@
 #include "gatedFixture.h"
 
 #include "../board.h"
+#include "../executor.h"
 #include "../memoryMap.h"
+#include "../scheduler.h"
+#include "../status.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -48,6 +51,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -459,6 +463,19 @@ namespace
 	// whole boot fits in g_handshakeIterations iterations.
 	constexpr uint32_t g_cyclesPerIteration = 4096u;
 
+	/* ONE SCHEDULER FRAME PER ITERATION, ALONGSIDE THE ADVANCE ABOVE RATHER THAN
+	 * INSTEAD OF IT, BECAUSE THE TWO DRIVE DIFFERENT CORES. Scheduler::runFrames
+	 * runs Board::runMcu, which advances the core the BOARD constructs and which
+	 * nothing resets; the firmware runs on the core this file creates and resets
+	 * to the entry point, and the file header says why that second core has to
+	 * exist. So the frame turns the DSP set, the chain and the panel, and the
+	 * advance above stays the thing that executes firmware.
+	 *
+	 * runFrames carries no cycle budget out of this file: it allocates the MCU's
+	 * cycles from its own Config rational, so what the drive inherits from the
+	 * loop is the ITERATION BOUND and nothing else. */
+	constexpr size_t g_framesPerIteration = 1;
+
 	// What one boot produced. Everything the assertions below read comes from
 	// here, so the run happens once and no assertion can re-run the machine and
 	// quietly get a second answer.
@@ -490,7 +507,45 @@ namespace
 		bool     faulted        = false;
 		uint32_t iterations     = 0;
 		std::vector<std::string> busLog;
+
+		// The DSP cycle counters, one for each slot the Board owns, sampled once
+		// at the end of the run. The CARDINALITY is carried separately from the
+		// values because a per-slot property over an empty set is vacuously
+		// true, so the count is what the loop bound is held to rather than read
+		// from.
+		unsigned              dspCount = 0;
+		std::vector<uint64_t> dspCycles;
 	};
+
+	// WRITTEN OUT RATHER THAN READ FROM THE OBJECT UNDER TEST. DspSet holds a
+	// fixed array and dspCount() returns its size, so a comparison against that
+	// same accessor would agree with itself whatever the array became.
+	constexpr unsigned g_expectedDspCount = 8u;
+
+	bool everyDspRan(const BootResult& _r)
+	{
+		for(const uint64_t cycles : _r.dspCycles)
+		{
+			if(cycles == 0u)
+				return false;
+		}
+
+		return true;
+	}
+
+	std::string dspCycleList(const BootResult& _r)
+	{
+		std::string out;
+
+		for(size_t i = 0; i < _r.dspCycles.size(); ++i)
+		{
+			if(i != 0)
+				out += ", ";
+			out += std::to_string(_r.dspCycles[i]);
+		}
+
+		return "[" + out + "]";
+	}
 
 	bool runBoot(const std::string& _directory, BootResult& _result)
 	{
@@ -566,6 +621,29 @@ namespace
 
 		mcf5307_reset(mcu, g_entrySp, g_entryPc);
 
+		/* THE SCHEDULER, TASK INT-3. It is declared AFTER the Board so that it is
+		 * destroyed BEFORE it: it borrows the Board's DSP set, and it installs
+		 * chain callbacks into ESAIs the Board owns. The Executor is declared
+		 * before the Scheduler for the same reason.
+		 *
+		 * A NULL RETURN IS THE ONE REJECTION THAT CARRIES A REASON, so the status
+		 * is reported here and the run loop is not entered. Every Config default
+		 * is a legal value and the factory is the single rejection point, so this
+		 * is the only place a reason exists to be printed. */
+		g2::SerialExecutor executor;
+		g2::Status         schedulerStatus{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(g2::Scheduler::Config(), executor, board, schedulerStatus);
+
+		if(!scheduler)
+		{
+			std::cout << "FAIL Scheduler::create returned no object; g2::Status = "
+			          << uint32_t(schedulerStatus) << std::endl;
+			mcf5307_destroy(mcu);
+			return false;
+		}
+
 		// PHASE 1 -- run until the firmware composes display content, or until the
 		// bound.
 		for(uint32_t i = 0; i < g_handshakeIterations; ++i)
@@ -573,6 +651,7 @@ namespace
 			_result.iterations = i + 1;
 
 			mcf5307_exec(mcu, g_cyclesPerIteration);
+			scheduler->runFrames(g_framesPerIteration);
 
 			if(mcf5307_halted(mcu))
 				break;
@@ -600,13 +679,21 @@ namespace
 		// expected to leave it, and a machine that did not is expected to sit
 		// still. The two are told apart below.
 		for(uint32_t i = 0; i < 64u && !mcf5307_halted(mcu); ++i)
+		{
 			mcf5307_exec(mcu, g_cyclesPerIteration);
+			scheduler->runFrames(g_framesPerIteration);
+		}
 
 		_result.pcLater = mcf5307_get_reg(mcu, g_regPc);
 		_result.halted  = mcf5307_halted(mcu) != 0;
 		_result.faulted = mcf5307_faulted(mcu) != 0;
 		_result.handshakePorts = handshakePortCount(board);
 		_result.busLog = board.memory().log();
+
+		_result.dspCount = board.dspSet().dspCount();
+
+		for(unsigned i = 0; i < _result.dspCount; ++i)
+			_result.dspCycles.push_back(board.dspSet().dsp(i).getCycles());
 
 		_result.contentWrites = ram.contentWrites();
 		_result.clearWrites   = ram.clearWrites();
@@ -624,11 +711,14 @@ namespace
 
 	// ------------------------------------------------------- the positive control
 	//
-	// The predicate's false case is observed and its true case is constructed.
-	// The firmware currently
-	// stalls before the banner in an infinite spin polling the unmodelled M-Bus
-	// status register at MBAR+$28C, so no run available to this file reaches a
-	// real banner and the TRUE case cannot be observed. It is built instead: the
+	// THE PREDICATE'S FALSE CASE IS OBSERVED AND ITS TRUE CASE IS CONSTRUCTED,
+	// and the asymmetry is stated rather than hidden. The firmware rests before
+	// the banner in the closed loop at 0x300505d4..0x300505e0, which makes no
+	// MBAR access at all: it polls HDI08 port 3's ISR at 0x110007BA for RXDF,
+	// waiting on a reply the bootstrapped DSPs have not sent. Driving the
+	// scheduler beside the core turns those DSPs and does not end the wait, so
+	// no run available to this file reaches a real banner and the TRUE case
+	// cannot be observed. It is built instead: the
 	// expected bytes are driven into the display buffer through Board::onWrite --
 	// the exact static callback handed to mcf5307_create, so the same decode, the
 	// same region and the same store the core's own writes reach -- and the
@@ -748,6 +838,11 @@ namespace
 		std::cout << "boot: line0=" << escapedLine(_r.line0) << std::endl;
 		std::cout << "boot: line1=" << escapedLine(_r.line1) << std::endl;
 		std::cout << "boot: handshakePorts=" << _r.handshakePorts << std::endl;
+
+		std::cout << "boot: dspCount=" << _r.dspCount << " dspCycles=";
+		for(const uint64_t cycles : _r.dspCycles)
+			std::cout << cycles << ' ';
+		std::cout << std::endl;
 
 		// Every access the decode refused, in full. A boot that stopped stopped
 		// somewhere, and this is the trace that names where.
@@ -887,6 +982,31 @@ int main()
 		      result.pcLater != g_haltFlashGate && result.pcLater != g_haltModelByte,
 		      "execution entered the banner function 0x3001B7FC AND the run ended at "
 		      "neither hard halt (0x3001BB4C flash gate, 0x3001B86C model byte)");
+
+		// --------------------------------------------- task INT-3, the scheduler drive
+		//
+		// THE CARDINALITY IS ASSERTED FIRST AND IT IS NOT REDUNDANT. The cycle
+		// property below is quantified over the count, and a property over an
+		// empty set is true without discriminating anything, so the count is
+		// held to a number written here rather than read from the object the
+		// loop bound already came from.
+		//
+		// WHAT THESE TWO DO NOT ESTABLISH. Not that any DSP ran the program it
+		// was given, not that the firmware received the word it polls for, and
+		// not that the boot left the loop at 0x300505d4..0x300505e0. A counter
+		// above zero says the scheduler reached the DSP phase and says nothing
+		// about what was executed there. The counter itself is dsp56kEmu's and
+		// is written by the just-in-time backend alone, which is why
+		// Scheduler::create refusing an interpreter build is what makes it
+		// readable at all.
+		check(result.dspCount == g_expectedDspCount,
+		      "the Board owns " + std::to_string(g_expectedDspCount) +
+		      " DSP slots; counted " + std::to_string(result.dspCount));
+
+		check(everyDspRan(result),
+		      "every DSP the Board owns executed at least one cycle, so the "
+		      "scheduler turned them rather than leaving them bootstrapped and "
+		      "still; counted " + dspCycleList(result));
 
 		return g_failures == 0;
 	});
