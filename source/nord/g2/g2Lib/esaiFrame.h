@@ -22,6 +22,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 namespace dsp56k
 {
@@ -45,6 +46,23 @@ namespace g2
 	 */
 	uint32_t transmitDspFrame(dsp56k::Esai& esai) noexcept;
 
+	/* The callback form: invokes _callback after EACH execTX, so core
+	 * execution lands BETWEEN ESAI slots instead of between whole frames.
+	 *
+	 * THE TRANSMIT LOOP TERMINATION GUARD (B1). The shipped form terminates
+	 * on the frame counter advancing, which is safe when no guest
+	 * instruction runs between iterations. The callback form puts one there,
+	 * so a guest TCR write that clears TEM mid-loop would hang the
+	 * frame-counted while. The guard takes a bound -- getTxWordCount() + 1
+	 * read BEFORE the loop starts -- and terminates on EITHER the frame
+	 * counter advancing OR the bound being reached, whichever comes first.
+	 *
+	 * THE BOUND IS NOT A SECOND TERMINATION CONDITION IN THE SHIPPED SHAPE.
+	 * It is the safety net the interleave requires, because a guest that
+	 * clears TEM mid-frame is a real firmware event and not a pathology. */
+	uint32_t transmitDspFrame(dsp56k::Esai& esai,
+		const std::function<void()>& _callback) noexcept;
+
 	/* Advances one whole receive FRAME and returns the slot count, which is
 	 * exactly getRxWordCount() + 1.
 	 *
@@ -60,4 +78,16 @@ namespace g2
 	 * side has one, which is why the two are not symmetric.
 	 */
 	uint32_t receiveDspFrame(dsp56k::Esai& esai) noexcept;
+
+	/* The callback form: invokes _callback after EACH execRX.
+	 *
+	 * THE RECEIVE SIDE GUARD (B5). The shipped form reads getRxWordCount()
+	 * once and iterates against that fixed count. Under the interleave, a
+	 * guest RCCR write can change the word count mid-loop, leaving the
+	 * for iterating against a stale value. The guard re-reads the bound
+	 * inside the loop body and terminates early if getRxWordCount()
+	 * changes. The for loop is a fixed count and does not hang; the guard
+	 * prevents a phase perturbation the shipped shape excludes. */
+	uint32_t receiveDspFrame(dsp56k::Esai& esai,
+		const std::function<void()>& _callback) noexcept;
 }
