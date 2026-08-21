@@ -354,3 +354,26 @@ target_link_libraries(t0_order PRIVATE g2Lib)
 set_property(TARGET t0_order PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_order COMMAND t0_order)
+
+# ---------------- SCH-34 - t0_esai_slot_phase
+#
+# An ordinary executable. The path of the committed fixture is passed on the
+# command line, the same way SCH-14's t0_block_table_harness passes
+# synthetic_block_program.asm. The test reads the path from argv[1] and
+# assembles the file at run time through dsp56k::Assembler.
+#
+# THE TEST MUST RUN UNDER THE JIT. g_useJIT is read at run time and the
+# test fails loudly rather than skip on a non-JIT build. The fixture spin
+# sits below Vba_End ($100) so dynamicFastInterrupts (set in DspSet::Slot::Slot
+# by DSP-19's production code) puts the JIT in FastInterruptMode::Dynamic and
+# exec() returns after each instruction. The test uses DspSet rather than
+# PeripheralsNop because dynamicFastInterrupts is set in DspSet::Slot::Slot.
+
+add_executable(t0_esai_slot_phase
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_slot_phase.cpp)
+target_link_libraries(t0_esai_slot_phase PRIVATE g2Lib)
+set_property(TARGET t0_esai_slot_phase PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_esai_slot_phase COMMAND t0_esai_slot_phase
+	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/esai_sync_spin.asm)
+set_tests_properties(t0_esai_slot_phase PROPERTIES LABELS "UnitTest")
