@@ -377,3 +377,19 @@ set_property(TARGET t0_esai_slot_phase PROPERTY FOLDER "G2/test")
 add_test(NAME t0_esai_slot_phase COMMAND t0_esai_slot_phase
 	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/esai_sync_spin.asm)
 set_tests_properties(t0_esai_slot_phase PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-35 - t0_esai_idle_core
+#
+# An ordinary executable over a fixture-free source: the discriminating case's
+# guest is the reset state itself and the companion case enables ports through
+# the public control-register writes, so no .asm is committed. The program is
+# assembled in-test and sits below Vba_End for the same reason
+# t0_esai_slot_phase's does.
+
+add_executable(t0_esai_idle_core
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_idle_core.cpp)
+target_link_libraries(t0_esai_idle_core PRIVATE g2Lib)
+set_property(TARGET t0_esai_idle_core PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_esai_idle_core COMMAND t0_esai_idle_core)
+set_tests_properties(t0_esai_idle_core PROPERTIES LABELS "UnitTest")
