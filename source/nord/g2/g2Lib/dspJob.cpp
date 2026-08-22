@@ -45,12 +45,23 @@
  * Status::BadDivider and no object for that value, so the modulo cannot
  * divide by zero.
  *
- * THE LIMIT: this file configures the interleave and nothing else. It makes
- * a correct waveform observable to a compiled guest; it produces none.
+ * THE IDLE ROUTE (SCH-35) RESTORES WHAT SCH-34 REMOVED. On real hardware
+ * the ESAI gates audio transfers, not core execution. When the audio port
+ * has no enabled transmitters AND no enabled receivers -- the reset state
+ * of every boot -- both helpers return before their loops and the quantum's
+ * budget would never reach the core. dspJob then runs the budget DIRECTLY,
+ * frame-granular at frame position, behind the same run gate; the two
+ * routes are exclusive per quantum and share one reconciliation.
+ *
+ * THE LIMIT: this file configures the interleave and its idle fallback and
+ * nothing else. It makes a correct waveform observable to a compiled guest;
+ * it produces none.
  */
 
 #include "dspContext.h"
 #include "esaiFrame.h"
+
+#include "dsp56kEmu/esai.h"
 #include "runDspCycles.h"
 #include "cycleDebt.h"
 
@@ -103,9 +114,39 @@ namespace g2
 				totalSpent += runDspCycles(*c->dsp, sub);
 		};
 
+		/* THE IDLE ROUTE (SCH-35). On real hardware the ESAI gates audio
+		 * transfers, not core execution. Both frame helpers return before
+		 * their loops when their direction has no enabled channel, so an
+		 * idle audio port leaves the interleave's callbacks unfired and
+		 * the quantum's budget undelivered. The route is decided ONCE per
+		 * quantum here, at the top, and a mid-quantum enable completes
+		 * the chosen route: the enable writes align slot counters to the
+		 * NEXT frame boundary, so no current-frame slot can appear. The
+		 * AUDIO PORT ALONE gates -- secondEsai's enables decide nothing,
+		 * which is the state a busy audio bus beside an idle second bus
+		 * already survives -- and IDLE means no transmitters AND no
+		 * receivers, not or: one enabled direction still runs its half's
+		 * slots through the interleave below.
+		 *
+		 * THE TWO ROUTES ARE EXCLUSIVE PER QUANTUM. When the direct route
+		 * fires it replaces this quantum's core execution entirely and
+		 * all four helper calls run in their bare no-callback forms; a
+		 * mixed quantum would deliver the budget twice against one want.
+		 * Direct-run cycles join totalSpent BEFORE the single
+		 * reconciliation, so ctx.debt reconciles over them exactly as it
+		 * does over the interleave's per-slot spends.
+		 *
+		 * The direct run sits behind the SAME programLanded gate step 2
+		 * has always sat behind. */
+		const bool landed =
+			c->programLanded != nullptr && *c->programLanded;
+		const bool audioIdle =
+			c->audioEsai->hasEnabledTransmitters() == 0 &&
+			c->audioEsai->hasEnabledReceivers() == 0;
+
 		/* 1. The receive half of the frame, interleaved with core
-		 * execution. The second bus advances only inside the window
-		 * ChainAdapter::advanceAll uses. */
+		 * execution when the interleave runs. The second bus advances
+		 * only inside the window ChainAdapter::advanceAll uses. */
 		const bool secondBus = c->frameIndex % c->secondBusFrameDivider == 0;
 
 		/* THE RUN GATE. A NULL pointer is NOT LANDED, and that direction
@@ -113,7 +154,7 @@ namespace g2
 		 * a slot whose program memory is zero-filled -- and 0x000000 is
 		 * a no-operation on this core, so that slot faults nowhere and
 		 * writes no log line. */
-		if(c->programLanded != nullptr && *c->programLanded)
+		if(landed && !audioIdle)
 		{
 			receiveDspFrame(*c->audioEsai, run);
 			if(secondBus)
@@ -126,13 +167,16 @@ namespace g2
 				receiveDspFrame(*c->secondEsai);
 		}
 
-		/* 2. When the program has not landed, the interleave does not run.
-		 * The frame helpers still advance the ESAI. When want <= 0, the
-		 * callback runs nothing and the debt is paid down by the whole
-		 * allocation, which is the same rule runQuantum uses. */
+		/* 2. THE DIRECT ROUTE. Frame-granular, at frame position, the
+		 * pre-SCH-34 shape restored for the idle-port quantum. A want <=
+		 * 0 runs no cycle and the reconciliation below pays the debt
+		 * down by the whole allocation, the same rule runQuantum uses. */
+		if(landed && audioIdle && want > 0)
+			totalSpent += runDspCycles(*c->dsp,
+				static_cast<uint32_t>(want));
 
 		/* 3. The transmit half of the frame, gated on the same window. */
-		if(c->programLanded != nullptr && *c->programLanded)
+		if(landed && !audioIdle)
 		{
 			transmitDspFrame(*c->audioEsai, run);
 			if(secondBus)
