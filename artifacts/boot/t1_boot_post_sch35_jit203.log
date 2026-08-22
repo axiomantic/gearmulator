@@ -1,0 +1,864 @@
+UpdateCTestConfiguration  from :/Users/eek/Development/gearmulator/build/DartConfiguration.tcl
+Parse Config file:/Users/eek/Development/gearmulator/build/DartConfiguration.tcl
+Test project /Users/eek/Development/gearmulator/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added setup test g2_test_executables_build required by fixture g2_test_executables_built
+Added 1 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 104
+    Start 104: g2_test_executables_build
+
+104: Test command: /opt/homebrew/bin/cmake "--build" "/Users/eek/Development/gearmulator/build" "--config" "Debug" "--target" "g2_test_executables_all"
+104: Working Directory: /Users/eek/Development/gearmulator/build/source/nord/g2/g2Lib/test
+104: Test timeout computed to be: 1500
+104: [  0%] Built target 68kEmu
+104: [  0%] Built target dsp56kBase
+104: [  0%] Built target baseLib
+104: [  0%] Built target resample
+104: [  6%] Built target synthLib
+104: [  6%] Built target hardwareLib
+104: [ 12%] Built target mcf5307_nim_objs
+104: [ 12%] Built target mcf5307
+104: [ 31%] Built target asmjit
+104: [ 50%] Built target dsp56kEmu
+104: [ 56%] Built target g2Lib
+104: [ 56%] Built target t1_boot
+104: [ 56%] Built target t0_mcf5307_link
+104: [ 56%] Built target t0_memory_map
+104: [ 62%] Built target t0_sim
+104: [ 62%] Built target t0_panel
+104: [ 62%] Built target t0_cs1_decode
+104: [ 62%] Built target t0_anomaly_log
+104: [ 62%] Built target t0_extract_matches_python
+104: [ 62%] Built target t0_version_mismatch
+104: [ 62%] Built target t0_no_firmware
+104: [ 62%] Built target t0_flash
+104: [ 62%] Built target t0_interrupts
+104: [ 62%] Built target t0_panel_seam
+104: [ 62%] Built target t0_bootstrap_rom
+104: [ 68%] Built target t0_hdi08_adapter
+104: [ 68%] Built target t0_uart0
+104: [ 68%] Built target t0_board_surface
+104: [ 68%] Built target t0_hdi08_nonblocking
+104: [ 75%] Built target t0_sof_tick
+104: [ 75%] Built target t0_pmem_funnel
+104: [ 75%] Built target t0_board_routing
+104: [ 75%] Built target t0_cs2_cfi
+104: [ 75%] Built target t0_bus_size_unit
+104: [ 81%] Built target t0_mbus
+104: [ 87%] Built target t0_board_dsp_set
+104: [ 87%] Built target t0_board_mcu_handle
+104: [ 87%] Built target t0_frame_layout
+104: [ 87%] Built target t0_alloc
+104: [ 87%] Built target t0_frames_for_block
+104: [ 87%] Built target t0_clock_guard
+104: [ 87%] Built target t0_frame_conversion
+104: [ 87%] Built target t0_dsp_context_layout
+104: [ 87%] Built target t0_esai_frame
+104: [ 93%] Built target t0_codec_queue_surface
+104: [ 93%] Built target t0_executor
+104: [ 93%] Built target t0_run_dsp_cycles_contract
+104: [ 93%] Built target t0_run_dsp_cycles
+104: [ 93%] Built target t0_block_table_harness
+104: [ 93%] Built target t0_codec_capacity
+104: [ 93%] Built target t0_backend_rule
+104: [ 93%] Built target t0_cycle_debt
+104: [ 93%] Built target t0_long_dispatch
+104: [ 93%] Built target t0_dsp_job_order
+104: [ 93%] Built target t0_dsp_run_gate
+104: [ 93%] Built target t0_status_contract
+104: [ 93%] Built target t0_construction_rejection
+104: [ 93%] Built target t0_order
+104: [ 93%] Built target t0_esai_slot_phase
+104: [ 93%] Built target t0_esai_idle_core
+104: [ 93%] Built target t0_slot_write_view
+104: [ 93%] Built target t0_mailbox_surface
+104: [ 93%] Built target t0_mailbox_index
+104: [ 93%] Built target t0_mailbox_count
+104: [ 93%] Built target t0_chain_adapter_surface
+104: [ 93%] Built target t0_written_flag
+104: [ 93%] Built target t0_advance_all
+104: [ 93%] Built target t0_chain_counters
+104: [ 93%] Built target t0_dsp_attach
+104: [ 93%] Built target t0_hdi08_dsp_bridge
+104: [ 93%] Built target t0_dsp_boot_consumer
+104: [ 93%] Built target t0_hdi08_cvr_irq
+104: [ 93%] Built target t0_chain_data_flow
+104: [100%] Built target t0_dynamic_fast_interrupts
+104: [100%] Built target t0_artifact_resolver
+104: [100%] Built target t0_skip_discipline
+104: [100%] Built target t0_manifest_parses
+104: [100%] Built target g2_test_executables_all
+1/2 Test #104: g2_test_executables_build ........   Passed    2.35 sec
+test 103
+    Start 103: t1_boot
+
+103: Test command: /Users/eek/Development/gearmulator/build/source/nord/g2/g2Lib/test/t1_boot
+103: Working Directory: /Users/eek/Development/gearmulator/build/source/nord/g2/g2Lib/test
+103: Environment variables: 
+103:  NMG2_ARTIFACTS=/Users/eek/Development/nmg2-artifacts
+103: Test timeout computed to be: 1500
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: board: G2_MCU_CORE_CLOCK_HZ = 162000000 is derived from the schematic CLKIN label and the PLL multiplier, and is not scope-measured; owner spike criterion (j)
+103: ok   CONTROL clear-shaped: sixteen 0x20 spaces written into display 0 line 0 through Board::onWrite count 0 content writes and 16 clear writes; counted 0 and 16
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: board: G2_MCU_CORE_CLOCK_HZ = 162000000 is derived from the schematic CLKIN label and the PLL multiplier, and is not scope-measured; owner spike criterion (j)
+103: ok   CONTROL banner-shaped: "Nord Modular G2 " written by the same route counts 13 content writes and 3 clear writes; counted 13 and 3
+103: ok   CONTROL banner-shaped: the same sixteen cells read back through Board::onRead equal "Nord Modular G2 "; read "Nord Modular G2 "
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: board: G2_MCU_CORE_CLOCK_HZ = 162000000 is derived from the schematic CLKIN label and the PLL multiplier, and is not scope-measured; owner spike criterion (j)
+103: ok   CONTROL landmark: one 2-byte read at 0x3001B7FA and one at 0x3001B7FC leave the counter at 0x3001B7FC reading exactly 1, so it answers that address and not its neighbour; read 1
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: write8@92: write8 addr=00000003, val=0f
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: MemoryBuffer@169: MMU based DSP memory setup successful
+103: Jit@121: No profiler detected
+103: board: G2_MCU_CORE_CLOCK_HZ = 162000000 is derived from the schematic CLKIN label and the PLL multiplier, and is not scope-measured; owner spike criterion (j)
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@71: HDI08 Initialization, HREQ=0, TREQ=0
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: write8@92: write8 addr=00000004, val=00
+103: *** JIT errNotImplemented: opcode=$000203
+103: Assertion failed: (0 && "instruction not implemented"), function errNotImplemented, file jitops.cpp, line 431.
+103: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+103: hdiWriteTX@59: DSP Boot: finished
+103: writeControlRegister@334: Write ESAI CR 000000
+103: writeTransmitControlRegister@199: Write ESAI TCR 087900
+103: writeTransmitClockControlRegister@221: Write ESAI TCCR f40f03
+103: writeControlRegister@334: Write ESAI CR 000000
+103: writeTransmitControlRegister@199: Write ESAI TCR 087900
+103: writeTransmitClockControlRegister@221: Write ESAI TCCR 840f03
+103: writeReceiveControlRegister@172: Write ESAI RCR 087d00
+103: writeReceiveClockControlRegister@235: Write ESAI RCCR f4c302
+103: writeReceiveControlRegister@172: Write ESAI RCR 087900
+103: writeReceiveClockControlRegister@235: Write ESAI RCCR 848f03
+103: writeReceiveControlRegister@172: Write ESAI RCR 007d03
+103: writeReceiveControlRegister@172: Write ESAI RCR 007903
+103: writeTransmitControlRegister@199: Write ESAI TCR 007903
+103: writeTransmitControlRegister@199: Write ESAI TCR 00790c
+103: writeTPLR@134: Write Timer TPLR : 000001
+103: writeTLR@116: Write Timer 0 TLR: fffe02
+103: writePortControlRegister@386: Write HDI08 HPCR 000000
+103: writePortControlRegister@386: Write HDI08 HPCR 000008
+103: writePortControlRegister@386: Write HDI08 HPCR 000048
+103: writeSlotToFrame@388: ESAI transmit underrun, written is 000000, enabled is 000003
+103: writeSlotToFrame@388: ESAI transmit underrun, written is 000000, enabled is 000003
+103: writeSlotToFrame@388: ESAI transmit underrun, written is 000000, enabled is 000003
+103: writeSlotToFrame@388: ESAI transmit underrun, written is 000000, enabled is 000003
+103: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+103: SIGABRT: Abnormal termination.
+2/2 Test #103: t1_boot ..........................Subprocess aborted***Exception:   2.32 sec
+
+The following tests passed:
+	g2_test_executables_build
+
+50% tests passed, 1 tests failed out of 2
+
+Label Time Summary:
+Infrastructure     =   2.35 sec*proc (1 test)
+IntegrationTest    =   2.32 sec*proc (1 test)
+
+Total Test time (real) =   4.68 sec
+
+The following tests FAILED:
+	103 - t1_boot (Subprocess aborted)                      IntegrationTest
+Errors while running CTest
+Output from these tests are in: /Users/eek/Development/gearmulator/build/Testing/Temporary/LastTest.log
+Use "--rerun-failed --output-on-failure" to re-run the failed cases verbosely.
