@@ -334,6 +334,32 @@ namespace g2
 			MBus&  m_mbus;
 		};
 
+		/* THE ISP1181 ANSWERS CS3, AND THE DEVICE ITSELF IS ALREADY THIS
+		 * BOARD'S MEMBER. This adapter is the join, in the shape of
+		 * FlashWindow above: the decode subtracts the window base and hands
+		 * the offset down, and the stub expects exactly such a window-relative
+		 * address, so the offset is forwarded UNALTERED and every address in
+		 * the window is accepted. Splitting the offsets into the command and
+		 * data ports the part multiplexes onto A0/A4 is the full model's
+		 * business and not this adapter's.
+		 *
+		 * IT HOLDS A REFERENCE TO THE HANDLE RATHER THAN A COPY OF IT, because
+		 * the handle does not exist until the constructor body calls
+		 * isp1181_create -- after this adapter is constructed -- and a copy
+		 * taken here would stay nil for the adapter's whole life. */
+		class Isp1181Window final : public BusTarget
+		{
+		public:
+			explicit Isp1181Window(isp1181_ctx*& _usb)
+				: m_usb(_usb) {}
+
+			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+
+		private:
+			isp1181_ctx*& m_usb;
+		};
+
 		// The strap offset the SIM answers inside the UART block. sim.cpp's
 		// register table carries it as UIPCR and its DIVERGENCE note is the
 		// authority for the SIM answering it.
@@ -374,6 +400,12 @@ namespace g2
 		FlashWindow  m_flashCs0;
 		FlashWindow  m_flashCs2;
 		MbarRouter   m_mbar;
+
+		/* Declared AFTER m_usb, whose handle it forwards to: the reference is
+		 * bound at construction and the handle it names is assigned in the
+		 * constructor body, so declaration order here records that dependency
+		 * rather than creating one. */
+		Isp1181Window m_usbCs3;
 
 		mcf5307_ctx* m_mcu;
 
