@@ -339,6 +339,20 @@ extern "C"
 		g_sofCalls.push_back(SofCall{ctx, sofFrames, g_drivingFrameIndex,
 		                             g_drivingBoard, g_seq++});
 	}
+
+	/* The two entry points the Board's CS3 window forwards to. Nothing in
+	 * THIS test drives the bus, so each answers the benign value the stub
+	 * itself answers: a byte of zero on a read, and nothing kept on a write.
+	 * They exist here only so that board.cpp, which now calls them from the
+	 * adapter, still links without a library. */
+	uint8_t isp1181_read(isp1181_ctx*, const uint32_t)
+	{
+		return 0u;
+	}
+
+	void isp1181_write(isp1181_ctx*, const uint32_t, const uint8_t)
+	{
+	}
 }
 
 int main()

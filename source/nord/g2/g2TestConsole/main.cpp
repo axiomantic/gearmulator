@@ -67,6 +67,11 @@ namespace
 	constexpr uint32_t g_cs4Base = 0x14000000u;
 	constexpr uint32_t g_cs4Size = 0x00010000u;
 
+	// MEASURED, the workspace logbook section 3.8: CS3 is a 64 KiB window,
+	// derived from CSMR3 at 0x100000A8. The OS touches only 0x13000000 and
+	// 0x13000010 inside it.
+	constexpr uint32_t g_cs3Size = 0x00010000u;
+
 	constexpr uint32_t g_cs1Size   = 0x00010000u;
 	constexpr uint32_t g_cs5Size   = 0x00000010u;
 	constexpr uint32_t g_sdramSize = 0x00800000u;
@@ -156,9 +161,7 @@ namespace
 		config.memory.cs0   = {g_cs0Base,       g_cs0Size};
 		config.memory.cs1   = {g2::g_cs1Base,   g_cs1Size};
 		config.memory.cs2   = {g_cs2Base,       g_cs2Size};
-		// CS3 is left ABSENT: this task boots "with a stubbed CS3", and an
-		// absent window reports unmapped and logs, which is what a stub should
-		// do. An answer of zero would be indistinguishable from a device.
+		config.memory.cs3   = {g2::g_cs3Base,   g_cs3Size};
 		config.memory.cs4   = {g_cs4Base,       g_cs4Size};
 		config.memory.cs5   = {g2::g_cs5Base,   g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,      g2::g_simSpaceSize};

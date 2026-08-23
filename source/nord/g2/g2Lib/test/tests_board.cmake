@@ -621,3 +621,24 @@ set_property(TARGET t0_board_mcu_handle PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_board_mcu_handle COMMAND t0_board_mcu_handle)
 set_tests_properties(t0_board_mcu_handle PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-29, CS3 wired to the ISP1181 stub
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_cs3_wire$
+#
+# T0 AND UNGATED. The test needs no firmware artifact of any kind: it drives
+# the Board's installed bus callbacks at the CS3 window and asserts STATUS
+# only, because the unmapped READ path zeroes its return exactly as the benign
+# stub answer does and a value assertion would pass without any wiring.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing,
+# t0_board_mcu_handle, t0_cs2_cfi and t0_bus_size_unit already use: it constructs
+# a Board over its own BoardConfig and drives Board::onRead / Board::onWrite,
+# the exact pointers mcf5307_create receives.
+
+add_executable(t0_cs3_wire t0_cs3_wire.cpp)
+target_link_libraries(t0_cs3_wire PRIVATE g2Lib)
+set_property(TARGET t0_cs3_wire PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_cs3_wire COMMAND t0_cs3_wire)
+set_tests_properties(t0_cs3_wire PROPERTIES LABELS "UnitTest")
