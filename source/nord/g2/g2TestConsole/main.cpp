@@ -182,7 +182,7 @@ namespace
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
-			out.push_back(char(g2::Board::onRead(&_board, base + col, 8, &status) & 0xffu));
+			out.push_back(char(g2::Board::onRead(&_board, base + col, 1, &status) & 0xffu));
 		}
 
 		return out;
