@@ -188,7 +188,36 @@ set_property(TARGET t0_hdi08_adapter PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_adapter COMMAND t0_hdi08_adapter)
 set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
 
-# ----------------- UART0
+# ----------------- INT-6, the HDI08 host-to-DSP flag bridge
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_flag_bridge$
+#
+# T0 AND UNGATED. The test constructs a single DSP behind one host port, bridges
+# them, and asserts that an ICR write of HF0 (0x08) reaches the DSP's HSR, that
+# an ICR write without HF0 does not, and that an unbridged port does not forward.
+# No firmware artifact of any kind reaches it.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing,
+# t0_cs2_cfi and t0_bus_size_unit already use: it constructs an Hdi08Adapter and
+# an Hdi08Bridge with the real mc68k and dsp56kEmu behind them, and g2Lib carries
+# that link itself.
+
+add_executable(t0_hdi08_flag_bridge t0_hdi08_flag_bridge.cpp)
+target_link_libraries(t0_hdi08_flag_bridge PRIVATE g2Lib)
+set_property(TARGET t0_hdi08_flag_bridge PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_hdi08_flag_bridge COMMAND t0_hdi08_flag_bridge)
+set_tests_properties(t0_hdi08_flag_bridge PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-4, UART0
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_uart0$
+#
+# UART0 at MBAR+0x1C0, vector 0x42, divider 0x36, 8N1; UART1 unused reads reset
+# values. The test drives the register file directly and wires UART0 to a
+# BRD-3 controller to assert the vectored (vector 0x42, autovector 0) source,
+# and exercises the one restricted width rule of MCF5307 UM section 14.3.7
+# (all UART registers are bytes).
 
 add_executable(t0_uart0 t0_uart0.cpp)
 target_link_libraries(t0_uart0 PRIVATE g2Lib)
@@ -493,3 +522,23 @@ set_property(TARGET t0_cs3_wire PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cs3_wire COMMAND t0_cs3_wire)
 set_tests_properties(t0_cs3_wire PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-31, the CS2 flash status-responder
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_cs2_status$
+#
+# T0 AND UNGATED. The test needs no firmware artifact of any kind: it creates
+# a Flash instance directly over synthetic CS2 image bytes, reads the status
+# address the firmware probes, and asserts the intercept returns the AMD
+# status value 3. NMG2_ARTIFACTS is unset.
+#
+# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_flash
+# already uses: it constructs a Flash over its own bases and sizes, drives
+# read8 directly, and needs no Board, no mcf5307 core and no firmware image.
+
+add_executable(t0_cs2_status t0_cs2_status.cpp)
+target_link_libraries(t0_cs2_status PRIVATE g2Lib)
+set_property(TARGET t0_cs2_status PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_cs2_status COMMAND t0_cs2_status)
+set_tests_properties(t0_cs2_status PROPERTIES LABELS "UnitTest")

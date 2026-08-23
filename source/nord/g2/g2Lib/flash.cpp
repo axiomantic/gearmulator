@@ -30,7 +30,28 @@ namespace g2
 			return ss.str();
 		}
 
-		// The CFI command set, at byte offsets within the CS2 window. Offset
+		// The CS2 status address the firmware reads, 0x30119848. Plan section
+	// 24.6 row W3-352 records the measurement: MOVE.B ($30119848),D0 at
+	// 0x3001BAF0 (six bytes 1039 3011 9848). The firmware writes its
+	// hardware model code there and demands value 3 (AMD status "ready/
+	// completed") before passing the flash-type gate at 0x3001BB4C.
+	//
+	// THE ADDRESS IS A CONSTANT AND THE REASON IS MEASURED RATHER THAN
+	// PREFERRED. A full AMD flash model would enter status-reporting mode
+	// on the 0x70 command byte and answer the status register at every
+	// address whose offset equals the last entered status-query base. This
+	// model does not model erase, write or the Clavia update procedure, so
+	// no command byte ever reaches it to enter that mode, and the constant
+	// is the only honest approach short of modelling the full command set.
+	//
+	// THE ADDRESS IS SDRAM-RESIDENT, NOT FLASH-RESIDENT. The firmware stores
+	// its model code in SDRAM at this address, and the CS2 FlashWindow routes
+	// the read to Flash::read8. The intercept is what answers, not the flash
+	// image byte beneath it. Plan section 13.4, BRD-31.
+	constexpr uint32_t kCs2StatusAddress = 0x30119848u;
+	constexpr uint8_t  kCs2StatusValue   = 3u;
+
+	// The CFI command set, at byte offsets within the CS2 window. Offset
 		// 0xAA is word address 0x55, where the JEDEC standard puts query-enter.
 		constexpr uint32_t kCfiQueryEnterOffset  = 0x000000AAu;
 		constexpr uint16_t kCfiQueryEnterCommand = 0x0098u;
@@ -145,6 +166,8 @@ namespace g2
 			const uint32_t offset = _addr - m_cs2Base;
 			if(m_cs2QueryMode && offset >= kCfiWindowFirst && offset <= kCfiWindowLast)
 				return kCfiWindow[offset - kCfiWindowFirst];
+			if(_addr == kCs2StatusAddress)
+				return kCs2StatusValue;
 			return m_cs2[offset];
 		}
 		// Outside both images. Returning 0xFF matches an erased device and

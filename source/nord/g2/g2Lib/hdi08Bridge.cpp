@@ -64,6 +64,14 @@ namespace g2
 		{
 			drainDspToHost();
 		});
+
+		/* HF0 and HF1 sit at bits 3 and 4 of the host ICR and of the DSP HSR
+		 * alike, so the forwarding is a masked copy and not a translation. */
+		m_host.setWriteIcrCallback([this](const uint8_t _icr)
+		{
+			const uint8_t flags = _icr & 0x18;
+			m_dsp.setPendingHostFlags01(static_cast<uint32_t>(flags));
+		});
 	}
 
 	/* NULL is the uninstall and not a hole. Every `mc68k::Hdi08` setter puts the
@@ -80,6 +88,7 @@ namespace g2
 		m_host.setRxEmptyCallback(nullptr);
 		m_host.setReadIsrCallback(nullptr);
 		m_host.setWriteIrqCallback(nullptr);
+		m_host.setWriteIcrCallback(nullptr);
 
 		m_dsp.setWriteTxCallback(nullptr);
 	}
