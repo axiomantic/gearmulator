@@ -252,14 +252,21 @@ namespace
 	constexpr uint32_t g_cs2Base = 0x12000000u;
 	constexpr uint32_t g_cs2Size = 0x00800000u;
 
-	// Invented by this harness and labelled as such: no authority records CS0's
-	// or CS4's base. CS0 carries the boot loader image, which loads at
-	// 0x00000000, so 0 is the one value consistent with the image this harness
-	// does not execute. CS4's base is a free choice: the panel HARDWARE sits on
-	// the CS5 latch at 0x15000004, so the banner path does not read through CS4
-	// at all, and this window exists only so an access to it is decoded rather
-	// than logged as unmapped. Neither number is a measurement and neither may
-	// be copied into a shipped header.
+	// The CS3 window carrying the ISP1181 USB device. The base is memoryMap.h's
+	// g_cs3Base; the size is 64 KiB derived from CSMR3 at 0x100000A8
+	// (workspace logbook section 3.8), the same figure main.cpp and
+	// t0_cs3_wire.cpp configure.
+	constexpr uint32_t g_cs3Size = 0x00010000u;
+
+	// INVENTED BY THIS HARNESS AND LABELLED AS SUCH. No authority records CS0's
+	// or CS4's base (plan section 4.2 register row 18, still open). CS0 carries
+	// the boot loader image, which loads at 0x00000000, so 0 is the one value
+	// consistent with the image this harness does not execute. CS4's base is a
+	// free choice: plan section 6.6.4 puts the panel HARDWARE on the CS5 latch
+	// at 0x15000004, so the banner path does not read through CS4 at all, and
+	// this window exists only so an access to it is decoded rather than logged
+	// as unmapped. NEITHER NUMBER IS A MEASUREMENT AND NEITHER MAY BE COPIED
+	// INTO A SHIPPED HEADER.
 	constexpr uint32_t g_cs0Base = 0x00000000u;
 	constexpr uint32_t g_cs0Size = 0x00020000u;
 	constexpr uint32_t g_cs4Base = 0x14000000u;
@@ -445,9 +452,7 @@ namespace
 		config.memory.cs0   = {g_cs0Base,     g_cs0Size};
 		config.memory.cs1   = {g2::g_cs1Base, g_cs1Size};
 		config.memory.cs2   = {g_cs2Base,     g_cs2Size};
-		// CS3 is left ABSENT. An absent window is the honest stub: an access to
-		// it is reported unmapped and logged, rather than answered with a zero
-		// that a caller cannot tell from a device.
+		config.memory.cs3   = {g2::g_cs3Base, g_cs3Size};
 		config.memory.cs4   = {g_cs4Base,     g_cs4Size};
 		config.memory.cs5   = {g2::g_cs5Base, g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,    g2::g_simSpaceSize};
