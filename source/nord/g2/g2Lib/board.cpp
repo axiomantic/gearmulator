@@ -20,13 +20,15 @@
 //     CS0    the flash boot image, through FlashWindow
 //     CS1    the HDI08 array
 //     CS2    the flash main image, through FlashWindow
+//     CS3    the ISP1181 USB device, through Isp1181Window
 //     CS4    the panel
 //     CS5    the latches
 //     MBAR   the SIM, UART0 and the M-Bus, through MbarRouter
 //
-// CS3 and the SDRAM get no target on purpose. CS3 is the ISP1181 and the SDRAM
-// is main memory; a region with no target answers exactly as a region with no
-// window does.
+// THE SDRAM GETS NO TARGET, AND THAT IS DELIBERATE RATHER THAN UNFINISHED.
+// Main memory is not one of the seven units this task composes; the harness
+// supplies it (see main.cpp). A region with no target answers exactly as a
+// region with no window does -- see the unmapped note below.
 //
 // memoryMap.cpp already fixes what an address in no window does: an access that
 // decodes to no region, or to a region with no target, reports
@@ -180,6 +182,54 @@ namespace g2
 		_status = MCF5307_BUS_SIZE_ILLEGAL;
 	}
 
+	uint32_t Board::Isp1181Window::read(const uint32_t _offset, const int _size,
+		mcf5307_bus_status& _status)
+	{
+		_status = MCF5307_BUS_OK;
+
+		/* THE STUB ANSWERS EVERY CYCLE AT EVERY OFFSET, so neither arm can
+		 * produce anything but BUS_OK -- a fault status from a device that
+		 * accepts everything would be this file inventing a policy no design
+		 * section states, which is exactly what FlashWindow::write's comment
+		 * records for the flash. The 16 and 32-bit cycles are ANSWERED rather
+		 * than refused: the driver reads the part word-sized in the register
+		 * file idiom, and a refusal here would turn each such cycle into a
+		 * logged bus failure indistinguishable from the unmapped one this
+		 * wiring removes. The byte answer is REPLICATED across the access
+		 * width, big-endian, in the shape main.cpp's own Ram target models. */
+		const uint8_t value = isp1181_read(m_usb, _offset);
+
+		switch(_size)
+		{
+		case 8:  return value;
+		case 16: return uint32_t(value) * 0x0101u;
+		case 32: return uint32_t(value) * 0x01010101u;
+		default: break;
+		}
+
+		_status = MCF5307_BUS_SIZE_ILLEGAL;
+		return 0;
+	}
+
+	void Board::Isp1181Window::write(const uint32_t _offset, const int _size,
+		const uint32_t _value, mcf5307_bus_status& _status)
+	{
+		_status = MCF5307_BUS_OK;
+
+		/* THE LOW BYTE ONLY. The stub keeps nothing it is handed and the full
+		 * model routes one register per address, so there is no wider state to
+		 * compose a multi-byte store into. */
+		switch(_size)
+		{
+		case 8:
+		case 16:
+		case 32: isp1181_write(m_usb, _offset, uint8_t(_value & 0xffu)); return;
+		default: break;
+		}
+
+		_status = MCF5307_BUS_SIZE_ILLEGAL;
+	}
+
 	bool Board::MbarRouter::isUartOwned(const uint32_t _offset)
 	{
 		// The one offset the SIM answers inside the UART block, encoded here and
@@ -238,12 +288,13 @@ namespace g2
 		m_memory.attach(Region::Cs0,  &m_flashCs0);
 		m_memory.attach(Region::Cs1,  &m_hdi08);
 		m_memory.attach(Region::Cs2,  &m_flashCs2);
+		m_memory.attach(Region::Cs3,  &m_usbCs3);
 		m_memory.attach(Region::Cs4,  &m_panel);
 		m_memory.attach(Region::Cs5,  &m_latches);
 		m_memory.attach(Region::Mbar, &m_mbar);
 
-		// Region::Cs3 and Region::Sdram are left with no target on purpose;
-		// see the file header.
+		// Region::Sdram is left with no target on purpose; see the file
+		// header.
 	}
 
 	uint32_t Board::onRead(void* const user, const uint32_t addr, const int size,
@@ -291,6 +342,7 @@ namespace g2
 		, m_flashCs0(m_flash, m_memory, Region::Cs0)
 		, m_flashCs2(m_flash, m_memory, Region::Cs2)
 		, m_mbar(m_sim, m_uart0, m_mbus)
+		, m_usbCs3(m_usb)
 		, m_mcu(nullptr)
 		, m_usb(nullptr)
 	{
