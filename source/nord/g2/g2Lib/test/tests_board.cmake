@@ -452,6 +452,7 @@ target_sources(t0_sof_tick PRIVATE
 	../hdi08Adapter.cpp
 	../memoryMap.cpp
 	../sim.cpp
+	../timer.cpp
 	../uart0.cpp
 	../interruptController.cpp)
 
@@ -734,3 +735,14 @@ set_tests_properties(t1_sprintf_isolated PROPERTIES LABELS "IntegrationTest" SKI
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_sprintf_isolated APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+# ----------------- BRD-33, the MCF5307 general-purpose timers
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_timer$
+
+add_executable(t0_timer t0_timer.cpp)
+target_link_libraries(t0_timer PRIVATE g2Lib)
+set_property(TARGET t0_timer PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_timer COMMAND t0_timer)
+set_tests_properties(t0_timer PROPERTIES LABELS "UnitTest")

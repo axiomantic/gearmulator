@@ -368,6 +368,43 @@ namespace g2
 		}
 	}
 
+	Timer* Sim::timerForByte(const uint32_t _index, uint32_t& _blockOffset)
+	{
+		if(_index >= Timer::gTimer1Base && _index < Timer::gTimer1Base + Timer::gBlockSize)
+		{
+			const uint32_t offset = _index - Timer::gTimer1Base;
+			if(Timer::coversByte(offset))
+			{
+				_blockOffset = offset;
+				return &m_timer1;
+			}
+		}
+
+		if(_index >= Timer::gTimer2Base && _index < Timer::gTimer2Base + Timer::gBlockSize)
+		{
+			const uint32_t offset = _index - Timer::gTimer2Base;
+			if(Timer::coversByte(offset))
+			{
+				_blockOffset = offset;
+				return &m_timer2;
+			}
+		}
+
+		return nullptr;
+	}
+
+	void Sim::advanceTimers(const uint32_t _inputClocks)
+	{
+		m_timer1.advance(_inputClocks);
+		m_timer2.advance(_inputClocks);
+	}
+
+	void Sim::setInterruptController(InterruptController* _interrupts)
+	{
+		m_timer1.setInterruptController(_interrupts);
+		m_timer2.setInterruptController(_interrupts);
+	}
+
 	void Sim::logLine(const char* _reason, const bool _isWrite, const int _size, const uint32_t _offset)
 	{
 		m_log.push_back(std::string("sim: ") + _reason
@@ -404,7 +441,14 @@ namespace g2
 		{
 			const uint32_t index = _offset + byte;
 			value <<= 8;
-			if(index < g_simSpaceSize)
+
+			// TASK BRD-33. The ten timer register bytes come from the timer
+			// modules and not from this model's storage. Before BRD-33 they
+			// were storage, and the counter never counted.
+			uint32_t blockOffset = 0;
+			if(Timer* const timer = timerForByte(index, blockOffset))
+				value |= timer->readByte(blockOffset);
+			else if(index < g_simSpaceSize)
 				value |= m_space[index];
 		}
 
@@ -443,6 +487,18 @@ namespace g2
 
 			const int shift = int(8 * (bytes - 1 - byte));
 			const uint8_t incoming = uint8_t((_value >> shift) & 0xffu);
+
+			// TASK BRD-33. A timer register byte carries its own write rules
+			// -- TCR is read-only and TER is write-one-to-clear -- so the
+			// module owns the write and this model's write-protect mask does
+			// not reach it.
+			uint32_t blockOffset = 0;
+			if(Timer* const timer = timerForByte(index, blockOffset))
+			{
+				timer->writeByte(blockOffset, incoming);
+				continue;
+			}
+
 			const uint8_t protect = m_writeProtect[index];
 
 			m_space[index] = uint8_t((m_space[index] & protect) | (incoming & ~protect));

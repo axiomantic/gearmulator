@@ -112,7 +112,13 @@ namespace
 	// MBAR+$1D0 is UIPCR on a read and UACR on a write, so from a reader's
 	// side it is ReadOnly: a write reaches UACR and never changes what a read
 	// returns. That is why no WriteOnly kind is needed here.
-	enum class Kind { ReadWrite, ReadOnly };
+	// TASK BRD-33 ADDED WriteOneToClear. The two TER rows were ReadWrite here
+	// while sim.cpp carried the ten timer addresses as plain storage. They are
+	// not storage: MCF5307 UM section 9.4.1.5 makes TER write-one-to-clear, so
+	// a write of ones CLEARS the bits it names and can never set one. A write
+	// probe therefore reaches NO bit of TER, and the row that called it fully
+	// writable was describing the inert model rather than the part.
+	enum class Kind { ReadWrite, ReadOnly, WriteOneToClear };
 
 	struct RegisterFact
 	{
@@ -174,12 +180,12 @@ namespace
 		{0x144, 16, Kind::ReadWrite, false, 0xffff, true, 0, "TRR1"},
 		{0x148, 16, Kind::ReadOnly,  false, 0x0000, true, 0, "TCR1"},
 		{0x14c, 16, Kind::ReadWrite, false, 0x0000, true, 0, "TCN1"},
-		{0x151,  8, Kind::ReadWrite, false, 0x00,   true, 0, "TER1"},
+		{0x151,  8, Kind::WriteOneToClear, false, 0x00,   true, 0, "TER1"},
 		{0x180, 16, Kind::ReadWrite, false, 0x0000, true, 0, "TMR2"},
 		{0x184, 16, Kind::ReadWrite, false, 0xffff, true, 0, "TRR2"},
 		{0x188, 16, Kind::ReadOnly,  false, 0x0000, true, 0, "TCR2"},
 		{0x18c, 16, Kind::ReadWrite, false, 0x0000, true, 0, "TCN2"},
-		{0x191,  8, Kind::ReadWrite, false, 0x00,   true, 0, "TER2"},
+		{0x191,  8, Kind::WriteOneToClear, false, 0x00,   true, 0, "TER2"},
 
 		// UM Table B-1 gives UIPCR reset $0F. AGENTS.md section 4.1 fixes
 		// bit 0 at zero for the machine this project presents, and the bit is
@@ -286,7 +292,10 @@ namespace
 			if(_offset < r.offset || (_offset - r.offset) >= bytes)
 				continue;
 
-			if(r.kind == Kind::ReadOnly)
+			// A write-one-to-clear register can only clear a bit that some
+			// event set, so a write probe that starts from a clear register
+			// reaches no bit of it -- exactly as a read-only row does.
+			if(r.kind == Kind::ReadOnly || r.kind == Kind::WriteOneToClear)
 				return 0x00u;
 
 			const int shift = int(8 * (bytes - 1 - (_offset - r.offset)));
@@ -378,6 +387,9 @@ int main()
 			checkEqual(status, MCF5307_BUS_OK,
 				std::string("a read of ") + r.name + " at its own width completes");
 
+			// A write-one-to-clear row reads its reset value for the same
+			// reason a read-only row does: no event has set a bit, so the
+			// write of ones clears nothing and sets nothing.
 			const uint32_t expected = r.kind == Kind::ReadWrite
 				? ((pattern & ~r.readOnlyBits) | (r.resetValue & r.readOnlyBits))
 				: r.resetValue;
@@ -877,8 +889,8 @@ int main()
 
 		checkEqual(firstDisagreement, g2::g_simSpaceSize,
 			"the model lets a write change exactly the bits this file's table says it may, at every offset in the MBAR window");
-		checkEqual(writableBytes, size_t(83),
-			"83 of the model's 89 register bytes are fully writable; the other six are the four bytes of the two read-only timer counters, the one strap byte at 0x1d0 and the one Port A byte that carries bit 9");
+		checkEqual(writableBytes, size_t(81),
+			"81 of the model's 89 register bytes are fully writable; the other eight are the four bytes of the two read-only timer capture registers, the two write-one-to-clear timer event registers, the one strap byte at 0x1d0 and the one Port A byte that carries bit 9");
 
 		// The three protected places by name, so that a reader does not have
 		// to reconstruct them from the sweep.
@@ -890,6 +902,8 @@ int main()
 			"a write reaches no bit of MBAR+0x1d0, because a write there goes to UACR and a read comes from UIPCR");
 		checkEqual(uint32_t(modelWritableMask(bus, 0x148)), uint32_t(0x00),
 			"a write reaches no bit of TCR1, which UM Table B-1 gives as read-only");
+		checkEqual(uint32_t(modelWritableMask(bus, 0x151)), uint32_t(0x00),
+			"a write reaches no bit of TER1 from its cleared state, because UM section 9.4.1.5 makes it write-one-to-clear");
 		checkEqual(uint32_t(modelWritableMask(bus, 0x0f0)), uint32_t(0x00),
 			"a write reaches no bit of the reserved offset 0x0f0");
 	}
