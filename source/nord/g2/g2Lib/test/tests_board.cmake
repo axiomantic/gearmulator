@@ -605,3 +605,78 @@ set_property(TARGET t0_timer PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_timer COMMAND t0_timer)
 set_tests_properties(t0_timer PROPERTIES LABELS "UnitTest")
+
+# ----------------- BRD-34, the Board owns the interrupt controller
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_board_interrupts$
+#
+# THE ASSEMBLED Board IS DRIVEN AND THE CORE-FACING CALL IS OBSERVED, so this
+# check fails when the WIRE is absent rather than when the class is wrong.
+# t0_interrupts already drives InterruptController directly, covers the class,
+# and cannot see that defect at all.
+#
+# THIS TARGET COMPILES board.cpp AND LINKS NO mcf5307 ARCHIVE, which is
+# t0_sof_tick's arrangement and is here for the same reason. The behaviour
+# under test is a call the Board makes OUT to mcf5307_set_irq, and mcf5307.h
+# publishes no getter for the presented interrupt state, so the test SUPPLIES
+# that entry point itself and records what arrives. The archive cannot be on
+# the link line: `nm -g libmcf5307.a` puts _mcf5307_set_irq in the same member
+# as _takeInterrupt and _pendingInterrupt, which the core needs, so the member
+# is always pulled and the test's own definition would be a duplicate symbol.
+# Linking g2Lib would put that archive on the line through g2Lib's own PUBLIC
+# link, so this target names the g2Lib sources board.cpp needs instead.
+#
+# The mcf5307 include directory is taken from the imported target's INTERFACE
+# property rather than linking it, so the header arrives and the archive does
+# not. THE EXECUTABLE IS DECLARED UNCONDITIONALLY AND ONLY THE PROPERTY
+# REFERENCES ARE GUARDED, which is the discipline the t0_mcf5307_link and
+# t0_sof_tick blocks above both state.
+
+add_executable(t0_board_interrupts
+	t0_board_interrupts.cpp
+	../board.cpp
+	../flash.cpp
+	../panel.cpp
+	../latches.cpp
+	../hdi08Decode.cpp
+	../hdi08Adapter.cpp
+	../memoryMap.cpp
+	../sim.cpp
+	../timer.cpp
+	../uart0.cpp
+	../interruptController.cpp
+	../mbus.cpp
+	../max1039.cpp
+	../dspSet.cpp
+	../hdi08Bridge.cpp
+	../chainAdapter.cpp
+	../mailbox.cpp
+	../frame.cpp)
+
+target_include_directories(t0_board_interrupts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
+if(TARGET mcf5307::mcf5307)
+	target_include_directories(t0_board_interrupts PRIVATE
+		$<TARGET_PROPERTY:mcf5307::mcf5307,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
+if(TARGET hardwareLib)
+	target_include_directories(t0_board_interrupts PRIVATE
+		$<TARGET_PROPERTY:hardwareLib,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
+# 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
+# class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
+# onto the link line. NONE of the three is the mcf5307 archive, so the property
+# this block protects is untouched.
+
+foreach(lib 68kEmu dsp56kEmu baseLib)
+	if(TARGET ${lib})
+		target_link_libraries(t0_board_interrupts PRIVATE ${lib})
+	endif()
+endforeach()
+
+set_property(TARGET t0_board_interrupts PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_board_interrupts COMMAND t0_board_interrupts)
+set_tests_properties(t0_board_interrupts PROPERTIES LABELS "UnitTest")

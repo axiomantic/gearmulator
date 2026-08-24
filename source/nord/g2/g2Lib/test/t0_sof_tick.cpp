@@ -303,6 +303,15 @@ extern "C"
 		return 0;
 	}
 
+	/* TASK BRD-34 CONSEQUENCE. board.cpp now presents the Board's interrupt
+	 * state to the core, so a target that compiles it on its own must supply
+	 * this entry point too. NOTHING IN THIS TEST DRIVES IT: no case here
+	 * programs an ICR or raises a source, and the interrupt wiring is
+	 * t0_board_interrupts' subject. */
+	void mcf5307_set_irq(mcf5307_ctx*, int, uint8_t, int)
+	{
+	}
+
 	/* A DISTINCT, NON-NULL handle on every call, and never a repeat. This is
 	 * the whole reason the assertions below can say "correct" rather than only
 	 * "constant" -- see the file header. */
