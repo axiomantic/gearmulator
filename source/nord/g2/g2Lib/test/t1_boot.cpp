@@ -175,14 +175,18 @@ namespace
 
 	// The two expected lines. Plan section 6.6.1 is their one home.
 	//
-	// LINE 0 CARRIES A TRAILING SPACE AND IT IS LOAD-BEARING. The stored string
-	// `Nord Modular G2` is FIFTEEN characters; the sixteenth is produced by the
-	// display helper padding a NUL source byte to 0x20 at 0x30057060, without
-	// advancing the source pointer. A comparison that trims trailing whitespace
-	// is comparing a different value. Both literals are written out in full
-	// rather than composed, so nothing here can agree with a wrong firmware by
-	// deriving its expectation from the same place the firmware got it.
-	const std::string g_expectedLine0 = "Nord Modular G2 ";
+	// THIS PROJECT PRESENTS THE G2X STRAP. Plan section 24.6 row W3-367 records
+	// the operator decision: AGENTS.md section 4.1 fixes this machine at panel
+	// latch bits 5:4 = 0b11, model code 1, and BRD-12 builds it there, so the
+	// firmware selects `Nord Modular G2X`. That string is SIXTEEN characters
+	// stored, so line 0's last cell is a real `X` and not the pad byte the
+	// base model's fifteen-character string produced.
+	//
+	// The comparison still refuses to trim, and both literals are still written
+	// out in full rather than composed, so nothing here can agree with a wrong
+	// firmware by deriving its expectation from the same place the firmware
+	// got it.
+	const std::string g_expectedLine0 = "Nord Modular G2X";
 	const std::string g_expectedLine1 = "Version 1.62 Exp";
 
 	// ------------------------------------------------- what "a banner" means here
@@ -780,6 +784,20 @@ namespace
 
 		_result.line0 = readDisplayLine(board, 0, 0);
 		_result.line1 = readDisplayLine(board, 0, 1);
+
+		// TEMPORARY DIAGNOSTIC -- the 40 bytes spanning both banner lines, so a
+		// short write is visible as a byte rather than inferred from a string.
+		{
+			std::stringstream ds;
+			ds << "BANNERDUMP";
+			for(uint32_t i = 0; i < 40u; ++i)
+			{
+				mcf5307_bus_status st = MCF5307_BUS_OK;
+				const uint32_t b = g2::Board::onRead(&board, g_displayBase + i, g_byte, &st);
+				ds << ' ' << std::hex << std::setw(2) << std::setfill('0') << (b & 0xffu);
+			}
+			std::cout << ds.str() << std::endl;
+		}
 		_result.pcAfterBanner = mcf5307_get_reg(mcu, g_regPc);
 
 		// PHASE 2 -- the answer to plan section 24.6 row W3-129. A green read of
