@@ -31,7 +31,8 @@
 //     CS3    the ISP1181 USB device, through Isp1181Window
 //     CS4    the panel
 //     CS5    the latches
-//     MBAR   the SIM, UART0 and the M-Bus, through MbarRouter
+//     MBAR   the SIM, UART0, the M-Bus and the interrupt controller,
+//            through MbarRouter
 //
 // THE SDRAM GETS NO TARGET, AND THAT IS DELIBERATE RATHER THAN UNFINISHED.
 // Main memory is not one of the seven units this task composes; the harness
@@ -280,6 +281,16 @@ namespace g2
 		return _offset >= MBus::g_base && _offset < MBus::g_base + MBus::g_size;
 	}
 
+	bool Board::MbarRouter::isInterruptOwned(const uint32_t _offset)
+	{
+		if(_offset == InterruptController::gIrqparOffset)
+			return true;
+		if(_offset == InterruptController::gAvrOffset)
+			return true;
+		return _offset >= InterruptController::gIcrBase
+			&& _offset < InterruptController::gIcrBase + InterruptController::gIcrCount;
+	}
+
 	BusTarget& Board::MbarRouter::select(const uint32_t _offset)
 	{
 		if(isMbusOwned(_offset))
@@ -292,6 +303,20 @@ namespace g2
 	uint32_t Board::MbarRouter::read(const uint32_t _offset, const int _size,
 		mcf5307_bus_status& _status)
 	{
+		/* TASK BRD-34. IRQPAR, AVR and the internal control block are BYTE
+		 * registers -- MCF5307 UM Table B-1 gives each of them one byte -- so
+		 * a wider access is refused here rather than split, in the shape
+		 * uart0.cpp already uses for its own byte-only rule. */
+		if(isInterruptOwned(_offset))
+		{
+			if(_size != 8)
+			{
+				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				return 0u;
+			}
+			return m_interrupts.readRegister(_offset);
+		}
+
 		// The offset is already MBAR-relative and BOTH units expect it that
 		// way, so nothing is adjusted here.
 		return select(_offset).read(_offset, _size, _status);
@@ -300,6 +325,17 @@ namespace g2
 	void Board::MbarRouter::write(const uint32_t _offset, const int _size,
 		const uint32_t _value, mcf5307_bus_status& _status)
 	{
+		if(isInterruptOwned(_offset))
+		{
+			if(_size != 8)
+			{
+				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				return;
+			}
+			m_interrupts.writeRegister(_offset, uint8_t(_value & 0xffu));
+			return;
+		}
+
 		select(_offset).write(_offset, _size, _value, _status);
 	}
 
@@ -348,10 +384,34 @@ namespace g2
 			*status = local;
 	}
 
+	void Board::onInterruptPresent(void* const user, const int level, const uint8_t vector,
+	                               const int autovector)
+	{
+		Board* const board = static_cast<Board*>(user);
+
+		/* THE GUARD IS ON THE HANDLE AND NOT ON THE RESET. mcf5307.h records
+		 * that a board presenting a level 1 to 6 interrupt immediately after
+		 * mcf5307_reset is a DEFINED case, so a presentation before the first
+		 * reset is fine; a presentation before the core EXISTS has nowhere to
+		 * go. */
+		if(!board->m_mcu)
+			return;
+
+		/* The whole current state, unconditionally, on every recomputation.
+		 * mcf5307_set_irq is IDEMPOTENT and mcf5307.h says so, which is what
+		 * licenses the board to present on a CLEAR exactly as it does on an
+		 * assert. */
+		mcf5307_set_irq(board->m_mcu, level, vector, autovector);
+	}
+
 	void Board::onInterruptAck(void*, const int, const uint8_t)
 	{
-		// The T0 surface keeps the interrupt source set empty, so there is
-		// nothing to clear here.
+		/* NOTHING IS CLEARED HERE AND THAT IS THE CONTRACT RATHER THAN AN
+		 * OMISSION. mcf5307.h states that an acknowledge clears an
+		 * EDGE-TRIGGERED source on the board's own side, and every source this
+		 * board carries is level-triggered: the timer's TER[REF] drops when
+		 * the firmware writes it and UART0's condition drops when the
+		 * firmware empties the receiver. */
 	}
 
 	/* The unconfigured Board. It DELEGATES rather than repeating the body, so
@@ -365,24 +425,34 @@ namespace g2
 	}
 
 	Board::Board(const BoardConfig& _config)
-		: m_memory(_config.memory)
+		: m_mcu(nullptr)
+		, m_interrupts(this, &Board::onInterruptPresent)
+		, m_memory(_config.memory)
 		, m_flash(_config.memory.cs0.base, _config.memory.cs0.size,
 		          _config.memory.cs2.base, _config.memory.cs2.size)
 		, m_panel(_config.memory.cs4.size)
 		, m_latches(_config.memory.cs5.size)
 		, m_hdi08(_config.hdi08)
+		, m_uart0(&m_interrupts)
 		, m_adc(_config.adc)
 		, m_mbus(&m_adc)
 		, m_flashCs0(m_flash, m_memory, Region::Cs0)
 		, m_flashCs2(m_flash, m_memory, Region::Cs2)
-		, m_mbar(m_sim, m_uart0, m_mbus)
+		, m_mbar(m_sim, m_uart0, m_mbus, m_interrupts)
 		, m_usbCs3(m_usb)
-		, m_mcu(nullptr)
 		, m_usb(nullptr)
 	{
 		// Every unit is attached before the core exists, so no callback can
 		// reach a half-built decode.
 		attachUnits();
+
+		/* TASK BRD-34. BOTH TIMER MODULES ASSERT ON THE BOARD'S ONE
+		 * CONTROLLER. Uart0 already holds it -- the initialiser list above
+		 * hands it in, which is what replaces the nullptr default that left
+		 * its interrupt path dead on the assembled machine. THIS CALL IS THE
+		 * TIMERS' HALF OF THE SAME WIRE, and Sim::setInterruptController
+		 * forwards it to both modules. */
+		m_sim.setInterruptController(&m_interrupts);
 
 		/* The DSP side of the host ports, attached from the constructor BODY
 		 * rather than from the initialiser list: the call takes both members by

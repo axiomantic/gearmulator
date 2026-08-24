@@ -61,7 +61,9 @@
 // split is not a choice made here: sim.cpp's DIVERGENCE note states it. The SIM
 // answers MBAR+0x1D0 because the firmware reads it as a model strap and BRD-2's
 // check requires it, and BRD-4 "owns every other UART offset". The M-Bus module
-// answers its own register block, whose bound mbus.h carries.
+// answers its own register block, whose bound mbus.h carries. TASK BRD-34 adds
+// the fourth arm: the interrupt controller's three register groups, whose
+// bounds interruptController.h carries.
 
 #pragma once
 
@@ -74,6 +76,7 @@
 #include "dspSet.h"
 #include "flash.h"
 #include "hdi08Adapter.h"
+#include "interruptController.h"
 #include "latches.h"
 #include "max1039.h"
 #include "mbus.h"
@@ -253,6 +256,13 @@ namespace g2
 		 * log. The Board owns every one of them and hands out references
 		 * rather than copies: none of these types is copyable in a meaningful
 		 * sense and the Scheduler's callbacks point into them. */
+		/* Task BRD-34. THE ONE INTERRUPT CONTROLLER OF THE WHOLE MACHINE.
+		 * Every source on this board arbitrates through it -- both timers and
+		 * UART0 -- because arbitration across sources is the whole point of
+		 * the two-tier model, and two controllers would each arbitrate over
+		 * half the sources and neither would see the winner. */
+		InterruptController& interrupts() { return m_interrupts; }
+
 		Flash&        flash()   { return m_flash; }
 		Panel&        panel()   { return m_panel; }
 		Latches&      latches() { return m_latches; }
@@ -311,8 +321,8 @@ namespace g2
 		class MbarRouter final : public BusTarget
 		{
 		public:
-			MbarRouter(Sim& _sim, Uart0& _uart0, MBus& _mbus)
-				: m_sim(_sim), m_uart0(_uart0), m_mbus(_mbus) {}
+			MbarRouter(Sim& _sim, Uart0& _uart0, MBus& _mbus, InterruptController& _interrupts)
+				: m_sim(_sim), m_uart0(_uart0), m_mbus(_mbus), m_interrupts(_interrupts) {}
 
 			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
 			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
@@ -327,11 +337,25 @@ namespace g2
 			// from mbus.h, so this file states no register address of its own.
 			static bool isMbusOwned(uint32_t _offset);
 
+			/* TASK BRD-34. TRUE when the offset is one of the three register
+			 * groups the interrupt controller answers -- IRQPAR, AVR and the
+			 * internal control block. Every bound comes from
+			 * interruptController.h, so this file states no register address
+			 * of its own.
+			 *
+			 * THE CONTROLLER IS NOT A BusTarget AND THAT IS WHY IT IS NOT IN
+			 * select() BELOW. Its surface is a byte at an MBAR-relative
+			 * offset, and every one of its registers is an 8-bit register in
+			 * the manual, so read and write dispatch to it directly and the
+			 * BusTarget arm below is left for the units that have one. */
+			static bool isInterruptOwned(uint32_t _offset);
+
 			BusTarget& select(uint32_t _offset);
 
-			Sim&   m_sim;
-			Uart0& m_uart0;
-			MBus&  m_mbus;
+			Sim&                 m_sim;
+			Uart0&               m_uart0;
+			MBus&                m_mbus;
+			InterruptController& m_interrupts;
 		};
 
 		/* THE ISP1181 ANSWERS CS3, AND THE DEVICE ITSELF IS ALREADY THIS
@@ -374,14 +398,39 @@ namespace g2
 
 		/* onRead and onWrite are declared in the public section above, with the
 		 * measured reason they are reachable. The acknowledge callback stays
-		 * private: nothing drives it yet and the interrupt presentation is task
-		 * BRD-3's. */
+		 * private: only the core drives it, and its body says why it clears
+		 * nothing. */
 		static void     onInterruptAck(void* user, int level, uint8_t vector);
+
+		/* Task BRD-34. THE CONTROLLER'S PRESENT CALLBACK. It hands the whole
+		 * current state to the sink and does NOTHING ELSE: no arbitration, no
+		 * pending bit and no priority decision, every one of which is BRD-3's
+		 * and is already built. The `autovector` argument is FORWARDED and not
+		 * decided -- the controller has already read the AVEC bit of the
+		 * winning source's ICR, and a present function that chose either form
+		 * here would silently override the bit the firmware programmed.
+		 *
+		 * IT IS A NO-OP WHILE THE CORE HANDLE IS NULL. The controller exists
+		 * before `mcf5307_create` returns, and `Uart0`'s constructor programs
+		 * its vector into the controller, which presents; that presentation
+		 * has no core to reach. */
+		static void     onInterruptPresent(void* user, int level, uint8_t vector,
+		                                   int autovector);
 
 		/* DECLARATION ORDER IS INITIALISATION ORDER AND IT IS LOAD-BEARING
 		 * HERE. m_memory is declared before the adapters because they bind
 		 * references to it, and the units are declared before the adapters
-		 * that forward to them. */
+		 * that forward to them.
+		 *
+		 * THE TWO BRD-34 MEMBERS ARE FIRST, AND THAT POSITION IS THE REASON
+		 * onInterruptPresent CAN READ THEM AT ALL. Constructing m_uart0 asks
+		 * the controller to record its vector, and the controller presents on
+		 * every change -- so the present callback runs while the members below
+		 * it are still raw storage. m_mcu is the member it reads, so it is
+		 * initialised before any unit that can present exists. */
+		mcf5307_ctx*        m_mcu;
+		InterruptController m_interrupts;
+
 		MemoryMap    m_memory;
 
 		Flash        m_flash;
@@ -406,8 +455,6 @@ namespace g2
 		 * constructor body, so declaration order here records that dependency
 		 * rather than creating one. */
 		Isp1181Window m_usbCs3;
-
-		mcf5307_ctx* m_mcu;
 
 		/* The ISP1181 USB device this Board owns. Design sections 5.2 and 9.4
 		 * put it on the Board, and tickSofIfDue is what advances it. The Board
