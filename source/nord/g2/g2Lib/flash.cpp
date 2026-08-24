@@ -63,24 +63,6 @@ namespace g2
 		constexpr uint32_t kCfiWindowFirst = 0x20u;
 		constexpr uint32_t kCfiWindowLast  = 0x29u;
 
-		// TEMPORARY DIAGNOSTIC INSTRUMENTATION -- BRD-32 CFI probe trace.
-		int g_traceCount = 0;
-		bool g_composing = false;
-		constexpr int kTraceMax = 400;
-		void traceCs2(const char* _what, uint32_t _addr, uint32_t _off, uint32_t _val, int _size, bool _query)
-		{
-			if(g_traceCount >= kTraceMax)
-				return;
-			++g_traceCount;
-			std::stringstream ss;
-			ss << "CS2TRACE #" << g_traceCount << ' ' << _what
-			   << " addr=" << formatAddressHex(_addr)
-			   << " off=0x" << std::hex << _off
-			   << " val=0x" << _val << std::dec
-			   << " size=" << _size
-			   << " query=" << (_query ? 1 : 0);
-			baseLib::logging::logToConsole(ss.str());
-		}
 
 		constexpr uint8_t kCfiWindow[] = {
 			0x00, 0x51,   // word 0x10, 'Q'
@@ -165,12 +147,8 @@ namespace g2
 			if(m_cs2QueryMode && offset >= kCfiWindowFirst && offset <= kCfiWindowLast)
 			{
 				const uint8_t v = kCfiWindow[offset - kCfiWindowFirst];
-				if(!g_composing)
-					traceCs2("R8-cfi", _addr, offset, v, 8, m_cs2QueryMode);
 				return v;
 			}
-			if(!g_composing && offset < 0x100u)
-				traceCs2("R8-img", _addr, offset, m_cs2[offset], 8, m_cs2QueryMode);
 			return m_cs2[offset];
 		}
 		// Outside both images. Returning 0xFF matches an erased device and
@@ -193,11 +171,8 @@ namespace g2
 		        static_cast<uint32_t>(read8(_addr + 3));
 	}
 
-	void Flash::write8(uint32_t _addr, uint8_t _value)
+	void Flash::write8(uint32_t _addr, uint8_t /*_value*/)
 	{
-		if(containsCs2(_addr))
-			traceCs2("W8", _addr, _addr - m_cs2Base, _value, 8, m_cs2QueryMode);
-
 		baseLib::logging::logToConsole("Rejected write to read-only Flash at " + formatAddressHex(_addr));
 	}
 
@@ -207,7 +182,6 @@ namespace g2
 		{
 			const uint32_t offset = _addr - m_cs2Base;
 
-			traceCs2("W16", _addr, offset, _value, 16, m_cs2QueryMode);
 
 			if(offset == kCfiQueryEnterOffset && _value == kCfiQueryEnterCommand)
 			{

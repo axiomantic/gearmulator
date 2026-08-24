@@ -766,19 +766,7 @@ namespace
 		_result.line0 = readDisplayLine(board, 0, 0);
 		_result.line1 = readDisplayLine(board, 0, 1);
 
-		// TEMPORARY DIAGNOSTIC -- the 40 bytes spanning both banner lines, so a
-		// short write is visible as a byte rather than inferred from a string.
-		{
-			std::stringstream ds;
-			ds << "BANNERDUMP";
-			for(uint32_t i = 0; i < 40u; ++i)
-			{
-				mcf5307_bus_status st = MCF5307_BUS_OK;
-				const uint32_t b = g2::Board::onRead(&board, g_displayBase + i, g_byte, &st);
-				ds << ' ' << std::hex << std::setw(2) << std::setfill('0') << (b & 0xffu);
-			}
-			std::cout << ds.str() << std::endl;
-		}
+
 		_result.pcAfterBanner = mcf5307_get_reg(mcu, g_regPc);
 
 		// A green read of correct cells does NOT by itself show the firmware ran
