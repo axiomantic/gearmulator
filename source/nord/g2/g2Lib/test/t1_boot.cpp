@@ -31,13 +31,32 @@
 // mcf5307_create, so a core driven through them takes the path the real core
 // takes. Nothing in this file reaches the routing by any other door.
 //
-// WHY IT CREATES ITS OWN mcf5307_ctx. The Board owns a core but publishes no
-// handle to it, so nothing outside the Board can call mcf5307_reset (which is
-// the only way to set the program counter), mcf5307_halted, mcf5307_faulted or
-// mcf5307_get_reg. Adding an accessor would be a write to `g2Lib/board.h`,
-// which is NOT on this task's Files: line. The core this file creates is
-// pointed at the SAME Board through the SAME two callbacks, so it exercises the
-// composition and not a copy of it.
+// WHY IT ONCE CREATED ITS OWN mcf5307_ctx, AND WHAT ENDED THAT. Task INT-7,
+// plan section 1.3 rule 12: the section this replaces is STRUCK AND QUOTED
+// rather than deleted, because it was CORRECT ON THE DAY IT WAS WRITTEN and a
+// reader who finds no trace of it will re-derive it. It read:
+//
+//     "WHY IT CREATES ITS OWN mcf5307_ctx. The Board owns a core but publishes
+//      no handle to it, so nothing outside the Board can call mcf5307_reset
+//      (which is the only way to set the program counter), mcf5307_halted,
+//      mcf5307_faulted or mcf5307_get_reg. Adding an accessor would be a write
+//      to `g2Lib/board.h`, which is NOT on this task's Files: line. The core
+//      this file creates is pointed at the SAME Board through the SAME two
+//      callbacks, so it exercises the composition and not a copy of it."
+//
+// THAT WAS A SCOPE CONSTRAINT AND TASK BRD-28 ENDED IT. board.h now publishes
+// `resetMcu`, `mcuReg`, `setMcuReg` and `mcuHalted`, and `faulted()` reads the
+// core's own flag -- every accessor the struck section names as absent. So the
+// second core became vestigial, and it was not free: Scheduler::runFrames calls
+// Board::runMcu on the BOARD's core, nothing ever called Board::resetMcu, and
+// that core was halted and faulted from the first instant and returned zero
+// cycles on every call. BRD-33 advances the MCF5307 timers from the cycles
+// runMcu actually ran, so the timers received zero cycles for the whole boot
+// and every interrupt-driven behaviour was unreachable under the one test that
+// boots real firmware.
+//
+// THIS FILE NOW RESETS AND OBSERVES THE BOARD'S OWN CORE, and Scheduler::
+// runFrames is the ONLY thing that advances it.
 //
 // WHERE THE WINDOWS COME FROM, AND WHICH TWO ARE INVENTED BY THIS HARNESS.
 // CS1, CS3, CS5 and the SDRAM come from memoryMap.h, which takes them from
@@ -173,6 +192,11 @@ namespace
 	// another is that same defect.
 	constexpr int g_byte = 1;
 
+	// The same unit for a 16-bit access. TCN2 is a 16-bit register and sim.cpp's
+	// own table declares it two bytes wide, so a byte read of it would be
+	// refused rather than answered.
+	constexpr int g_word = 2;
+
 	// The two expected lines. Plan section 6.6.1 is their one home.
 	//
 	// THIS PROJECT PRESENTS THE G2X STRAP. Plan section 24.6 row W3-367 records
@@ -301,8 +325,52 @@ namespace
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
-	// The register indices of the mcf5307 C ABI. 17 is the program counter.
-	constexpr int g_regPc = 17;
+	// The register indices of the mcf5307 C ABI. 17 is the program counter,
+	// 18 is the vector base register. machine.nim's regFileGet/regFileSet
+	// state the whole index space and why VBR is reachable through it.
+	constexpr int g_regPc  = 17;
+	constexpr int g_regVbr = 18;
+
+	// ------------------------------------------------ the vector table, TASK INT-8
+	//
+	// MEASURED FROM THE OS IMAGE, and it is supplied here for the reason MBAR
+	// is supplied here: booting CODE directly skips the code that would set it
+	// up, and the machine needs it before the firmware gets there.
+	//
+	// CODE_30000400.bin at 0x30058218 does
+	//
+	//     movel  #0x30000000,%d0
+	//     movel  %d0,0x302A159C
+	//     movec  %d0,%vbr
+	//     clrl   %d0
+	//     moveal 0x302A159C,%a0
+	//     movel  #0x300585CE,%d1
+	//  L: movel  %d1,(%a0,%d0.l*4)
+	//     addql  #1,%d0
+	//     cmpil  #0xFF,%d0
+	//     bles   L
+	//
+	// so the table is 256 longwords at 0x30000000, every one of them the same
+	// handler, and VBR is that base. The 1 KiB it occupies is the gap below
+	// the image, which loads at 0x30000400 and never reaches down into it.
+	//
+	// WHAT IS LOAD-BEARING HERE IS VBR AND NOT THE TABLE, AND THE MEASUREMENT
+	// SAYS SO RATHER THAN THE OTHER WAY ROUND. The first exception this boot
+	// takes is vector 25, the level 1 autovector, at program counter
+	// 0x30011FE2 -- 0x46000 bytes of firmware short of the routine above. At
+	// that instant the longword at 0x30000064 already reads 0x30001854 and NOT
+	// the 0x300585CE this file writes, so the firmware has filled the table
+	// itself by then through some path that is not the routine above. Omitting
+	// the place() below leaves the whole run identical, assertion for
+	// assertion; overriding VBR does not, and the core faults to 0xFFFFFFFF.
+	//
+	// SO THIS TABLE IS A FLOOR AND NOT A FIX, AND IT IS LABELLED AS ONE. It
+	// holds for an exception taken before the firmware's own fill, which is a
+	// window no run has yet entered. Nothing below asserts it, and nothing can:
+	// its absence is invisible from outside.
+	constexpr uint32_t g_vectorTableBase    = 0x30000000u;
+	constexpr uint32_t g_vectorTableEntries = 256u;
+	constexpr uint32_t g_vectorHandler      = 0x300585CEu;
 
 	// -------------------------------------------------------------- the windows
 
@@ -311,6 +379,12 @@ namespace
 	// `movec` to %mbar at all. Booting CODE directly means this harness supplies
 	// it. The size is the SIM's own g_simSpaceSize, which covers UM Table B-1.
 	constexpr uint32_t g_mbarBase = 0x10000000u;
+
+	// General-purpose timer 2's counter. MCF5307 UM table 12-1 gives TCN2 at
+	// MBAR + $18C, and sim.cpp's register table carries the same offset. It is
+	// read HERE, through the bus, rather than from any Timer object, so the
+	// value the assertion holds is the one the core itself would see.
+	constexpr uint32_t g_tcn2Offset = 0x18Cu;
 
 	// MEASURED. Plan section 6.6.9, from the loader's CSAR2 = $1200,
 	// CSMR2 = $007F0001 at loader offsets 0x70 and 0x7c: the window is
@@ -607,18 +681,20 @@ namespace
 	// machine that never converges stops rather than hanging the suite.
 	constexpr uint32_t g_handshakeIterations = 0xFDE8u;
 
-	// The cycle budget of one polling iteration. Small enough that the banner is
-	// noticed close to the instruction that wrote it, large enough that the
-	// whole boot fits in g_handshakeIterations iterations.
+	/* THE BUDGET OF THE ONE OBSERVING Board::runMcu CALL, AND OF NOTHING ELSE.
+	 * Task INT-7 deleted the per-iteration mcf5307_exec this used to size; the
+	 * single sample taken after the drive is over is its only remaining reader,
+	 * and that sample asks for a budget large enough that a running core cannot
+	 * answer zero merely because it was asked for nothing. */
 	constexpr uint32_t g_cyclesPerIteration = 4096u;
 
-	/* ONE SCHEDULER FRAME PER ITERATION, ALONGSIDE THE ADVANCE ABOVE RATHER THAN
-	 * INSTEAD OF IT, BECAUSE THE TWO DRIVE DIFFERENT CORES. Scheduler::runFrames
-	 * runs Board::runMcu, which advances the core the BOARD constructs and which
-	 * nothing resets; the firmware runs on the core this file creates and resets
-	 * to the entry point, and the file header says why that second core has to
-	 * exist. So the frame turns the DSP set, the chain and the panel, and the
-	 * advance above stays the thing that executes firmware.
+	/* ONE SCHEDULER FRAME PER ITERATION, AND IT IS NOW THE WHOLE DRIVE. Task
+	 * INT-7: there is ONE core, the Board's, so the frame turns the DSP set,
+	 * the chain, the panel AND the MCU. The mcf5307_exec calls that used to sit
+	 * beside this were DELETED rather than repointed at Board::runMcu, because
+	 * a second budget applied to the same core would double-count the cycles
+	 * the scheduler already allocated -- and BRD-33 feeds those cycles to the
+	 * timers, so double-counting them would falsify a timer tick.
 	 *
 	 * runFrames carries no cycle budget out of this file: it allocates the MCU's
 	 * cycles from its own Config rational, so what the drive inherits from the
@@ -665,6 +741,30 @@ namespace
 		bool     halted         = false;
 		bool     faulted        = false;
 		uint32_t iterations     = 0;
+
+		/* TASK INT-7. THE THREE SIGNALS THAT SAY THE BOARD'S OWN CORE IS THE
+		 * ONE THAT RAN, and each of them reads zero-or-true when it is not.
+		 *
+		 * `mcuCycles` is ONE Board::runMcu return value, sampled once after the
+		 * drive has finished. It is an OBSERVATION and not a second drive: the
+		 * firmware is advanced by Scheduler::runFrames alone, and this call
+		 * exists because runFrames discards what runMcu returns and publishes
+		 * no cycle count of its own.
+		 *
+		 * `haltedAtBanner` is Board::mcuHalted() sampled WHILE THE FIRMWARE
+		 * RUNS -- at the first iteration that observed display content -- and
+		 * not at the end, because "the core has not halted yet" is a claim
+		 * about the run and not about its aftermath. It starts TRUE so that a
+		 * run which never reaches that point fails rather than passing on an
+		 * unwritten field.
+		 *
+		 * `tcn2` is the SIM's general-purpose timer 2 counter read through the
+		 * bus. BRD-33 advances the timers from the cycles runMcu actually ran,
+		 * so a core that runs zero cycles leaves this at zero however long the
+		 * scheduler turns. */
+		uint32_t mcuCycles      = 0;
+		uint32_t tcn2           = 0;
+		bool     haltedAtBanner = true;
 		std::vector<std::string> busLog;
 
 		// The DSP cycle counters, one for each slot the Board owns, sampled once
@@ -729,6 +829,27 @@ namespace
 			return false;
 		}
 
+		// TASK INT-8. The vector table, big-endian, 256 identical longwords.
+		// It goes in through Ram::place beside the image, which is the harness's
+		// other supply site, and it goes in BEFORE the watches below so that
+		// none of it is counted as the firmware's own traffic.
+		{
+			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
+
+			for(uint32_t entry = 0; entry < g_vectorTableEntries; ++entry)
+			{
+				for(uint32_t byte = 0; byte < 4u; ++byte)
+					table[entry * 4u + byte] =
+						uint8_t((g_vectorHandler >> ((3u - byte) * 8u)) & 0xffu);
+			}
+
+			if(!ram.place(g_vectorTableBase - g2::g_sdramBase, table))
+			{
+				std::cout << "FAIL the vector table does not fit the configured SDRAM window" << std::endl;
+				return false;
+			}
+		}
+
 		board.memory().attach(g2::Region::Sdram, &ram);
 		_result.imageLoaded = true;
 
@@ -756,17 +877,6 @@ namespace
 				_result.readPathProven = false;
 		}
 
-		// THE CORE IS POINTED AT Board::onRead AND Board::onWrite, which are the
-		// exact pointers the Board hands to its own mcf5307_create. See the file
-		// header for why this file creates a core rather than borrowing one.
-		mcf5307_ctx* mcu = mcf5307_create(&board, &g2::Board::onRead, &g2::Board::onWrite, nullptr);
-
-		if(!mcu)
-		{
-			std::cout << "FAIL mcf5307_create returned no context" << std::endl;
-			return false;
-		}
-
 		/* THE WATCHES ARE INSTALLED HERE, AFTER THE READ-PATH PROOF AND BEFORE THE
 		 * CORE RUNS, so that every count below is the FIRMWARE's and none of it is
 		 * the harness's own traffic. The proof above reads sixteen BYTES at the
@@ -778,7 +888,27 @@ namespace
 		ram.watchFetch(g_entryPc - g2::g_sdramBase);
 		ram.watchFetch(g_bannerFunction - g2::g_sdramBase);
 
-		mcf5307_reset(mcu, g_entrySp, g_entryPc);
+		/* TASK INT-7. THE BOARD'S OWN CORE IS RESET, AND NO SECOND CORE IS
+		 * CREATED. The Board already pointed its core at Board::onRead and
+		 * Board::onWrite, so this is the same composition the struck header
+		 * section went out of its way to reach -- reached now through the
+		 * handle BRD-28 published instead of through a copy. */
+		board.resetMcu(g_entrySp, g_entryPc);
+
+		/* TASK INT-8. VBR IS PLACED AFTER THE RESET AND NOT BEFORE IT, because
+		 * the reset is what defines the machine's starting state and a value
+		 * written ahead of it would depend on what the reset does NOT clear.
+		 *
+		 * THE RETURN IS CHECKED. setMcuReg answers FALSE for an index the core
+		 * refuses, and a core that refused this one would leave the table based
+		 * at zero with nothing said about it -- which is the failure this whole
+		 * block exists to remove. */
+		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
+		{
+			std::cout << "FAIL the core refused VBR at register index "
+			          << g_regVbr << std::endl;
+			return false;
+		}
 
 		/* THE SCHEDULER, TASK INT-3. It is declared AFTER the Board so that it is
 		 * destroyed BEFORE it: it borrows the Board's DSP set, and it installs
@@ -799,7 +929,6 @@ namespace
 		{
 			std::cout << "FAIL Scheduler::create returned no object; g2::Status = "
 			          << uint32_t(schedulerStatus) << std::endl;
-			mcf5307_destroy(mcu);
 			return false;
 		}
 
@@ -810,10 +939,9 @@ namespace
 		{
 			_result.iterations = i + 1;
 
-			mcf5307_exec(mcu, g_cyclesPerIteration);
 			scheduler->runFrames(g_framesPerIteration);
 
-			if(mcf5307_halted(mcu))
+			if(board.mcuHalted())
 				break;
 
 			/* THE LOOP LEAVES ON THE SAME PREDICATE THE ASSERTION USES, and that
@@ -824,7 +952,12 @@ namespace
 			if(ram.contentWrites() > 0)
 			{
 				if(_result.pcAtBanner == 0)
-					_result.pcAtBanner = mcf5307_get_reg(mcu, g_regPc);
+				{
+					_result.pcAtBanner = board.mcuReg(g_regPc);
+
+					// TASK INT-7. Sampled here, mid-run, and not at the end.
+					_result.haltedAtBanner = board.mcuHalted();
+				}
 				if(++settleIterations >= g_bannerSettleIterations)
 					break;
 			}
@@ -834,7 +967,7 @@ namespace
 		_result.line1 = readDisplayLine(board, 0, 1);
 
 
-		_result.pcAfterBanner = mcf5307_get_reg(mcu, g_regPc);
+		_result.pcAfterBanner = board.mcuReg(g_regPc);
 
 		// PHASE 2 -- the answer to plan section 24.6 row W3-129. A green read of
 		// correct cells does NOT by itself show the firmware ran on, so the
@@ -844,16 +977,27 @@ namespace
 		// timer -- so a machine that reached the banner is expected to leave it,
 		// and a machine that did not is expected to sit still. The two are told
 		// apart below.
-		for(uint32_t i = 0; i < 64u && !mcf5307_halted(mcu); ++i)
-		{
-			mcf5307_exec(mcu, g_cyclesPerIteration);
+		for(uint32_t i = 0; i < 64u && !board.mcuHalted(); ++i)
 			scheduler->runFrames(g_framesPerIteration);
+
+		_result.pcLater = board.mcuReg(g_regPc);
+		_result.halted  = board.mcuHalted();
+		_result.faulted = board.faulted();
+		_result.handshakePorts = handshakePortCount(board);
+
+		/* TASK INT-7. THE ONE SAMPLE OF Board::runMcu's RETURN VALUE, taken
+		 * after the drive is over so that it cannot alter what any other
+		 * counter above measured. See the BootResult comment for why it exists
+		 * at all. */
+		_result.mcuCycles = board.runMcu(g_cyclesPerIteration);
+
+		{
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			const uint32_t tcn2 =
+				g2::Board::onRead(&board, g_mbarBase + g_tcn2Offset, g_word, &status);
+			_result.tcn2 = (status == MCF5307_BUS_OK) ? tcn2 : 0u;
 		}
 
-		_result.pcLater = mcf5307_get_reg(mcu, g_regPc);
-		_result.halted  = mcf5307_halted(mcu) != 0;
-		_result.faulted = mcf5307_faulted(mcu) != 0;
-		_result.handshakePorts = handshakePortCount(board);
 		_result.busLog = board.memory().log();
 
 		_result.dspCount = board.dspSet().dspCount();
@@ -866,7 +1010,6 @@ namespace
 		_result.entryFetches  = ram.fetches(g_entryPc - g2::g_sdramBase);
 		_result.bannerEntries = ram.fetches(g_bannerFunction - g2::g_sdramBase);
 
-		mcf5307_destroy(mcu);
 		return true;
 	}
 
@@ -1004,6 +1147,11 @@ namespace
 		std::cout << "boot: line0=" << escapedLine(_r.line0) << std::endl;
 		std::cout << "boot: line1=" << escapedLine(_r.line1) << std::endl;
 		std::cout << "boot: handshakePorts=" << _r.handshakePorts << std::endl;
+
+		// TASK INT-7. The Board's own core, reported before it is asserted on.
+		std::cout << "boot: boardCore mcuCycles=" << _r.mcuCycles
+		          << " haltedAtBanner=" << (_r.haltedAtBanner ? 1 : 0)
+		          << " tcn2=" << _r.tcn2 << std::endl;
 
 		std::cout << "boot: dspCount=" << _r.dspCount << " dspCycles=";
 		for(const uint64_t cycles : _r.dspCycles)
@@ -1194,6 +1342,29 @@ int main()
 		      "every DSP the Board owns executed at least one cycle, so the "
 		      "scheduler turned them rather than leaving them bootstrapped and "
 		      "still; counted " + dspCycleList(result));
+
+		// ------------------------------------ task INT-7, the Board's own core runs
+		//
+		// THE THREE CLAUSES ARE NOT ONE CLAUSE SAID THREE WAYS. A core that is
+		// halted returns zero cycles, so the first two would collapse into each
+		// other if halt were the only way to reach zero -- but a core with a
+		// zero budget also returns zero while never halting, and a running core
+		// whose timers were never advanced still leaves TCN2 at zero. Each
+		// clause therefore names a different way the drive can be absent.
+		check(result.mcuCycles > 0,
+		      "Board::runMcu executed a non-zero number of cycles on the Board's "
+		      "own core, so the core the Scheduler drives is the one the firmware "
+		      "runs on; counted " + std::to_string(result.mcuCycles) + " cycles");
+
+		check(!result.haltedAtBanner,
+		      "Board::mcuHalted() was FALSE while the firmware ran, sampled at the "
+		      "first iteration that observed display content rather than after the "
+		      "run ended");
+
+		check(result.tcn2 > 0,
+		      "the SIM's TCN2 at MBAR+$18C is non-zero by the end of the run, so "
+		      "the general-purpose timer received the cycles Board::runMcu actually "
+		      "executed; read " + std::to_string(result.tcn2));
 
 		return g_failures == 0;
 	});
