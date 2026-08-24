@@ -30,28 +30,7 @@ namespace g2
 			return ss.str();
 		}
 
-		// The CS2 status address the firmware reads, 0x30119848. Plan section
-	// 24.6 row W3-352 records the measurement: MOVE.B ($30119848),D0 at
-	// 0x3001BAF0 (six bytes 1039 3011 9848). The firmware writes its
-	// hardware model code there and demands value 3 (AMD status "ready/
-	// completed") before passing the flash-type gate at 0x3001BB4C.
-	//
-	// THE ADDRESS IS A CONSTANT AND THE REASON IS MEASURED RATHER THAN
-	// PREFERRED. A full AMD flash model would enter status-reporting mode
-	// on the 0x70 command byte and answer the status register at every
-	// address whose offset equals the last entered status-query base. This
-	// model does not model erase, write or the Clavia update procedure, so
-	// no command byte ever reaches it to enter that mode, and the constant
-	// is the only honest approach short of modelling the full command set.
-	//
-	// THE ADDRESS IS SDRAM-RESIDENT, NOT FLASH-RESIDENT. The firmware stores
-	// its model code in SDRAM at this address, and the CS2 FlashWindow routes
-	// the read to Flash::read8. The intercept is what answers, not the flash
-	// image byte beneath it. Plan section 13.4, BRD-31.
-	constexpr uint32_t kCs2StatusAddress = 0x30119848u;
-	constexpr uint8_t  kCs2StatusValue   = 3u;
-
-	// The CFI command set, at byte offsets within the CS2 window. Offset
+		// The CFI command set, at byte offsets within the CS2 window. Offset
 		// 0xAA is word address 0x55, where the JEDEC standard puts query-enter.
 		constexpr uint32_t kCfiQueryEnterOffset  = 0x000000AAu;
 		constexpr uint16_t kCfiQueryEnterCommand = 0x0098u;
@@ -84,12 +63,31 @@ namespace g2
 		constexpr uint32_t kCfiWindowFirst = 0x20u;
 		constexpr uint32_t kCfiWindowLast  = 0x29u;
 
+		// TEMPORARY DIAGNOSTIC INSTRUMENTATION -- BRD-32 CFI probe trace.
+		int g_traceCount = 0;
+		bool g_composing = false;
+		constexpr int kTraceMax = 400;
+		void traceCs2(const char* _what, uint32_t _addr, uint32_t _off, uint32_t _val, int _size, bool _query)
+		{
+			if(g_traceCount >= kTraceMax)
+				return;
+			++g_traceCount;
+			std::stringstream ss;
+			ss << "CS2TRACE #" << g_traceCount << ' ' << _what
+			   << " addr=" << formatAddressHex(_addr)
+			   << " off=0x" << std::hex << _off
+			   << " val=0x" << _val << std::dec
+			   << " size=" << _size
+			   << " query=" << (_query ? 1 : 0);
+			baseLib::logging::logToConsole(ss.str());
+		}
+
 		constexpr uint8_t kCfiWindow[] = {
 			0x00, 0x51,   // word 0x10, 'Q'
 			0x00, 0x52,   // word 0x11, 'R'
 			0x00, 0x59,   // word 0x12, 'Y'
-			0x00, 0x00,   // word 0x13, the ID's high half at 0x26
-			0x02, 0x00,   // word 0x14, the ID's low half at 0x28
+			0x00, 0x02,   // word 0x13, the Primary Vendor Command Set ID at 0x26/0x27
+			0x00, 0x00,   // word 0x14, the Extended Table pointer, absent
 		};
 	}
 
@@ -165,9 +163,14 @@ namespace g2
 		{
 			const uint32_t offset = _addr - m_cs2Base;
 			if(m_cs2QueryMode && offset >= kCfiWindowFirst && offset <= kCfiWindowLast)
-				return kCfiWindow[offset - kCfiWindowFirst];
-			if(_addr == kCs2StatusAddress)
-				return kCs2StatusValue;
+			{
+				const uint8_t v = kCfiWindow[offset - kCfiWindowFirst];
+				if(!g_composing)
+					traceCs2("R8-cfi", _addr, offset, v, 8, m_cs2QueryMode);
+				return v;
+			}
+			if(!g_composing && offset < 0x100u)
+				traceCs2("R8-img", _addr, offset, m_cs2[offset], 8, m_cs2QueryMode);
 			return m_cs2[offset];
 		}
 		// Outside both images. Returning 0xFF matches an erased device and
@@ -190,8 +193,11 @@ namespace g2
 		        static_cast<uint32_t>(read8(_addr + 3));
 	}
 
-	void Flash::write8(uint32_t _addr, uint8_t /*_value*/)
+	void Flash::write8(uint32_t _addr, uint8_t _value)
 	{
+		if(containsCs2(_addr))
+			traceCs2("W8", _addr, _addr - m_cs2Base, _value, 8, m_cs2QueryMode);
+
 		baseLib::logging::logToConsole("Rejected write to read-only Flash at " + formatAddressHex(_addr));
 	}
 
@@ -200,6 +206,8 @@ namespace g2
 		if(containsCs2(_addr))
 		{
 			const uint32_t offset = _addr - m_cs2Base;
+
+			traceCs2("W16", _addr, offset, _value, 16, m_cs2QueryMode);
 
 			if(offset == kCfiQueryEnterOffset && _value == kCfiQueryEnterCommand)
 			{
