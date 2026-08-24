@@ -407,6 +407,13 @@ namespace g2
 		 * faulted() gives cannot drift from the machine it describes. */
 		m_faulted = mcf5307_faulted(m_mcu) != 0;
 
+		/* TASK BRD-33. THE TIMERS ARE ADVANCED FROM THE CYCLES THIS CALL
+		 * ACTUALLY RAN, and not from the budget it was asked for and not from
+		 * any clock outside the machine. That is what makes a timer tick a
+		 * function of executed cycles and keeps it deterministic under the
+		 * scheduler's quantum. No new callback, no wall clock and no thread. */
+		m_sim.advanceTimers(cycles);
+
 		return cycles;
 	}
 

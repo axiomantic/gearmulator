@@ -97,3 +97,15 @@ list(APPEND G2LIB_SOURCES
 	max1039.h
 	max1039.cpp
 )
+
+# ----------------- BRD-33, the MCF5307 general-purpose timers
+#
+# One Timer is one of the two general-purpose timer modules the MCF5307
+# carries, at MBAR+$140 and MBAR+$180. The Sim owns both and routes the ten
+# register addresses to them; the Board advances them from the cycles runMcu
+# actually ran.
+
+list(APPEND G2LIB_SOURCES
+	timer.h
+	timer.cpp
+)
