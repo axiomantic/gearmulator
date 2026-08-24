@@ -205,9 +205,52 @@ namespace
 	// cannot produce: a printable character that is not a space. Every character
 	// of `Nord Modular G2` is one of these; nothing the clear writes is, and
 	// nothing a freshly constructed Ram holds is.
+	// THE G2 DISPLAY DOES NOT HOLD ASCII, AND ASSUMING IT DOES COSTS THREE
+	// INVESTIGATIONS. Plan section 24.6 row W3-374 is the record.
+	//
+	// The display helper at 0x30056FEA is a TABLE-TRANSLATING copy: it uses each
+	// source character as an index into a 256-byte per-display table at
+	// 0x302A0DE2 and stores table[char], never char. The firmware initialises
+	// that table to the identity and then deliberately remaps exactly FIVE
+	// entries, at 0x30056BE8..0x30056C04:
+	//
+	//     'g' -> 0x08   'p' -> 0x09   'q' -> 0x0A   'y' -> 0x0B   'j' -> 0x0C
+	//
+	// Those are the five DESCENDERS, and 0x08..0x0C is the CGRAM alias range for
+	// custom characters 0..4. Immediately afterwards the firmware uploads five
+	// 8-row glyph bitmaps from 0x300EC4B8 into those slots -- rendering them
+	// gives recognisable lowercase letterforms with descending tails.
+	//
+	// So a cell holding 0x09 is a correctly displayed 'p'. Any reader that
+	// compares raw cells against ASCII mis-reads g, j, p, q and y on every G2
+	// display, on every line.
+	constexpr uint8_t g_cgramFirst = 0x08u;
+	constexpr uint8_t g_cgramLast  = 0x0Cu;
+
+	// The CGRAM slot for each remapped character, and its inverse. Both are
+	// written out rather than derived from each other, so a typo in one does not
+	// silently agree with the other.
+	constexpr char cgramToAscii(const uint8_t _byte)
+	{
+		return _byte == 0x08u ? 'g'
+		     : _byte == 0x09u ? 'p'
+		     : _byte == 0x0Au ? 'q'
+		     : _byte == 0x0Bu ? 'y'
+		     : _byte == 0x0Cu ? 'j'
+		     : char(_byte);
+	}
+
+	constexpr bool isCgramGlyph(const uint8_t _byte)
+	{
+		return _byte >= g_cgramFirst && _byte <= g_cgramLast;
+	}
+
+	// A cell is CONTENT if it is an ordinary printable byte, or one of the five
+	// CGRAM glyphs. The second clause is what stops a line whose only printable
+	// character is a descender from counting as blank.
 	constexpr bool isDisplayContent(const uint8_t _byte)
 	{
-		return _byte > g_clearByte && _byte < 0x7fu;
+		return (_byte > g_clearByte && _byte < 0x7fu) || isCgramGlyph(_byte);
 	}
 
 	// The number of characters of the expected line 0 that are display CONTENT by
@@ -501,7 +544,12 @@ namespace
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
 			const uint32_t byte = g2::Board::onRead(&_board, base + col, g_byte, &status);
-			out.push_back(char(byte & 0xffu));
+
+			// Decode the five CGRAM glyphs back to the characters they render.
+			// The cells hold display codes, not ASCII -- see W3-374 at
+			// isDisplayContent above. Every other byte passes through untouched,
+			// so a genuinely wrong cell still reads as whatever it actually is.
+			out.push_back(cgramToAscii(uint8_t(byte & 0xffu)));
 		}
 
 		return out;
