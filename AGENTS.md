@@ -140,15 +140,18 @@ build for anything below the G2.
 - `ctest` in this directory BUILDS: the compile-failure fixture
   `g2_test_executables_build` runs `cmake --build` inside the run. Do not start a
   ctest run against a build tree another process is building.
-- **On this host a bare configure of this repository does not generate at all.**
-  `xcode-select` points at CommandLineTools while full Xcode is installed, so
-  `xcodebuild -version` fails, `xcodeversion.cmake:10` hands an empty string to
-  `string(REGEX MATCH)`, and the configure stops with `Configuring incomplete`
-  before writing a Makefile. The fix is
-  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`, which the presets
-  carry in their environment; a raw `cmake -S . -B <build>` needs it as a prefix.
-  Setting `-DXCODE_VERSION=<anything>` also gets past it, by skipping the
-  detection rather than by fixing it.
+- **On this host a bare configure generates, but falls back instead of detecting
+  Xcode.** `xcode-select` points at CommandLineTools while full Xcode is
+  installed, so `xcodebuild -version` writes only to stderr, which
+  `xcodeversion.cmake` discards. The empty result reaches that file's own
+  warn-and-fallback branch, `XCODE_VERSION` becomes the 99 sentinel meaning
+  "newest", and the configure completes. Export
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` when you want the
+  real version detected rather than the sentinel; the presets carry it in their
+  environment. `-DXCODE_VERSION=<value>` also pins it, by skipping detection
+  rather than performing it. Reaching that fallback needs a quoted expansion
+  upstream does not have, so it is a divergence and `docs/divergence.md` carries
+  the condition that would retire it.
 - **A synth added upstream is ON by default and the `g2` preset will not turn it
   off.** The preset names the options that exist today; it cannot name one that
   does not. Read the current set out of the root `CMakeLists.txt` and
@@ -197,6 +200,12 @@ Never write these in a comment:
   mechanism the word did.
 - **A path that does not resolve.** A comment that names a file, a script, a
   test, or a type must name one that exists.
+- **A claim about the rest of the tree.** A comment describes the code beside
+  it. Do not write what else includes this header, what its only caller is,
+  which target links it next, or what another file does not name. The build
+  graph and the include graph answer those and stay right; a sentence about them
+  is derivable, goes stale the moment another target moves, and records no
+  decision.
 
 **One exception, and it is the only one.** A number that a mechanism reads and
 checks at build time or at test time may stay. The check is then the source of
@@ -214,6 +223,12 @@ target, so give it one. A named script that exists nowhere has no target, so the
 sentence goes — unless the sentence records a known GAP, and then the gap moves
 to a tracked item BEFORE the comment goes. A deleted gap is an unknown gap, which
 is worse than the stale comment.
+
+**A cross-reference that helps a reader NAVIGATE still stands.** "The frame
+layout is also computed in `g2Lib/frame.cpp`" earns its place and stays, provided
+it asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
+"does not name": those are the falsifiable forms, and that difference is the
+whole of the rule.
 
 **A date does not rescue a stale claim.** Within a day of churn a date
 discriminates nothing.
