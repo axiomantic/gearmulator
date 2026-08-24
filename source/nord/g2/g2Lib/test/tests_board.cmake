@@ -542,3 +542,54 @@ set_property(TARGET t0_cs2_status PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cs2_status COMMAND t0_cs2_status)
 set_tests_properties(t0_cs2_status PROPERTIES LABELS "UnitTest")
+
+# ----------------- the isolated sprintf probe
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_sprintf_isolated$
+#
+# TIER T1 AND GATED, AND NOT BY CHOICE. The commissioning task asked for T0 and
+# ungated. The test drives the FIRMWARE's own sprintf, and the only source of
+# CODE_30000400.bin is the Clavia artifact directory, so an ungated
+# registration would run a test whose input does not exist on a machine without
+# artifacts. It resolves through ArtifactResolver, never through getenv, and
+# reports the section 18.5 skip line with NMG2_ARTIFACTS unset.
+#
+# THE GATE VARIABLES ARE COMPUTED HERE rather than borrowed from
+# tests_int.cmake, because CMakeLists.txt includes THIS file first and the
+# variables do not exist yet at this point. The skip code is READ OUT OF
+# gatedFixture.h by the same regex tests_int.cmake uses, so the two spellings
+# cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever include site
+# sets it first wins and the second set is a no-op with the same value.
+#
+# IT LINKS g2Lib AND NOTHING ELSE, the arrangement every board test above uses.
+# Naming mcf5307::mcf5307 here would let the test pass with g2Lib's own link
+# line deleted.
+
+add_executable(t1_sprintf_isolated t1_sprintf_isolated.cpp)
+target_link_libraries(t1_sprintf_isolated PRIVATE g2Lib)
+set_property(TARGET t1_sprintf_isolated PROPERTY FOLDER "G2/test")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_sprintfSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_sprintfSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_sprintfSkipExitCode "${CMAKE_MATCH_1}")
+
+if(DEFINED ENV{NMG2_ARTIFACTS})
+	set(g2_sprintfArtifactsDefault "$ENV{NMG2_ARTIFACTS}")
+else()
+	get_filename_component(g2_sprintfArtifactsDefault "${CMAKE_SOURCE_DIR}/../nmg2-artifacts" ABSOLUTE)
+endif()
+
+set(NMG2_ARTIFACTS "${g2_sprintfArtifactsDefault}" CACHE PATH "Directory holding the Clavia-derived G2 artifacts. Gated tests skip when it names no directory.")
+
+add_test(NAME t1_sprintf_isolated COMMAND t1_sprintf_isolated)
+set_tests_properties(t1_sprintf_isolated PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_sprintfSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_sprintf_isolated APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
