@@ -145,8 +145,19 @@ namespace
 
 	// The floor's own offsets, byte-absolute within the CS2 window.
 	constexpr uint32_t kSignatureQ = 0x20u;
+	// THE PROBE READS A WORD, AND THE WORD IS AT 0x26. Plan section 24.6 row
+	// W3-365 records the disassembly: 0x30004350 is
+	// `MOVEA.L #0x12000026,A4` and the loop below it reads a WORD through A4,
+	// so the Primary Vendor Command Set ID occupies bytes 0x26 AND 0x27.
+	//
+	// THESE CONSTANTS NAMED 0x26 AND 0x28 UNTIL 2026-08-24, AND THE MODEL
+	// AGREED WITH THEM, WHICH IS WHY THIS TEST PASSED THIRTY-FIVE CASES
+	// AGAINST A TABLE THE FIRMWARE READ AS ZERO. The test and the model shared
+	// one wrong assumption, so the test could only ever confirm it. The
+	// derivation below is now the firmware's, taken from the instruction and
+	// not from the model it checks.
 	constexpr uint32_t kIdHighHalf = 0x26u;
-	constexpr uint32_t kIdLowHalf  = 0x28u;
+	constexpr uint32_t kIdLowHalf  = 0x27u;
 
 	// The block every mode assertion compares. It starts at the load address
 	// and ends at the last byte of the compressed length, which is exactly the
@@ -258,8 +269,12 @@ namespace
 			0x00u, 0x51u,                                                  // word 0x10, 'Q'
 			0x00u, 0x52u,                                                  // word 0x11, 'R'
 			0x00u, 0x59u,                                                  // word 0x12, 'Y'
-			static_cast<uint8_t>((kPrimaryVendorCommandSetId >> 8) & 0xffu), 0x00u,  // 0x26, 0x27
-			static_cast<uint8_t>( kPrimaryVendorCommandSetId       & 0xffu), 0x00u,  // 0x28, 0x29
+			// The ID is the WORD at 0x26, so its high half is 0x26 and its low
+			// half is 0x27. Word 0x14 at 0x28/0x29 is the Extended Table
+			// pointer, which this model does not advertise and answers as zero.
+			static_cast<uint8_t>((kPrimaryVendorCommandSetId >> 8) & 0xffu),
+			static_cast<uint8_t>( kPrimaryVendorCommandSetId       & 0xffu),  // 0x26, 0x27
+			0x00u, 0x00u,                                                     // 0x28, 0x29
 			image[0x2Au], image[0x2Bu]                                     // past the floor
 		};
 		return toHex(bytes);
