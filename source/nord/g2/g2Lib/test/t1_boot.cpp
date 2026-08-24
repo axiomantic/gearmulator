@@ -552,6 +552,16 @@ namespace
 	 * loop is the ITERATION BOUND and nothing else. */
 	constexpr size_t g_framesPerIteration = 1;
 
+	/* HOW LONG THE FIRMWARE IS GIVEN AFTER THE FIRST PRINTABLE CHARACTER.
+	 * The previous exit fired on the FIRST content write, which was correct only
+	 * while the sole content the boot ever produced was the flash-failure string.
+	 * With the flash gate cleared the firmware composes a real banner one
+	 * character at a time, so stopping at the first one samples the machine
+	 * mid-word -- the measured symptom was line 0 reading "Nord" and stopping.
+	 * The loop now keeps running after first content and leaves only once the
+	 * display has been quiet for this many iterations. */
+	constexpr uint32_t g_bannerSettleIterations = 20000u;
+
 	// What one boot produced. Everything the assertions below read comes from
 	// here, so the run happens once and no assertion can re-run the machine and
 	// quietly get a second answer.
@@ -722,6 +732,7 @@ namespace
 
 		// PHASE 1 -- run until the firmware composes display content, or until the
 		// bound.
+		uint32_t settleIterations = 0;
 		for(uint32_t i = 0; i < g_handshakeIterations; ++i)
 		{
 			_result.iterations = i + 1;
@@ -739,8 +750,10 @@ namespace
 			 * a boot that had not reached the banner. */
 			if(ram.contentWrites() > 0)
 			{
-				_result.pcAtBanner = mcf5307_get_reg(mcu, g_regPc);
-				break;
+				if(_result.pcAtBanner == 0)
+					_result.pcAtBanner = mcf5307_get_reg(mcu, g_regPc);
+				if(++settleIterations >= g_bannerSettleIterations)
+					break;
 			}
 		}
 
