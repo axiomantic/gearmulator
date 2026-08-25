@@ -485,3 +485,41 @@ set_property(TARGET t0_thread_map PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_thread_map COMMAND t0_thread_map)
 set_tests_properties(t0_thread_map PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-21 step 6 - t0_mcu_debt
+#
+# An ordinary executable. It drives a real Board whose SDRAM window holds a
+# field of one repeated instruction, its real MCF5307 core and the real
+# Scheduler; the ONE object it supplies is the Executor, which the factory
+# already takes by injection.
+#
+# IT LINKS g2Lib AND THEREFORE THE REAL mcf5307 CORE, AND ITS FIRST CASE IS
+# ABOUT THAT LIBRARY RATHER THAN ABOUT THE SCHEDULER. A core that clamped
+# mcf5307_exec's return to its budget makes design section 13.4.6's cycle debt
+# identically zero -- section 24.6 row W3-410 -- so case 1 offers the linked
+# core a budget of one cycle and asserts it reports more. Every later case in
+# the file is vacuous without that property, and the file stops rather than
+# reporting them if the measurement is unusable.
+#
+# NO CYCLE COST IS COMPILED IN. The cost and the byte length of one dispatch
+# unit are measured at run time from the linked core, and both workload rates,
+# every expected spend and design section 13.4.6's rule 2 bound are derived
+# from them.
+#
+# A BUILD OF THE TARGET SEES ONLY THE COMPILE-TIME HALF: the four static_asserts
+# that hold McuContext's members to the types the shared block reads. The seven
+# run-time properties -- the overshoot, the debt walk, the floor at zero, rule
+# 4's counter, the rule 2 bound, the conservation law and the agreement with
+# g2::runQuantum itself -- all report through the failure counter.
+#
+# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and nothing
+# catches an exception, so the failure counter is the whole observable in either
+# build type.
+
+add_executable(t0_mcu_debt
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_mcu_debt.cpp)
+target_link_libraries(t0_mcu_debt PRIVATE g2Lib)
+set_property(TARGET t0_mcu_debt PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mcu_debt COMMAND t0_mcu_debt)
+set_tests_properties(t0_mcu_debt PROPERTIES LABELS "UnitTest")
