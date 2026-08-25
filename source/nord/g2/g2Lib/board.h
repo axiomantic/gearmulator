@@ -139,7 +139,13 @@ namespace g2
 		 * exactly what mcf5307_exec returns. It forwards DIRECTLY to
 		 * mcf5307_exec, which already takes a cycle budget. uint32_t, not
 		 * int64_t: it returns exactly what the core returned, and the Scheduler
-		 * widens at the call site. */
+		 * widens at the call site.
+		 *
+		 * THE RETURN MAY EXCEED `wantCycles`, by up to the cost of one
+		 * instruction, because mcf5307_exec finishes the instruction it
+		 * started. That overrun is not a defect to absorb here: it is what
+		 * g2::runQuantum's cycle debt exists to carry, and clamping it in this
+		 * method would make the debt identically zero. */
 		uint32_t runMcu(uint32_t wantCycles) noexcept;
 
 		/* TRUE when the MCF5307 core stopped because an instruction TRAPPED --

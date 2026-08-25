@@ -521,7 +521,30 @@ namespace g2
 		 * ACTUALLY RAN, and not from the budget it was asked for and not from
 		 * any clock outside the machine. That is what makes a timer tick a
 		 * function of executed cycles and keeps it deterministic under the
-		 * scheduler's quantum. No new callback, no wall clock and no thread. */
+		 * scheduler's quantum. No new callback, no wall clock and no thread.
+		 *
+		 * `cycles` MAY BE GREATER THAN `wantCycles`, by up to the cost of one
+		 * instruction. mcf5307.h is the contract: the core tests its budget
+		 * only at an instruction boundary, so an instruction that starts
+		 * inside the budget runs to completion and its whole cost is
+		 * reported. The timers therefore see a quantum that is sometimes a
+		 * few cycles longer than the one that was asked for.
+		 *
+		 * THAT IS THE CORRECT ARGUMENT AND NOT AN ACCEPTED ERROR, and the
+		 * reason is the part and not this code. An MCF5307's timers count
+		 * cycles that ELAPSED. The cycles of the instruction that crossed the
+		 * budget elapsed on the machine, so a timer that did not see them
+		 * would be a timer running slow by exactly the overrun -- and the
+		 * overrun is not noise: it recurs on every quantum whose last
+		 * instruction is not free, so the error would ACCUMULATE rather than
+		 * average out. Feeding `wantCycles` instead would make the timer's
+		 * rate a function of the scheduler's quantum length, which no
+		 * property of the hardware depends on.
+		 *
+		 * NOTHING IS DOUBLE-COUNTED. g2::runQuantum carries `spent - want`
+		 * forward as the cycle debt and shortens the NEXT quantum's budget by
+		 * it, so the same emulated cycle is executed once, fed to the timers
+		 * once, and paid for once. */
 		m_sim.advanceTimers(cycles);
 
 		return cycles;

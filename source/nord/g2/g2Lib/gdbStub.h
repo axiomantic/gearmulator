@@ -31,6 +31,11 @@
 //              loop runs while `spent < maxCycles` -- so a budget of one runs
 //              exactly ONE INSTRUCTION, whatever that instruction costs. That
 //              is the single-step primitive. A budget of ZERO runs nothing.
+//              THE RETURN IS THAT INSTRUCTION'S WHOLE COST AND NOT THE
+//              BUDGET, and the stub reads neither: `step` and `resume` both
+//              discard it and report the machine's state instead. Nothing
+//              here depends on the number, so the step primitive is exactly
+//              what it was.
 //
 //   HALT       `Board::mcuHalted` and `Board::faulted`.
 //
