@@ -77,6 +77,7 @@
 
 #include "board.h"
 #include "executor.h"
+#include "gdbStub.h"
 #include "memoryMap.h"
 #include "scheduler.h"
 #include "status.h"
@@ -864,14 +865,130 @@ namespace
 		return 0;
 	}
 
+	/* TASK TOOL-13. THE GDB REMOTE STUB, AND IT IS OPT-IN AND ABSENT BY DEFAULT.
+	 * `--gdb <port>` places the same machine `--boot` places -- the same image at
+	 * the same entry, the same vector table, the same reset -- and then BLOCKS
+	 * until a debugger attaches instead of driving it. NOTHING ADVANCES THE
+	 * MACHINE HERE: the debugger's own `continue` and `stepi` are what run it, so
+	 * a session that never attaches leaves a machine that has executed nothing.
+	 *
+	 * IT DRIVES THE MCU AND NOT THE SCHEDULER, and that is a stated limit rather
+	 * than an oversight. The stub steps `Board::runMcu` alone, so the DSP set,
+	 * the chain and the panel do not turn while a session is open; a question
+	 * about the MCU's own memory, registers and flow is what this answers.
+	 *
+	 * THERE IS NO DSP56300 STUB. That core has no stock GDB target, and a DSP
+	 * question still needs the older method. */
+	int gdb(const uint16_t _port)
+	{
+		installLogFilter();
+
+		g2::EnvArtifactResolver resolver;
+		std::string why;
+
+		const std::string directory = resolver.resolve(why, "CODE_30000400.bin");
+
+		if(directory.empty())
+		{
+			std::cout << why << std::endl;
+			return 2;
+		}
+
+		const std::vector<uint8_t> code = readFile(directory + "/CODE_30000400.bin");
+
+		if(code.empty())
+		{
+			std::cout << "CODE_30000400.bin is empty or unreadable under " << directory << std::endl;
+			return 2;
+		}
+
+		g2::Board board(makeConfig());
+		Ram ram(g_sdramSize);
+
+		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
+		{
+			std::cout << "the image does not fit the configured SDRAM window" << std::endl;
+			return 2;
+		}
+
+		// The vector table, exactly as the boot path places it and for the reason
+		// task INT-8 gives: booting CODE directly skips the code that builds it.
+		{
+			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
+
+			for(uint32_t entry = 0; entry < g_vectorTableEntries; ++entry)
+			{
+				for(uint32_t byte = 0; byte < 4u; ++byte)
+					table[entry * 4u + byte] =
+						uint8_t((g_vectorHandler >> ((3u - byte) * 8u)) & 0xffu);
+			}
+
+			if(!ram.place(g_vectorTableBase - g2::g_sdramBase, table))
+			{
+				std::cout << "the vector table does not fit the configured SDRAM window" << std::endl;
+				return 2;
+			}
+		}
+
+		board.memory().attach(g2::Region::Sdram, &ram);
+
+		board.resetMcu(g_entrySp, g_entryPc);
+
+		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
+		{
+			std::cout << "the core refused VBR at register index " << g_regVbr << std::endl;
+			return 2;
+		}
+
+		/* THE STUB IS CONSTRUCTED AFTER THE STORE IS ATTACHED. Its watchpoint
+		 * wrapper is interposed in front of whatever the memory map holds at that
+		 * moment, so a target attached later would sit in front of the wrapper
+		 * rather than behind it and its accesses would be invisible. */
+		g2::GdbStub stub(board);
+
+		const uint16_t bound = stub.listenOn(_port);
+
+		if(bound == 0)
+		{
+			std::cout << "the stub could not bind 127.0.0.1:" << _port << std::endl;
+			return 2;
+		}
+
+		std::cout << "gdb stub listening on 127.0.0.1:" << bound << std::endl;
+		std::cout << "connect with: m68k-elf-gdb -ex 'target remote 127.0.0.1:" << bound << "'"
+		          << std::endl;
+		std::cout << "the machine is at pc=0x" << std::hex << board.mcuReg(g_regPc) << std::dec
+		          << " and has executed nothing; it runs when the debugger says so" << std::endl;
+
+		if(!stub.waitForClient())
+		{
+			std::cout << "no debugger attached" << std::endl;
+			return 2;
+		}
+
+		std::cout << "debugger attached" << std::endl;
+
+		stub.serve();
+
+		std::cout << "the debugger detached; pc=0x" << std::hex << board.mcuReg(g_regPc) << std::dec
+		          << " halted=" << (board.mcuHalted() ? 1 : 0)
+		          << " faulted=" << (board.faulted() ? 1 : 0) << std::endl;
+
+		return 0;
+	}
+
 	void usage()
 	{
 		std::cout << "usage: g2TestConsole --boot [--dump-dsp-dma]" << std::endl;
+		std::cout << "       g2TestConsole --gdb <port>" << std::endl;
 		std::cout << "  --boot           boot CODE_30000400.bin from NMG2_ARTIFACTS and print"
 		             " display 0's 32 character cells" << std::endl;
 		std::cout << "  --dump-dsp-dma   additionally print each DSP position's DDR2, DCO2 and"
 		             " DCO4 and check them against design section 2.3; a mismatch exits non-zero"
 		          << std::endl;
+		std::cout << "  --gdb <port>     place the same machine and serve a GDB remote session on"
+		             " 127.0.0.1:<port>, blocking until a debugger attaches; 0 asks for a free"
+		             " port" << std::endl;
 	}
 }
 
@@ -911,6 +1028,30 @@ int main(int _argc, char** _argv)
 		}
 
 		return boot(dumpDspDma);
+	}
+
+	/* TASK TOOL-13. THE PORT IS REQUIRED AND IT IS NOT GUESSED AT. A `--gdb`
+	 * with no number, or with a number outside a port, is an ERROR here rather
+	 * than a default the operator did not choose -- the same rule the modifier
+	 * loop above already applies for the same reason. */
+	if(command == "--gdb")
+	{
+		if(_argc != 3)
+		{
+			usage();
+			return 2;
+		}
+
+		char*             end   = nullptr;
+		const long        value = std::strtol(_argv[2], &end, 10);
+
+		if(end == _argv[2] || *end != '\0' || value < 0 || value > 65535)
+		{
+			usage();
+			return 2;
+		}
+
+		return gdb(uint16_t(value));
 	}
 
 	usage();

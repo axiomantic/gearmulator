@@ -273,3 +273,43 @@ cross-repository rules, the implementation plan and the private-submodule
 prohibition live in the `nord-modular-emulator` workspace. `source/dsp56300` and
 `source/mc68k` are submodules pointing at their own repositories; a change to
 either belongs in that repository's fork, not here.
+
+## Debugging the MCF5307 with GDB
+
+`g2TestConsole --gdb <port>` places the same machine `--boot` places — the OS
+image at `0x30000400`, the vector table, the reset — and then serves a GDB
+remote session on `127.0.0.1:<port>`, blocking until a debugger attaches. A port
+of `0` asks for a free one and the program prints the port it bound. Nothing
+advances the machine until the debugger says so.
+
+```bash
+NMG2_ARTIFACTS=<artifacts> g2TestConsole --gdb 3333
+m68k-elf-gdb -ex 'target remote 127.0.0.1:3333'
+```
+
+`lldb` speaks the same protocol: `gdb-remote 127.0.0.1:3333`.
+
+**Which questions this answers faster than a print statement.** Each of these
+was answered at least once by adding a `std::cout`, rebuilding, reading one line
+and reverting, at roughly ninety seconds a cycle:
+
+| Question | Command |
+|---|---|
+| Who writes this address? | `watch *0x30057040` — the stop reply names the address that was written |
+| Who reads this address? | `rwatch *0x30057040` |
+| Is this routine ever reached? | `break *0x30056fea` then `continue` |
+| What do the registers hold at a fault? | `continue` to the fault, then `info registers` |
+| What does this memory region contain right now? | `x/32xb 0x302a0db8` |
+
+**The limit: this reaches the MCF5307 only. There is no DSP56300 stub.** That
+core has no stock GDB target and would need its own register map and a custom
+target description. A question about DSP state still needs the older method.
+
+Two further limits, stated because neither is visible from the debugger side.
+The session steps `Board::runMcu` alone, so the Scheduler does not turn while
+it is open: the DSP set, the chain and the panel do not advance. And the stub is
+opt-in and absent by default — no test enables it, and a run without `--gdb`
+executes none of it.
+
+The listening socket binds loopback and never `INADDR_ANY`. It is an
+unauthenticated channel with full read and write access to the emulated machine.
