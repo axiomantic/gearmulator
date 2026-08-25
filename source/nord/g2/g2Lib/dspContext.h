@@ -79,11 +79,25 @@ namespace g2
 		uint64_t   longDispatchQuanta;
 		dsp56k::DSP* dsp;     /* borrowed; the Scheduler owns the DSP set   */
 
-		/* The scheduler drives the ESAI frame, so the job body needs to name
-		 * the port it must advance and to decide whether this quantum is
-		 * inside the second bus's advance window. */
-		dsp56k::Esai* audioEsai;   /* borrowed; the X-space ESAI            */
-		dsp56k::Esai* secondEsai;  /* borrowed; the Y-space ESAI_1          */
+		/* THE INTERLEAVE'S TWO OBSERVABLES. dspJob overwrites both at the top
+		 * of every quantum and no other code reads them.
+		 *
+		 * THEY EXIST BECAUSE THE SUB-BUDGET DIVISOR IS A PREDICATE -- "how many
+		 * times will the interleave's callback fire this quantum" -- AND A
+		 * PREDICATE NOTHING CAN OBSERVE IS A PREDICATE THAT DRIFTS. A literal 8
+		 * stood in that role while the callback fired thirty times, and no
+		 * check could see the disagreement because neither number left the
+		 * function. The divisor must BOUND the dispatch count; these two
+		 * members are what makes that statement testable. */
+		uint32_t   slotBudgetDivisor;    /* the divisor the quantum derived */
+		uint32_t   slotDispatches;       /* times the callback actually fired */
+
+		/* THE MEMBERS BELOW EXIST BECAUSE THE SCHEDULER DRIVES THE ESAI
+		 * FRAME. Without them the job body cannot name the port it must
+		 * advance, and it cannot decide whether this quantum is inside the
+		 * second bus's advance window. */
+		dsp56k::Esai* audioEsai;   /* borrowed; the X-space ESAI, 11.1      */
+		dsp56k::Esai* secondEsai;  /* borrowed; the Y-space ESAI_1, 11.1    */
 
 		/* The scheduler's virtual frame index for the quantum about to run.
 		 * The Scheduler writes it into every DspContext before it calls
