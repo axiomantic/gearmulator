@@ -211,6 +211,29 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		void   stateLoad(const void* src) noexcept;
 
+		/* THE RESET. Task SCH-21 step 3, design section 13.10.5.
+		 *
+		 * WHAT IT COVERS: the MCF5307 core, through the same mcf5307_reset the
+		 * resetMcu above drives; this class's own snapshot state -- the fault
+		 * bit and the last frame index; and the DSP set, through
+		 * DspSet::reset.
+		 *
+		 * WHAT IT DOES NOT COVER, STATED HERE RATHER THAN LEFT TO BE FOUND.
+		 * Design section 13.10.5 says a reset "zeroes every emulated memory",
+		 * AND THE BUS TARGETS ATTACHED TO THIS BOARD ARE NOT ZEROED BY THIS
+		 * CALL: the flash images, the SDRAM window, the latches, the panel
+		 * surface, the MBAR block and the USB device all keep what they held.
+		 * The reason is structural and is not a decision taken here: BusTarget
+		 * declares read and write and NOTHING ELSE, MemoryMap hands out a
+		 * BusTarget* and offers no walk over the attached set, and no unit in
+		 * this tree carries a reset of its own. Covering them needs a reset on
+		 * the BusTarget interface and one implementation for each unit, which
+		 * is an edit across seven owners rather than inside this file. A
+		 * CALLER THAT NEEDS A CLEARED SDRAM MUST STILL RECONSTRUCT THE BOARD.
+		 *
+		 * NO EXCEPTION. Design section 13.10 rule 2. */
+		void reset() noexcept;
+
 		/* THE BUS, AS THE MEMORY MAP SEES IT. onRead and onWrite forward here,
 		 * so this is the routing itself; a caller may drive it without running
 		 * a program.
