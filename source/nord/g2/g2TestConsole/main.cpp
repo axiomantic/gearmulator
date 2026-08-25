@@ -977,18 +977,54 @@ namespace
 		return 0;
 	}
 
+	/* TASK PLG-14. THE LISTING IS MACHINE-READABLE BECAUSE A CHECK READS IT.
+	 *
+	 * `subcommands:` opens a block of one name per line, two spaces then the
+	 * name; the block ends at the first line that is not of that shape. What
+	 * this buys is the half a roster cannot state: t0_console_subcommands
+	 * compares this block against the `command == "--name"` comparisons in
+	 * main() below and requires the two sets to be EQUAL, so a subcommand
+	 * dispatched without a line here is red, and a line here whose subcommand
+	 * is not dispatched is red.
+	 *
+	 * A MODIFIER IS NOT A SUBCOMMAND and sits under `options:` for that reason:
+	 * --dump-dsp-dma is read out of a later argv entry by --boot and is never
+	 * compared against argv[1]. */
 	void usage()
 	{
-		std::cout << "usage: g2TestConsole --boot [--dump-dsp-dma]" << std::endl;
-		std::cout << "       g2TestConsole --gdb <port>" << std::endl;
+		std::cout << "usage: g2TestConsole <subcommand> [option ...]" << std::endl;
+		std::cout << "subcommands:" << std::endl;
 		std::cout << "  --boot           boot CODE_30000400.bin from NMG2_ARTIFACTS and print"
 		             " display 0's 32 character cells" << std::endl;
-		std::cout << "  --dump-dsp-dma   additionally print each DSP position's DDR2, DCO2 and"
-		             " DCO4 and check them against design section 2.3; a mismatch exits non-zero"
-		          << std::endl;
 		std::cout << "  --gdb <port>     place the same machine and serve a GDB remote session on"
 		             " 127.0.0.1:<port>, blocking until a debugger attaches; 0 asks for a free"
 		             " port" << std::endl;
+		std::cout << "  --help           print this listing and exit 0" << std::endl;
+		std::cout << "options:" << std::endl;
+		std::cout << "  --dump-dsp-dma   modifier of --boot: additionally print each DSP"
+		             " position's DDR2, DCO2 and DCO4 and check them against design section 2.3;"
+		             " a mismatch exits non-zero" << std::endl;
+	}
+
+	/* A REFUSAL NAMES THE SUBCOMMAND THAT REFUSED, AND THE USAGE TEXT IS NOT A
+	 * DIAGNOSTIC. The listing prints every name, so "the output mentions the
+	 * name" would be true of any refusal that printed usage and would say
+	 * nothing about which subcommand failed. Every diagnostic therefore opens
+	 * at column 0 with this prefix, which no indented listing line can. */
+	void diagnose(const std::string& _subject, const std::string& _reason)
+	{
+		std::cerr << "g2TestConsole: " << _subject << ": " << _reason << std::endl;
+	}
+
+	// A subcommand that ran and failed must not be silent about WHICH one it
+	// was. The exit status is passed through unchanged; only the naming is
+	// added, so no caller's meaning moves.
+	int named(const std::string& _name, const int _result)
+	{
+		if(_result != 0)
+			diagnose(_name, "failed with exit status " + std::to_string(_result));
+
+		return _result;
 	}
 }
 
@@ -1023,11 +1059,12 @@ int main(int _argc, char** _argv)
 				continue;
 			}
 
+			diagnose("--boot", std::string("unrecognised option '") + _argv[i] + "'");
 			usage();
 			return 2;
 		}
 
-		return boot(dumpDspDma);
+		return named("--boot", boot(dumpDspDma));
 	}
 
 	/* TASK TOOL-13. THE PORT IS REQUIRED AND IT IS NOT GUESSED AT. A `--gdb`
@@ -1038,6 +1075,7 @@ int main(int _argc, char** _argv)
 	{
 		if(_argc != 3)
 		{
+			diagnose("--gdb", "expects exactly one port number");
 			usage();
 			return 2;
 		}
@@ -1047,13 +1085,28 @@ int main(int _argc, char** _argv)
 
 		if(end == _argv[2] || *end != '\0' || value < 0 || value > 65535)
 		{
+			diagnose("--gdb", std::string("'") + _argv[2] + "' is not a port number in 0..65535");
 			usage();
 			return 2;
 		}
 
-		return gdb(uint16_t(value));
+		return named("--gdb", gdb(uint16_t(value)));
 	}
 
+	/* TASK PLG-14. `--help` IS A HANDLED WORD AND NOT A FALL-THROUGH. Before
+	 * this task it printed the usage text only because it was UNRECOGNISED, and
+	 * it exited 2 -- a defensible exit for an unknown flag and not a --help. */
+	if(command == "--help")
+	{
+		usage();
+		return 0;
+	}
+
+	/* NOTHING UNIMPLEMENTED EXITS 0, AND THE REFUSAL SAYS WHAT IT REFUSED. A
+	 * name this binary does not dispatch -- one another task owns, or one that
+	 * is simply wrong -- lands here, and an operator reads WHICH argument was
+	 * rejected rather than that something was. */
+	diagnose("unrecognised argument", "'" + command + "'");
 	usage();
 	return 2;
 }
