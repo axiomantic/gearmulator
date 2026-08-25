@@ -543,6 +543,28 @@ namespace g2
 		std::memcpy(dst, &s, sizeof s);
 	}
 
+	/* THE RESET. It reuses resetMcu rather than calling mcf5307_reset itself,
+	 * so the core's reset and the clearing of this class's fault bit stay ONE
+	 * decision in ONE place; a second call site here could drift from that one.
+	 *
+	 * THE VECTORS ARE ZERO BECAUSE THERE IS NO OTHER DEFENSIBLE VALUE. A reset
+	 * that is not handed an initial stack pointer and an initial program
+	 * counter has no source for either: the firmware's reset vector lives in a
+	 * flash image this call is explicitly not reading, and a plausible-looking
+	 * address invented here would be a machine configuration wearing the
+	 * costume of a measurement. A caller that knows the vectors calls resetMcu
+	 * with them.
+	 *
+	 * board.h states in full what this call does NOT zero, and why. */
+	void Board::reset() noexcept
+	{
+		resetMcu(0u, 0u);
+
+		m_lastFrameIndex = 0;
+
+		m_dspSet.reset();
+	}
+
 	void Board::stateLoad(const void* const src) noexcept
 	{
 		BoardState s;

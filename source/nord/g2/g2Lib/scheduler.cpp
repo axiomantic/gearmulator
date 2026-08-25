@@ -282,7 +282,13 @@ namespace g2
 			m_jobs[i].ctx = &c.base;
 		}
 
-		/* Last, and the order is load-bearing. This call publishes callbacks
+		/* THE DISPATCH SET STARTS FULL. Nothing has faulted, so this is the
+		 * whole job array -- and building it HERE rather than special-casing
+		 * "no fault yet" in runFrames means the dispatch path has exactly one
+		 * shape from the first quantum onwards. */
+		rebuildDispatchSet();
+
+		/* LAST, AND THE ORDER IS LOAD-BEARING. This call publishes callbacks
 		 * that capture `this` into ESAIs the Board owns, so every member the
 		 * callbacks reach must already hold its final value when it runs.
 		 * Publishing a half-built object is the one ordering error here that
@@ -331,7 +337,25 @@ namespace g2
 		 * runFrames of the play phase re-establishes it on the audio thread
 		 * instead of tripping on the boot thread's identity. */
 		if(m_owner == std::thread::id{})
+		{
 			m_owner = std::this_thread::get_id();
+		}
+		else
+		{
+			/* THE DEBUG-ONLY CROSS-CHECK OF THE THREAD MAP, and it is the
+			 * PREDICATE OF NOTHING. docs/threading.md gives runFrames to one
+			 * thread at a time and design section 13.10.5 has ownership move
+			 * exactly once, at beginPlayPhase; a second thread calling in is a
+			 * data race on every member below, and this is where it is loudest.
+			 *
+			 * A RELEASE BUILD REMOVES IT, WHICH IS WHY owningThread() EXISTS.
+			 * The property that stops the race in the SHIPPED build has to be
+			 * checkable in the shipped build, so t0_thread_map reads the
+			 * recorded identity back through the accessor and never through
+			 * this line. */
+			assert(m_owner == std::this_thread::get_id()
+				&& "runFrames was called from a thread that does not own this Scheduler");
+		}
 
 		for(size_t f = 0; f < _frames; ++f)
 		{
@@ -384,7 +408,15 @@ namespace g2
 			});
 
 			mark(TracePhase::Dsp, frameIndex);
-			m_executor.run(m_jobs, kJobCount);
+			m_executor.run(m_liveJobs, m_liveCount);
+
+			/* THE FAULT IS READ AFTER run() RETURNS, design section 13.10.5,
+			 * and it covers the MCU's bit as well as the eight job contexts --
+			 * the MCU ran earlier in this same quantum. A NEW fault takes the
+			 * faulted context out of the dispatch set from the NEXT quantum
+			 * onwards; the quantum that produced it already ran. */
+			if(latchFaults())
+				rebuildDispatchSet();
 
 			/* THE EGRESS, AND IT FOLLOWS THE WHOLE RUN PHASE. A refused push
 			 * is a DEFECT REPORT and not a condition to handle: the capacity
@@ -569,6 +601,132 @@ namespace g2
 			return 0;
 
 		return m_contexts[_contextIndex - 1].longDispatchQuanta;
+	}
+
+	/* THE FAULT SURFACE. Design section 13.10.5, and the SAME context index
+	 * cycleDebt and longDispatchQuanta take: 0 is the MCU, 1 .. dspCount are
+	 * the DSPs. An index above dspCount reads back the no-fault answer rather
+	 * than running off the end of the latch. */
+	bool Scheduler::faulted() const noexcept
+	{
+		return m_faulted;
+	}
+
+	bool Scheduler::contextFaulted(const unsigned _contextIndex) const noexcept
+	{
+		return contextFault(_contextIndex) != JobFault::None;
+	}
+
+	JobFault Scheduler::contextFault(const unsigned _contextIndex) const noexcept
+	{
+		if(_contextIndex > kJobCount)
+			return JobFault::None;
+
+		return m_fault[_contextIndex];
+	}
+
+	/* THE RESET. Design section 13.10.5, and the boot thread's call.
+	 *
+	 * THE ORDER IS LOAD-BEARING IN ONE PLACE AND NOWHERE ELSE: the three
+	 * adapter-owned counter baselines are taken AFTER m_chain.reset(), because
+	 * a baseline read before the adapter was zeroed would record the old
+	 * reading and every observability accessor would then answer a negative
+	 * difference through an unsigned type.
+	 *
+	 * THE RATIONAL ACCUMULATORS ARE ZEROED HERE AND beginPlayPhase DOES NOT
+	 * ZERO THEM, and the two are right for the same reason rather than
+	 * inconsistent: an accumulator is emulated timebase state, which a
+	 * boot-to-play hand-off may not touch and which a reset of the whole
+	 * machine must. */
+	void Scheduler::reset() noexcept
+	{
+		for(auto& f : m_fault)
+			f = JobFault::None;
+
+		m_faulted = false;
+
+		for(auto& c : m_contexts)
+		{
+			c.base.fault         = JobFault::None;
+			c.acc                = 0;
+			c.debt               = 0;
+			c.longDispatchQuanta = 0;
+		}
+
+		rebuildDispatchSet();
+
+		m_mcu.acc                = 0;
+		m_mcu.debt               = 0;
+		m_mcu.longDispatchQuanta = 0;
+
+		m_frameIndex = 0;
+		m_regime     = CodecRegime::Boot;
+
+		/* Reconstruction is what clears a queue and its counters. Each ring is
+		 * already the right size, so neither assignment reallocates. */
+		m_source = CodecSource(m_codecCapacity);
+		m_sink   = CodecSink  (m_codecCapacity);
+
+		m_board.reset();
+		m_chain.reset();
+
+		for(unsigned p = 0; p < static_cast<unsigned>(m_underrunBase.size()); ++p)
+		{
+			m_underrunBase[p]       = m_chain.underrunFrames(p);
+			m_secondUnderrunBase[p] = m_chain.secondBusUnderrunFrames(p);
+			m_phaseErrorBase[p]     = m_chain.phaseErrorFrames(p);
+		}
+
+		m_owner = std::thread::id{};
+	}
+
+	void Scheduler::rebuildDispatchSet() noexcept
+	{
+		m_liveCount = 0;
+
+		for(size_t i = 0; i < kJobCount; ++i)
+		{
+			if(m_fault[i + 1u] != JobFault::None)
+				continue;
+
+			m_liveJobs[m_liveCount] = m_jobs[i];
+			++m_liveCount;
+		}
+	}
+
+	/* THE FAULT IS READ BACK AFTER THE PHASE THAT COULD HAVE PRODUCED IT, and
+	 * the first latch of an index WINS. A context that faulted is not
+	 * dispatched again, so its `base.fault` cannot be overwritten -- but the
+	 * MCU's bit can be, because Board::runMcu rewrites it on every call, and a
+	 * later clear must not silently retract a fault the Device may already have
+	 * acted on. Design section 13.10.5 calls the fault sticky and this is where
+	 * that word is implemented. */
+	bool Scheduler::latchFaults() noexcept
+	{
+		bool latched = false;
+
+		if(m_fault[0] == JobFault::None && m_board.faulted())
+		{
+			m_fault[0] = JobFault::CoreHalted;
+			m_faulted  = true;
+		}
+
+		for(size_t i = 0; i < kJobCount; ++i)
+		{
+			if(m_fault[i + 1u] != JobFault::None)
+				continue;
+
+			const JobFault f = m_contexts[i].base.fault;
+
+			if(f == JobFault::None)
+				continue;
+
+			m_fault[i + 1u] = f;
+			m_faulted       = true;
+			latched         = true;
+		}
+
+		return latched;
 	}
 
 	std::thread::id Scheduler::owningThread() const noexcept

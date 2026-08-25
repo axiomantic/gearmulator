@@ -430,3 +430,58 @@ set_property(TARGET t0_codec_regimes PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_codec_regimes COMMAND t0_codec_regimes)
 set_tests_properties(t0_codec_regimes PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-21 step 3 - t0_scheduler_faults
+#
+# An ordinary executable. It drives a real Board, its real DSP set, the real
+# ChainAdapter and both real codec queues; the ONE object it supplies is the
+# Executor, which the factory already takes by injection. That Executor
+# dispatches every real job and then writes one JobFault into one context,
+# which is where design section 13.10.5 puts a fault and where the Scheduler
+# reads it -- so the fault path under test is the production one.
+#
+# A BUILD OF THE TARGET SEES NONE OF THE FIVE PROPERTIES THIS CHECK OWNS: the
+# latch, its stickiness, the context index it names, the removal of the faulted
+# context from the dispatch set, and reset() restoring that set.
+#
+# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and
+# nothing catches an exception, so the failure counter is the whole observable
+# in either build type.
+
+add_executable(t0_scheduler_faults
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_scheduler_faults.cpp)
+target_link_libraries(t0_scheduler_faults PRIVATE g2Lib)
+set_property(TARGET t0_scheduler_faults PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_scheduler_faults COMMAND t0_scheduler_faults)
+set_tests_properties(t0_scheduler_faults PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-21 step 5 - t0_thread_map
+#
+# An ordinary executable. It drives a real Board, its real DSP set, the real
+# ChainAdapter and both real codec queues through the two phases of the thread
+# map, and it runs the AUDIO phase on a real second thread -- which is the half
+# no single-threaded fixture can distinguish from "records the first thread it
+# ever saw".
+#
+# THE ASSERTION IN scheduler.cpp IS NOT THIS CHECK'S PREDICATE. Every case here
+# reads the recorded identity back through Scheduler::owningThread, which is
+# present in every build type, so the property that stops the data race in the
+# SHIPPED build is the property this check reads. No case in the source is an
+# assert() and no case catches an exception.
+#
+# WHAT THIS REGISTRATION DOES NOT COVER: the generator here is single-config
+# and the tree is configured Debug, so this add_test names one build type and
+# can name no other. The source carries no build-type-dependent case, which is
+# what makes the single registration sufficient rather than merely convenient.
+#
+# NOTHING IN THE SOURCE READS docs/threading.md. That document is the map; a
+# test that grepped it would assert the prose and pass while the code was wrong.
+
+add_executable(t0_thread_map
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_thread_map.cpp)
+target_link_libraries(t0_thread_map PRIVATE g2Lib)
+set_property(TARGET t0_thread_map PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_thread_map COMMAND t0_thread_map)
+set_tests_properties(t0_thread_map PROPERTIES LABELS "UnitTest")

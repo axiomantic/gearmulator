@@ -201,6 +201,36 @@ namespace g2
 		int64_t  cycleDebt(unsigned _contextIndex) const noexcept;
 		uint64_t longDispatchQuanta(unsigned _contextIndex) const noexcept;
 
+		/* THE FAULT SURFACE, design section 13.10.5. A fault is STICKY: once a
+		 * context has faulted, nothing but reset() clears it, and the faulted
+		 * context is never dispatched again.
+		 *
+		 * `faulted()` IS THE DISJUNCTION over every context and is what the
+		 * Device reads AFTER runFrames returns. THE CONTEXT INDEX IS DESIGN
+		 * SECTION 13.5's: 0 is the MCU and 1 .. dspCount are the DSPs,
+		 * ascending -- the same index cycleDebt and longDispatchQuanta take. An
+		 * index above dspCount reads back false and JobFault::None rather than
+		 * running off the end.
+		 *
+		 * NO EXCEPTION AND NO ASSERTION IS INVOLVED. Design section 13.10 rule
+		 * 2 forbids throwing and a release build removes an assertion, so a
+		 * fault is observable through these three and through nothing else. */
+		bool     faulted() const noexcept;
+		bool     contextFaulted(unsigned _contextIndex) const noexcept;
+		JobFault contextFault(unsigned _contextIndex) const noexcept;
+
+		/* THE RESET, design section 13.10.5, and the boot thread's call. It
+		 * returns this object and the machine it drives to the state a freshly
+		 * created Scheduler is in: every fault cleared and every context back
+		 * in the dispatch set, the virtual clock at frame 0, the boot regime,
+		 * both codec queues empty, every counter and every debt zero, the
+		 * recorded owning thread cleared, and the emulated memories the objects
+		 * below own zeroed.
+		 *
+		 * WHAT IT DOES NOT ZERO IS STATED IN board.cpp AT Board::reset, because
+		 * the limit is that object's and not this one's. */
+		void reset() noexcept;
+
 		/* THE RECORDED OWNING THREAD. runFrames records the calling thread on
 		 * its first call after each clearing, and beginPlayPhase's step 5
 		 * clears the record so the first runFrames of the play phase
@@ -306,11 +336,47 @@ namespace g2
 		 * the state a fresh Scheduler starts in. */
 		std::thread::id m_owner{};
 
+		/* THE STICKY FAULT LATCH, ONE ENTRY FOR EACH CONTEXT INDEX, in design
+		 * section 13.5's numbering: entry 0 is the MCU and 1 .. kJobCount are
+		 * the DSPs. It is the SCHEDULER's record and not the job's: a job's own
+		 * `base.fault` is overwritten by the next quantum that dispatches it,
+		 * and the MCU has no fault field at all -- Board::faulted() is one bit
+		 * with no code beside it. Latching here is what makes contextFault
+		 * answer for EVERY index rather than for the DSPs only. */
+		JobFault m_fault[1u + kJobCount]{};
+
+		/* THE DISJUNCTION OVER THE LATCH, KEPT RATHER THAN COMPUTED. It is what
+		 * the Device reads after every runFrames, and a scan of nine entries on
+		 * that path buys nothing. */
+		bool m_faulted = false;
+
 		/* THE JOB ARRAY, BUILT ONCE. `Job::ctx` points at each context's
 		 * LEADING JobContext, which dspContext.h's two static_asserts are what
 		 * make legal. */
 		DspContext    m_contexts[kJobCount]{};
 		Executor::Job m_jobs[kJobCount]{};
+
+		/* THE DISPATCH SET, AND IT IS A SECOND ARRAY RATHER THAN A COUNT INTO
+		 * THE FIRST. Executor::run takes a CONTIGUOUS array and a count, so a
+		 * faulted context in the middle cannot be skipped by lowering the
+		 * count; the live jobs are compacted into this array instead, and
+		 * m_jobs keeps its position-indexed order so that nothing else has to
+		 * learn about the compaction.
+		 *
+		 * A FAULTED CONTEXT IS NEVER DISPATCHED AGAIN, which is the property
+		 * this array exists to deliver, and reset() is the only thing that puts
+		 * one back. */
+		Executor::Job m_liveJobs[kJobCount]{};
+		size_t        m_liveCount = 0;
+
+		/* Rebuilds m_liveJobs from m_fault. Called at construction, whenever a
+		 * fault latches, and by reset(). */
+		void rebuildDispatchSet() noexcept;
+
+		/* Reads the fault of every context back after the run phase and latches
+		 * whatever it finds. Returns true when at least one NEW fault latched,
+		 * which is when the dispatch set has to be rebuilt. */
+		bool latchFaults() noexcept;
 	};
 
 	/* Neither copyable nor movable, as a compile-time property so that it

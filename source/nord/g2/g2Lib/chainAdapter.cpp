@@ -555,4 +555,44 @@ namespace g2
 		for(unsigned p = 0u; p < m_dspCount; ++p)
 			m_secondWritten[p] = *cursor++;
 	}
+
+	/* THE RESET. Design section 13.10.5's "zeroes every emulated memory",
+	 * applied to the one object that owns the chain's own memory.
+	 *
+	 * A FRAME IS ZEROED IN PLACE RATHER THAN THE RING BEING REASSIGNED, so no
+	 * allocation happens here and this call is legal on any thread the boot
+	 * phase owns without a second look at the allocator.
+	 *
+	 * THE HEAD GOES TO 0 AS WELL AS THE FRAMES. A ring whose frames are all
+	 * zero still carries a head, and two adapters reset from different heads
+	 * would agree on every read and disagree on the next advance -- which is a
+	 * difference no read of this object could show. */
+	void ChainAdapter::reset() noexcept
+	{
+		const auto clearBus = [](std::vector<Mailbox>& _bus) noexcept
+		{
+			for(auto& mailbox : _bus)
+			{
+				for(auto& frame : mailbox.m_ring)
+					frame = Frame{};
+
+				mailbox.m_head = 0;
+			}
+		};
+
+		clearBus(m_audio);
+		clearBus(m_second);
+
+		for(auto& flag : m_audioWritten)
+			flag = 0;
+		for(auto& flag : m_secondWritten)
+			flag = 0;
+
+		for(auto& c : m_underrun)
+			c = 0;
+		for(auto& c : m_secondUnderrun)
+			c = 0;
+		for(auto& c : m_phaseError)
+			c = 0;
+	}
 }
