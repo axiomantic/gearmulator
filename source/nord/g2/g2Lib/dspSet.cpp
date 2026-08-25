@@ -13,6 +13,7 @@
 #include <new>
 #include <stdexcept>
 #include <tuple>
+#include <utility>
 
 namespace g2
 {
@@ -211,6 +212,49 @@ namespace g2
 		return Status::Ok;
 	}
 
+	/* THE DETACH. It MOVES the bridges aside and destroys none of them, which
+	 * is what makes reattachHdi08Bridges an exact inverse rather than a rebuild
+	 * that happens to produce the same count. dspSet.h carries the whole reason
+	 * -- the run gate borrows the ADDRESS programLanded answers -- and
+	 * t0_scheduler_state case 1 pins it by that address at every index.
+	 *
+	 * A DETACHED SET IS INDISTINGUISHABLE FROM A NEVER-ATTACHED ONE at every
+	 * public reader: bridgesAttached() is false, programLanded() answers NULL
+	 * for every slot because m_bridges is empty, and stateLoad no longer
+	 * refuses. That is the point: the guard's condition is m_bridges, so
+	 * emptying m_bridges is the whole of the detach.
+	 *
+	 * TOTAL AT BOTH ENDS. The move-assignment below is well defined on an empty
+	 * source, so a second detach is a no-op rather than a discard: an
+	 * unconditional `m_detachedBridges = std::move(m_bridges)` on an already
+	 * detached set would overwrite the parked bridges with an empty vector and
+	 * destroy every one of them. The guard is what stops that, and it is the
+	 * one line in this pair whose absence would be silent. */
+	void DspSet::detachHdi08Bridges() noexcept
+	{
+		if(m_bridges.empty())
+			return;
+
+		m_detachedBridges = std::move(m_bridges);
+		m_bridges.clear();
+	}
+
+	/* THE INVERSE. The same objects, in the same order, back at the same
+	 * indices. The guard is this call's half of the same no-op rule. */
+	void DspSet::reattachHdi08Bridges() noexcept
+	{
+		if(m_detachedBridges.empty())
+			return;
+
+		m_bridges = std::move(m_detachedBridges);
+		m_detachedBridges.clear();
+	}
+
+	bool DspSet::bridgesAttached() const noexcept
+	{
+		return !m_bridges.empty();
+	}
+
 	/* THE RESET. It walks the SAME slot list and the SAME area list stateSize
 	 * and stateSave walk, so a slot or an area added to the snapshot is added
 	 * to the reset by the same edit rather than by remembering to.
@@ -263,6 +307,15 @@ namespace g2
 		 * learn that. Of the two failures only this one is visible. */
 		if(!_set.m_bridges.empty())
 			throw std::logic_error("attachHdi08Bridges: the set already holds bridges");
+
+		/* A DETACHED SET ALREADY HOLDS ITS BRIDGES; IT IS ONLY NOT WEARING
+		 * THEM. Testing m_bridges alone would let this call build a second
+		 * bridge for every host port while the parked ones stayed alive, and
+		 * the two would then drive the same port. reattachHdi08Bridges is the
+		 * only way back from a detach and this refusal is what says so. */
+		if(!_set.m_detachedBridges.empty())
+			throw std::logic_error("attachHdi08Bridges: the set holds detached bridges -- "
+				"reattachHdi08Bridges is the only way back from a detach");
 
 		_set.m_bridges.reserve(_set.dspCount());
 
