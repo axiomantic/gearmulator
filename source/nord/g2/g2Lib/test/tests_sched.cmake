@@ -460,3 +460,48 @@ set_property(TARGET t0_transport_hub PROPERTY FOLDER "G2/test")
 add_test(NAME t0_transport_hub COMMAND t0_transport_hub
 	${CMAKE_CURRENT_SOURCE_DIR}/../transportHub.h)
 set_tests_properties(t0_transport_hub PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-21 step 1 - t0_begin_play_phase
+#
+# An ordinary executable. It drives a real Board, a real DSP set, the real
+# ChainAdapter and both real codec queues through Scheduler::runFrames and
+# Scheduler::beginPlayPhase; the check supplies only the two objects the
+# factory already takes by injection -- an Executor and, through Config::trace,
+# a TraceSink.
+#
+# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and
+# nothing catches an exception, so the failure counter is the whole observable
+# in either build type. WHAT THIS REGISTRATION DOES NOT COVER: the generator
+# here is single-config and the tree is configured Debug, so this add_test
+# names one build type and can name no other.
+
+add_executable(t0_begin_play_phase
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_begin_play_phase.cpp)
+target_link_libraries(t0_begin_play_phase PRIVATE g2Lib)
+set_property(TARGET t0_begin_play_phase PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_begin_play_phase COMMAND t0_begin_play_phase)
+set_tests_properties(t0_begin_play_phase PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-21 step 2 - t0_codec_regimes
+#
+# An ordinary executable. It drives a real Board, a real DSP set, the real
+# ChainAdapter and both real codec queues through Scheduler::runFrames and
+# Scheduler::beginPlayPhase, and observes the two play-only phases through the
+# same Config::trace sink SCH-19 declares. A BUILD of the target sees none of
+# the four properties this check owns: the boot regime's five records, the play
+# regime's seven, the POSITION of the ingress and the egress within design
+# section 13.5's order, and the negative case in which a play regime run during
+# what would be the boot fills the sink and stops the scheduler.
+#
+# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and
+# nothing catches an exception, so the failure counter is the whole observable
+# in either build type.
+
+add_executable(t0_codec_regimes
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_codec_regimes.cpp)
+target_link_libraries(t0_codec_regimes PRIVATE g2Lib)
+set_property(TARGET t0_codec_regimes PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_codec_regimes COMMAND t0_codec_regimes)
+set_tests_properties(t0_codec_regimes PROPERTIES LABELS "UnitTest")
