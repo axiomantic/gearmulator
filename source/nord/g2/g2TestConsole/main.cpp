@@ -527,6 +527,43 @@ namespace
 
 	// A position's row of the section 2.3 table. `_count` rather than a literal
 	// 8, so the tail follows the DSP set's own size and cannot disagree with it.
+
+	// The firmware's OWN port ordering, read from the nine-entry table it builds
+	// at 0x30116970 (set_hdi08_bases, 0x300391E8) rather than assumed from ours.
+	// Entry i holds the CS1 address of the port at chain position i, and A3..A10
+	// are eight ACTIVE-LOW one-cold selects, so the port number is the index of
+	// the single line pulled down. Plan section 24.6 row W3-399.
+	unsigned chainPositionOfPort(g2::Board& _board, const unsigned _port, const unsigned _count)
+	{
+		constexpr uint32_t g_portTableBase = 0x30116970u;
+
+		for(unsigned position = 0; position < _count; ++position)
+		{
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			const uint32_t entry =
+				g2::Board::onRead(&_board, g_portTableBase + position * 4u, 4, &status);
+
+			const uint8_t selects = uint8_t((entry >> 3) & 0xffu);
+			const uint8_t low     = uint8_t(~selects);
+
+			// Exactly one line low is a port; none low is the broadcast address
+			// and belongs to no position.
+			if(low == 0u || (low & uint8_t(low - 1u)) != 0u)
+				continue;
+
+			unsigned port = 0;
+			for(uint8_t bit = low; bit > 1u; bit >>= 1)
+				++port;
+
+			if(port == _port)
+				return position;
+		}
+
+		// A port the table does not name cannot be placed, and returning the
+		// port itself makes that visible as a mismatch rather than hiding it.
+		return _port;
+	}
+
 	constexpr DspDmaExpectation expectedDspDma(const unsigned _position, const unsigned _count)
 	{
 		const bool head = _position == 0u;
@@ -568,7 +605,18 @@ namespace
 			const dsp56k::TWord dco2 = dma.getDCO(g_dmaRxChannel);
 			const dsp56k::TWord dco4 = dma.getDCO(g_dmaTxChannel);
 
-			const DspDmaExpectation expected = expectedDspDma(position, count);
+			/* THE EXPECTATION IS INDEXED BY CHAIN POSITION AND THE LOOP WALKS
+			 * HARDWARE PORTS, AND THOSE ARE NOT THE SAME ORDER. Plan section
+			 * 24.6 row W3-399 carries the measurement: the firmware's own
+			 * nine-entry table at 0x30116970 maps chain position to port as
+			 * 3, 7, 6, 5, 4, 2, 1, 0 -- so chain position 0, the head, IS
+			 * hardware port 3, and chain position 7, the tail, IS port 0.
+			 *
+			 * COMPARING A PORT'S REGISTERS AGAINST THAT PORT'S NUMBER AS IF IT
+			 * WERE A CHAIN POSITION IS WHAT MADE THIS CHECK REPORT THREE
+			 * MISMATCHES AGAINST A CORRECT MACHINE. */
+			const unsigned chainPosition = chainPositionOfPort(_board, position, count);
+			const DspDmaExpectation expected = expectedDspDma(chainPosition, count);
 
 			const bool ok = ddr2 == expected.ddr2
 			             && dco2 == expected.dco2
