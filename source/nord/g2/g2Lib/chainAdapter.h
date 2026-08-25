@@ -244,6 +244,21 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		void   stateLoad(const void* src) noexcept;
 
+		/* ------------- The reset. Task SCH-21 step 3, design section 13.10.5.
+		 *
+		 * IT ZEROES EVERY EMULATED MEMORY THIS OBJECT OWNS AND EVERY COUNTER
+		 * IT KEEPS: every frame of every mailbox on both buses, every ring
+		 * head, both written-flag arrays, and the three per-position counters.
+		 * THE GEOMETRY IS NOT TOUCHED -- the position count, the hop, the
+		 * topology and the divider are construction parameters and not state,
+		 * so no ring is resized and no vector reallocates.
+		 *
+		 * THE BORROWED Esai POINTERS ARE NOT TOUCHED EITHER. They name the DSP
+		 * set's ports, the set outlives this object, and clearing them would
+		 * leave the transmit wrappers pointing at nothing while every check
+		 * here stayed green. */
+		void reset() noexcept;
+
 	private:
 		/* The two buses' mailboxes. The audio bus is fixed to Line and holds
 		 * mailboxCount(Line, m_dspCount); the second bus holds

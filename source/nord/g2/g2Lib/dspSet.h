@@ -65,6 +65,25 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
+		/* THE RESET. Task SCH-21 step 3, design section 13.10.5's "zeroes
+		 * every emulated memory".
+		 *
+		 * IT COVERS EXACTLY WHAT THE SNAPSHOT COVERS AND NOTHING MORE, which is
+		 * a deliberate pairing rather than a coincidence: every slot's P, X and
+		 * Y memory, and that slot's core state through dsp56k::DSP::resetHW.
+		 * The peripherals are outside it for the same reason they are outside
+		 * stateSave -- the DSP library carries no reset member for a peripheral
+		 * set, its ESAIs, its Dma, its Timers or its host port.
+		 *
+		 * IT DOES NOT DETACH THE BRIDGES AND IT DOES NOT CLEAR A LANDED FLAG.
+		 * A bridge is a wire and not emulated memory; tearing it down here
+		 * would leave the run gate shut for the life of the program, because
+		 * attachHdi08Bridges refuses the second attach that would rebuild it.
+		 * THE CONSEQUENCE IS STATED RATHER THAN LEFT TO BE FOUND: a reset set
+		 * whose firmware had already landed reports LANDED over zeroed program
+		 * memory until the producer downloads again. */
+		void reset() noexcept;
+
 	private:
 		struct Slot
 		{

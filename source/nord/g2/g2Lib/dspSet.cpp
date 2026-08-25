@@ -211,6 +211,31 @@ namespace g2
 		return Status::Ok;
 	}
 
+	/* THE RESET. It walks the SAME slot list and the SAME area list stateSize
+	 * and stateSave walk, so a slot or an area added to the snapshot is added
+	 * to the reset by the same edit rather than by remembering to.
+	 *
+	 * resetHW IS THE LIBRARY'S OWN CALL AND NOT A ZEROING OF THE REGISTER
+	 * BLOCK. A register file zeroed by memset is not the state a DSP56311
+	 * holds after reset -- the status register's reset value is not zero -- so
+	 * a hand-written zero would produce a machine no reset ever produces.
+	 */
+	void DspSet::reset() noexcept
+	{
+		for(unsigned i = 0; i < dspCount(); ++i)
+		{
+			Slot& s = slot(i);
+
+			for(const auto area : g_areas)
+			{
+				const auto bytes = areaByteSize(s.memory, area);
+				std::memset(s.memory.getMemAreaPtr(area), 0, bytes);
+			}
+
+			s.dsp.resetHW();
+		}
+	}
+
 	/* THE INSTALL LIVES HERE RATHER THAN IN hdi08Bridge.cpp because this is the
 	 * construction point that holds both ends of the wire.
 	 *
