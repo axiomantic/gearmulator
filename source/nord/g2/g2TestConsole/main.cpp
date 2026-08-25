@@ -82,6 +82,11 @@
 #include "status.h"
 #include "artifactResolver.h"
 
+// TASK M4 CLAUSE 1 reads the DMA registers of each position's peripheral set.
+// board.h already reaches dma.h through dspSet.h and peripherals56311.h; the
+// include is written out because this file NAMES dsp56k::Dma and dsp56k::TWord.
+#include "dsp56kEmu/dma.h"
+
 #include "dsp56kBase/logging.h"
 
 #include <atomic>
@@ -478,7 +483,119 @@ namespace
 		return false;
 	}
 
-	int boot()
+	// ------------------------------------------- TASK M4 CLAUSE 1, THE DMA CHECK
+	//
+	// MILESTONE M4 CLAUSE 1, VERBATIM: "`g2TestConsole --boot --dump-dsp-dma`
+	// prints, for each of the eight positions, DDR2, DCO2 and DCO4 values that
+	// match the design section 2.3 table for that position."
+	//
+	// THE FOUR CONSTANTS BELOW ARE READ OFF DESIGN SECTION 2.3's TABLE AND ARE
+	// NOT DERIVED HERE. That table decodes the kernel's own MOVEP block:
+	//
+	//   Channel | DSR            | DDR                          | DCO
+	//   2       | $FFFFA8 ESAI   | $001C00, $001C04 at the head | $007001, $001001 at the head
+	//   4       | $001D00        | $FFFFA0 ESAI TX0             | $007001, $001001 at the tail
+	//
+	// M4 NAMES THREE REGISTERS AND ALL THREE ARE POSITION-DEPENDENT, which is
+	// why this is a check and not a dump: DDR2 and DCO2 single out the chain
+	// HEAD, DCO4 singles out the chain TAIL, and a firmware that programmed one
+	// uniform value everywhere would satisfy a printer while failing the table.
+	//
+	// HEAD AND TAIL ARE POSITION 0 AND POSITION dspCount-1, READ OFF THE CODE
+	// AND NOT ASSUMED. chainAdapter.cpp:206 states the head: injectCodecSource
+	// writes mailbox 0's ingress frame and "the head's DMA then places them at
+	// X:$001C04, not X:$001C00" -- the head is the position whose receive
+	// callback reads mailbox 0, which audioRxCallback makes position 0.
+	// chainAdapter.cpp:301 states the tail: "The tail position N - 1 therefore
+	// writes mailbox N, which is the mailbox the egress phase reads."
+	constexpr dsp56k::TWord g_ddr2Chain    = 0x001C00u;
+	constexpr dsp56k::TWord g_ddr2Head     = 0x001C04u;
+	constexpr dsp56k::TWord g_dcoChain     = 0x007001u;
+	constexpr dsp56k::TWord g_dcoEndpoint  = 0x001001u;
+
+	// The two channels section 2.3 names: 2 is the ESAI RX0 receive channel and
+	// 4 is the ESAI TX0 transmit channel.
+	constexpr dsp56k::TWord g_dmaRxChannel = 2u;
+	constexpr dsp56k::TWord g_dmaTxChannel = 4u;
+
+	struct DspDmaExpectation
+	{
+		dsp56k::TWord ddr2;
+		dsp56k::TWord dco2;
+		dsp56k::TWord dco4;
+	};
+
+	// A position's row of the section 2.3 table. `_count` rather than a literal
+	// 8, so the tail follows the DSP set's own size and cannot disagree with it.
+	constexpr DspDmaExpectation expectedDspDma(const unsigned _position, const unsigned _count)
+	{
+		const bool head = _position == 0u;
+		const bool tail = _count > 0u && _position + 1u == _count;
+
+		return DspDmaExpectation{
+			head ? g_ddr2Head    : g_ddr2Chain,
+			head ? g_dcoEndpoint : g_dcoChain,
+			tail ? g_dcoEndpoint : g_dcoChain};
+	}
+
+	std::string dmaHex(const dsp56k::TWord _value)
+	{
+		char buf[16];
+		std::snprintf(buf, sizeof buf, "$%06X", unsigned(_value));
+		return buf;
+	}
+
+	// Prints one line for each position and answers whether EVERY position
+	// matched. THE VERDICT IS THE WORST POSITION: `all` is a conjunction over
+	// the per-position results and never a separately computed summary, so a
+	// single FAIL row cannot coexist with a PASS verdict.
+	bool dumpDspDma(g2::Board& _board)
+	{
+		const unsigned count = _board.dspSet().dspCount();
+
+		std::cout << "dsp-dma positions=" << count << std::endl;
+
+		bool all = true;
+
+		for(unsigned position = 0; position < count; ++position)
+		{
+			// The registers are read through the DSP set's own peripherals, so
+			// this is the state the emulated kernel left behind and not a copy
+			// the harness maintained beside it.
+			dsp56k::Dma& dma = _board.dspSet().peripherals(position).getDMA();
+
+			const dsp56k::TWord ddr2 = dma.getDDR(g_dmaRxChannel);
+			const dsp56k::TWord dco2 = dma.getDCO(g_dmaRxChannel);
+			const dsp56k::TWord dco4 = dma.getDCO(g_dmaTxChannel);
+
+			const DspDmaExpectation expected = expectedDspDma(position, count);
+
+			const bool ok = ddr2 == expected.ddr2
+			             && dco2 == expected.dco2
+			             && dco4 == expected.dco4;
+
+			all = all && ok;
+
+			std::cout << "  position " << position
+			          << " DDR2=" << dmaHex(ddr2) << "/" << dmaHex(expected.ddr2)
+			          << " DCO2=" << dmaHex(dco2) << "/" << dmaHex(expected.dco2)
+			          << " DCO4=" << dmaHex(dco4) << "/" << dmaHex(expected.dco4)
+			          << " " << (ok ? "PASS" : "FAIL") << std::endl;
+		}
+
+		// A set with no positions matched nothing and must not report a pass:
+		// the loop would leave `all` true with no row behind it.
+		if(count == 0)
+			all = false;
+
+		std::cout << "dsp-dma=" << (all ? "PASS" : "FAIL")
+		          << " (measured/expected, expectations from design section 2.3)"
+		          << std::endl;
+
+		return all;
+	}
+
+	int boot(const bool _dumpDspDma)
 	{
 		installLogFilter();
 
@@ -679,7 +796,21 @@ namespace
 		// Both clauses below refuse that byte -- the latch is only set on a run
 		// that observed writes the clear cannot produce, and anyContent refuses
 		// 0x20 itself.
-		if(!bannerLatched || !anyContent(line0) || halted || faulted)
+		const bool bootOk = bannerLatched && anyContent(line0) && !halted && !faulted;
+
+		/* TASK M4 CLAUSE 1. The dump runs AFTER the drive, on the same Board the
+		 * drive turned, and it is the last thing the program does before it
+		 * answers -- the registers it reads are the ones the firmware left at
+		 * the bound.
+		 *
+		 * IT IS SKIPPED ENTIRELY WITHOUT THE FLAG, so `--boot` alone answers on
+		 * the banner predicate exactly as it did before this task. */
+		const bool dmaOk = _dumpDspDma ? dumpDspDma(board) : true;
+
+		/* BOTH CLAUSES, AND THE VERDICT IS THE WORSE OF THE TWO. A run whose
+		 * DMA registers matched but which never composed a banner read those
+		 * registers off a machine that did not boot, and must not exit 0. */
+		if(!bootOk || !dmaOk)
 			return 1;
 
 		return 0;
@@ -687,9 +818,12 @@ namespace
 
 	void usage()
 	{
-		std::cout << "usage: g2TestConsole --boot" << std::endl;
-		std::cout << "  --boot  boot CODE_30000400.bin from NMG2_ARTIFACTS and print"
+		std::cout << "usage: g2TestConsole --boot [--dump-dsp-dma]" << std::endl;
+		std::cout << "  --boot           boot CODE_30000400.bin from NMG2_ARTIFACTS and print"
 		             " display 0's 32 character cells" << std::endl;
+		std::cout << "  --dump-dsp-dma   additionally print each DSP position's DDR2, DCO2 and"
+		             " DCO4 and check them against design section 2.3; a mismatch exits non-zero"
+		          << std::endl;
 	}
 }
 
@@ -707,7 +841,29 @@ int main(int _argc, char** _argv)
 	const std::string command = _argv[1];
 
 	if(command == "--boot")
-		return boot();
+	{
+		/* AN UNRECOGNISED MODIFIER IS AN ERROR AND NOT A SHRUG. Measured before
+		 * this task: `--boot --dump-dsp-dma` ran the whole boot, printed nothing
+		 * about DMA and exited 0, because nothing past argv[1] was ever read --
+		 * the milestone's own acceptance command passing against a program that
+		 * does not implement it, which is the row W3-95 shape this file already
+		 * carries one instance of. */
+		bool dumpDspDma = false;
+
+		for(int i = 2; i < _argc; ++i)
+		{
+			if(std::string(_argv[i]) == "--dump-dsp-dma")
+			{
+				dumpDspDma = true;
+				continue;
+			}
+
+			usage();
+			return 2;
+		}
+
+		return boot(dumpDspDma);
+	}
 
 	usage();
 	return 2;
