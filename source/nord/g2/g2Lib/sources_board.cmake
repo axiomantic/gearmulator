@@ -109,3 +109,25 @@ list(APPEND G2LIB_SOURCES
 	timer.h
 	timer.cpp
 )
+
+# ----------------- TOOL-13, the GDB remote stub
+#
+# THE TOOLS TRACK HAS NO SOURCE LIST OF ITS OWN AND THIS IS WHY THE PAIR IS
+# HERE. `g2Lib/CMakeLists.txt` includes ten per-track lists and none of them is
+# a `sources_tools.cmake`; creating one is an edit to that file, which BRD-0
+# owns and TOOL-13 does not declare. The pair is appended to the board track's
+# list instead, under its own heading, because the alternative is an edit to an
+# owned file for a target that already exists.
+#
+# THE TRANSLATION UNIT IS LISTED AND NOT ONLY THE HEADER: `g2TestConsole` links
+# `g2Lib` and nothing else, so a build that compiled the header alone would fail
+# at the LINK step on `g2::GdbStub` when `--gdb` reaches it.
+#
+# NOTHING IN `g2Lib` GAINS A DEBUG MEMBER FOR THIS FILE. The stub borrows a
+# Board and holds its own breakpoints and watchpoints, so a build without this
+# translation unit is byte-identical in every other object.
+
+list(APPEND G2LIB_SOURCES
+	gdbStub.h
+	gdbStub.cpp
+)

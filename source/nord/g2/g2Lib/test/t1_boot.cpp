@@ -762,6 +762,7 @@ namespace
 		 * turns. */
 		uint32_t mcuCycles      = 0;
 		uint32_t tcn2           = 0;
+		uint32_t tcn2Latched    = 0;   /* the witness: see the latch site */
 		bool     haltedAtBanner = true;
 		std::vector<std::string> busLog;
 
@@ -942,6 +943,24 @@ namespace
 			// halts the core still contributes its observation.
 			latchHandshakePorts(board, handshakeLatched);
 
+			/* TCN2 IS A SAWTOOTH AND NOT A MONOTONIC WITNESS, SO IT IS LATCHED
+			 * FOR THE SAME REASON THE HANDSHAKE IS -- plan section 24.6 row
+			 * W3-403. The firmware programs TMR = 0x7F3B, whose FRR bit is SET,
+			 * and TRR = 0x32, so the counter runs 0 to 50 and RESTARTS AT ZERO
+			 * on every reference match. A terminal read samples a value in
+			 * 0..50, and READING ZERO IS A LEGAL HEALTHY VALUE -- the same
+			 * reading the required-red mutation produces when the core never
+			 * ran, so the old assertion could not tell them apart and passed by
+			 * luck. */
+			if(_result.tcn2Latched == 0u)
+			{
+				mcf5307_bus_status tcnStatus = MCF5307_BUS_OK;
+				const uint32_t tcnNow =
+					g2::Board::onRead(&board, g_mbarBase + g_tcn2Offset, g_word, &tcnStatus);
+				if(tcnStatus == MCF5307_BUS_OK && tcnNow != 0u)
+					_result.tcn2Latched = tcnNow;
+			}
+
 			if(board.mcuHalted())
 				break;
 
@@ -1008,6 +1027,24 @@ namespace
 		{
 			scheduler->runFrames(g_framesPerIteration);
 			latchHandshakePorts(board, handshakeLatched);
+
+			/* TCN2 IS A SAWTOOTH AND NOT A MONOTONIC WITNESS, SO IT IS LATCHED
+			 * FOR THE SAME REASON THE HANDSHAKE IS -- plan section 24.6 row
+			 * W3-403. The firmware programs TMR = 0x7F3B, whose FRR bit is SET,
+			 * and TRR = 0x32, so the counter runs 0 to 50 and RESTARTS AT ZERO
+			 * on every reference match. A terminal read samples a value in
+			 * 0..50, and READING ZERO IS A LEGAL HEALTHY VALUE -- the same
+			 * reading the required-red mutation produces when the core never
+			 * ran, so the old assertion could not tell them apart and passed by
+			 * luck. */
+			if(_result.tcn2Latched == 0u)
+			{
+				mcf5307_bus_status tcnStatus = MCF5307_BUS_OK;
+				const uint32_t tcnNow =
+					g2::Board::onRead(&board, g_mbarBase + g_tcn2Offset, g_word, &tcnStatus);
+				if(tcnStatus == MCF5307_BUS_OK && tcnNow != 0u)
+					_result.tcn2Latched = tcnNow;
+			}
 		}
 
 		_result.pcLater = board.mcuReg(g_regPc);
@@ -1382,10 +1419,14 @@ int main()
 		      "first iteration that observed display content rather than after the "
 		      "run ended");
 
-		check(result.tcn2 > 0,
-		      "the SIM's TCN2 at MBAR+$18C is non-zero by the end of the run, so "
-		      "the general-purpose timer received the cycles Board::runMcu actually "
-		      "executed; read " + std::to_string(result.tcn2));
+		check(result.tcn2Latched > 0,
+		      "the SIM's TCN2 at MBAR+$18C was observed non-zero AT SOME POINT during "
+		      "the run, so the general-purpose timer received the cycles Board::runMcu "
+		      "actually executed; latched " + std::to_string(result.tcn2Latched) +
+		      ", terminal read " + std::to_string(result.tcn2) +
+		      " (a terminal read alone proves nothing: TMR[FRR] is set, so the counter "
+		      "restarts at zero on every reference match and zero is a legal healthy "
+		      "sample)");
 
 		return g_failures == 0;
 	});
