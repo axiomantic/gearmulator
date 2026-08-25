@@ -28,8 +28,12 @@
 #include <memory>
 #include <type_traits>
 
+#include <thread>
+
 #include "chainAdapter.h"
+#include "codecQueues.h"
 #include "executor.h"
+#include "mcuContext.h"
 #include "status.h"
 
 #include "g2/timebase.h"
@@ -135,6 +139,79 @@ namespace g2
 		 * use workers inside run(), which returns only when every job has. */
 		void runFrames(size_t _frames) noexcept;
 
+		/* THE BOOT-TO-PLAY TRANSITION, AS ONE CALL, and the boot thread's last
+		 * Scheduler action. Design section 13.10 rule 3 states its five steps
+		 * and scheduler.cpp carries them in order.
+		 *
+		 * IT LEAVES THE PLAY PHASE'S INITIAL CONDITION AND NOTHING ELSE: the
+		 * CodecSource empty, the CodecSink holding exactly `lookaheadFrames`
+		 * frames, all seven chain-health counters zero and the recorded
+		 * owning-thread identity cleared. It touches no emulated machine
+		 * state, clears no fault, and does not reset the frame index -- its own
+		 * `lookaheadFrames` quanta advance it by that much.
+		 *
+		 * `noexcept`, matching runFrames, because design section 13.10 rule 2
+		 * forbids throwing. */
+		void beginPlayPhase() noexcept;
+
+		/* HOST INPUT. Returns the number of frames the CodecSource ACCEPTED.
+		 * A return below `_frames` means the queue refused the remainder,
+		 * which the capacity rule of design section 13.6.1 makes unreachable
+		 * in a correct build -- so a short return is a DEFECT REPORT and
+		 * overflowFrames() is how it is counted. */
+		size_t push(const Frame* _in, size_t _frames) noexcept;
+
+		/* HOST OUTPUT. Returns the frames actually taken. The part the sink
+		 * could not supply reads as SILENCE and raises underflowFrames by the
+		 * shortfall. */
+		size_t pull(Frame* _out, size_t _frames) noexcept;
+
+		/* THE VIRTUAL CLOCK. It advances once for each quantum and nothing
+		 * else moves it. */
+		uint64_t frameIndex() const noexcept;
+
+		/* THE SEVEN CHAIN-HEALTH COUNTERS of design section 13.10.5's
+		 * observability block. None of them influences emulation and all
+		 * seven are zeroed by beginPlayPhase.
+		 *
+		 * THE FIRST THREE READ THROUGH A BASELINE THIS OBJECT KEEPS, and the
+		 * reason is stated rather than hidden: they live on the ChainAdapter,
+		 * which CHN-5, CHN-7 and CHN-8 own and which exposes no way to zero
+		 * them. Zeroing the ADAPTER is not an option either -- its mailboxes
+		 * are emulated state and beginPlayPhase may not touch that. So the
+		 * SCHEDULER's counter, which is the one design section 13.10.5
+		 * declares, is the adapter's reading minus the reading taken at the
+		 * last zeroing. */
+		uint64_t underrunFrames(unsigned _position) const noexcept;
+		uint64_t secondBusUnderrunFrames(unsigned _position) const noexcept;
+		uint64_t phaseErrorFrames(unsigned _position) const noexcept;
+		uint64_t starvedFrames() const noexcept;
+		uint64_t overflowFrames() const noexcept;
+		uint64_t droppedFrames() const noexcept;
+		uint64_t underflowFrames() const noexcept;
+
+		/* THE TWO DIAGNOSTIC COUNTERS. Both are emulated-cycle quantities and
+		 * NEITHER MEASURES HOST TIME. A non-zero value is a finding, not
+		 * necessarily a failure, which is why these two are not among the
+		 * seven asserted zero.
+		 *
+		 * THE CONTEXT INDEX IS DESIGN SECTION 13.5's: 0 is the MCU and
+		 * 1 .. dspCount are the DSPs, ascending. An index above dspCount
+		 * reads back zero rather than running off the end. */
+		int64_t  cycleDebt(unsigned _contextIndex) const noexcept;
+		uint64_t longDispatchQuanta(unsigned _contextIndex) const noexcept;
+
+		/* THE RECORDED OWNING THREAD. runFrames records the calling thread on
+		 * its first call after each clearing, and beginPlayPhase's step 5
+		 * clears the record so the first runFrames of the play phase
+		 * re-establishes it on the audio thread.
+		 *
+		 * IT IS EXPOSED BECAUSE THE PROPERTY MUST BE CHECKABLE IN A RELEASE
+		 * BUILD. A debug assertion is removed by NDEBUG, so a check whose
+		 * predicate was the assertion would check the wrong build. A
+		 * default-constructed id means NO OWNER IS RECORDED. */
+		std::thread::id owningThread() const noexcept;
+
 		/* A Scheduler is neither copied nor moved. It installs callbacks that
 		 * capture `this` into ESAIs the Board owns, and those callbacks are
 		 * not re-pointed by a copy or a move -- so a second object would hold
@@ -181,22 +258,55 @@ namespace g2
 		 * the next one's install. */
 		ChainAdapter m_chain;
 
-		/* The MCU's cycles-for-each-frame rational and its accumulator: the
-		 * allocation alone, which is what `runMcu` takes. */
-		Rational m_mcuRate;
-		uint32_t m_mcuAcc     = 0;
+		/* THE MCU CONTEXT, CONTEXT INDEX 0. It carries the rate, the rational
+		 * accumulator, the cycle debt and the rule 4 counter, and the ONE
+		 * block of design section 13.4.6 -- g2::runQuantum -- wraps
+		 * Board::runMcu with it. It is not a JobContext and it does not enter
+		 * the job array, which stays at exactly kJobCount. */
+		McuContext m_mcu;
 
 		/* The authoritative virtual frame index. Every phase of one quantum
 		 * reads the SAME value, and it advances once for each quantum. */
 		uint64_t m_frameIndex = 0;
 
-		/* No codec-queue member and no codec `Frame` member stands here, and
-		 * that is deliberate rather than unfinished. The ingress and the egress
-		 * are play regime only; this class carries no regime member, so it is
-		 * the boot machine by construction and a quantum of it runs the swap
-		 * and the run phase alone.
-		 *
-		 * `Job::ctx` points at each context's
+		/* THE CODEC REGIME. The object knows its phase and the CALLER DOES NOT
+		 * SELECT IT: a Scheduler is born in Boot and beginPlayPhase is the one
+		 * thing that moves it to Play. In Boot a quantum runs the swap and the
+		 * run phase only -- no ingress, no egress, neither queue touched. In
+		 * Play all four phases run. Without the boot regime the sink fills
+		 * after L + B boot quanta and the scheduler stops part-way through the
+		 * boot, which is the defect this regime closes. */
+		enum class CodecRegime { Boot, Play };
+
+		CodecRegime m_regime = CodecRegime::Boot;
+
+		/* THE TWO CODEC QUEUES, OWNED HERE. Design section 13.10.5 makes the
+		 * Scheduler the owner of both. Both capacities are
+		 * lookaheadFrames + maxHostBlockFrames, and both rings are allocated
+		 * once, here, and never resized by a quantum. */
+		CodecSource m_source;
+		CodecSink   m_sink;
+
+		/* L, KEPT BECAUSE beginPlayPhase NEEDS IT TWICE -- once to prime and
+		 * once to count its own quanta -- and the Config is not stored. */
+		unsigned m_lookaheadFrames;
+		size_t   m_codecCapacity;
+
+		/* THE BASELINE OF THE THREE ADAPTER-OWNED COUNTERS, one for each
+		 * position for each of the three. See the accessor comments above:
+		 * the ChainAdapter cannot be zeroed without destroying emulated
+		 * state, so the Scheduler subtracts the reading it took at the last
+		 * zeroing. */
+		std::vector<uint64_t> m_underrunBase;
+		std::vector<uint64_t> m_secondUnderrunBase;
+		std::vector<uint64_t> m_phaseErrorBase;
+
+		/* THE RECORDED OWNING THREAD. A default-constructed id means no owner
+		 * is recorded, which is the state beginPlayPhase's step 5 leaves and
+		 * the state a fresh Scheduler starts in. */
+		std::thread::id m_owner{};
+
+		/* THE JOB ARRAY, BUILT ONCE. `Job::ctx` points at each context's
 		 * LEADING JobContext, which dspContext.h's two static_asserts are what
 		 * make legal. */
 		DspContext    m_contexts[kJobCount]{};
