@@ -29,6 +29,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
+#include <type_traits>
 
 namespace g2
 {
@@ -425,11 +427,163 @@ namespace g2
 
 	/* ------------- the state trio. --------------------------------------------- */
 
-	/* CHN-5 defines the trio so the surface links; CHN-14 owns the real
-	 * save-and-load round trip (mailbox contents and counters) and the return
-	 * type of stateLoad, which design section 13.10.2 declares as g2::Status
-	 * but which SCH-18 has not created yet (see the header comment). */
-	size_t ChainAdapter::stateSize() const noexcept { return 0u; }
-	void   ChainAdapter::stateSave(void*) const noexcept {}
-	void   ChainAdapter::stateLoad(const void*) noexcept {}
+	/* CHN-9 STEP 2 (the absorbed CHN-14) gives the trio its real save-and-load
+	 * round trip. The image carries EVERY member a later quantum can read:
+	 *
+	 *   a geometry header      audio mailbox count, second-bus mailbox count,
+	 *                          ring depth, position count
+	 *   each mailbox           its head index, then its whole ring
+	 *   the three counters     underrun, second-bus underrun, phase error
+	 *   the two written flags  the audio and the second-bus flag of each
+	 *                          position
+	 *
+	 * THE WRITTEN FLAGS ARE IN THE IMAGE AND THEY ARE NOT AN OVER-SAVE. A flag
+	 * describes the quantum that has not yet been closed by advanceAll, so a
+	 * snapshot taken mid-quantum that dropped them would resume with every flag
+	 * clear and count an underrun the run never had.
+	 *
+	 * THE GEOMETRY HEADER IS A GUARD AND NOT DECORATION. stateLoad against an
+	 * image of a differently-shaped adapter would otherwise walk the cursor off
+	 * the end of the buffer; the header lets it refuse instead, leaving this
+	 * object exactly as it was.
+	 *
+	 * EVERY FIELD MOVES THROUGH memcpy AND NOTHING IS READ THROUGH A CAST
+	 * POINTER. The destination is a caller-supplied void* with no alignment
+	 * guarantee, so a typed store into it would be undefined for every field
+	 * wider than a byte.
+	 *
+	 * stateLoad's RETURN TYPE IS STILL void, which is the shape CHN-5 laid
+	 * down and the shape this task's Files: line permits: chainAdapter.h is not
+	 * this task's file. Design section 13.10.2's g2::Status return is the
+	 * reconciliation the header already records as outstanding. */
+	namespace
+	{
+		/* One frame of one ring. Frame is a flat array of int32_t with no
+		 * invariant, so its whole object representation is its state. */
+		static_assert(std::is_trivially_copyable_v<Frame>,
+			"the mailbox image copies whole Frames, which requires them to be "
+			"trivially copyable");
+
+		constexpr size_t kHeaderFields = 4u;   /* the four geometry values */
+
+		void put(uint8_t*& cursor, const uint64_t value) noexcept
+		{
+			std::memcpy(cursor, &value, sizeof(value));
+			cursor += sizeof(value);
+		}
+
+		uint64_t get(const uint8_t*& cursor) noexcept
+		{
+			uint64_t value = 0;
+			std::memcpy(&value, cursor, sizeof(value));
+			cursor += sizeof(value);
+			return value;
+		}
+	}
+
+	size_t ChainAdapter::stateSize() const noexcept
+	{
+		const size_t depth  = m_hopFrames + 1u;
+		const size_t frames = (m_audio.size() + m_second.size()) * depth;
+		const size_t heads  = m_audio.size() + m_second.size();
+
+		return kHeaderFields * sizeof(uint64_t)
+			+ heads * sizeof(uint64_t)
+			+ frames * sizeof(Frame)
+			+ 3u * m_dspCount * sizeof(uint64_t)   /* the three counters   */
+			+ 2u * m_dspCount * sizeof(uint8_t);   /* the two written flags */
+	}
+
+	void ChainAdapter::stateSave(void* const dst) const noexcept
+	{
+		if(dst == nullptr)
+			return;
+
+		uint8_t* cursor = static_cast<uint8_t*>(dst);
+
+		put(cursor, m_audio.size());
+		put(cursor, m_second.size());
+		put(cursor, m_hopFrames + 1u);
+		put(cursor, m_dspCount);
+
+		const auto saveBus = [&cursor](const std::vector<Mailbox>& bus) noexcept
+		{
+			for(const auto& mailbox : bus)
+			{
+				put(cursor, mailbox.m_head);
+
+				for(const auto& frame : mailbox.m_ring)
+				{
+					std::memcpy(cursor, &frame, sizeof(frame));
+					cursor += sizeof(frame);
+				}
+			}
+		};
+
+		saveBus(m_audio);
+		saveBus(m_second);
+
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			put(cursor, m_underrun[p]);
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			put(cursor, m_secondUnderrun[p]);
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			put(cursor, m_phaseError[p]);
+
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			*cursor++ = m_audioWritten[p];
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			*cursor++ = m_secondWritten[p];
+	}
+
+	void ChainAdapter::stateLoad(const void* const src) noexcept
+	{
+		if(src == nullptr)
+			return;
+
+		const uint8_t* cursor = static_cast<const uint8_t*>(src);
+
+		const uint64_t audioCount  = get(cursor);
+		const uint64_t secondCount = get(cursor);
+		const uint64_t depth       = get(cursor);
+		const uint64_t positions   = get(cursor);
+
+		/* THE REFUSAL IS TOTAL AND IT HAPPENS BEFORE ANY MEMBER MOVES. An image
+		 * of a differently-shaped adapter carries a different cursor walk, so a
+		 * partial load would leave this object in a state no run produced. */
+		if(audioCount != m_audio.size()
+			|| secondCount != m_second.size()
+			|| depth != m_hopFrames + 1u
+			|| positions != m_dspCount)
+			return;
+
+		const auto loadBus = [&cursor](std::vector<Mailbox>& bus) noexcept
+		{
+			for(auto& mailbox : bus)
+			{
+				mailbox.m_head = static_cast<unsigned>(get(cursor));
+
+				for(auto& frame : mailbox.m_ring)
+				{
+					std::memcpy(&frame, cursor, sizeof(frame));
+					cursor += sizeof(frame);
+				}
+			}
+		};
+
+		loadBus(m_audio);
+		loadBus(m_second);
+
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			m_underrun[p] = get(cursor);
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			m_secondUnderrun[p] = get(cursor);
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			m_phaseError[p] = get(cursor);
+
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			m_audioWritten[p] = *cursor++;
+		for(unsigned p = 0u; p < m_dspCount; ++p)
+			m_secondWritten[p] = *cursor++;
+	}
 }
