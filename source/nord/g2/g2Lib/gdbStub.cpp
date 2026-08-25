@@ -468,7 +468,11 @@ namespace g2
 	/* ONE INSTRUCTION AND NOT ONE CYCLE. `Board::runMcu(1)` forwards to
 	 * `mcf5307_exec(ctx, 1)`, whose loop runs WHILE `spent < maxCycles` -- so a
 	 * budget of one executes one whole instruction of whatever cost, and a budget
-	 * of ZERO executes nothing at all. */
+	 * of ZERO executes nothing at all.
+	 *
+	 * THE RETURN IS THE INSTRUCTION'S COST AND IS DISCARDED. A single step is
+	 * defined by the budget going in and not by the number coming back, and
+	 * the stop reply is built from the machine's registers. */
 	std::string GdbStub::step()
 	{
 		m_hit = Hit{};
