@@ -788,10 +788,262 @@ namespace
 		return 0;
 	}
 
-	/* `--gdb <port>` places the same machine `--boot` places -- the same image at
-	 * the same entry, the same vector table, the same reset -- and then blocks
-	 * until a debugger attaches instead of driving it. Nothing advances the
-	 * machine here: the debugger's own `continue` and `stepi` are what run it, so
+	/* TASK INT-2, AND IT IS MILESTONE M5's OWN ACCEPTANCE COMMAND.
+	 *
+	 * It places the machine `--boot` places, drives it until the firmware has
+	 * booted and every DSP has taken its program, enters the play phase, and
+	 * then injects a known pattern at the CODEC SOURCE and reports the frame at
+	 * which it reappears at the CODEC SINK.
+	 *
+	 * THE EXPECTED DELAY IS DERIVED AND NEVER TYPED. The audio bus is a Line of
+	 * dspCount + 1 mailboxes; the ingress phase writes mailbox 0's READ frame
+	 * and the egress phase reads the last mailbox's WRITE frame, so neither
+	 * codec edge carries a delay of its own and D_codec is 0. Each DSP-to-DSP
+	 * hand-off costs one hop, and a chain of dspCount positions has
+	 * dspCount - 1 of them:
+	 *
+	 *     D_chain + D_codec = (dspCount - 1) * hopFrames
+	 *
+	 * dspCount is read off the booted machine and hopFrames off the
+	 * Scheduler::Config this program hands the factory.
+	 *
+	 * A REPORT IS NOT A VERDICT. This function exits NON-ZERO unless the pattern
+	 * arrived, arrived at exactly that frame, and arrived unchanged -- plan
+	 * section 24.6 row W3-406 names a milestone command that could not fail as
+	 * this project's fourth instance of one defect. */
+	constexpr int32_t g_impulseLeft  = 0x0055AA33;
+	constexpr int32_t g_impulseRight = 0x00337799;
+
+	constexpr unsigned g_impulseOverrunQuanta = 1024u;
+
+	int impulse()
+	{
+		installLogFilter();
+
+		g2::EnvArtifactResolver resolver;
+		std::string why;
+
+		const std::string directory = resolver.resolve(why, "CODE_30000400.bin");
+
+		if(directory.empty())
+		{
+			std::cout << why << std::endl;
+			return 2;
+		}
+
+		const std::vector<uint8_t> code = readFile(directory + "/CODE_30000400.bin");
+
+		if(code.empty())
+		{
+			std::cout << "CODE_30000400.bin is empty or unreadable under " << directory << std::endl;
+			return 2;
+		}
+
+		g2::Board board(makeConfig());
+		Ram ram(g_sdramSize);
+
+		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
+		{
+			std::cout << "the image does not fit the configured SDRAM window" << std::endl;
+			return 2;
+		}
+
+		{
+			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
+
+			for(uint32_t entry = 0; entry < g_vectorTableEntries; ++entry)
+			{
+				for(uint32_t byte = 0; byte < 4u; ++byte)
+					table[entry * 4u + byte] =
+						uint8_t((g_vectorHandler >> ((3u - byte) * 8u)) & 0xffu);
+			}
+
+			if(!ram.place(g_vectorTableBase - g2::g_sdramBase, table))
+			{
+				std::cout << "the vector table does not fit the configured SDRAM window" << std::endl;
+				return 2;
+			}
+		}
+
+		board.memory().attach(g2::Region::Sdram, &ram);
+		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
+
+		board.resetMcu(g_entrySp, g_entryPc);
+
+		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
+		{
+			std::cout << "the core refused VBR at register index " << g_regVbr << std::endl;
+			return 2;
+		}
+
+		g2::SerialExecutor          executor;
+		g2::Status                  schedulerStatus{};
+		const g2::Scheduler::Config config;
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, executor, board, schedulerStatus);
+
+		if(!scheduler)
+		{
+			std::cout << "Scheduler::create returned no object; g2::Status = "
+			          << uint32_t(schedulerStatus) << std::endl;
+			return 2;
+		}
+
+		const unsigned dspCount = board.dspSet().dspCount();
+
+		/* THE DRIVE LEAVES ON THE PROPERTIES THE PLAY PHASE NEEDS: display
+		 * content composed, the settle window served, and every DSP position's
+		 * program landed. A fixed count would either cost the full bound every
+		 * run or hand beginPlayPhase a machine still downloading kernels. */
+		uint32_t iteration = 0;
+		uint32_t settle    = 0;
+		bool     booted    = false;
+		bool     landed    = false;
+
+		for(; iteration < g_iterations; ++iteration)
+		{
+			scheduler->runFrames(g_framesPerIteration);
+
+			if(board.mcuHalted())
+				break;
+
+			if(ram.contentWrites() == 0)
+				continue;
+
+			if(++settle < g_bannerSettleIterations)
+				continue;
+
+			booted = true;
+
+			unsigned landedCount = 0;
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				const bool* const flag = board.dspSet().programLanded(d);
+				if(flag != nullptr && *flag)
+					++landedCount;
+			}
+
+			if(landedCount == dspCount)
+			{
+				landed = true;
+				break;
+			}
+		}
+
+		const bool halted  = board.mcuHalted();
+		const bool faulted = board.faulted();
+
+		scheduler->beginPlayPhase();
+
+		/* THE PRIMED FRAMES COME OFF THE SINK BEFORE THE WALK STARTS, so the
+		 * walk's own index is measured from the injection quantum and not from
+		 * the lookahead. */
+		std::vector<g2::Frame> primed(config.lookaheadFrames);
+		const size_t primedPulled = scheduler->pull(primed.data(), primed.size());
+
+		const unsigned expected = (dspCount > 0 ? dspCount - 1u : 0u) * config.hopFrames;
+		const unsigned walk     = expected + g_impulseOverrunQuanta;
+
+		g2::Frame impulseFrame{};
+		impulseFrame.slot[0] = g_impulseLeft;
+		impulseFrame.slot[1] = g_impulseRight;
+
+		const g2::Frame silence{};
+
+		int  arrival      = -1;
+		bool arrivalExact = false;
+
+		for(unsigned q = 0; q < walk; ++q)
+		{
+			const g2::Frame& in = (q == 0) ? impulseFrame : silence;
+
+			(void) scheduler->push(&in, 1);
+			scheduler->runFrames(1);
+
+			g2::Frame out{};
+			(void) scheduler->pull(&out, 1);
+
+			if(arrival < 0 && (out.slot[0] != 0 || out.slot[1] != 0))
+			{
+				arrival      = int(q);
+				arrivalExact = out.slot[0] == g_impulseLeft && out.slot[1] == g_impulseRight;
+			}
+		}
+
+		std::cout << "impulse: dspCount=" << dspCount
+		          << " hopFrames=" << config.hopFrames
+		          << " lookaheadFrames=" << config.lookaheadFrames
+		          << " D_chain=" << expected
+		          << " D_codec=0" << std::endl;
+		std::cout << "impulse: bootIterations=" << iteration
+		          << " booted=" << (booted ? 1 : 0)
+		          << " programsLanded=" << (landed ? 1 : 0)
+		          << " halted=" << (halted ? 1 : 0)
+		          << " faulted=" << (faulted ? 1 : 0) << std::endl;
+		std::cout << "impulse: primedPulled=" << primedPulled
+		          << " walkQuanta=" << walk
+		          << " arrival=" << arrival
+		          << " arrivalExact=" << (arrivalExact ? 1 : 0) << std::endl;
+
+		/* THE SEVEN CHAIN-HEALTH COUNTERS, REPORTED BY THIS COMMAND BECAUSE M5's
+		 * OWN ROW ASKS FOR THEM HERE. The three per-position figures are
+		 * reported as their maximum over the positions, with the position that
+		 * carried it, so a reader is told WHICH one moved. */
+		uint64_t underrun = 0, secondUnderrun = 0, phaseError = 0;
+		unsigned underrunAt = 0, secondUnderrunAt = 0, phaseErrorAt = 0;
+
+		for(unsigned p = 0; p < dspCount; ++p)
+		{
+			if(scheduler->underrunFrames(p) > underrun)
+			{
+				underrun   = scheduler->underrunFrames(p);
+				underrunAt = p;
+			}
+			if(scheduler->secondBusUnderrunFrames(p) > secondUnderrun)
+			{
+				secondUnderrun   = scheduler->secondBusUnderrunFrames(p);
+				secondUnderrunAt = p;
+			}
+			if(scheduler->phaseErrorFrames(p) > phaseError)
+			{
+				phaseError   = scheduler->phaseErrorFrames(p);
+				phaseErrorAt = p;
+			}
+		}
+
+		const bool countersZero = underrun == 0 && secondUnderrun == 0 && phaseError == 0
+			&& scheduler->starvedFrames() == 0 && scheduler->overflowFrames() == 0
+			&& scheduler->droppedFrames() == 0 && scheduler->underflowFrames() == 0;
+
+		std::cout << "impulse: underrun=" << underrun << "@" << underrunAt
+		          << " secondBusUnderrun=" << secondUnderrun << "@" << secondUnderrunAt
+		          << " phaseError=" << phaseError << "@" << phaseErrorAt
+		          << " starved=" << scheduler->starvedFrames()
+		          << " overflow=" << scheduler->overflowFrames()
+		          << " dropped=" << scheduler->droppedFrames()
+		          << " underflow=" << scheduler->underflowFrames() << std::endl;
+
+		std::cout << "impulse: countersZero=" << (countersZero ? 1 : 0) << std::endl;
+
+		reportSuppressedLogLines();
+
+		/* THE VERDICT, AND IT IS THE WORST OF ITS CLAUSES. A machine that never
+		 * booted read its arrival off a chain that was not running, and a
+		 * pattern that arrived at the wrong frame or changed on the way is a
+		 * failure of the row and not a note beside it. */
+		const bool ok = booted && landed && !halted && !faulted
+			&& primedPulled == size_t(config.lookaheadFrames)
+			&& arrival == int(expected) && arrivalExact && countersZero;
+
+		return ok ? 0 : 1;
+	}
+
+	/* TASK TOOL-13. THE GDB REMOTE STUB, AND IT IS OPT-IN AND ABSENT BY DEFAULT.
+	 * `--gdb <port>` places the same machine `--boot` places -- the same image at
+	 * the same entry, the same vector table, the same reset -- and then BLOCKS
+	 * until a debugger attaches instead of driving it. NOTHING ADVANCES THE
+	 * MACHINE HERE: the debugger's own `continue` and `stepi` are what run it, so
 	 * a session that never attaches leaves a machine that has executed nothing.
 	 *
 	 * It drives the MCU and not the Scheduler, and that is a stated limit rather
@@ -919,6 +1171,10 @@ namespace
 		             " 127.0.0.1:<port>, blocking until a debugger attaches; 0 asks for a free"
 		             " port" << std::endl;
 		std::cout << "  --help           print this listing and exit 0" << std::endl;
+		std::cout << "  --impulse        boot, enter the play phase, inject a known pattern at the"
+		             " codec source and report the frame at which it reaches the codec sink,"
+		             " against (dspCount - 1) * hopFrames; also report the seven chain-health"
+		             " counters. A late, changed or absent arrival exits non-zero" << std::endl;
 		std::cout << "options:" << std::endl;
 		std::cout << "  --dump-dsp-dma   modifier of --boot: additionally print each DSP"
 		             " position's DDR2, DCO2 and DCO4 and check them against design section 2.3;"
@@ -1008,8 +1264,24 @@ int main(int _argc, char** _argv)
 		return named("--gdb", gdb(uint16_t(value)));
 	}
 
-	/* `--help` is a handled word and not a fall-through: reaching the
-	 * unrecognised-argument path below would exit 2. */
+	/* TASK INT-2. MILESTONE M5's OWN ACCEPTANCE COMMAND. It takes no option and
+	 * an option handed to it is an error rather than a shrug, for the reason
+	 * `--boot`'s modifier loop states. */
+	if(command == "--impulse")
+	{
+		if(_argc != 2)
+		{
+			diagnose("--impulse", "takes no option");
+			usage();
+			return 2;
+		}
+
+		return named("--impulse", impulse());
+	}
+
+	/* TASK PLG-14. `--help` IS A HANDLED WORD AND NOT A FALL-THROUGH. Before
+	 * this task it printed the usage text only because it was UNRECOGNISED, and
+	 * it exited 2 -- a defensible exit for an unknown flag and not a --help. */
 	if(command == "--help")
 	{
 		usage();
