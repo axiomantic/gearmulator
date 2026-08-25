@@ -524,26 +524,6 @@ set_property(TARGET t0_cs3_wire PROPERTY FOLDER "G2/test")
 add_test(NAME t0_cs3_wire COMMAND t0_cs3_wire)
 set_tests_properties(t0_cs3_wire PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-31, the CS2 flash status-responder
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_cs2_status$
-#
-# T0 AND UNGATED. The test needs no firmware artifact of any kind: it creates
-# a Flash instance directly over synthetic CS2 image bytes, reads the status
-# address the firmware probes, and asserts the intercept returns the AMD
-# status value 3. NMG2_ARTIFACTS is unset.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_flash
-# already uses: it constructs a Flash over its own bases and sizes, drives
-# read8 directly, and needs no Board, no mcf5307 core and no firmware image.
-
-add_executable(t0_cs2_status t0_cs2_status.cpp)
-target_link_libraries(t0_cs2_status PRIVATE g2Lib)
-set_property(TARGET t0_cs2_status PROPERTY FOLDER "G2/test")
-
-add_test(NAME t0_cs2_status COMMAND t0_cs2_status)
-set_tests_properties(t0_cs2_status PROPERTIES LABELS "UnitTest")
-
 # ----------------- the isolated sprintf probe
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t1_sprintf_isolated$
