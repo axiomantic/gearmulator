@@ -6,11 +6,10 @@
 // wave.
 //
 // WHAT THIS PROGRAM IS. `g2TestConsole --boot` boots the Clavia OS image
-// directly at 0x30000400 and PRINTS display 0's 32 character cells as they
-// stand in main memory. It asserts nothing. INT-1's Check puts the assertions
-// in `t1_boot`, which is a ctest target; this program is the operator-facing
-// window onto the same boot, and its output is meant to be read by a person
-// bringing the machine up.
+// directly at 0x30000400 and PRINTS display 0's 32 character cells. It asserts
+// nothing. INT-1's Check puts the assertions in `t1_boot`, which is a ctest
+// target; this program is the operator-facing window onto the same boot, and
+// its output is meant to be read by a person bringing the machine up.
 //
 // IT EXISTS BECAUSE ITS ABSENCE WAS ITSELF A DEFECT. Until this file existed
 // `g2TestConsole/CMakeLists.txt` generated a placeholder translation unit whose
@@ -23,22 +22,135 @@
 // `g2Lib/test/t1_boot.cpp` AND IS DOCUMENTED THERE. Two of them -- CS0's base
 // and CS4's base -- are INVENTED BY THIS HARNESS because no authority records
 // them, and they are labelled at their site rather than presented as measured.
+//
+// ------------------------------------------------------------------ TASK W3-396
+//
+// THIS FILE DRIFTED FROM `t1_boot.cpp` AND THIS SECTION RECORDS WHAT IT MISSED,
+// because a reader who finds the two files agreeing today will otherwise not
+// know which one was wrong. Plan section 24.6 row W3-396 is the audit. Measured
+// before the repair, this program printed
+//
+//     iterations=65000 halted=0 faulted=0 pc=0x300505d6
+//     display0.line0="                "
+//     display0.line1="                "
+//
+// -- sixteen spaces on both lines, no banner, and EXIT 0, because the "did the
+// firmware compose anything" predicate below read `>= 0x20` and a screenful of
+// 0x20 spaces satisfies it. That program counter is the pre-SCH-35 RXDF spin.
+//
+// FOUR REPAIRS LANDED IN `t1_boot` AND NONE OF THEM LANDED HERE:
+//
+//   INT-7  -- this file created its OWN mcf5307_ctx and drove it with
+//             mcf5307_exec, beside a Board whose own core was never reset. That
+//             second core is the two-core defect: the Board's core stayed
+//             halted, returned zero cycles from every Board::runMcu, and BRD-33
+//             feeds those cycles to the MCF5307 timers, so the timers never
+//             advanced and no interrupt-driven behaviour was reachable. The
+//             Board's core is now reset through Board::resetMcu and advanced by
+//             Scheduler::runFrames ALONE.
+//
+//   INT-8  -- VBR was never set, so an exception would fetch its vector from
+//             the wrong table. It is set here for the reason t1_boot sets it:
+//             booting CODE directly skips the code that would set it up.
+//
+//   W3-394 -- the iteration bound was 0xFDE8, the firmware's own handshake
+//             retry count, and the real boot needs roughly 425,000 iterations
+//             to reach the patch browser.
+//
+//   W3-395 -- the display was sampled AT THE END. The banner is a TRANSIENT:
+//             the firmware composes it and the patch browser then overwrites
+//             it, so a terminal sample reads the browser and not the banner.
+//             The banner is LATCHED when it appears.
+//
+// A FIFTH DIFFERENCE IS NOT A DRIFT BUT A BUG THIS FILE ALWAYS HAD: W3-374's
+// CGRAM decode. The display cells hold DISPLAY CODES, not ASCII, and five
+// descender characters are stored as CGRAM aliases 0x08..0x0C. `Version 1.62
+// Exp` contains a `p`, so without the decode this program prints line 1 as
+// `Ex\x09` and reports a correct machine as a wrong one.
+//
+// WHERE THIS FILE DELIBERATELY DIFFERS FROM `t1_boot`, and each site says so
+// again at the site: it PRINTS where the harness ASSERTS, so it carries none of
+// the harness's positive controls, none of its landmark fetch counters and
+// none of its HDI08 handshake latch. Those exist to make a check fail; this
+// program has no checks to make fail, and duplicating them here would be a
+// second copy of an instrument with no reader.
 
 #include "board.h"
+#include "executor.h"
 #include "memoryMap.h"
+#include "scheduler.h"
+#include "status.h"
 #include "artifactResolver.h"
 
-#include <algorithm>
+#include "dsp56kBase/logging.h"
+
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace
 {
+	// ------------------------------------------------ the ESAI underrun log filter
+	//
+	// PORTED FROM `t1_boot.cpp` UNCHANGED IN BEHAVIOUR, and it is here for the
+	// same reason it is there: dsp56kEmu's Esai::writeSlotToFrame calls LOG()
+	// once per transmit slot whose data was never written, nothing drains the
+	// ESAIs until the codec queues arrive with task SCH-22, and this program now
+	// turns hundreds of thousands of Scheduler frames. Without the filter the
+	// two display lines a person ran this program to read are buried.
+	//
+	// IT HIDES THE REPETITION OF A REAL AND EXPECTED CONDITION AND NOTHING ELSE.
+	// A quiet run is NOT evidence that the ESAIs are being drained; once SCH-22
+	// lands, a run that still reports underruns is reporting a defect, and the
+	// kept lines are what makes that visible. Set G2_LOG_ESAI_UNDERRUN to
+	// install no filter at all.
+	const char* const g_underrunMessage = "ESAI transmit underrun";
+
+	constexpr uint64_t g_underrunLinesKept = 4;
+
+	std::atomic<uint64_t> g_underrunLines{0};
+
+	void filterLog(const std::string& _s)
+	{
+		if(_s.find(g_underrunMessage) != std::string::npos &&
+		   g_underrunLines.fetch_add(1) >= g_underrunLinesKept)
+			return;
+
+		std::cout << _s << '\n';
+	}
+
+	void installLogFilter()
+	{
+		if(std::getenv("G2_LOG_ESAI_UNDERRUN"))
+			return;
+
+		Logging::setLogFunc(&filterLog);
+	}
+
+	// The count is REPORTED rather than discarded, so "the log was silenced"
+	// stays a statement about volume and not about evidence.
+	void reportSuppressedLogLines()
+	{
+		const uint64_t seen = g_underrunLines.load();
+
+		if(seen <= g_underrunLinesKept)
+			return;
+
+		std::cout << "note " << (seen - g_underrunLinesKept) << " further \""
+		          << g_underrunMessage << "\" lines were suppressed; set "
+		             "G2_LOG_ESAI_UNDERRUN to see every one of them"
+		          << std::endl;
+	}
+
+	// ---------------------------------------------------------------- section 6.6
+
 	// Plan section 6.6.4 clause 1: the display buffer base, confirmed at
 	// 0x30057040 as `addil #808062392,%d0`.
 	constexpr uint32_t g_displayBase   = 0x302A0DB8u;
@@ -47,7 +159,16 @@ namespace
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
-	constexpr int      g_regPc   = 17;
+
+	// The register indices of the mcf5307 C ABI. 17 is the program counter, 18
+	// is the vector base register.
+	constexpr int g_regPc  = 17;
+	constexpr int g_regVbr = 18;
+
+	// The size a byte access presents to Board::onRead, IN THE CORE'S UNIT.
+	// mcf5307.h states it twice, once per callback typedef: `size` is a COUNT OF
+	// BYTES and never a width in bits.
+	constexpr int g_byte = 1;
 
 	// MEASURED, plan section 6.6.3: the loader's `movel #0x10000001,%d0` /
 	// `movec %d0,%mbar` at loader offset 0x1E. The OS never writes MBAR, so a
@@ -76,8 +197,98 @@ namespace
 	constexpr uint32_t g_cs5Size   = 0x00000010u;
 	constexpr uint32_t g_sdramSize = 0x00800000u;
 
-	constexpr uint32_t g_iterations        = 0xFDE8u;
-	constexpr uint32_t g_cyclesPerIteration = 4096u;
+	// ------------------------------------------------ the vector table, TASK INT-8
+	//
+	// MEASURED FROM THE OS IMAGE and documented in full at `t1_boot.cpp`'s own
+	// INT-8 block: CODE_30000400.bin at 0x30058218 builds 256 identical
+	// longwords at 0x30000000 and points VBR at that base. Booting CODE directly
+	// skips the code that would set it up, so the harness supplies it.
+	//
+	// IT IS A FLOOR AND NOT A FIX, AND IT IS LABELLED AS ONE HERE TOO. t1_boot
+	// measured that the firmware has filled the table itself by the time the
+	// first exception is taken, so omitting the table leaves the run identical
+	// -- what is load-bearing is VBR. The table holds only for an exception
+	// taken before the firmware's own fill, a window no run has yet entered.
+	constexpr uint32_t g_vectorTableBase    = 0x30000000u;
+	constexpr uint32_t g_vectorTableEntries = 256u;
+	constexpr uint32_t g_vectorHandler      = 0x300585CEu;
+
+	// ------------------------------------------------ what "display content" means
+	//
+	// THE BYTE THE DISPLAY CLEAR WRITES. MEASURED: the OS clears all four
+	// displays to spaces before it composes anything, and 0x20 is the byte it
+	// stores. It is named because it is the ONE value a "the firmware composed
+	// something" predicate must refuse to be satisfied by. This program's
+	// previous predicate read `>= 0x20` and a blank screen satisfied it, so a
+	// boot that reached nothing exited 0.
+	constexpr uint8_t g_clearByte = 0x20u;
+
+	// THE G2 DISPLAY DOES NOT HOLD ASCII. Plan section 24.6 row W3-374: the
+	// display helper at 0x30056FEA is a TABLE-TRANSLATING copy, and the firmware
+	// remaps exactly five entries onto the CGRAM alias range 0x08..0x0C --
+	//
+	//     'g' -> 0x08   'p' -> 0x09   'q' -> 0x0A   'y' -> 0x0B   'j' -> 0x0C
+	//
+	// -- the five DESCENDERS, whose glyph bitmaps it then uploads. A cell
+	// holding 0x09 is a correctly displayed 'p'. `Version 1.62 Exp` contains
+	// one, so a console without this decode misreports a correct machine.
+	constexpr uint8_t g_cgramFirst = 0x08u;
+	constexpr uint8_t g_cgramLast  = 0x0Cu;
+
+	// The CGRAM slot for each remapped character, and its inverse. Both are
+	// written out rather than derived from each other, so a typo in one does not
+	// silently agree with the other.
+	constexpr char cgramToAscii(const uint8_t _byte)
+	{
+		return _byte == 0x08u ? 'g'
+		     : _byte == 0x09u ? 'p'
+		     : _byte == 0x0Au ? 'q'
+		     : _byte == 0x0Bu ? 'y'
+		     : _byte == 0x0Cu ? 'j'
+		     : char(_byte);
+	}
+
+	constexpr bool isCgramGlyph(const uint8_t _byte)
+	{
+		return _byte >= g_cgramFirst && _byte <= g_cgramLast;
+	}
+
+	// A cell is CONTENT if it is an ordinary printable byte, or one of the five
+	// CGRAM glyphs. The second clause is what stops a line whose only printable
+	// character is a descender from counting as blank.
+	constexpr bool isDisplayContent(const uint8_t _byte)
+	{
+		return (_byte > g_clearByte && _byte < 0x7fu) || isCgramGlyph(_byte);
+	}
+
+	// ------------------------------------------------------------ the drive bounds
+
+	/* THE ITERATION BOUND, TASK W3-394. It is a STOP so that a machine which
+	 * never converges terminates rather than hanging; it is not a figure the
+	 * firmware publishes. The previous value, 0xFDE8, was the firmware's own
+	 * handshake retry count and it is demonstrably too small for a boot: the
+	 * real boot needs roughly 425,000 iterations to reach the patch browser.
+	 * Sized above that, and the run costs roughly ninety seconds. It is the
+	 * SAME figure `t1_boot` uses, deliberately: the two programs boot the same
+	 * firmware and a console that gave up earlier than the harness would report
+	 * a failure the harness does not see. */
+	constexpr uint32_t g_iterations = 500000u;
+
+	/* ONE SCHEDULER FRAME PER ITERATION, AND IT IS THE WHOLE DRIVE. Task INT-7:
+	 * there is ONE core, the Board's, so the frame turns the DSP set, the chain,
+	 * the panel AND the MCU. The mcf5307_exec calls that used to sit here were
+	 * DELETED rather than repointed at Board::runMcu, because a second budget
+	 * applied to the same core would double-count the cycles the scheduler
+	 * already allocated -- and BRD-33 feeds those cycles to the timers, so
+	 * double-counting them would falsify a timer tick. */
+	constexpr size_t g_framesPerIteration = 1;
+
+	/* HOW LONG THE FIRMWARE IS GIVEN AFTER THE FIRST PRINTABLE CHARACTER, TASK
+	 * W3-395. The banner is written A CHARACTER AT A TIME, so a capture on the
+	 * first content byte catches a partial line -- the measured symptom in
+	 * `t1_boot` was line 0 reading "Nord" and stopping. The latch therefore
+	 * waits until the display has been quiet for this many iterations. */
+	constexpr uint32_t g_bannerSettleIterations = 20000u;
 
 	// The SDRAM the firmware executes from. board.cpp attaches the seven units
 	// plan section 24.6 row W3-115 names and leaves Region::Sdram with no target
@@ -87,6 +298,28 @@ namespace
 	{
 	public:
 		explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
+
+		/* THE BANNER OBSERVATION LIVES HERE, ON THE WRITE, AND NOT ON THE BYTES
+		 * THAT SURVIVE, exactly as in `t1_boot.cpp`. Every SDRAM access the core
+		 * makes arrives at this object, so this is the firmware's own write path.
+		 *
+		 * A predicate that reads cells back asks whether a value is PRESENT,
+		 * which is green whenever the bytes happen to be right, whoever put them
+		 * there. A predicate over the write asks whether the firmware performed
+		 * the transaction. It separates the two byte values that can arrive
+		 * rather than counting writes, because "the cells were written" is
+		 * exactly what the display CLEAR does and exactly what must not count as
+		 * a banner. */
+		void watchCells(const uint32_t _offset, const uint32_t _length)
+		{
+			m_watchOffset   = _offset;
+			m_watchLength   = _length;
+			m_contentWrites = 0;
+			m_clearWrites   = 0;
+		}
+
+		uint32_t contentWrites() const { return m_contentWrites; }
+		uint32_t clearWrites() const { return m_clearWrites; }
 
 		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
 		{
@@ -130,7 +363,9 @@ namespace
 				if(index >= m_bytes.size())
 					continue;
 				const int shift = int(8u * (count - 1u - i));
-				m_bytes[index] = uint8_t((_value >> shift) & 0xffu);
+				const auto byte = uint8_t((_value >> shift) & 0xffu);
+				m_bytes[index] = byte;
+				observeWrite(index, byte);
 			}
 		}
 
@@ -143,7 +378,27 @@ namespace
 		}
 
 	private:
+		// One byte that landed in the store, classified. A byte outside the
+		// watched span is not a display cell and counts as neither.
+		void observeWrite(const size_t _index, const uint8_t _byte)
+		{
+			if(m_watchLength == 0)
+				return;
+			if(_index < size_t(m_watchOffset) || _index >= size_t(m_watchOffset) + m_watchLength)
+				return;
+
+			if(isDisplayContent(_byte))
+				++m_contentWrites;
+			else if(_byte == g_clearByte)
+				++m_clearWrites;
+		}
+
 		std::vector<uint8_t> m_bytes;
+
+		uint32_t m_watchOffset   = 0;
+		uint32_t m_watchLength   = 0;
+		uint32_t m_contentWrites = 0;
+		uint32_t m_clearWrites   = 0;
 	};
 
 	std::vector<uint8_t> readFile(const std::string& _path)
@@ -171,7 +426,10 @@ namespace
 	}
 
 	// Reads through Board::onRead, which is the exact callback the Board hands
-	// to mcf5307_create and therefore the path the core itself takes.
+	// to mcf5307_create and therefore the path the core itself takes. The five
+	// CGRAM glyphs are decoded back to the characters they render; every other
+	// byte passes through untouched, so a genuinely wrong cell still reads as
+	// whatever it actually is.
 	std::string readDisplayLine(g2::Board& _board, const uint32_t _display, const uint32_t _line)
 	{
 		const uint32_t base = g_displayBase + _display * g_displayStride + _line * g_lineWidth;
@@ -182,7 +440,8 @@ namespace
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
-			out.push_back(char(g2::Board::onRead(&_board, base + col, 1, &status) & 0xffu));
+			const uint32_t byte = g2::Board::onRead(&_board, base + col, g_byte, &status);
+			out.push_back(cgramToAscii(uint8_t(byte & 0xffu)));
 		}
 
 		return out;
@@ -207,8 +466,22 @@ namespace
 		return out;
 	}
 
+	bool anyContent(const std::string& _line)
+	{
+		for(const char c : _line)
+		{
+			// The line has already been CGRAM-decoded, so a descender reads as
+			// its ASCII letter here and the raw-cell clause is not needed.
+			if(uint8_t(c) > g_clearByte && uint8_t(c) < 0x7fu)
+				return true;
+		}
+		return false;
+	}
+
 	int boot()
 	{
+		installLogFilter();
+
 		g2::EnvArtifactResolver resolver;
 		std::string why;
 
@@ -231,37 +504,131 @@ namespace
 		g2::Board board(makeConfig());
 		Ram ram(g_sdramSize);
 
+		// The image goes where its name says it goes: 0x30000400, which is
+		// offset 0x400 into the SDRAM window at 0x30000000.
 		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
 		{
 			std::cout << "the image does not fit the configured SDRAM window" << std::endl;
 			return 2;
 		}
 
+		// TASK INT-8. The vector table, big-endian, 256 identical longwords. It
+		// goes in beside the image and BEFORE the watch below, so that none of
+		// it is counted as the firmware's own traffic.
+		{
+			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
+
+			for(uint32_t entry = 0; entry < g_vectorTableEntries; ++entry)
+			{
+				for(uint32_t byte = 0; byte < 4u; ++byte)
+					table[entry * 4u + byte] =
+						uint8_t((g_vectorHandler >> ((3u - byte) * 8u)) & 0xffu);
+			}
+
+			if(!ram.place(g_vectorTableBase - g2::g_sdramBase, table))
+			{
+				std::cout << "the vector table does not fit the configured SDRAM window" << std::endl;
+				return 2;
+			}
+		}
+
 		board.memory().attach(g2::Region::Sdram, &ram);
 
-		mcf5307_ctx* mcu = mcf5307_create(&board, &g2::Board::onRead, &g2::Board::onWrite, nullptr);
+		// Installed before the core runs, so every count below is the
+		// FIRMWARE's and none of it is the harness's own traffic.
+		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
 
-		if(!mcu)
+		/* TASK INT-7. THE BOARD'S OWN CORE IS RESET, AND NO SECOND CORE IS
+		 * CREATED. The Board already pointed its core at Board::onRead and
+		 * Board::onWrite, so this is the same composition the deleted
+		 * mcf5307_create call went out of its way to reach -- reached now
+		 * through the handle BRD-28 published instead of through a copy. */
+		board.resetMcu(g_entrySp, g_entryPc);
+
+		/* TASK INT-8. VBR IS PLACED AFTER THE RESET AND NOT BEFORE IT, because
+		 * the reset is what defines the machine's starting state and a value
+		 * written ahead of it would depend on what the reset does NOT clear.
+		 *
+		 * THE RETURN IS CHECKED. setMcuReg answers FALSE for an index the core
+		 * refuses, and a core that refused this one would leave the table based
+		 * at zero with nothing said about it. */
+		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
 		{
-			std::cout << "mcf5307_create returned no context" << std::endl;
+			std::cout << "the core refused VBR at register index " << g_regVbr << std::endl;
 			return 2;
 		}
 
-		mcf5307_reset(mcu, g_entrySp, g_entryPc);
+		/* THE SCHEDULER, TASK INT-3. It is declared AFTER the Board so that it
+		 * is destroyed BEFORE it: it borrows the Board's DSP set, and it
+		 * installs chain callbacks into ESAIs the Board owns. The Executor is
+		 * declared before the Scheduler for the same reason. */
+		g2::SerialExecutor executor;
+		g2::Status         schedulerStatus{};
 
-		uint32_t iteration = 0;
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(g2::Scheduler::Config(), executor, board, schedulerStatus);
+
+		if(!scheduler)
+		{
+			std::cout << "Scheduler::create returned no object; g2::Status = "
+			          << uint32_t(schedulerStatus) << std::endl;
+			return 2;
+		}
+
+		uint32_t iteration        = 0;
+		uint32_t settleIterations = 0;
+		bool     bannerLatched    = false;
+		uint32_t pcAtBanner       = 0;
+
+		std::string line0;
+		std::string line1;
 
 		for(; iteration < g_iterations; ++iteration)
 		{
-			mcf5307_exec(mcu, g_cyclesPerIteration);
+			scheduler->runFrames(g_framesPerIteration);
 
-			if(mcf5307_halted(mcu))
+			if(board.mcuHalted())
 				break;
+
+			/* TASK W3-395. THE BANNER IS LATCHED WHEN IT APPEARS BECAUSE IT IS A
+			 * TRANSIENT: the firmware composes it, then boots on and the PATCH
+			 * BROWSER overwrites it. Measured at the full bound, line 0 reads
+			 * "-:-       No Cat" and line 1 is blank, with the banner long gone,
+			 * which is precisely what this program used to print a terminal
+			 * sample of.
+			 *
+			 * The settle counter is what makes the capture a WHOLE line: the
+			 * banner is written a character at a time, so latching on the first
+			 * content byte catches a partial one. Reaching the settle does not
+			 * STOP the drive -- it freezes the banner and lets the machine run
+			 * on, so the halted/faulted report below describes the machine at
+			 * the bound and not the machine at the banner. */
+			if(ram.contentWrites() > 0)
+			{
+				if(pcAtBanner == 0)
+					pcAtBanner = board.mcuReg(g_regPc);
+
+				if(++settleIterations >= g_bannerSettleIterations && !bannerLatched)
+				{
+					bannerLatched = true;
+					line0 = readDisplayLine(board, 0, 0);
+					line1 = readDisplayLine(board, 0, 1);
+				}
+			}
 		}
 
-		const uint32_t pc = mcf5307_get_reg(mcu, g_regPc);
-		const bool halted = mcf5307_halted(mcu) != 0;
-		const bool faulted = mcf5307_faulted(mcu) != 0;
+		/* A run that never composed a banner latched nothing. readDisplayLine is
+		 * called here ONLY in that case, so the report shows what the display
+		 * actually held rather than two empty strings. */
+		if(!bannerLatched)
+		{
+			line0 = readDisplayLine(board, 0, 0);
+			line1 = readDisplayLine(board, 0, 1);
+		}
+
+		const uint32_t pc = board.mcuReg(g_regPc);
+		const bool halted = board.mcuHalted();
+		const bool faulted = board.faulted();
 
 		std::cout << "iterations=" << iteration
 		          << " halted=" << (halted ? 1 : 0)
@@ -269,15 +636,22 @@ namespace
 		          << " pc=0x" << std::hex << pc << std::dec << std::endl;
 
 		// The two lines, printed UNTRIMMED and byte for byte. The escaped form
-		// is what makes line 0's trailing space visible to a reader; the plain
+		// is what makes a trailing space or a NUL visible to a reader; the plain
 		// form is what a person actually wants to see.
-		const std::string line0 = readDisplayLine(board, 0, 0);
-		const std::string line1 = readDisplayLine(board, 0, 1);
-
 		std::cout << "display0.line0=" << escapedLine(line0) << std::endl;
 		std::cout << "display0.line1=" << escapedLine(line1) << std::endl;
 		std::cout << line0 << std::endl;
 		std::cout << line1 << std::endl;
+
+		// WHICH SAMPLE THE TWO LINES ARE, said in the output rather than left to
+		// a reader who knows this file. `banner=latched` means they are the
+		// frozen first banner; `banner=none` means they are a terminal read of a
+		// machine that never composed one.
+		std::cout << "banner=" << (bannerLatched ? "latched" : "none")
+		          << " contentWrites=" << ram.contentWrites()
+		          << " clearWrites=" << ram.clearWrites()
+		          << " pcAtBanner=0x" << std::hex << pcAtBanner << std::dec
+		          << std::endl;
 
 		const auto& log = board.memory().log();
 		std::cout << "buslog=" << log.size() << std::endl;
@@ -292,19 +666,20 @@ namespace
 			std::cout << "  " << line << std::endl;
 		}
 
-		mcf5307_destroy(mcu);
+		reportSuppressedLogLines();
 
 		// A BOOT THAT PRODUCED NO BANNER IS NOT A SUCCESS, AND THIS PROGRAM MUST
 		// NOT REPORT ONE. Plan section 24.6 row W3-95 records the shape being
 		// avoided here: the milestone's own acceptance command exiting 0 while
-		// the machine did nothing. `--boot` therefore reports success only when
-		// the firmware actually composed something printable into display 0 and
-		// the core is still running; a faulted or halted core is an error exit
-		// whose diagnosis is the lines printed above.
-		const bool composed = std::any_of(line0.begin(), line0.end(),
-			[](const char c) { return uint8_t(c) >= 0x20; });
-
-		if(!composed || halted || faulted)
+		// the machine did nothing.
+		//
+		// THE PREDICATE THIS REPLACES WAS VACUOUS AND ROW W3-396 MEASURED IT AS
+		// SUCH: it read `>= 0x20`, and a screenful of the 0x20 SPACES the display
+		// clear writes satisfied it, so a run whose display was blank exited 0.
+		// Both clauses below refuse that byte -- the latch is only set on a run
+		// that observed writes the clear cannot produce, and anyContent refuses
+		// 0x20 itself.
+		if(!bannerLatched || !anyContent(line0) || halted || faulted)
 			return 1;
 
 		return 0;
