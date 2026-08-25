@@ -434,3 +434,29 @@ set_property(TARGET t0_esai_idle_core PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_esai_idle_core COMMAND t0_esai_idle_core)
 set_tests_properties(t0_esai_idle_core PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-29 - t0_transport_hub
+#
+# An ordinary executable. A BUILD of the target sees none of the six properties
+# this check owns: the allocation total, that nothing allocates after
+# construction, the two refusals, the fixed attachment order, the stamp and the
+# borrow lifetime. All six report through the test's own failure counter, so
+# NDEBUG changes no case in it -- nothing in the source is an assert() and
+# nothing catches an exception. The compile-time half is the member-function
+# pointers and the static_asserts, which the compiler and the linker carry.
+#
+# THE HEADER PATH IS PASSED ON THE COMMAND LINE, the way t0_clock_guard and
+# t0_block_table_harness pass theirs. The declaration-order property -- that
+# ProtocolFrame and StampedFrame are declared BEFORE TransportHub -- is a
+# property of the header's source text that no C++ expression can read, so the
+# check reads the file. A path the test had to guess would be a path the test
+# could get wrong in silence.
+
+add_executable(t0_transport_hub
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_transport_hub.cpp)
+target_link_libraries(t0_transport_hub PRIVATE g2Lib)
+set_property(TARGET t0_transport_hub PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_transport_hub COMMAND t0_transport_hub
+	${CMAKE_CURRENT_SOURCE_DIR}/../transportHub.h)
+set_tests_properties(t0_transport_hub PROPERTIES LABELS "UnitTest")
