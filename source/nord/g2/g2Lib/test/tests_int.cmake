@@ -21,6 +21,31 @@ add_executable(t1_boot t1_boot.cpp)
 target_link_libraries(t1_boot PRIVATE g2Lib)
 set_property(TARGET t1_boot PROPERTY FOLDER "G2/test")
 
+# ----------------- INT-2, audio through the chain: the egress arrival
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_egress$
+#
+# TIER T1, gated exactly as t1_boot is. It boots the firmware, enters the play
+# phase and measures the frame at which a pattern injected at the codec source
+# reappears at the codec sink, against the delay the chain's own geometry
+# predicts. Plan section 6's M5 row and INT-2's Check: line.
+
+add_executable(t1_egress t1_egress.cpp)
+target_link_libraries(t1_egress PRIVATE g2Lib)
+set_property(TARGET t1_egress PROPERTY FOLDER "G2/test")
+
+# ----------------- INT-2, audio through the chain: the seven chain-health counters
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_chain_health$
+#
+# TIER T1, gated exactly as t1_boot is. It asserts INT-2's seven-zero clause
+# across a golden run and INT-2's hand-off state, and it pairs EVERY zero it
+# asserts with a known positive that drives that counter above zero.
+
+add_executable(t1_chain_health t1_chain_health.cpp)
+target_link_libraries(t1_chain_health PRIVATE g2Lib)
+set_property(TARGET t1_chain_health PROPERTY FOLDER "G2/test")
+
 # ----------------- the gate, made visible to ctest and satisfiable by build
 #
 # ctest reads an exit status and never a summary line. gatedFixture.h owns the
@@ -56,11 +81,19 @@ set(NMG2_ARTIFACTS "${g2_artifactsDefault}" CACHE PATH "Directory holding the Cl
 add_test(NAME t1_boot COMMAND t1_boot)
 set_tests_properties(t1_boot PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_gatedSkipExitCode})
 
+add_test(NAME t1_egress COMMAND t1_egress)
+set_tests_properties(t1_egress PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_gatedSkipExitCode})
+
+add_test(NAME t1_chain_health COMMAND t1_chain_health)
+set_tests_properties(t1_chain_health PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_gatedSkipExitCode})
+
 # Only when the directory is really there. Handing the gate a path that does not
 # exist would trade the resolver's "unset" message for its "names no directory"
 # message and report a machine without artifacts as a machine misconfigured.
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_boot APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+	set_property(TEST t1_egress APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+	set_property(TEST t1_chain_health APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 	message(STATUS "g2 gated tests: NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 else()
 	message(STATUS "g2 gated tests: no artifacts at '${NMG2_ARTIFACTS}', gated tests will report Skipped")
