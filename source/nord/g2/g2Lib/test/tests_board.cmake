@@ -660,3 +660,61 @@ set_property(TARGET t0_board_interrupts PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_board_interrupts COMMAND t0_board_interrupts)
 set_tests_properties(t0_board_interrupts PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- BRD-18, the boot handshake driven and censused over all
+#                   eight host ports (BRD-27 absorbed as STEP 2, plan §24.6
+#                   row W3-390)
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_dsp_handshake$
+#
+# TIER T1 AND GATED BECAUSE THE BLOCK DECLARES THE TIER, and that reason is
+# written down because it is not the usual one. The test reads NO firmware
+# artifact: it composes a Board, drives host flags and reads host registers,
+# and every input it has is compiled in. It resolves through ArtifactResolver
+# exactly as t1_boot and t1_sprintf_isolated do, so a machine without artifacts
+# prints the section 18.5 skip line and reports NOT VERIFIED rather than
+# passing in silence.
+#
+# THE GATE VARIABLES ARE COMPUTED HERE under names of their own rather than
+# borrowed from the t1_sprintf_isolated block above, for the reason that block
+# already states about tests_int.cmake: a variable borrowed across blocks is how
+# one task's edit silently changes another task's registration. The skip code is
+# READ OUT OF gatedFixture.h by the same regex both other sites use, so the
+# spellings cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever
+# include site sets it first wins and every later set is a no-op with the same
+# value.
+#
+# IT LINKS g2Lib AND NOTHING ELSE, the arrangement t0_board_dsp_set uses for the
+# same composition: the real board.cpp with the real DspSet and Hdi08Bridge
+# behind it are all g2Lib sources. NOTHING HERE REFERENCES mcf5307::mcf5307, so
+# no if(TARGET) guard is needed and none is written.
+
+add_executable(t1_dsp_handshake t1_dsp_handshake.cpp)
+target_link_libraries(t1_dsp_handshake PRIVATE g2Lib)
+set_property(TARGET t1_dsp_handshake PROPERTY FOLDER "G2/test")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_handshakeSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_handshakeSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_handshakeSkipExitCode "${CMAKE_MATCH_1}")
+
+if(DEFINED ENV{NMG2_ARTIFACTS})
+	set(g2_handshakeArtifactsDefault "$ENV{NMG2_ARTIFACTS}")
+else()
+	get_filename_component(g2_handshakeArtifactsDefault "${CMAKE_SOURCE_DIR}/../nmg2-artifacts" ABSOLUTE)
+endif()
+
+set(NMG2_ARTIFACTS "${g2_handshakeArtifactsDefault}" CACHE PATH "Directory holding the Clavia-derived G2 artifacts. Gated tests skip when it names no directory.")
+
+add_test(NAME t1_dsp_handshake COMMAND t1_dsp_handshake)
+set_tests_properties(t1_dsp_handshake PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_handshakeSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_dsp_handshake APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
