@@ -61,6 +61,53 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
+		/* THE DETACH AND ITS EXACT INVERSE. Task SCH-21 step 4, by operator
+		 * ruling; section 24.6 row W3-415 records the blocker they answer.
+		 *
+		 * WHAT THEY ARE FOR. Board's constructor calls attachHdi08Bridges
+		 * unconditionally, so EVERY set reachable from a Scheduler holds
+		 * bridges, and stateLoad above refuses such a set. Without a detach
+		 * Scheduler::stateLoad could never return Ok on any Scheduler built
+		 * from a real Board and step 4's round trip was unreachable. The
+		 * Scheduler brackets its DSP limb with this pair.
+		 *
+		 * THEY MOVE THE BRIDGES ASIDE AND BACK; THEY DESTROY NOTHING AND THEY
+		 * BUILD NOTHING. That is what makes them EXACTLY inverse rather than
+		 * approximately so, and the reason is a borrowed address: Scheduler's
+		 * constructor copies programLanded(i) into each DspContext and the run
+		 * gate reads through that pointer for the life of the object. A
+		 * re-attach that constructed fresh bridges would leave every one of
+		 * those pointers dangling -- with no diagnostic anywhere, because the
+		 * gate would keep reading whatever now occupies the freed storage.
+		 * Moving the same objects back to the same indices is the only shape
+		 * with no such failure, and t0_scheduler_state case 1 pins it by the
+		 * pointer VALUE at each index rather than by a count.
+		 *
+		 * BOTH ARE TOTAL. A detach of a detached set and a re-attach of an
+		 * attached set each change nothing, so no caller has to test first.
+		 *
+		 * WHILE DETACHED THE SET REPORTS WHAT IT IS: bridgesAttached() is
+		 * false and programLanded() answers NULL for every slot, which is the
+		 * run gate's own reading of NOT LANDED.
+		 *
+		 * THE LANDED FLAG SURVIVES THE ROUND, and that limit is stated rather
+		 * than left to be found. The flags live ON the bridges and the bridges
+		 * are not touched, so a set whose firmware had landed is still LANDED
+		 * after a detach, a load and a re-attach -- over whatever program
+		 * memory the load restored. That is right for the case this pair
+		 * exists for, a snapshot taken from and returned to the SAME machine,
+		 * and it is wrong for an image taken from a machine that had loaded a
+		 * different program. Nothing here can tell those two apart; the
+		 * version word and the geometry headers guard the SHAPE of an image
+		 * and not its provenance. */
+		void detachHdi08Bridges() noexcept;
+		void reattachHdi08Bridges() noexcept;
+
+		/* TRUE when the set holds bridges, which is exactly the condition
+		 * stateLoad refuses on. It is the observable that separates a detach
+		 * that reached the set from one that reported success. */
+		bool bridgesAttached() const noexcept;
+
 		/* THE RESET. Task SCH-21 step 3, design section 13.10.5's "zeroes
 		 * every emulated memory".
 		 *
@@ -105,6 +152,13 @@ namespace g2
 		/* Declared after the slots so it is destroyed before them. Each bridge
 		 * holds a reference into its slot's peripherals. */
 		std::vector<std::unique_ptr<Hdi08Bridge>> m_bridges;
+
+		/* WHERE detachHdi08Bridges PARKS THEM, and the only other place a
+		 * bridge this set owns can be. It is declared beside m_bridges and
+		 * after the slots for the same lifetime reason: a parked bridge still
+		 * holds a reference into its slot's peripherals, so it must be
+		 * destroyed before them whichever member happens to hold it. */
+		std::vector<std::unique_ptr<Hdi08Bridge>> m_detachedBridges;
 	};
 
 	/* Declared at namespace scope and deliberately not befriended. The

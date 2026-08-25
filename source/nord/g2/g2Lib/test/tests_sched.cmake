@@ -523,3 +523,27 @@ set_property(TARGET t0_mcu_debt PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_mcu_debt COMMAND t0_mcu_debt)
 set_tests_properties(t0_mcu_debt PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-21 step 4 - t0_scheduler_state
+#
+# An ordinary executable. It drives a real Board, its real bridged DSP set, the
+# real ChainAdapter and the real MCU core through Scheduler::stateSize,
+# stateSave and stateLoad.
+#
+# THE FIXTURE IS A FIELD OF ONE REPEATED INSTRUCTION, for the reason t0_mcu_debt
+# gives: the MCU context is the one part of a T0 Scheduler whose emulated state
+# moves, and a state round trip over a machine whose state never moves is
+# satisfied by a snapshot of zero bytes. The source asserts that the state MOVED
+# before it asserts that anything about it matched.
+#
+# NO CASE IN THE SOURCE IS AN assert() AND NO CASE CATCHES AN EXCEPTION. Every
+# verdict is the failure counter and the process exit status; the compile-time
+# half is static_assert, which fires in every build type.
+
+add_executable(t0_scheduler_state
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_scheduler_state.cpp)
+target_link_libraries(t0_scheduler_state PRIVATE g2Lib)
+set_property(TARGET t0_scheduler_state PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_scheduler_state COMMAND t0_scheduler_state)
+set_tests_properties(t0_scheduler_state PROPERTIES LABELS "UnitTest")

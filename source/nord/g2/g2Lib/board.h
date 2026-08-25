@@ -64,6 +64,7 @@
 #include "memoryMap.h"
 #include "panel.h"
 #include "sim.h"
+#include "status.h"
 #include "uart0.h"
 
 namespace g2
@@ -169,11 +170,29 @@ namespace g2
 		 * pinned core commit exports no Nim mcf5307_state_* or isp1181_state_*
 		 * block, and those are appended once it does.
 		 *
-		 * stateLoad deliberately returns void rather than g2::Status: that type
-		 * does not exist yet. It is reconciled once status.h exists. */
+		 * stateLoad's RETURN TYPE IS RECONCILED, AND THE DEVIATION THAT STOOD
+		 * HERE IS QUOTED RATHER THAN DELETED. It read: "the plan's Check line
+		 * for this task lists stateLoad among the six methods without pinning
+		 * its return type, and g2::Status is owned by task SCH-18 ... so
+		 * stateLoad returns void here ... The reconciliation happens there,
+		 * once SCH-18 has created status.h." status.h exists, and SCH-21 step 4
+		 * -- which absorbed SCH-24 -- is the task that owns the correction.
+		 * stateLoad now returns g2::Status, which is design section 13.10.5's
+		 * POST-correction declaration.
+		 *
+		 * WHAT IT REPORTS. Status::Ok, or Status::BadStateImage for an image
+		 * whose version word is not the one this build writes. The version word
+		 * was WRITTEN by stateSave and READ BY NOTHING before this pass, which
+		 * made it a guard that could not fire: the only thing a version word is
+		 * for is refusing, and a void return had nowhere to refuse to. Design
+		 * section 13.10 rule 2 forbids an exception and a release build removes
+		 * an assertion, so the return value is the whole channel.
+		 *
+		 * THE GUARD IS BEFORE THE FIRST WRITE, so a refused load changes
+		 * nothing. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
-		void   stateLoad(const void* src) noexcept;
+		Status stateLoad(const void* src) noexcept;
 
 		/* THE RESET. Task SCH-21 step 3, design section 13.10.5.
 		 *

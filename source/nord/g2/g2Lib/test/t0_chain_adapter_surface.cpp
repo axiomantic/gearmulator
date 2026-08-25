@@ -68,7 +68,12 @@ unsigned (ChainAdapter::*const kSecondMailboxCount)() const noexcept = &ChainAda
 /* the state trio */
 size_t (ChainAdapter::*const kStateSize)() const noexcept = &ChainAdapter::stateSize;
 void (ChainAdapter::*const kStateSave)(void*) const noexcept = &ChainAdapter::stateSave;
-void (ChainAdapter::*const kStateLoad)(const void*) noexcept = &ChainAdapter::stateLoad;
+/* RECONCILED FROM void TO g2::Status BY SCH-21 STEP 4, which is the correction
+ * design section 13.10.5 records and which chainAdapter.h's own comment named as
+ * outstanding. THIS FILE IS CHN-5's AND THE EDIT IS A CROSS-OWNER ONE: the
+ * pointer type is a pin on the surface, so leaving it at void would fail to
+ * compile against the reconciled declaration. */
+g2::Status (ChainAdapter::*const kStateLoad)(const void*) noexcept = &ChainAdapter::stateLoad;
 
 /* the static constexpr mailboxCount */
 unsigned (*const kMailboxCount)(g2::ChainTopology, unsigned) noexcept = &ChainAdapter::mailboxCount;

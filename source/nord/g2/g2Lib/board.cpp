@@ -565,14 +565,25 @@ namespace g2
 		m_dspSet.reset();
 	}
 
-	void Board::stateLoad(const void* const src) noexcept
+	/* THE LOAD, AND THE VERSION WORD IS NOW READ. stateSave has written it
+	 * since BRD-21; nothing read it, because a void return had nowhere to
+	 * report a refusal to. SCH-21 step 4's reconciliation gives it one, and the
+	 * comparison is what turns the word from decoration into a guard.
+	 *
+	 * THE COMPARISON IS BEFORE THE FIRST WRITE, so a refused load leaves this
+	 * object exactly as it was -- the same rule ChainAdapter::stateLoad's
+	 * geometry header and DspSet::stateLoad's bridge test already follow. */
+	Status Board::stateLoad(const void* const src) noexcept
 	{
 		BoardState s;
 		std::memcpy(&s, src, sizeof s);
-		assert(s.version == g_boardStateVersion
-			&& "a snapshot from a different revision would be read with this "
-			"revision's field layout");
+
+		if(s.version != g_boardStateVersion)
+			return Status::BadStateImage;
+
 		m_lastFrameIndex = s.lastFrameIndex;
 		m_faulted        = s.faulted != 0u;
+
+		return Status::Ok;
 	}
 }
