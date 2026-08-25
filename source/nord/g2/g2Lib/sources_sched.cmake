@@ -69,3 +69,9 @@ list(APPEND G2LIB_SOURCES
 # it), transmit. Design sections 13.10.3 and 13.4.6.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/dspJob.cpp)
+
+# SCH-29. transportHub.* is the transport hub: the fixed-allocation, fixed-order
+# path between the device and the three attachments of design section 15.1.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/transportHub.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/transportHub.h)
