@@ -114,3 +114,60 @@ set_property(TARGET t0_dynamic_fast_interrupts PROPERTY FOLDER "G2/test")
 add_test(NAME t0_dynamic_fast_interrupts COMMAND t0_dynamic_fast_interrupts
 	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/bit_test_spin.asm)
 set_tests_properties(t0_dynamic_fast_interrupts PROPERTIES LABELS "UnitTest")
+
+# ----------------- DSP-14, the kernel download and the DMA constants
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_kernel_load$
+#
+# TIER T1 AND GATED. The test boots the real firmware out of
+# CODE_30000400.bin and reads the DMA registers the downloaded kernel
+# programmed, so it needs the Clavia artifacts. It resolves them through
+# ArtifactResolver exactly as t1_boot and t1_dsp_handshake do, so a machine
+# without artifacts prints the design section 18.5 skip line, reports NOT
+# VERIFIED and reaches ctest as SKIP_RETURN_CODE rather than as a silent pass.
+#
+# THE GATE VARIABLES ARE COMPUTED HERE UNDER NAMES OF THEIR OWN, on the reason
+# BRD-18's block above already states: a variable borrowed across blocks is how
+# one task's edit silently changes another task's registration. The skip code is
+# READ OUT OF gatedFixture.h by the same regex every other gated site uses, so
+# the spellings cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever
+# include site sets it first wins and every later set is a no-op with the same
+# value.
+#
+# IT LINKS g2Lib AND NOTHING ELSE, the arrangement every other g2 test uses:
+# the Board, the DspSet, the Scheduler and the dsp56300 core all have to arrive
+# through g2Lib's own PUBLIC link.
+
+add_executable(t1_kernel_load t1_kernel_load.cpp)
+target_link_libraries(t1_kernel_load PRIVATE g2Lib)
+set_property(TARGET t1_kernel_load PROPERTY FOLDER "G2/test")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_kernelLoadSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_kernelLoadSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_kernelLoadSkipExitCode "${CMAKE_MATCH_1}")
+
+if(DEFINED ENV{NMG2_ARTIFACTS})
+	set(g2_kernelLoadArtifactsDefault "$ENV{NMG2_ARTIFACTS}")
+else()
+	get_filename_component(g2_kernelLoadArtifactsDefault "${CMAKE_SOURCE_DIR}/../nmg2-artifacts" ABSOLUTE)
+endif()
+
+set(NMG2_ARTIFACTS "${g2_kernelLoadArtifactsDefault}" CACHE PATH "Directory holding the Clavia-derived G2 artifacts. Gated tests skip when it names no directory.")
+
+# THE TIMEOUT IS PART OF THE ASSERTION AND IS NOT HOUSEKEEPING. The drive leaves
+# early on its convergence predicate; a machine that never converges walks the
+# whole iteration bound, and a machine that hangs inside a peripheral callback
+# returns neither pass nor fail. The timeout is what turns the second into a
+# result.
+add_test(NAME t1_kernel_load COMMAND t1_kernel_load)
+set_tests_properties(t1_kernel_load PROPERTIES LABELS "IntegrationTest" TIMEOUT 600 SKIP_RETURN_CODE ${g2_kernelLoadSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_kernel_load APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
