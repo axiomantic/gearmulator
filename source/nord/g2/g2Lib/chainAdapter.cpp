@@ -452,10 +452,13 @@ namespace g2
 	 * guarantee, so a typed store into it would be undefined for every field
 	 * wider than a byte.
 	 *
-	 * stateLoad's RETURN TYPE IS STILL void, which is the shape CHN-5 laid
-	 * down and the shape this task's Files: line permits: chainAdapter.h is not
-	 * this task's file. Design section 13.10.2's g2::Status return is the
-	 * reconciliation the header already records as outstanding. */
+	 * stateLoad's RETURN TYPE IS NOW g2::Status, reconciled by SCH-21 step 4.
+	 * The sentence that stood here -- "stateLoad's RETURN TYPE IS STILL void,
+	 * which is the shape CHN-5 laid down ... Design section 13.10.2's g2::Status
+	 * return is the reconciliation the header already records as outstanding" --
+	 * described a shape that no longer exists and is quoted rather than
+	 * overwritten. The two refusals below, the null source and the geometry
+	 * mismatch, now have a channel to report on. */
 	namespace
 	{
 		/* One frame of one ring. Frame is a flat array of int32_t with no
@@ -536,10 +539,10 @@ namespace g2
 			*cursor++ = m_secondWritten[p];
 	}
 
-	void ChainAdapter::stateLoad(const void* const src) noexcept
+	Status ChainAdapter::stateLoad(const void* const src) noexcept
 	{
 		if(src == nullptr)
-			return;
+			return Status::BadStateImage;
 
 		const uint8_t* cursor = static_cast<const uint8_t*>(src);
 
@@ -555,7 +558,7 @@ namespace g2
 			|| secondCount != m_second.size()
 			|| depth != m_hopFrames + 1u
 			|| positions != m_dspCount)
-			return;
+			return Status::BadStateImage;
 
 		const auto loadBus = [&cursor](std::vector<Mailbox>& bus) noexcept
 		{
@@ -585,6 +588,8 @@ namespace g2
 			m_audioWritten[p] = *cursor++;
 		for(unsigned p = 0u; p < m_dspCount; ++p)
 			m_secondWritten[p] = *cursor++;
+
+		return Status::Ok;
 	}
 
 	/* THE RESET. Design section 13.10.5's "zeroes every emulated memory",

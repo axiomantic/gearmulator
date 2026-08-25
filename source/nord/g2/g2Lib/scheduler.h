@@ -268,6 +268,26 @@ namespace g2
 		bool     contextFaulted(unsigned _contextIndex) const noexcept;
 		JobFault contextFault(unsigned _contextIndex) const noexcept;
 
+		/* THE STATE TRIO, design section 13.10.5 and SCH-21 step 4. DECLARED
+		 * HERE AND DEFINED IN scheduler.cpp, which carries the block's layout.
+		 *
+		 * THE SNAPSHOT IS A FLAT BYTE BLOCK AND IT CARRIES A VERSION WORD, and
+		 * `stateLoad` reports through g2::Status rather than returning void:
+		 * design section 13.10 rule 2 forbids an exception, a release build
+		 * removes an assertion, and a void return would leave the version word
+		 * with nothing to refuse to -- which is the silent acceptance the word
+		 * exists to prevent.
+		 *
+		 * ALL THREE ARE noexcept, matching runFrames and the rule that forbids
+		 * throwing.
+		 *
+		 * CallbackTimer IS NOT PART OF IT. It carries no emulated state, and a
+		 * state file recorded on a fast machine must load identically on a slow
+		 * one. */
+		size_t stateSize() const noexcept;
+		void   stateSave(void* dst) const noexcept;
+		Status stateLoad(const void* src) noexcept;
+
 		/* THE RESET, design section 13.10.5, and the boot thread's call. It
 		 * returns this object and the machine it drives to the state a freshly
 		 * created Scheduler is in: every fault cleared and every context back

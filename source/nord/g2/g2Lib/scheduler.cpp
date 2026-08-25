@@ -48,10 +48,12 @@
 #include "scheduler.h"
 
 #include "board.h"
+#include "dspSet.h"
 #include "cycleDebt.h"
 #include "executor.h"
 
 #include <cassert>
+#include <cstring>
 #include <cstdint>
 #include <thread>
 
@@ -678,6 +680,256 @@ namespace g2
 		}
 
 		m_owner = std::thread::id{};
+	}
+
+	/* THE STATE TRIO. SCH-21 STEP 4, THE ABSORBED SCH-24. Design sections
+	 * 13.10 rule 2 and 13.10.5.
+	 *
+	 * THE BLOCK IS FLAT AND IT IS A COMPOSITION OF FOUR. In this fixed order:
+	 *
+	 *   1. THIS OBJECT'S OWN STATE -- the version word first, then the regime,
+	 *      the virtual frame index, the MCU context's rational accumulator,
+	 *      cycle debt and rule 4 counter, the same three for every DSP context,
+	 *      the sticky fault latch and its disjunction, and the three
+	 *      adapter-owned counter baselines.
+	 *   2. Board::stateSave
+	 *   3. ChainAdapter::stateSave
+	 *   4. DspSet::stateSave
+	 *
+	 * stateLoad READS THEM BACK IN THE SAME ORDER AND RETURNS THE FIRST NON-Ok
+	 * STATUS ANY OF THE THREE LIMBS PRODUCES.
+	 *
+	 * THE VERSION WORD IS THE FIRST FIELD AND IT IS COMPARED BEFORE THE FIRST
+	 * WRITE. A version word that nothing compares is decoration; one compared
+	 * after a partial apply leaves a machine no run produced. Design section
+	 * 13.10 rule 2 forbids an exception and a release build removes an
+	 * assertion, so the returned Status is the whole channel a refusal has --
+	 * which is why stateLoad returns g2::Status and not void, and why
+	 * Board::stateLoad and ChainAdapter::stateLoad were reconciled to the same
+	 * shape by this task.
+	 *
+	 * WHAT A REFUSAL FROM ONE OF THE THREE LIMBS LEAVES BEHIND, STATED RATHER
+	 * THAN HIDDEN. Each limb guards before its own first write, so a limb that
+	 * refuses changes nothing OF ITS OWN; the limbs BEFORE it in the order
+	 * above have already been applied. Only the version-word refusal is total,
+	 * because it happens before anything is applied at all. A total rollback
+	 * would need a self-snapshot, and taking one inside a noexcept method means
+	 * an allocation whose failure terminates the process -- a worse trade than
+	 * the partial apply, and one no caller has asked for.
+	 *
+	 * THE DSP LIMB IS BRACKETED BY THE DETACH AND ITS INVERSE, and that bracket
+	 * is the whole reason section 24.6 row W3-415's blocker is gone.
+	 * DspSet::stateLoad refuses a set holding bridges -- and the Board's
+	 * constructor attaches them unconditionally, so EVERY set reachable from a
+	 * Scheduler holds them. The pair moves the same bridge objects aside and
+	 * back, which is what keeps the programLanded pointers this class borrowed
+	 * at construction valid across the load; dspSet.h carries the full reason
+	 * and t0_scheduler_state case 1 pins it by address at every index.
+	 *
+	 * THE RE-ATTACH RUNS ON EVERY PATH OUT OF THE BRACKET, refusal included. A
+	 * Scheduler left holding a detached set would have every run gate shut for
+	 * the life of the object with no diagnostic anywhere.
+	 *
+	 * WHAT THE BLOCK DOES NOT COVER, AND WHY. CallbackTimer, because it carries
+	 * no emulated state and a state file recorded on a fast machine must load
+	 * identically on a slow one -- the row states that one. The RECORDED OWNING
+	 * THREAD, for the same reason: it is a property of the process that took the
+	 * snapshot and not of the machine. And BOTH CODEC QUEUES, which is the one
+	 * omission a reader could mistake for an oversight: SCH-15's two queues
+	 * expose no way to read a ring without consuming it and no way to restore a
+	 * counter, so covering them needs new surface on codecQueues.h, which is
+	 * SCH-15's file and not this task's. THE CONSEQUENCE IS STATED: a snapshot
+	 * taken in the PLAY regime restores a machine whose queues hold whatever the
+	 * load left in them. The boot regime is unaffected, because a boot quantum
+	 * touches neither queue.
+	 *
+	 * EVERY FIELD MOVES THROUGH memcpy. The destination is a caller-supplied
+	 * void* with no alignment guarantee, so a typed store into it would be
+	 * undefined for every field wider than a byte.
+	 */
+	namespace
+	{
+		/* The version of THIS class's own block. It is not the Board's and not
+		 * the chain's; each limb versions or guards itself. */
+		constexpr uint32_t g_schedulerStateVersion = 1u;
+
+		void put32(uint8_t*& _cursor, const uint32_t _value) noexcept
+		{
+			std::memcpy(_cursor, &_value, sizeof(_value));
+			_cursor += sizeof(_value);
+		}
+
+		void put64(uint8_t*& _cursor, const uint64_t _value) noexcept
+		{
+			std::memcpy(_cursor, &_value, sizeof(_value));
+			_cursor += sizeof(_value);
+		}
+
+		uint32_t get32(const uint8_t*& _cursor) noexcept
+		{
+			uint32_t value = 0;
+			std::memcpy(&value, _cursor, sizeof(value));
+			_cursor += sizeof(value);
+			return value;
+		}
+
+		uint64_t get64(const uint8_t*& _cursor) noexcept
+		{
+			uint64_t value = 0;
+			std::memcpy(&value, _cursor, sizeof(value));
+			_cursor += sizeof(value);
+			return value;
+		}
+
+		/* A signed debt travels as its two's-complement bit pattern. The
+		 * conversion back is implementation-defined before C++20 and exact on
+		 * every target this project builds for; the round trip through the same
+		 * pair of casts is what the state file depends on, not the value's
+		 * interpretation. */
+		void putI64(uint8_t*& _cursor, const int64_t _value) noexcept
+		{
+			put64(_cursor, static_cast<uint64_t>(_value));
+		}
+
+		int64_t getI64(const uint8_t*& _cursor) noexcept
+		{
+			return static_cast<int64_t>(get64(_cursor));
+		}
+
+		/* THE FIELD COUNT OF THIS CLASS'S OWN BLOCK, DERIVED FROM THE WALK
+		 * BELOW RATHER THAN COUNTED BY HAND. ownBlockSize() and both walks read
+		 * the SAME three expressions, so a field added to the walk without a
+		 * matching term here is a size that no longer matches the cursor -- and
+		 * the guard-region case of t0_scheduler_state reports it. */
+		size_t ownBlockSize(const size_t _dspCount) noexcept
+		{
+			return sizeof(uint32_t)                       /* the version word   */
+				+ sizeof(uint32_t)                        /* the codec regime   */
+				+ sizeof(uint64_t)                        /* the frame index    */
+				+ sizeof(uint32_t) + sizeof(int64_t) + sizeof(uint64_t)   /* MCU */
+				+ kJobCount * (sizeof(uint32_t) + sizeof(int64_t) + sizeof(uint64_t))
+				+ (1u + kJobCount) * sizeof(uint32_t)     /* the fault latch    */
+				+ sizeof(uint8_t)                         /* its disjunction    */
+				+ 3u * _dspCount * sizeof(uint64_t);      /* the three baselines */
+		}
+	}
+
+	size_t Scheduler::stateSize() const noexcept
+	{
+		return ownBlockSize(m_underrunBase.size())
+			+ m_board.stateSize()
+			+ m_chain.stateSize()
+			+ m_board.dspSet().stateSize();
+	}
+
+	void Scheduler::stateSave(void* const _dst) const noexcept
+	{
+		if(_dst == nullptr)
+			return;
+
+		auto* cursor = static_cast<uint8_t*>(_dst);
+
+		put32(cursor, g_schedulerStateVersion);
+		put32(cursor, static_cast<uint32_t>(m_regime));
+		put64(cursor, m_frameIndex);
+
+		put32 (cursor, m_mcu.acc);
+		putI64(cursor, m_mcu.debt);
+		put64 (cursor, m_mcu.longDispatchQuanta);
+
+		for(const auto& c : m_contexts)
+		{
+			put32 (cursor, c.acc);
+			putI64(cursor, c.debt);
+			put64 (cursor, c.longDispatchQuanta);
+		}
+
+		for(const auto f : m_fault)
+			put32(cursor, static_cast<uint32_t>(f));
+
+		*cursor++ = m_faulted ? 1u : 0u;
+
+		for(const auto v : m_underrunBase)
+			put64(cursor, v);
+		for(const auto v : m_secondUnderrunBase)
+			put64(cursor, v);
+		for(const auto v : m_phaseErrorBase)
+			put64(cursor, v);
+
+		m_board.stateSave(cursor);
+		cursor += m_board.stateSize();
+
+		m_chain.stateSave(cursor);
+		cursor += m_chain.stateSize();
+
+		m_board.dspSet().stateSave(cursor);
+	}
+
+	Status Scheduler::stateLoad(const void* const _src) noexcept
+	{
+		if(_src == nullptr)
+			return Status::BadStateImage;
+
+		const auto* cursor = static_cast<const uint8_t*>(_src);
+
+		/* BEFORE THE FIRST WRITE. */
+		if(get32(cursor) != g_schedulerStateVersion)
+			return Status::BadStateImage;
+
+		m_regime     = static_cast<CodecRegime>(get32(cursor));
+		m_frameIndex = get64(cursor);
+
+		m_mcu.acc                = get32 (cursor);
+		m_mcu.debt               = getI64(cursor);
+		m_mcu.longDispatchQuanta = get64 (cursor);
+
+		for(auto& c : m_contexts)
+		{
+			c.acc                = get32 (cursor);
+			c.debt               = getI64(cursor);
+			c.longDispatchQuanta = get64 (cursor);
+		}
+
+		for(auto& f : m_fault)
+			f = static_cast<JobFault>(get32(cursor));
+
+		m_faulted = *cursor++ != 0u;
+
+		for(auto& v : m_underrunBase)
+			v = get64(cursor);
+		for(auto& v : m_secondUnderrunBase)
+			v = get64(cursor);
+		for(auto& v : m_phaseErrorBase)
+			v = get64(cursor);
+
+		/* THE DISPATCH SET IS REBUILT FROM THE RESTORED LATCH AND NOT SAVED.
+		 * m_liveJobs holds pointers into m_contexts, which a snapshot cannot
+		 * carry across a process; rebuildDispatchSet is the one function that
+		 * derives it, and deriving it here means a loaded fault takes its
+		 * context out of the dispatch set by the same rule a fresh one does. */
+		rebuildDispatchSet();
+
+		const Status boardStatus = m_board.stateLoad(cursor);
+		cursor += m_board.stateSize();
+
+		if(boardStatus != Status::Ok)
+			return boardStatus;
+
+		const Status chainStatus = m_chain.stateLoad(cursor);
+		cursor += m_chain.stateSize();
+
+		if(chainStatus != Status::Ok)
+			return chainStatus;
+
+		/* THE BRACKET. The re-attach runs on the refusal path as well as on the
+		 * success path, so no exit from here leaves the set detached. */
+		DspSet& set = m_board.dspSet();
+
+		set.detachHdi08Bridges();
+		const Status dspStatus = set.stateLoad(cursor);
+		set.reattachHdi08Bridges();
+
+		return dspStatus;
 	}
 
 	void Scheduler::rebuildDispatchSet() noexcept

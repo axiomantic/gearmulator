@@ -30,6 +30,7 @@
  * dsp56k::Audio's ReadRxCallback and WriteTxCallback aliases that the two
  * alias types below bind to. */
 #include "mailbox.h"
+#include "status.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -230,19 +231,26 @@ namespace g2
 		 * the save-and-load round trip (mailbox contents and counters);
 		 * CHN-5 declares and defines the trio so the surface links.
 		 *
-		 * stateLoad RETURN-TYPE DEVIATION, STATED RATHER THAN HIDDEN. The
-		 * design declares `Status stateLoad(const void*)`, but g2::Status is
-		 * owned by task SCH-18 (Files: g2Lib/status.h), which is not in this
-		 * task's Depends: line. CHN-5 must not define g2::Status -- that
-		 * would be implementing SCH-18's owned file -- so stateLoad returns
-		 * void here, exactly as task BRD-21 declares Board::stateLoad for the
-		 * same reason (see board.h). When SCH-18 has created status.h, the
-		 * chain adapter's stateLoad is reconciled to return g2::Status, the
-		 * shape the design's POST-correction declaration wants and that
-		 * CHN-14 asserts. */
+		 * stateLoad's RETURN TYPE IS RECONCILED, AND THE DEVIATION THAT STOOD
+		 * HERE IS QUOTED RATHER THAN DELETED. It read: "The design declares
+		 * `Status stateLoad(const void*)`, but g2::Status is owned by task
+		 * SCH-18 ... so stateLoad returns void here ... When SCH-18 has created
+		 * status.h, the chain adapter's stateLoad is reconciled to return
+		 * g2::Status." status.h exists, and SCH-21 step 4 -- which absorbed
+		 * SCH-24 -- is the task that owns the correction.
+		 *
+		 * WHAT IT REPORTS. Status::Ok, or Status::BadStateImage for a null
+		 * source and for an image whose geometry header describes a
+		 * differently-shaped adapter. BOTH REFUSALS EXISTED ALREADY and both
+		 * were SILENT: the body returned without touching a member and the
+		 * caller could not tell that from a load that ran. The refusal is the
+		 * reason the geometry header is in the image at all, so a channel to
+		 * report it on is what makes the header a guard.
+		 *
+		 * THE REFUSAL IS TOTAL AND IT HAPPENS BEFORE ANY MEMBER MOVES. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
-		void   stateLoad(const void* src) noexcept;
+		Status stateLoad(const void* src) noexcept;
 
 		/* ------------- The reset. Task SCH-21 step 3, design section 13.10.5.
 		 *

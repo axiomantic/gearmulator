@@ -30,6 +30,18 @@ namespace g2
 		BadDivider,
 		BadMaxHostBlock,
 		BridgesAttached,
+
+		/* A STATE IMAGE THIS OBJECT WILL NOT TAKE BACK. The version word does
+		 * not match the one this build writes, or the image's own geometry
+		 * header describes a differently-shaped object. Both are refused
+		 * BEFORE the first write, so a refused load changes nothing.
+		 *
+		 * IT IS ONE VALUE AND NOT TWO because a caller can act on neither
+		 * differently: an image this build cannot read is an image this build
+		 * cannot read. The refusing object's own comment carries which of the
+		 * two conditions it tested. */
+		BadStateImage,
+
 		Count
 	};
 }
