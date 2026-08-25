@@ -859,3 +859,25 @@ set_tests_properties(t1_dsp_handshake PROPERTIES LABELS "IntegrationTest" SKIP_R
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_dsp_handshake APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+# ----------------- TOOL-13, the GDB remote stub
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_gdb_stub$
+#
+# TIER T0 AND NOT GATED: the test reads no firmware artifact. It composes a
+# Board, pokes six hand-encoded instruction words into a RAM of its own, and
+# drives the stub with a test client over a LOOPBACK SOCKET -- no `gdb` binary
+# is required, so the check runs anywhere the suite does.
+#
+# IT LINKS g2Lib AND NOTHING ELSE. gdbStub.cpp is inside g2Lib through
+# sources_board.cmake, so the test drives the same translation unit
+# `g2TestConsole --gdb` drives and not a second copy of it.
+
+add_executable(t0_gdb_stub t0_gdb_stub.cpp)
+target_link_libraries(t0_gdb_stub PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t0_gdb_stub PRIVATE Threads::Threads)
+set_property(TARGET t0_gdb_stub PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_gdb_stub COMMAND t0_gdb_stub)
+set_tests_properties(t0_gdb_stub PROPERTIES LABELS "UnitTest")
