@@ -314,8 +314,26 @@ namespace
 		checkEqual(f.dsp.getInstructionCounter() - instructions, 0u,
 			"a slot whose program has not landed executes no instruction");
 
-		checkEqual(ctx.acc, 0u,
-			"a closed gate consumes no allocation");
+		/* THE ACCUMULATOR IS PINNED TO OBSERVED BEHAVIOUR AND THE ASSERTION
+		 * SAYS SO ITSELF, IN THE STRING A READER MEETS WHEN IT GOES RED. The
+		 * expected value is not a literal: it is one allocation taken from this
+		 * context's own rate, so the pin follows the timebase rather than
+		 * restating a number measured once. */
+		uint32_t oneAllocation = 0u;
+		(void) alloc(ctx.rate, &oneAllocation);
+
+		checkEqual(ctx.acc, oneAllocation,
+			"PROVISIONAL, and pinned to OBSERVED behaviour rather than to a "
+			"ruling -- plan row W3-407 carries the open design question SHOULD "
+			"A SHUT GATE ADVANCE THE RATIONAL SAMPLE ACCUMULATOR?, and this "
+			"assertion does not answer it. Post-SCH-34 the allocation at "
+			"dspJob.cpp:103 stands AHEAD of the run gate, so a shut gate "
+			"advances the accumulator by one whole allocation; that is what "
+			"this line pins, and it can no more tell a correct timebase from "
+			"an accidental one than the code can. IF THE RULING GOES THE OTHER "
+			"WAY, THIS ASSERTION AND THE alloc() CALL IN dspJob MOVE TOGETHER "
+			"AND NEITHER MOVES ALONE. a closed gate advances the accumulator "
+			"by exactly one allocation");
 		checkEqual(static_cast<uint64_t>(ctx.debt), 0u,
 			"a closed gate carries no debt");
 		checkEqual(ctx.longDispatchQuanta, 0u,
@@ -394,15 +412,51 @@ int main()
 			++failures;
 		}
 
-		if(spent >= static_cast<uint64_t>(want) + maxDispatchCost)
+		/* THE UPPER HALF IS PER SUB-CALL AND NOT PER QUANTUM. Step 2 stopped
+		 * being one call at SCH-34: the interleave subdivides want across the
+		 * frame's ESAI slots and every sub-call rounds up to its own dispatch
+		 * unit independently, so the honest bound is want + k * maxDispatchCost
+		 * for the k sub-calls the quantum made.
+		 *
+		 * k IS MEASURED AND NEVER WRITTEN DOWN. It is the dispatch count the
+		 * job itself reports for the quantum that just ran. A literal k here
+		 * would be the same defect this file's subject was repaired for -- a
+		 * roster standing where the generating count belongs -- one file
+		 * further out. */
+		const uint64_t k = ctx.slotDispatches;
+		const uint64_t upperHalf =
+			static_cast<uint64_t>(want) + k * maxDispatchCost;
+
+		if(spent >= upperHalf)
 		{
 			printf("FAIL an open gate spent %llu cycles, which is not below "
-				"the want of %llu plus the fixture's dispatch unit of %llu.\n",
+				"the want of %llu plus its %llu sub-dispatches of one %llu-"
+				"cycle dispatch unit each (%llu).\n",
 				static_cast<unsigned long long>(spent),
 				static_cast<unsigned long long>(want),
-				static_cast<unsigned long long>(maxDispatchCost));
+				static_cast<unsigned long long>(k),
+				static_cast<unsigned long long>(maxDispatchCost),
+				static_cast<unsigned long long>(upperHalf));
 			++failures;
 		}
+
+		/* THE DIVISOR MUST BOUND THE COUNT THAT GENERATES IT, and this is the
+		 * clause that fails when it does not. A divisor BELOW the dispatch
+		 * count hands the leading slots a share of want computed against too
+		 * few slots, which is how a hardcoded 8 delivered 3.75x its want across
+		 * a thirty-slot frame. */
+		if(ctx.slotBudgetDivisor < ctx.slotDispatches)
+		{
+			printf("FAIL the sub-budget divisor was %u while the interleave's "
+				"callback fired %u times, so the divisor does not bound the "
+				"count that generates it.\n",
+				ctx.slotBudgetDivisor, ctx.slotDispatches);
+			++failures;
+		}
+
+		check(ctx.slotDispatches > 0,
+			"an open gate with enabled ports delivers its budget through the "
+			"interleave rather than the idle route");
 
 		uint32_t acc = 0u;
 		(void) alloc(ctx.rate, &acc);
@@ -421,6 +475,24 @@ int main()
 				"%lld, expected %lld\n",
 				static_cast<long long>(ctx.debt),
 				static_cast<long long>(expectedDebt));
+			++failures;
+		}
+
+		/* THE INVARIANT, AND IT IS THE REAL CHECK THAT THE BAND ONLY
+		 * APPROXIMATES. cycleDebt.h states 0 <= debt < maxDispatchCost at every
+		 * quantum boundary, and it holds under the interleave only because each
+		 * sub-budget is taken from what REMAINS of want: the overshoot of one
+		 * sub-call shrinks the next one, so the whole quantum overshoots by the
+		 * single crossing dispatch and no more. A quantum that satisfied the
+		 * band above and violated this line would be delivering k dispatch
+		 * units of overshoot into the next quantum's debt. */
+		if(ctx.debt < 0 || ctx.debt >= static_cast<int64_t>(maxDispatchCost))
+		{
+			printf("FAIL the quantum ended with a debt of %lld, outside "
+				"cycleDebt.h's 0 <= debt < maxDispatchCost for this fixture's "
+				"dispatch unit of %llu.\n",
+				static_cast<long long>(ctx.debt),
+				static_cast<unsigned long long>(maxDispatchCost));
 			++failures;
 		}
 
