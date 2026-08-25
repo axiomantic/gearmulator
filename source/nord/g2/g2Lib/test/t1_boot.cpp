@@ -633,35 +633,91 @@ namespace
 		return out;
 	}
 
-	// The number of HDI08 ports that completed the HF0/HF2 handshake. HF0 is the
-	// host's own flag in ICR and HF2 is the DSP's answer in ISR, so a port has
-	// completed the handshake only when BOTH are set: HF0 alone is the firmware
-	// talking to itself.
+	// Whether ONE HDI08 port stands, AT THIS INSTANT, with the handshake's two
+	// flags both raised. HF0 is the host's own flag in ICR and HF2 is the DSP's
+	// answer in ISR, so both must be set: HF0 alone is the firmware talking to
+	// itself.
+	//
+	// icr() and isr() are the model's own register readers. The BusTarget-facing
+	// read8 override is deliberately not used here: this is an inspection and it
+	// must not look like a bus cycle.
+	bool portHandshakeRaised(g2::Board& _board, const int _port)
+	{
+		auto& hdi08 = _board.hdi08().port(_port);
+
+		const uint8_t icr = hdi08.icr();
+		const uint8_t isr = hdi08.isr();
+
+		return (icr & mc68k::Hdi08::Hf0) != 0 && (isr & mc68k::Hdi08::Hf2) != 0;
+	}
+
+	// The number of ports raised at the instant of the call. THIS IS A LEVEL READ
+	// AND IT IS NOT AN ACCEPTANCE PREDICATE: plan section 24.6 row W3-394 measured
+	// icr=0x0 isr=0x6 on all eight ports at the end of a 424,537-iteration run, on
+	// a machine whose handshake had provably run. It is kept because the report
+	// prints it beside the latch, where the pair is what shows the event is a
+	// transient rather than a state.
 	int handshakePortCount(g2::Board& _board)
 	{
 		int completed = 0;
 
 		for(int port = 0; port < g2::g_hdi08PortCount; ++port)
 		{
-			auto& hdi08 = _board.hdi08().port(port);
-
-			// icr() and isr() are the model's own register readers. The
-			// BusTarget-facing read8 override is deliberately not used here:
-			// this is an inspection and it must not look like a bus cycle.
-			const uint8_t icr = hdi08.icr();
-			const uint8_t isr = hdi08.isr();
-
-			if((icr & mc68k::Hdi08::Hf0) && (isr & mc68k::Hdi08::Hf2))
+			if(portHandshakeRaised(_board, port))
 				++completed;
 		}
 
 		return completed;
 	}
 
-	// The firmware's own retry count for the handshake. It bounds this harness's
-	// polling too, so a machine that never converges stops rather than hanging
-	// the suite.
-	constexpr uint32_t g_handshakeIterations = 0xFDE8u;
+	/* THE ACCEPTANCE PREDICATE, AND IT IS AN EDGE DETECTOR. Plan section 24.6 row
+	 * W3-394: the firmware sets HF0, the DSP answers HF2, the routine returns and
+	 * the firmware clears HF0, so the two flags stand together only inside a
+	 * bounded window. A machine that never ran the handshake and a machine that
+	 * ran it and finished present the SAME registers afterwards, which is why the
+	 * terminal snapshot read zero for this whole project and was mistaken for a
+	 * defect report each time.
+	 *
+	 * The latch is STICKY and PER PORT: once a port has been seen raised it stays
+	 * recorded for the rest of the run. That is what the hardware promises -- the
+	 * edge happens once -- so counting completions instead would assert a
+	 * repetition nothing guarantees, and asserting the fetch landmark at the
+	 * handshake routine alone would prove the firmware ASKED and not that any DSP
+	 * ANSWERED.
+	 *
+	 * SAMPLED ONCE PER ITERATION OF THE DRIVE LOOP, at the same granularity the
+	 * loop advances the machine, so no completion can open and close between two
+	 * samples unobserved. */
+	void latchHandshakePorts(g2::Board& _board, std::vector<bool>& _latched)
+	{
+		for(int port = 0; port < g2::g_hdi08PortCount; ++port)
+		{
+			if(portHandshakeRaised(_board, port))
+				_latched[size_t(port)] = true;
+		}
+	}
+
+	int latchedPortCount(const std::vector<bool>& _latched)
+	{
+		int completed = 0;
+
+		for(const bool latched : _latched)
+		{
+			if(latched)
+				++completed;
+		}
+
+		return completed;
+	}
+
+	/* THE ITERATION BOUND. It is a STOP so that a machine which never converges
+	 * fails rather than hanging the suite; it is not a figure the firmware
+	 * publishes. The previous value, 0xFDE8, was the firmware's own handshake
+	 * retry count and it is demonstrably too small for a boot: plan section 24.6
+	 * row W3-394 measured the real boot needing roughly 425,000 iterations to
+	 * reach the patch browser. Sized above that, and the run costs roughly ninety
+	 * seconds when it is reached. */
+	constexpr uint32_t g_handshakeIterations = 500000u;
 
 	/* THE BUDGET OF THE ONE OBSERVING Board::runMcu CALL, AND OF NOTHING ELSE.
 	 * Task INT-7 deleted the per-iteration mcf5307_exec this used to size; the
@@ -716,7 +772,12 @@ namespace
 
 		std::string line0;
 		std::string line1;
-		int      handshakePorts = 0;
+		// The LATCHED count -- ports observed with HF0 and HF2 raised together at
+		// any point during the drive -- and, beside it, the level read taken at
+		// the end. The second is reported and never asserted; see
+		// latchHandshakePorts.
+		int      handshakePorts    = 0;
+		int      handshakeAtEnd    = 0;
 		uint32_t pcAtBanner     = 0;
 		uint32_t pcAfterBanner  = 0;
 		uint32_t pcLater        = 0;
@@ -916,12 +977,19 @@ namespace
 
 		// PHASE 1 -- run until the firmware composes display content, or until the
 		// bound.
+		std::vector<bool> handshakeLatched(size_t(g2::g_hdi08PortCount), false);
+
 		uint32_t settleIterations = 0;
+		bool     bannerLatched    = false;
 		for(uint32_t i = 0; i < g_handshakeIterations; ++i)
 		{
 			_result.iterations = i + 1;
 
 			scheduler->runFrames(g_framesPerIteration);
+
+			// THE LATCH IS SAMPLED BEFORE THE HALT TEST, so the iteration that
+			// halts the core still contributes its observation.
+			latchHandshakePorts(board, handshakeLatched);
 
 			if(board.mcuHalted())
 				break;
@@ -940,13 +1008,41 @@ namespace
 					// TASK INT-7. Sampled here, mid-run, and not at the end.
 					_result.haltedAtBanner = board.mcuHalted();
 				}
-				if(++settleIterations >= g_bannerSettleIterations)
-					break;
+
+				/* THE BANNER IS LATCHED WHEN IT APPEARS, FOR THE SAME REASON THE
+				 * HANDSHAKE IS -- plan section 24.6 rows W3-394 and W3-395. BOTH
+				 * ARE TRANSIENTS. The firmware composes the banner, then boots on
+				 * and the PATCH BROWSER overwrites it: measured at the full bound,
+				 * line 0 reads "-:-       No Cat" and line 1 is blank, with the
+				 * banner long gone. A terminal sample of one run cannot satisfy
+				 * the banner clause and the handshake clause together, because
+				 * they are true at different times.
+				 *
+				 * So the FIRST composed banner is captured and kept. The settle
+				 * counter still runs, because the banner is written a character
+				 * at a time and a capture on the first content byte would catch
+				 * a partial line -- that is the defect the settle window was
+				 * added to fix. What changes is that reaching the settle no
+				 * longer STOPS the drive: it freezes the banner and lets the
+				 * machine run on so the handshake can be observed. */
+				if(++settleIterations >= g_bannerSettleIterations && !bannerLatched)
+				{
+					bannerLatched = true;
+					_result.line0 = readDisplayLine(board, 0, 0);
+					_result.line1 = readDisplayLine(board, 0, 1);
+				}
 			}
 		}
 
-		_result.line0 = readDisplayLine(board, 0, 0);
-		_result.line1 = readDisplayLine(board, 0, 1);
+		/* A run that never composed a banner latched nothing, and the empty
+		 * strings it leaves must fail the comparison rather than read as a
+		 * pass. readDisplayLine is called here ONLY in that case, so the
+		 * assertion reports what the display actually held. */
+		if(!bannerLatched)
+		{
+			_result.line0 = readDisplayLine(board, 0, 0);
+			_result.line1 = readDisplayLine(board, 0, 1);
+		}
 
 
 		_result.pcAfterBanner = board.mcuReg(g_regPc);
@@ -960,12 +1056,16 @@ namespace
 		// and a machine that did not is expected to sit still. The two are told
 		// apart below.
 		for(uint32_t i = 0; i < 64u && !board.mcuHalted(); ++i)
+		{
 			scheduler->runFrames(g_framesPerIteration);
+			latchHandshakePorts(board, handshakeLatched);
+		}
 
 		_result.pcLater = board.mcuReg(g_regPc);
 		_result.halted  = board.mcuHalted();
 		_result.faulted = board.faulted();
-		_result.handshakePorts = handshakePortCount(board);
+		_result.handshakePorts = latchedPortCount(handshakeLatched);
+		_result.handshakeAtEnd = handshakePortCount(board);
 
 		/* TASK INT-7. THE ONE SAMPLE OF Board::runMcu's RETURN VALUE, taken
 		 * after the drive is over so that it cannot alter what any other
@@ -1128,7 +1228,9 @@ namespace
 		          << " pcLater=0x" << _r.pcLater << std::dec << std::endl;
 		std::cout << "boot: line0=" << escapedLine(_r.line0) << std::endl;
 		std::cout << "boot: line1=" << escapedLine(_r.line1) << std::endl;
-		std::cout << "boot: handshakePorts=" << _r.handshakePorts << std::endl;
+		std::cout << "boot: handshakePorts=" << _r.handshakePorts
+		          << " (latched) handshakeAtEnd=" << _r.handshakeAtEnd
+		          << " (level read, reported only)" << std::endl;
 
 		// TASK INT-7. The Board's own core, reported before it is asserted on.
 		std::cout << "boot: boardCore mcuCycles=" << _r.mcuCycles
@@ -1211,12 +1313,18 @@ int main()
 		      "display 0 line 1 equals " + escapedLine(g_expectedLine1) +
 		      "; read " + escapedLine(result.line1));
 
-		// The handshake count, compared AS A NUMBER.
+		// CLAUSE 2, the handshake count, compared AS A NUMBER. It is the LATCHED
+		// count: ports seen with HF0 and HF2 raised TOGETHER at any sample of the
+		// drive. The bound and the iterations actually run are both named from
+		// the values themselves, so neither can go stale against a literal.
 		check(result.handshakePorts == int(g2::g_hdi08PortCount),
-		      "HDI08 ports completing the HF0/HF2 handshake within " +
-		      std::to_string(g_handshakeIterations) + " iterations equals " +
-		      std::to_string(g2::g_hdi08PortCount) + "; counted " +
-		      std::to_string(result.handshakePorts));
+		      "HDI08 ports observed with HF0 and HF2 raised together at some point "
+		      "within the " + std::to_string(g_handshakeIterations) +
+		      "-iteration bound equals " + std::to_string(g2::g_hdi08PortCount) +
+		      "; counted " + std::to_string(result.handshakePorts) + " latched over " +
+		      std::to_string(result.iterations) + " iterations run, with " +
+		      std::to_string(result.handshakeAtEnd) +
+		      " still raised at the end (a level read, not the acceptance)");
 
 		// Correct cells can be read off a machine that is stuck, so a green
 		// comparison alone does not show the firmware ran on past the banner.
