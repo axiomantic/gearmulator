@@ -39,3 +39,6 @@ t0_version_mismatch
 
 # BRD-10, the no-firmware path.
 t0_no_firmware
+
+# PLG-14, `--help` names exactly the subcommands g2TestConsole implements.
+t0_console_subcommands
