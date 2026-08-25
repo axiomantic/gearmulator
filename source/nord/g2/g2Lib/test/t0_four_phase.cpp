@@ -29,13 +29,16 @@
  *   Scheduler owns its ChainAdapter privately, so the trace and the injected
  *   Executor are the only seams into one quantum.
  *
- *   PART B drives the codec edges directly against a ChainAdapter, because a
- *   Scheduler of today runs NEITHER of them. The Scheduler carries no regime
- *   member and is the boot machine by construction; SCH-22 owns the regime and
- *   the two calls, and it has not landed. Case 3 asserts that absence rather
- *   than leaving a reader to infer it, AND SAYS IN ITS OWN FAILURE MESSAGE
- *   THAT IT IS PINNED TO TODAY'S BOOT-ONLY SCHEDULER -- when SCH-22 lands, that
- *   case is the one that must change, and it will go red rather than quiet.
+ *   PART B drives the codec edges directly against a ChainAdapter. It was
+ *   written that way because a Scheduler ran NEITHER edge at the time; SCH-21
+ *   step 2 (formerly SCH-22) has since landed the regime and both calls, and
+ *   t0_codec_regimes is where the PLAY regime's seven records and the position
+ *   of the ingress and the egress inside them are asserted. PART B keeps the
+ *   adapter-level edges, which are a different claim and still its own. Case 3
+ *   is no longer pinned to the tree: this fixture never calls beginPlayPhase,
+ *   so it stays in the BOOT regime, and a boot quantum emitting neither edge is
+ *   design section 13.10 rule 3's property rather than a statement about what
+ *   had not yet been written.
  *
  * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION. Every
  * observable is a returned value, a delivered frame or a counter, so this file
@@ -297,15 +300,25 @@ namespace
 			}
 		}
 
-		/* ------------- CASE 3: a Scheduler of today runs NEITHER codec edge.
+		/* ------------- CASE 3: a BOOT-REGIME quantum runs NEITHER codec edge.
 		 *
-		 * PINNED TO TODAY'S TREE, AND THE MESSAGE SAYS SO. The Scheduler has no
-		 * regime member, so it is the boot machine by construction and a boot
-		 * quantum runs the swap and the run phase alone. SCH-22 owns the regime
-		 * and the two calls. When it lands, this case goes RED and is the
-		 * signal to move the codec-edge assertions of PART B onto the Scheduler
-		 * -- it is not a property of the design, it is a property of what has
-		 * landed today. */
+		 * THE PIN IS DISCHARGED AND THIS IS NO LONGER PINNED TO THE TREE.
+		 * SCH-21 step 2 (formerly SCH-22) has landed: the Scheduler now carries
+		 * a regime member and runs both codec edges IN THE PLAY REGIME. This
+		 * fixture never calls beginPlayPhase, so it stays in the BOOT regime
+		 * for its whole life -- and a boot quantum running the swap and the run
+		 * phase alone is now a stated property of design section 13.10 rule 3
+		 * rather than a statement about what had not yet been written.
+		 *
+		 * WHAT CHANGED HERE AND WHAT DID NOT. Only the rationale changed: the
+		 * assertion, the fixture and the counted records are untouched. The
+		 * earlier text claimed the Scheduler "carries no regime member", which
+		 * became FALSE the moment SCH-21 step 2 landed while this case went on
+		 * passing -- a true assertion carrying a false reason. THE CODEC EDGES
+		 * IN THE PLAY REGIME ARE NOT THIS FILE'S TO ASSERT: t0_codec_regimes
+		 * owns the play trace, its seven records and the position of the
+		 * ingress and the egress within them, and PART B below keeps the direct
+		 * adapter-level edges it always had. */
 		{
 			size_t codecRecords = 0;
 
@@ -315,10 +328,11 @@ namespace
 					++codecRecords;
 
 			checkEqual(codecRecords, 0u,
-				"PINNED TO TODAY'S TREE, NOT DERIVED FROM THE DESIGN: today's "
-				"Scheduler carries no regime member and runs neither codec edge "
-				"(SCH-22 owns them). When SCH-22 lands this case must move, and "
-				"this red is that signal -- the codec edges are asserted in PART B");
+				"a BOOT-REGIME quantum runs neither codec edge: this fixture "
+				"never calls beginPlayPhase, so the Scheduler stays in the boot "
+				"regime and emits neither the ingress nor the egress record. The "
+				"PLAY regime's seven records are t0_codec_regimes' to assert, and "
+				"the direct adapter-level edges are PART B's");
 		}
 	}
 
