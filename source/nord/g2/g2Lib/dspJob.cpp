@@ -287,13 +287,20 @@ namespace g2
 		if(c->debt < 0)
 			c->debt = 0;
 
-		/* THE LONG-DISPATCH QUANTUM COUNTER. When want <= 0, the callback
-		 * runs nothing and the debt is paid down by the whole allocation,
-		 * which is the long-dispatch condition runQuantum counts. */
+		/* THE LONG-DISPATCH QUANTUM COUNTER, AND NOTHING ELSE. When want <= 0
+		 * every route above runs nothing -- the callback returns on its
+		 * remaining <= 0 guard, the direct route is gated on want > 0 and the
+		 * tail flush on want > totalSpent -- so totalSpent is 0 and the
+		 * reconciliation above ALREADY paid the debt down by exactly one whole
+		 * allocation: with totalSpent == 0 it reads debt = -want = debt - budget,
+		 * which is the arithmetic g2::runQuantum's want <= 0 branch performs.
+		 * A SECOND `debt -= budget` HERE WOULD PAY THE SAME QUANTUM DOWN TWICE
+		 * and, because it would land AFTER the floor at zero, would carry the
+		 * debt BELOW zero whenever the carried debt equalled the budget --
+		 * breaking the lower half of cycleDebt.h:31's invariant rather than
+		 * merely mis-stating the figure. The floor stays the LAST write to the
+		 * debt in every route through this function. */
 		if(want <= 0)
-		{
-			c->debt -= budget;
 			++c->longDispatchQuanta;
-		}
 	}
 }
