@@ -1193,13 +1193,18 @@ namespace
 	 * MACHINE HERE: the debugger's own `continue` and `stepi` are what run it, so
 	 * a session that never attaches leaves a machine that has executed nothing.
 	 *
-	 * IT DRIVES THE MCU AND NOT THE SCHEDULER, and that is a stated limit rather
-	 * than an oversight. The stub steps `Board::runMcu` alone, so the DSP set,
-	 * the chain and the panel do not turn while a session is open; a question
-	 * about the MCU's own memory, registers and flow is what this answers.
+	 * IT DRIVES THE WHOLE MACHINE THROUGH THE SCHEDULER, which is what `--boot`
+	 * drives it with. The stub installs itself as that Scheduler's `McuRunner`,
+	 * so design section 13.5's quantum order is turned by its one owning site
+	 * and the stub adds only the decision point between two MCU instructions
+	 * where a breakpoint compare has to happen. WITHOUT THIS the session steps
+	 * `Board::runMcu` alone and stalls forever the first time the MCU waits on a
+	 * DSP -- and reports a clean, plausible MISS rather than stalling visibly.
 	 *
-	 * THERE IS NO DSP56300 STUB. That core has no stock GDB target, and a DSP
-	 * question still needs the older method. */
+	 * THERE IS STILL NO DSP56300 STUB. The DSPs RUN; they are not INSTRUMENTED.
+	 * A breakpoint on a DSP program counter, a DSP register read or a DSP memory
+	 * watchpoint is not available here and a question about DSP state still
+	 * needs the older method. */
 	int gdb(const uint16_t _port)
 	{
 		installLogFilter();
@@ -1261,11 +1266,35 @@ namespace
 			return 2;
 		}
 
+		/* THE SCHEDULER, DECLARED AFTER THE BOARD so that it is destroyed BEFORE
+		 * it, exactly as `--boot` declares it and for the same reason: it borrows
+		 * the Board's DSP set and installs chain callbacks into ESAIs the Board
+		 * owns. The Executor is declared before the Scheduler for the same
+		 * reason. NOTHING HERE RUNS A FRAME -- the debugger's own `s` and `c`
+		 * are still the only things that advance the machine. */
+		g2::SerialExecutor executor;
+		g2::Status         schedulerStatus{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(g2::Scheduler::Config(), executor, board, schedulerStatus);
+
+		if(!scheduler)
+		{
+			std::cout << "Scheduler::create returned no object; g2::Status = "
+			          << uint32_t(schedulerStatus) << std::endl;
+			return 2;
+		}
+
 		/* THE STUB IS CONSTRUCTED AFTER THE STORE IS ATTACHED. Its watchpoint
 		 * wrapper is interposed in front of whatever the memory map holds at that
 		 * moment, so a target attached later would sit in front of the wrapper
 		 * rather than behind it and its accesses would be invisible. */
 		g2::GdbStub stub(board);
+
+		/* AND THE SCHEDULER IS HANDED OVER BEFORE THE SOCKET OPENS, so no packet
+		 * can be answered by an MCU-only session. The stub is destroyed before
+		 * the Scheduler, which is what lets it remove its runner. */
+		stub.attachScheduler(*scheduler);
 
 		const uint16_t bound = stub.listenOn(_port);
 
@@ -1319,7 +1348,9 @@ namespace
 		             " display 0's 32 character cells" << std::endl;
 		std::cout << "  --gdb <port>     place the same machine and serve a GDB remote session on"
 		             " 127.0.0.1:<port>, blocking until a debugger attaches; 0 asks for a free"
-		             " port" << std::endl;
+		             " port. The debugger drives the whole machine through the Scheduler, so a"
+		             " continue crosses a DSP handshake; breakpoints are MCF5307-side only"
+		          << std::endl;
 		std::cout << "  --help           print this listing and exit 0" << std::endl;
 		std::cout << "  --impulse        boot, enter the play phase, inject a known pattern at the"
 		             " codec source and report the frame at which it reaches the codec sink,"

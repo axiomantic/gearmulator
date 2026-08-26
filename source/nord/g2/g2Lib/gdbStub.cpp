@@ -37,6 +37,26 @@ namespace g2
 		 * one that halted, which is what a debugger can act on. */
 		constexpr uint64_t g_continueBound = 100000000ull;
 
+		/* THE SAME STOP, COUNTED IN QUANTA, for a session that drives the whole
+		 * machine. It is a STOP AND NOT A FIGURE for the same reason the one
+		 * above is, and no authority publishes it either. Its size is chosen so
+		 * that it is not reached by anything the machine legitimately does:
+		 * `g2TestConsole --boot` drives 500000 quanta to reach a settled patch
+		 * browser, and this is twice that. A `c` that leaves through it answers
+		 * the same stop reply as one that halted. */
+		constexpr uint64_t g_continueQuantumBound = 1000000ull;
+
+		/* THE QUANTA ONE `s` MAY TURN. A step needs ONE quantum in which the MCU
+		 * actually runs; it needs more than one only when the quanta before it
+		 * take `g2::runQuantum`'s long-dispatch branch, which runs no MCU cycles
+		 * and pays the carried debt down by one whole allocation each time. That
+		 * branch therefore cannot repeat indefinitely, and this bound exists so
+		 * that a step terminates even if it did. */
+		constexpr uint64_t g_stepQuantumBound = 1024ull;
+
+		// The allowance a `c` carries: every instruction the bound permits.
+		constexpr uint64_t g_unbounded = ~uint64_t(0);
+
 		// The size a byte access presents to Board::onRead and Board::onWrite, IN
 		// THE CORE'S UNIT: mcf5307.h states it once per callback typedef, and
 		// `size` there is a COUNT OF BYTES and never a width in bits.
@@ -111,14 +131,38 @@ namespace g2
 
 	// ----------------------------------------------------------------- lifetime
 
-	GdbStub::GdbStub(Board& _board) : m_board(_board)
+	GdbStub::GdbStub(Board& _board) : m_board(_board), m_mcuDriver(*this)
 	{
 		installWatchers();
 	}
 
 	GdbStub::~GdbStub()
 	{
+		/* THE RUNNER IS REMOVED BEFORE THIS OBJECT DIES, so a Scheduler that
+		 * outlives the stub goes back to `Board::runMcu` rather than calling
+		 * into a destroyed McuDriver. It is the same restoration the watchpoint
+		 * wrappers get, for the same reason. */
+		if(m_scheduler != nullptr)
+		{
+			m_scheduler->setMcuRunner(nullptr);
+			m_scheduler = nullptr;
+		}
+
 		close();
+	}
+
+	/* IT INSTALLS AND DOES NOT RUN. Nothing here turns a quantum: the debugger's
+	 * own `s` and `c` are still the only things that advance the machine. */
+	void GdbStub::attachScheduler(Scheduler& _scheduler)
+	{
+		if(m_scheduler == &_scheduler)
+			return;
+
+		if(m_scheduler != nullptr)
+			m_scheduler->setMcuRunner(nullptr);
+
+		m_scheduler = &_scheduler;
+		m_scheduler->setMcuRunner(&m_mcuDriver);
 	}
 
 	// ------------------------------------------------------------ the bus hook
@@ -476,7 +520,29 @@ namespace g2
 	std::string GdbStub::step()
 	{
 		m_hit = Hit{};
-		(void)m_board.runMcu(1);
+
+		if(m_scheduler == nullptr)
+		{
+			(void)m_board.runMcu(1);
+			return stopReply();
+		}
+
+		/* WITH A SCHEDULER, A STEP IS ONE MCU INSTRUCTION AND ONE WHOLE QUANTUM.
+		 * The allowance of one is what keeps the MCU to a single instruction;
+		 * the quantum around it is what lets the rest of the machine answer,
+		 * which is the only reason a stepped session can cross a host-command
+		 * handshake at all. gdbStub.h's amendment block carries the justification
+		 * and states the rate distortion this accepts.
+		 *
+		 * THE BOUND IS NOT ONE FRAME. A quantum whose cycle budget was already
+		 * overrun by the previous one runs no MCU cycles at all -- the
+		 * long-dispatch branch of `g2::runQuantum` -- so a step that insisted on
+		 * exactly one frame would sometimes retire nothing and report a machine
+		 * that had not moved. It turns quanta until one instruction has retired. */
+		m_allowance = 1;
+		driveQuanta(g_stepQuantumBound);
+		m_allowance = g_unbounded;
+
 		return stopReply();
 	}
 
@@ -490,33 +556,146 @@ namespace g2
 	{
 		m_hit = Hit{};
 
-		for(uint64_t steps = 0; steps < g_continueBound; ++steps)
+		if(m_scheduler == nullptr)
 		{
-			if(m_board.mcuHalted())
-				break;
-
-			(void)m_board.runMcu(1);
-
-			if(m_hit.watch)
-				break;
-
-			if(m_board.mcuHalted())
-				break;
-
-			const uint32_t pc = m_board.mcuReg(g_regPc);
-
-			bool atBreakpoint = false;
-			for(const uint32_t address : m_breakpoints)
+			for(uint64_t steps = 0; steps < g_continueBound; ++steps)
 			{
-				if(pc == address)
-					atBreakpoint = true;
+				if(m_board.mcuHalted())
+					break;
+
+				(void)m_board.runMcu(1);
+
+				if(m_hit.watch)
+					break;
+
+				if(m_board.mcuHalted())
+					break;
+
+				if(atBreakpoint())
+					break;
 			}
 
-			if(atBreakpoint)
-				break;
+			return stopReply();
 		}
 
+		/* WITH A SCHEDULER, A CONTINUE TURNS WHOLE QUANTA and the breakpoint
+		 * compare happens inside each one, in runMcuBudget, after every single
+		 * instruction. THE DSP ADVANCE THEREFORE CANNOT SWALLOW A HIT: the
+		 * quantum's MCU phase returns the moment the compare fires, before the
+		 * DSPs of that quantum run.
+		 *
+		 * WHAT IT COSTS IS ONE QUANTUM OF SKEW, AND IT IS THE HONEST SIDE OF THE
+		 * TRADE. The quantum that produced the stop runs its remaining phases to
+		 * completion, so the DSP set can be one block ahead of the MCU at the
+		 * stop. Returning from the middle of a quantum would leave the machine
+		 * in a state design section 13.5's order never produces. */
+		m_allowance = g_unbounded;
+		driveQuanta(g_continueQuantumBound);
+
 		return stopReply();
+	}
+
+	/* THE ONE SITE THAT TURNS THE SCHEDULER. Both `s` and `c` reach the machine
+	 * through here, so the two differ in their allowance and their bound and in
+	 * nothing else.
+	 *
+	 * `m_stop` IS HOW A DECISION TAKEN MID-QUANTUM GETS OUT. runFrames answers
+	 * void and a quantum has no other return path, so the runner records the
+	 * stop and this loop reads it after the quantum it happened in. */
+	void GdbStub::driveQuanta(const uint64_t _bound)
+	{
+		m_stop    = false;
+		m_retired = 0;
+
+		if(m_board.mcuHalted())
+			return;
+
+		for(uint64_t quanta = 0; quanta < _bound; ++quanta)
+		{
+			m_scheduler->runFrames(1);
+
+			if(m_stop || m_retired >= m_allowance)
+				break;
+		}
+	}
+
+	/* THE MCU HALF OF ONE QUANTUM, AND THE ONLY THING IT ADDS TO
+	 * `Board::runMcu(_want)` IS A DECISION POINT BETWEEN TWO INSTRUCTIONS.
+	 *
+	 * THE RETURN IS THE CYCLES ACTUALLY SPENT and it may be fewer than `_want`.
+	 * That is the ordinary short-spend case `g2::runQuantum` already handles: it
+	 * floors the debt at zero and banks no credit, so a quantum cut short by a
+	 * breakpoint costs the MCU those cycles and distorts nothing else.
+	 *
+	 * A ZERO-COST INSTRUCTION IS COUNTED AS ONE CYCLE, AND THAT IS A TERMINATION
+	 * GUARANTEE AND NOT AN ESTIMATE. The loop's exit condition is a cycle total;
+	 * a core that answered zero for an instruction would leave it turning
+	 * forever. The retired-instruction count below is exact either way. */
+	uint32_t GdbStub::runMcuBudget(const uint32_t _want) noexcept
+	{
+		/* THE WATCHPOINT RECORD IS CLEARED AT THE TOP OF EACH QUANTUM'S MCU
+		 * PHASE, so that what a stop reply names is an access THIS phase made.
+		 * The bus wrapper reports whoever calls the target it wraps, and the
+		 * phases either side of this one -- the panel, the chain, the DSP set --
+		 * are not the MCU. Without this, an access made by one of them would be
+		 * carried into the next MCU instruction's check and reported as the
+		 * reason the machine stopped. */
+		m_hit = Hit{};
+
+		uint32_t spent = 0;
+
+		while(spent < _want)
+		{
+			if(m_board.mcuHalted())
+			{
+				m_stop = true;
+				break;
+			}
+
+			if(m_retired >= m_allowance)
+				break;
+
+			const uint32_t ran = m_board.runMcu(1);
+			++m_retired;
+			spent += ran > 0 ? ran : 1;
+
+			if(m_hit.watch)
+			{
+				m_stop = true;
+				break;
+			}
+
+			if(m_board.mcuHalted())
+			{
+				m_stop = true;
+				break;
+			}
+
+			if(atBreakpoint())
+			{
+				m_stop = true;
+				break;
+			}
+		}
+
+		return spent;
+	}
+
+	/* THE COMPARE IS AN EQUALITY AND NOT A `>=`. A breakpoint stops the machine
+	 * when the machine is AT it, and an address the machine merely passes is not
+	 * a stop; a `>=` would stop at the first instruction past any armed address,
+	 * including addresses no program counter can ever equal. */
+	bool GdbStub::atBreakpoint() const
+	{
+		const uint32_t pc = m_board.mcuReg(g_regPc);
+
+		for(const uint32_t address : m_breakpoints)
+		{
+			if(pc == address)
+				return true;
+		}
+
+		return false;
 	}
 
 	/* `Z`/`z` with the type digit already read. Type 0 and type 1 are

@@ -30,6 +30,15 @@
  * 5. SCH-19's `runFrames`, the quantum entry point, and the private
  *    constructor that wires the Executor and the Board in.
  *
+ * 6. TOOL-13's `McuRunner` and `setMcuRunner`. A null runner means the MCU
+ *    phase of a quantum calls `Board::runMcu`, which is what every build that
+ *    is not being debugged does, so a production Scheduler pays one further
+ *    null check for each quantum. It exists because a debugger needs a
+ *    decision point BETWEEN two MCU instructions and a quantum offers none;
+ *    a debugger that carried its own copy of design section 13.5's order
+ *    instead would be a second full-advance path that nothing keeps in step
+ *    with this one.
+ *
  * THE RULE SCH-17 OWNS, STATED IN ONE SENTENCE.
  *
  *   `Scheduler::create` succeeds only when `config.backend == Backend::Jit`
@@ -107,6 +116,37 @@ namespace g2
 		virtual ~TraceSink() = default;
 
 		virtual void onPhase(TracePhase _phase, uint64_t _frameIndex) noexcept = 0;
+	};
+
+	/* THE MCU RUNNER, AND IT IS NULL IN EVERY BUILD THAT IS NOT BEING DEBUGGED.
+	 * Task TOOL-13's amendment.
+	 *
+	 * WHAT IT REPLACES AND WHAT IT MUST NOT CHANGE. The run phase of one quantum
+	 * asks `g2::runQuantum` for `want` MCU cycles and `Board::runMcu` supplies
+	 * them. An installed runner is asked for the SAME want and must answer with
+	 * the cycles it actually spent, so the cycle-debt block's arithmetic is
+	 * untouched: a runner that returns less than it was asked for is the ordinary
+	 * short-spend case that block already floors at zero, and no credit is
+	 * banked for either party.
+	 *
+	 * WHY A HOOK AND NOT A SECOND QUANTUM LOOP. Design section 13.5's order is
+	 * stated once, in Scheduler::runFrames, and a debugger that wrote its own
+	 * copy of that order would be a second full-advance path which nothing keeps
+	 * in step with the first. The ONE thing a debugger needs that the quantum
+	 * does not give it is a decision point BETWEEN two MCU instructions, which is
+	 * where a breakpoint compare has to happen; this is that point and it is
+	 * nothing else.
+	 *
+	 * THE COST IN A BUILD WITH NO RUNNER IS ONE NULL TEST FOR EACH QUANTUM, which
+	 * is the arrangement `TraceSink` above already established. */
+	class McuRunner
+	{
+	public:
+		virtual ~McuRunner() = default;
+
+		/* Answers the cycles actually spent, which may be fewer than `_want`.
+		 * `noexcept`, matching runFrames and design section 13.10 rule 2. */
+		virtual uint32_t runMcu(uint32_t _want) noexcept = 0;
 	};
 
 	class Scheduler
@@ -212,6 +252,15 @@ namespace g2
 		 * serial executor runs the jobs on this same thread; a parallel one may
 		 * use workers inside run(), which returns only when every job has. */
 		void runFrames(size_t _frames) noexcept;
+
+		/* INSTALL OR REMOVE THE MCU RUNNER. A null argument restores
+		 * `Board::runMcu`, which is what every build that is not being debugged
+		 * runs on. The Scheduler BORROWS the runner and never destroys it, so a
+		 * runner must outlive the Scheduler or remove itself first -- GdbStub's
+		 * destructor does the latter. */
+		void setMcuRunner(McuRunner* _runner) noexcept { m_mcuRunner = _runner; }
+
+		McuRunner* mcuRunner() const noexcept { return m_mcuRunner; }
 
 		/* THE BOOT-TO-PLAY TRANSITION, AS ONE CALL, and the boot thread's last
 		 * Scheduler action. Design section 13.10 rule 3 states its five steps
@@ -386,6 +435,10 @@ namespace g2
 		/* NULL MEANS NO RECORDING, so a production Scheduler pays one null
 		 * check for each phase of each quantum and nothing else. */
 		TraceSink* m_trace;
+
+		/* NULL MEANS Board::runMcu, so a production Scheduler pays one null
+		 * check for each quantum and nothing else. */
+		McuRunner* m_mcuRunner = nullptr;
 
 		/* HELD BY VALUE, design section 13.10.5: the Scheduler owns exactly one
 		 * ChainAdapter. Its four constructor arguments come from the Config.
