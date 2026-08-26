@@ -48,6 +48,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 namespace
 {
@@ -339,6 +340,50 @@ int main()
 		config.mcuRate.den = 0;
 
 		checkRejected(executor, board, config, g2::Status::BadRational, "mcuRate with den == 0");
+	}
+
+	/* ---------------- the chain order, when the caller names one.
+	 *
+	 * Empty is the production value and means "derive it from the machine", so
+	 * the default Config case above already covers the accepted-empty half. What
+	 * is rejected is a NAMED order that is not one: the wrong length, a slot
+	 * that does not exist, or a slot named twice. The last is the one with no
+	 * downstream symptom -- a duplicate leaves one slot unwired while two chain
+	 * positions drive another, and nothing further along reports either.
+	 *
+	 * THE ACCEPTED CASE IS PAIRED WITH THEM rather than left to the default
+	 * Config, because a factory that rejected EVERY named order would satisfy
+	 * the three refusals alone.
+	 */
+	{
+		g2::Scheduler::Config config;
+
+		std::vector<unsigned> order(config.dspCount);
+		for(unsigned i = 0; i < config.dspCount; ++i)
+			order[i] = i;
+
+		config.chainOrder = order;
+		checkAccepted(executor, board, config, "a chain order that is a permutation of the slots");
+
+		config.chainOrder = order;
+		config.chainOrder.pop_back();
+		checkRejected(executor, board, config, g2::Status::BadChainOrder,
+			"a chain order shorter than dspCount");
+
+		config.chainOrder = order;
+		config.chainOrder.push_back(0u);
+		checkRejected(executor, board, config, g2::Status::BadChainOrder,
+			"a chain order longer than dspCount");
+
+		config.chainOrder = order;
+		config.chainOrder.back() = config.dspCount;
+		checkRejected(executor, board, config, g2::Status::BadChainOrder,
+			"a chain order naming a slot that does not exist");
+
+		config.chainOrder = order;
+		config.chainOrder.back() = config.chainOrder.front();
+		checkRejected(executor, board, config, g2::Status::BadChainOrder,
+			"a chain order naming one slot twice");
 	}
 
 	/* ---------------- row 8: the lookahead bound.

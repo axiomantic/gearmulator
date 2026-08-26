@@ -67,6 +67,7 @@
 #include <cstdint>
 #include <memory>
 #include <type_traits>
+#include <vector>
 
 #include <thread>
 
@@ -153,6 +154,30 @@ namespace g2
 			 * names it. PLG-17's golden-render path asserts it is false, so
 			 * the one path that records a reference cannot take it. */
 			bool          testOverride          = false;
+
+			/* THE POSITION-TO-PORT ORDER THE CHAIN IS WIRED BY, AND EMPTY IS
+			 * THE DEFAULT AND THE PRODUCTION VALUE.
+			 *
+			 * EMPTY MEANS DERIVE IT FROM THE MACHINE. The firmware chooses which
+			 * hardware port carries which chain position and it does not choose
+			 * the identity; chainOrder.h carries the derivation and why it can
+			 * only be answered once the firmware has run. A Scheduler built from
+			 * an empty order therefore leaves its ports IDLE and wires the chain
+			 * on the first quantum after the first program lands.
+			 * chainAttached() is where a caller reads whether that has happened.
+			 *
+			 * NON-EMPTY IS FOR A MACHINE THAT WILL NEVER BOOT ONE. A harness
+			 * that drives the ESAIs itself has no firmware to ask, and naming
+			 * the order it wants is how it says so -- rather than this field
+			 * carrying an identity default that would silently be the wrong
+			 * order on every real machine. A non-empty order is wired at
+			 * construction and is NOT replaced by a later derivation: an order
+			 * a caller named is the order it gets.
+			 *
+			 * IT IS REJECTED IN create() LIKE EVERY OTHER FIELD. An order whose
+			 * length is not `dspCount`, or that is not a permutation of the
+			 * slots, answers Status::BadChainOrder and yields no object. */
+			std::vector<unsigned> chainOrder{};
 
 			/* NULL MEANS NO RECORDING, and it is the default. */
 			TraceSink*    trace                 = nullptr;
@@ -300,6 +325,20 @@ namespace g2
 		 * the limit is that object's and not this one's. */
 		void reset() noexcept;
 
+		/* WHETHER THE CHAIN HAS BEEN WIRED YET, AND IT IS EXPOSED FOR THE REASON
+		 * owningThread() IS. With an empty Config::chainOrder the wiring is late
+		 * -- the position-to-port order is read out of the booted machine,
+		 * chainOrder.h carries why -- so "the chain got wired" is a property
+		 * with a moment, and a property with a moment that nothing can read is a
+		 * property nothing can check. An assertion would be deleted by NDEBUG
+		 * and would check the wrong build.
+		 *
+		 * FALSE MEANS THE PORTS ARE STILL IDLE: every receive answers silence,
+		 * every transmit is discarded and no audio reaches the ChainAdapter.
+		 *
+		 * A Scheduler built from a NAMED order reports true from construction. */
+		bool chainAttached() const noexcept;
+
 		/* THE RECORDED OWNING THREAD. runFrames records the calling thread on
 		 * its first call after each clearing, and beginPlayPhase's step 5
 		 * clears the record so the first runFrames of the play phase
@@ -444,6 +483,32 @@ namespace g2
 		/* Rebuilds m_liveJobs from m_fault. Called at construction, whenever a
 		 * fault latches, and by reset(). */
 		void rebuildDispatchSet() noexcept;
+
+		/* ------------- THE LATE CHAIN ATTACH.
+		 *
+		 * The position-to-port order the chain is wired by is READ OUT OF THE
+		 * BOOTED MACHINE -- chainOrder.h carries the derivation -- and this
+		 * object is constructed before the firmware has run. A caller that named
+		 * an order in the Config is wired at construction and this never fires;
+		 * every other caller is wired by this, which tries once for each quantum
+		 * until the machine can answer and then never again.
+		 *
+		 * m_chainOrder IS SCRATCH, SIZED AT CONSTRUCTION so that the attempt
+		 * allocates nothing inside a quantum. It carries no meaning between
+		 * calls; readChainOrder overwrites every entry.
+		 *
+		 * m_chainAttached IS NOT PART OF THE STATE SNAPSHOT. It records what
+		 * this object has wired and not what the emulated machine holds. */
+		void attachChainIfOrderKnown() noexcept;
+
+		std::vector<unsigned> m_chainOrder;
+		bool                  m_chainAttached = false;
+
+		/* THE ORDER THE CALLER NAMED, KEPT BECAUSE reset() HAS TO TELL THE TWO
+		 * CASES APART. Empty is the production case and means the order was
+		 * derived from the machine, which a reset invalidates; non-empty means
+		 * the caller supplied it, which a reset says nothing about. */
+		std::vector<unsigned> m_configuredChainOrder;
 
 		/* Reads the fault of every context back after the run phase and latches
 		 * whatever it finds. Returns true when at least one NEW fault latched,

@@ -42,6 +42,13 @@ namespace g2
 		 * two conditions it tested. */
 		BadStateImage,
 
+		/* A CHAIN ORDER THAT IS NOT ONE. attachChainCallbacks takes the
+		 * position-to-port map and refuses a map whose length is not the slot
+		 * count, or that names a slot twice or names one that does not exist.
+		 * Such a map would leave a DSP unwired while two chain positions drove
+		 * another, which nothing downstream reports. */
+		BadChainOrder,
+
 		Count
 	};
 }

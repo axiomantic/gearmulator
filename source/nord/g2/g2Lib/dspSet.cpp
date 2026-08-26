@@ -6,6 +6,7 @@
 
 #include "g2/timebase.h"
 
+#include "dsp56kEmu/esai.h"
 #include "dsp56kEmu/jit.h"
 #include "dsp56kEmu/jitconfig.h"
 
@@ -326,35 +327,89 @@ namespace g2
 		}
 	}
 
+	/* THE IDLE CALLBACKS. dspSet.h carries what they are for; the short of it
+	 * is that dsp56k::Audio's own default receive callback BLOCKS, so "leave the
+	 * ESAIs alone" is not a state a running machine survives. */
+	void installIdleChainCallbacks(DspSet& _set)
+	{
+		for(unsigned slot = 0; slot < _set.dspCount(); ++slot)
+		{
+			dsp56k::Peripherals56311& p = _set.peripherals(slot);
+
+			dsp56k::Esai* const esais[] = { &p.getEsai(), &p.getEsai1() };
+
+			for(dsp56k::Esai* const esai : esais)
+			{
+				esai->setReadRxCallback([](uint64_t&, dsp56k::Audio::RxFrame& _out) noexcept
+				{
+					_out.clear();
+				});
+
+				esai->setWriteTxCallback([](uint64_t&, const dsp56k::Audio::TxFrame&) noexcept
+				{
+				});
+			}
+		}
+	}
+
 	/* THE INSTALL LIVES HERE FOR THE REASON attachHdi08Bridges DOES: this is
 	 * the construction point that holds both ends of the wire. The adapter
 	 * keeps only borrowed ESAI pointers and hands out callables that borrow
 	 * it, so nothing is owned on either side and nothing is stored here. */
-	void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set)
+	Status attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set,
+		const std::vector<unsigned>& _portOfPosition)
 	{
-		/* EVERY POSITION IS ATTACHED BEFORE THE FIRST FACTORY RUNS, which is
+		const unsigned count = _set.dspCount();
+
+		if(_portOfPosition.size() != count)
+			return Status::BadChainOrder;
+
+		/* THE PERMUTATION CHECK IS QUADRATIC AND ALLOCATES NOTHING, and both
+		 * are deliberate. A seen-set would allocate on a path a caller may
+		 * drive from inside a quantum, and the slot count is the HDI08 port
+		 * count -- eight -- so the pair loop is cheaper than the allocation it
+		 * would replace. */
+		for(unsigned a = 0; a < count; ++a)
+		{
+			if(_portOfPosition[a] >= count)
+				return Status::BadChainOrder;
+
+			for(unsigned b = a + 1u; b < count; ++b)
+			{
+				if(_portOfPosition[a] == _portOfPosition[b])
+					return Status::BadChainOrder;
+			}
+		}
+
+		/* THE LOOP INDEX IS A CHAIN POSITION AND THE SLOT IT REACHES IS A
+		 * HARDWARE PORT, and the two are not the same number. chainOrder.h
+		 * carries the derivation and the reason.
+		 *
+		 * EVERY POSITION IS ATTACHED BEFORE THE FIRST FACTORY RUNS, which is
 		 * the order chainAdapter.h states: a position's transmit wrapper reads
 		 * the ESAI it was given from its first fire, and a wrapper produced
 		 * ahead of the attach carries a null one for the whole run. */
-		for(unsigned i = 0; i < _set.dspCount(); ++i)
+		for(unsigned position = 0; position < count; ++position)
 		{
-			dsp56k::Peripherals56311& p = _set.peripherals(i);
-			_adapter.attachEsai(i, p.getEsai(), p.getEsai1());
+			dsp56k::Peripherals56311& p = _set.peripherals(_portOfPosition[position]);
+			_adapter.attachEsai(position, p.getEsai(), p.getEsai1());
 		}
 
 		/* THE PAIR AND NOT setCallback. mqLib, xtLib and nord/n2x install a
 		 * single listener through Audio::setCallback; the chain needs the two
 		 * directions separately, which is what the adapter's per-direction
 		 * callback factories return. */
-		for(unsigned i = 0; i < _set.dspCount(); ++i)
+		for(unsigned position = 0; position < count; ++position)
 		{
-			dsp56k::Peripherals56311& p = _set.peripherals(i);
+			dsp56k::Peripherals56311& p = _set.peripherals(_portOfPosition[position]);
 
-			p.getEsai().setReadRxCallback(_adapter.audioRxCallback(i));
-			p.getEsai().setWriteTxCallback(_adapter.audioTxCallback(i));
+			p.getEsai().setReadRxCallback(_adapter.audioRxCallback(position));
+			p.getEsai().setWriteTxCallback(_adapter.audioTxCallback(position));
 
-			p.getEsai1().setReadRxCallback(_adapter.secondRxCallback(i));
-			p.getEsai1().setWriteTxCallback(_adapter.secondTxCallback(i));
+			p.getEsai1().setReadRxCallback(_adapter.secondRxCallback(position));
+			p.getEsai1().setWriteTxCallback(_adapter.secondTxCallback(position));
 		}
+
+		return Status::Ok;
 	}
 }
