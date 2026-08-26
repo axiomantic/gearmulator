@@ -83,6 +83,8 @@
 #include "status.h"
 #include "artifactResolver.h"
 
+#include "impulseOutcome.h"
+
 // TASK M4 CLAUSE 1 reads the DMA registers of each position's peripheral set.
 // board.h already reaches dma.h through dspSet.h and peripherals56311.h; the
 // include is written out because this file NAMES dsp56k::Dma and dsp56k::TWord.
@@ -963,6 +965,66 @@ namespace
 
 	constexpr unsigned g_impulseOverrunQuanta = 1024u;
 
+	/* THE OUTCOME IS PRINTED ON EVERY EXIT PATH, INCLUDING THE ONES THAT LEAVE
+	 * BEFORE A BOARD EXISTS. A path that returned a bare status printed figures
+	 * that a reader had to reconstruct an answer from, and the reconstruction
+	 * of "no artifact" and "the chain carried nothing" produced the same one. */
+	void reportOutcome(const g2console::ImpulseOutcome _outcome, const std::string& _detail)
+	{
+		std::cout << "impulse: OUTCOME=" << g2console::name(_outcome) << std::endl;
+		std::cout << "impulse: " << _detail << std::endl;
+		std::cout << "impulse: this is a TRANSPORT probe. It reports whether the path carried the"
+		             " injected sample, and it makes NO claim about audio: an unpatched Nord Modular"
+		             " is silent by design, so a chain that carried nothing is a transport answer"
+		             " and not a broken instrument" << std::endl;
+	}
+
+	/* THE DETAIL LINE SAYS WHAT THE WORD MEANS FOR THIS RUN, and it is derived
+	 * from the record rather than typed beside it, so a figure cannot drift from
+	 * the outcome it explains. */
+	std::string detailFor(const g2console::ImpulseOutcome _outcome,
+	                      const g2console::ImpulseObservation& _o)
+	{
+		switch(_outcome)
+		{
+		case g2console::ImpulseOutcome::DidNotRun:
+			return "nothing about the chain was measured: the play phase was never reached";
+
+		case g2console::ImpulseOutcome::InstrumentBlind:
+			return "NO ANSWER. The observer could not observe, so the absence of an arrival says"
+			       " nothing about the chain: framesPulled=" + std::to_string(_o.framesPulled)
+			       + " observerSelfTest=" + std::to_string(_o.observerSelfTest ? 1 : 0);
+
+		case g2console::ImpulseOutcome::Stopped:
+			return "the observer received " + std::to_string(_o.framesPulled)
+			       + " frames from the codec sink and the injected sample was in none of them, so"
+			         " the path did not carry it to the sink. The observer is proven able to see"
+			         " one (observerSelfTest=1), so this is a measured absence and not a blind one";
+
+		case g2console::ImpulseOutcome::Propagated:
+			return "the injected sample reached the codec sink unchanged at frame "
+			       + std::to_string(_o.arrival) + ", which is the derived expectation";
+
+		case g2console::ImpulseOutcome::PropagatedOffSpec:
+			return "the injected sample reached the codec sink at frame " + std::to_string(_o.arrival)
+			       + " against a derived expectation of " + std::to_string(_o.expectedArrival)
+			       + ", unchanged=" + std::to_string(_o.arrivalExact ? 1 : 0)
+			       + ", chain-health counters all zero=" + std::to_string(_o.countersZero ? 1 : 0);
+		}
+
+		return "unclassified";
+	}
+
+	int impulseDidNotRun(const std::string& _why)
+	{
+		std::cout << _why << std::endl;
+
+		reportOutcome(g2console::ImpulseOutcome::DidNotRun,
+			"nothing about the chain was measured: the play phase was never reached");
+
+		return g2console::exitStatus(g2console::ImpulseOutcome::DidNotRun);
+	}
+
 	int impulse()
 	{
 		installLogFilter();
@@ -974,16 +1036,14 @@ namespace
 
 		if(directory.empty())
 		{
-			std::cout << why << std::endl;
-			return 2;
+			return impulseDidNotRun(why);
 		}
 
 		const std::vector<uint8_t> code = readFile(directory + "/CODE_30000400.bin");
 
 		if(code.empty())
 		{
-			std::cout << "CODE_30000400.bin is empty or unreadable under " << directory << std::endl;
-			return 2;
+			return impulseDidNotRun("CODE_30000400.bin is empty or unreadable under " + directory);
 		}
 
 		g2::Board board(makeConfig());
@@ -991,8 +1051,7 @@ namespace
 
 		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
 		{
-			std::cout << "the image does not fit the configured SDRAM window" << std::endl;
-			return 2;
+			return impulseDidNotRun("the image does not fit the configured SDRAM window");
 		}
 
 		{
@@ -1007,8 +1066,7 @@ namespace
 
 			if(!ram.place(g_vectorTableBase - g2::g_sdramBase, table))
 			{
-				std::cout << "the vector table does not fit the configured SDRAM window" << std::endl;
-				return 2;
+				return impulseDidNotRun("the vector table does not fit the configured SDRAM window");
 			}
 		}
 
@@ -1019,8 +1077,7 @@ namespace
 
 		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
 		{
-			std::cout << "the core refused VBR at register index " << g_regVbr << std::endl;
-			return 2;
+			return impulseDidNotRun("the core refused VBR at register index " + std::to_string(g_regVbr));
 		}
 
 		g2::SerialExecutor          executor;
@@ -1032,9 +1089,7 @@ namespace
 
 		if(!scheduler)
 		{
-			std::cout << "Scheduler::create returned no object; g2::Status = "
-			          << uint32_t(schedulerStatus) << std::endl;
-			return 2;
+			return impulseDidNotRun("Scheduler::create returned no object; g2::Status = " + std::to_string(uint32_t(schedulerStatus)));
 		}
 
 		const unsigned dspCount = board.dspSet().dspCount();
@@ -1098,8 +1153,9 @@ namespace
 
 		const g2::Frame silence{};
 
-		int  arrival      = -1;
-		bool arrivalExact = false;
+		int      arrival      = -1;
+		bool     arrivalExact = false;
+		unsigned framesPulled = 0;
 
 		for(unsigned q = 0; q < walk; ++q)
 		{
@@ -1109,13 +1165,39 @@ namespace
 			scheduler->runFrames(1);
 
 			g2::Frame out{};
-			(void) scheduler->pull(&out, 1);
+
+			/* THE PULL COUNT IS THE PAIR FOR THE ZERO, AND DISCARDING IT WAS THE
+			 * DEFECT. `out` is zero-initialised every quantum, so a sink that
+			 * delivered NOTHING leaves exactly the bytes a sink that delivered
+			 * SILENCE leaves. Without this count `arrival=-1` reports "the chain
+			 * did not carry it" and "the observer never saw a frame" in one
+			 * value, and the second says nothing about the chain at all. */
+			framesPulled += unsigned(scheduler->pull(&out, 1));
 
 			if(arrival < 0 && (out.slot[0] != 0 || out.slot[1] != 0))
 			{
 				arrival      = int(q);
 				arrivalExact = out.slot[0] == g_impulseLeft && out.slot[1] == g_impulseRight;
 			}
+		}
+
+		/* THE OBSERVER'S OWN KNOWN POSITIVE AND KNOWN NEGATIVE, RUN ON THE
+		 * DETECTOR AND NOT ON THE CHAIN. The loop above reports an absence, and
+		 * an absence reported by a detector that cannot detect is not evidence.
+		 * This drives the SAME two predicates over a frame this program built,
+		 * whose answers are known before the run: the injected pattern must be
+		 * seen and must compare equal, and a zero frame must not be seen. */
+		bool observerSelfTest = false;
+		{
+			const g2::Frame& positive = impulseFrame;
+			const g2::Frame& negative = silence;
+
+			const bool positiveSeen   = positive.slot[0] != 0 || positive.slot[1] != 0;
+			const bool positiveMatches = positive.slot[0] == g_impulseLeft
+				&& positive.slot[1] == g_impulseRight;
+			const bool negativeSeen   = negative.slot[0] != 0 || negative.slot[1] != 0;
+
+			observerSelfTest = positiveSeen && positiveMatches && !negativeSeen;
 		}
 
 		std::cout << "impulse: dspCount=" << dspCount
@@ -1130,6 +1212,8 @@ namespace
 		          << " faulted=" << (faulted ? 1 : 0) << std::endl;
 		std::cout << "impulse: primedPulled=" << primedPulled
 		          << " walkQuanta=" << walk
+		          << " framesPulled=" << framesPulled
+		          << " observerSelfTest=" << (observerSelfTest ? 1 : 0)
 		          << " arrival=" << arrival
 		          << " arrivalExact=" << (arrivalExact ? 1 : 0) << std::endl;
 
@@ -1179,11 +1263,27 @@ namespace
 		 * booted read its arrival off a chain that was not running, and a
 		 * pattern that arrived at the wrong frame or changed on the way is a
 		 * failure of the row and not a note beside it. */
-		const bool ok = booted && landed && !halted && !faulted
-			&& primedPulled == size_t(config.lookaheadFrames)
-			&& arrival == int(expected) && arrivalExact && countersZero;
+		/* THE VERDICT IS THE CLASSIFIER'S, AND IT IS ONE WORD BEFORE IT IS A
+		 * STATUS. The clauses that used to be AND-ed into a single bool are the
+		 * classifier's fields now, so a reader is told WHICH answer this was
+		 * rather than handed the conjunction's false and left to reconstruct it.
+		 * The success clause is unchanged: the same five conditions still have
+		 * to hold for a zero status. */
+		g2console::ImpulseObservation observation;
+		observation.reachedPlayPhase = booted && landed && !halted && !faulted
+			&& primedPulled == size_t(config.lookaheadFrames);
+		observation.observerSelfTest = observerSelfTest;
+		observation.framesPulled     = framesPulled;
+		observation.arrival          = arrival;
+		observation.arrivalExact     = arrivalExact;
+		observation.expectedArrival  = expected;
+		observation.countersZero     = countersZero;
 
-		return ok ? 0 : 1;
+		const g2console::ImpulseOutcome outcome = g2console::classify(observation);
+
+		reportOutcome(outcome, detailFor(outcome, observation));
+
+		return g2console::exitStatus(outcome);
 	}
 
 	/* TASK TOOL-13. THE GDB REMOTE STUB, AND IT IS OPT-IN AND ABSENT BY DEFAULT.
@@ -1352,10 +1452,15 @@ namespace
 		             " continue crosses a DSP handshake; breakpoints are MCF5307-side only"
 		          << std::endl;
 		std::cout << "  --help           print this listing and exit 0" << std::endl;
-		std::cout << "  --impulse        boot, enter the play phase, inject a known pattern at the"
-		             " codec source and report the frame at which it reaches the codec sink,"
-		             " against (dspCount - 1) * hopFrames; also report the seven chain-health"
-		             " counters. A late, changed or absent arrival exits non-zero" << std::endl;
+		std::cout << "  --impulse        TRANSPORT probe, and NOT an audio claim: boot, enter the"
+		             " play phase, inject a known pattern at the codec source and report whether"
+		             " and where it propagates, against (dspCount - 1) * hopFrames; also report"
+		             " the seven chain-health counters. It prints one OUTCOME word -- PROPAGATED"
+		             " (exit 0), PROPAGATED-OFF-SPEC or STOPPED (exit 1), DID-NOT-RUN (exit 2),"
+		             " INSTRUMENT-BLIND (exit 3) -- so a chain that carried nothing, a machine that"
+		             " never ran and an observer that saw nothing are told apart. An unpatched Nord"
+		             " Modular is silent by design, so STOPPED is the expected answer with no patch"
+		             " loaded and is not a defect in the transport" << std::endl;
 		std::cout << "options:" << std::endl;
 		std::cout << "  --dump-dsp-dma   modifier of --boot: additionally print each DSP"
 		             " position's DDR2, DCO2 and DCO4 and check them against design section 2.3;"
