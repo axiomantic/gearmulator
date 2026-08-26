@@ -482,6 +482,10 @@ namespace juceRmlUi
 	{
 		Component::visibilityChanged();
 
+		// we skip rendering while off screen, redraw as soon as possible instead of waiting for the next scheduled frame
+		if (isVisible())
+			enqueueUpdate();
+
 		if (isVisible() && m_openGLContext && !m_openGLContext->isAttached())
 			m_openGLContext->attachTo(*this);
 
@@ -619,23 +623,30 @@ namespace juceRmlUi
 
 			if (m_rmlContext)
 			{
+				// Two phases so we never hold an iterator into m_pressedKeys across ProcessKeyUp:
+				// a key handler can pump the message loop (a modal or native menu), during which a
+				// new keystroke re-enters keyPressed() and push_back()s here, reallocating the
+				// vector - erasing through the now-stale iterator would be a use-after-free.
+				std::vector<juce::KeyPress> released;
 				for (auto it = m_pressedKeys.begin(); it != m_pressedKeys.end();)
 				{
-					if (!it->isCurrentlyDown())
-					{
-						const auto& key = *it;
-						if (consumed(m_rmlContext->ProcessKeyUp(helper::toRmlKey(key), toRmlModifiers(key))))
-						{
-							res = true;
-							enqueueUpdate();
-						}
-						it = m_pressedKeys.erase(it);
-					}
-					else
+					if (it->isCurrentlyDown())
 					{
 						++it;
+						continue;
 					}
+					released.push_back(*it);
+					it = m_pressedKeys.erase(it);
 				}
+
+				for (const auto& key : released)
+				{
+					if (consumed(m_rmlContext->ProcessKeyUp(helper::toRmlKey(key), toRmlModifiers(key))))
+						res = true;
+				}
+
+				if (res)
+					enqueueUpdate();
 			}
 		}
 		if (res)
@@ -807,6 +818,15 @@ namespace juceRmlUi
 		return static_cast<RmlComponent*>(p);
 	}
 
+	bool RmlComponent::isOnScreen() const
+	{
+		if (!isShowing())
+			return false;
+
+		const auto* peer = getPeer();
+		return peer == nullptr || !peer->isMinimised();
+	}
+
 	void RmlComponent::update()
 	{
 		RmlInterfaces::ScopedAccess access(*this);
@@ -834,6 +854,12 @@ namespace juceRmlUi
 			stopTimer();
 		}
 
+		// There is no point in producing frames that nobody can see. On macOS this is not just a waste but a real
+		// problem: an off-screen CAMetalLayer keeps handing out drawables immediately instead of blocking on vsync,
+		// so the render pipeline loses its pacing and burns the GPU while the editor is hidden or minimized.
+		// The software and OpenGL renderers get this for free from juce, the Metal renderer drives its own thread.
+		const bool visible = isOnScreen() || m_screenshotState == ScreenshotState::RequestScreenshot;
+
 		m_updating = true;
 		m_renderDone = false;
 
@@ -857,9 +883,13 @@ namespace juceRmlUi
 			evPreUpdate(this);
 
 			m_rmlContext->Update();
-			m_rmlContext->Render();
 
-			m_renderProxy->finishFrame();
+			if (visible)
+			{
+				m_rmlContext->Render();
+
+				m_renderProxy->finishFrame();
+			}
 
 			evPostUpdate(this);
 		}
@@ -903,7 +933,12 @@ namespace juceRmlUi
 		m_updating = false;
 
 		// trigger a repaint and wait for OpenGL to be done with it
-		if (m_renderType == Renderer::Software)
+		if (!visible)
+		{
+			// no frame was produced, unblock the next update
+			m_renderDone = true;
+		}
+		else if (m_renderType == Renderer::Software)
 		{
 			// get rid of opengl context if we switched to software rendering
 			if (m_openGLContext)

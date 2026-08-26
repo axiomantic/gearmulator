@@ -56,17 +56,25 @@ elseif(APPLE)
 	    "-framework OpenGL"
 	    "-framework QuartzCore"  	
 	)
-	string(APPEND CMAKE_C_FLAGS_RELEASE " -funroll-loops -Ofast -flto -fno-stack-protector -g")
-	string(APPEND CMAKE_CXX_FLAGS_RELEASE " -funroll-loops -Ofast -flto -fno-stack-protector -g")
+	string(APPEND CMAKE_C_FLAGS_RELEASE " -funroll-loops -Ofast -flto -fno-stack-protector")
+	string(APPEND CMAKE_CXX_FLAGS_RELEASE " -funroll-loops -Ofast -flto -fno-stack-protector")
 
 	# Ship a dSYM for Release so crashes in released macOS builds can be symbolized (a tester's Live crash
-	# report could only be read as raw offsets because no dSYM existed). The -g above is what makes the Xcode
+	# report could only be read as raw offsets because no dSYM existed). The -g below is what makes the Xcode
 	# generator turn on GCC_GENERATE_DEBUGGING_SYMBOLS - it stays off for Release otherwise, and setting that
 	# attribute directly is a no-op because CMake overrides it per target. dwarf-with-dsym then makes Xcode run
 	# dsymutil to emit a <product>.dSYM whose UUID matches the binary. The shipped binary keeps the same
-	# optimized code; the debug info lives only in the .dSYM. Release only. Only the Xcode generator (every
-	# macOS release build, see scripts/generate.cmake) honours the attribute; Makefile/Ninja dev builds just
-	# get inline DWARF from -g.
+	# optimized code; the debug info lives only in the .dSYM. Release only.
+	#
+	# Gate -g to the Xcode generator: it is the only generator that emits the dSYM, and the one every shipped
+	# macOS build goes through (self-hosted M2 via scripts/generate.cmake). Makefile/Ninja builds - the
+	# GitHub-hosted Nightly/CMake smoke tests on stock macos-14 runners - get NO dSYM from -g, only inline
+	# DWARF that, under -flto, balloons each arm64 plugin-bundle link from seconds to ~30 min and busts
+	# GitHub's hard 6h job limit (every Nightly since 2026-07-30 was cancelled at 6h for exactly this).
+	if(CMAKE_GENERATOR STREQUAL "Xcode")
+		string(APPEND CMAKE_C_FLAGS_RELEASE " -g")
+		string(APPEND CMAKE_CXX_FLAGS_RELEASE " -g")
+	endif()
 	set(CMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=Release] "dwarf-with-dsym")
 else()
 	message("CMAKE_SYSTEM_PROCESSOR: " ${CMAKE_SYSTEM_PROCESSOR})
@@ -95,6 +103,15 @@ else()
 	string(APPEND CMAKE_C_FLAGS_RELEASE " -Ofast -fno-stack-protector")
 	string(APPEND CMAKE_CXX_FLAGS_RELEASE " -Ofast -fno-stack-protector")
 	string(APPEND CMAKE_CXX_FLAGS_DEBUG " -rdynamic")
+
+	# Link the C++ runtime statically so that shipped binaries do not require the
+	# libstdc++ of the machine they happened to be built on. Without this a binary
+	# built with the toolchain PPA demands a GLIBCXX version that even current
+	# distributions do not ship, for example GLIBCXX_3.4.30 needs gcc 12 and so
+	# fails on Ubuntu 22.04.
+	# Set globally on purpose: this used to be repeated per target and had already
+	# been forgotten for xtTestConsole, n2xTestConsole and the DSP bridge.
+	add_link_options(-static-libgcc -static-libstdc++)
 
 	execute_process(COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE)
 
