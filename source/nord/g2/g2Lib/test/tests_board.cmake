@@ -881,3 +881,51 @@ set_property(TARGET t0_gdb_stub PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_gdb_stub COMMAND t0_gdb_stub)
 set_tests_properties(t0_gdb_stub PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- TOOL-13 AMENDED, the GDB stub advancing the whole machine
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_gdb_dsp$
+#
+# TIER T1 AND GATED, and here the usual reason applies: the test READS
+# CODE_30000400.bin. The defect it exists for only shows against the real
+# firmware, because it is the real firmware's HDI08 handshake that a stub
+# stepping Board::runMcu alone can never cross. A machine without artifacts
+# prints the section 18.5 skip line and reports NOT VERIFIED rather than
+# passing in silence.
+#
+# THE GATE VARIABLES ARE THIS BLOCK'S OWN, under names of their own rather than
+# borrowed from a neighbouring block, for the reason those blocks already give:
+# a variable borrowed across blocks is how one task's edit silently changes
+# another task's registration. The skip code is READ OUT OF gatedFixture.h by
+# the same regex the other sites use, so the spellings cannot drift.
+#
+# IT LINKS g2Lib AND Threads. gdbStub.cpp and scheduler.cpp are both inside
+# g2Lib through sources_board.cmake and sources_sched.cmake, so the test drives
+# the same two translation units `g2TestConsole --gdb` drives and not a copy of
+# either. Threads is the test client, which lives on its own thread.
+#
+# THE TIMEOUT IS THE SUITE'S OUTER BOUND AND NOT THE TEST'S. The test carries
+# its own watchdog, which prints a NAMED reason and exits 1; this property is
+# the backstop for a process that could not even reach that thread.
+
+add_executable(t1_gdb_dsp t1_gdb_dsp.cpp)
+target_link_libraries(t1_gdb_dsp PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t1_gdb_dsp PRIVATE Threads::Threads)
+set_property(TARGET t1_gdb_dsp PROPERTY FOLDER "G2/test")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_gdbDspSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_gdbDspSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_gdbDspSkipExitCode "${CMAKE_MATCH_1}")
+
+add_test(NAME t1_gdb_dsp COMMAND t1_gdb_dsp)
+set_tests_properties(t1_gdb_dsp PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_gdbDspSkipExitCode} TIMEOUT 1200)
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_gdb_dsp APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()

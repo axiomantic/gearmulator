@@ -301,15 +301,59 @@ and reverting, at roughly ninety seconds a cycle:
 | What do the registers hold at a fault? | `continue` to the fault, then `info registers` |
 | What does this memory region contain right now? | `x/32xb 0x302a0db8` |
 
-**The limit: this reaches the MCF5307 only. There is no DSP56300 stub.** That
-core has no stock GDB target and would need its own register map and a custom
-target description. A question about DSP state still needs the older method.
+**The session drives the WHOLE machine.** `--gdb` builds the same `Scheduler`
+`--boot` builds and hands it to the stub, so a `continue` turns whole quanta in
+design section 13.5's order — panel, SOF, MCU, the eight DSPs, the chain — and
+the MCU can complete a host-command handshake. The stub adds one thing the
+quantum does not offer: a decision point between two MCU instructions, which is
+where the breakpoint compare happens. A breakpoint is therefore still an exact
+equality on the MCU program counter, tested after every single instruction, and
+the DSP advance cannot swallow or delay a hit.
 
-Two further limits, stated because neither is visible from the debugger side.
-The session steps `Board::runMcu` alone, so the Scheduler does not turn while
-it is open: the DSP set, the chain and the panel do not advance. And the stub is
-opt-in and absent by default — no test enables it, and a run without `--gdb`
-executes none of it.
+**`stepi` retires one MCU instruction and turns one whole quantum.** That is not
+timing-faithful and the gap is not small: a quantum's MCU budget is thousands of
+cycles and a step spends one instruction's worth. It is the smaller of the two
+available distortions — freezing the DSP set instead would distort the rate
+without limit and would make a stepped session unable to cross a handshake at
+all — and it is the direction the hardware goes, since halting one core at a
+debugger prompt does not halt the other nine. **Ask timing questions with
+`continue` and a breakpoint, never with a stepping session.**
+
+**One skew is worth knowing about.** The quantum in which a stop happens runs its
+remaining phases to completion, so the DSP set can be up to one block ahead of
+the MCU at the stop. Returning from the middle of a quantum would leave the
+machine in a state the scheduler's order never produces.
+
+### What this still cannot do
+
+**It reaches the MCF5307 only. There is no DSP56300 stub.** The DSPs now RUN;
+they are not INSTRUMENTED. There is no way to break on a DSP program counter, to
+read a DSP register through this session, or to watch a DSP memory address. That
+core has no stock GDB target and would need its own register map and a custom
+target description. **A question about DSP state still needs the older method.**
+
+**A breakpoint that is never reached reports a plausible MISS and not an error.**
+The stop reply a `continue` sends after exhausting its own bound is the same
+`T05` a real hit sends, so "the machine did not stop where I armed it" is
+reported as "not reached" whatever the reason. **Pair every negative with a known
+positive** — arm a second breakpoint you are certain is reached, and treat a run
+in which BOTH are missed as a broken instrument rather than as evidence. This
+cost the project a day once: a breakpoint on `0x30038D1E` came back a clean miss
+while the session had in fact stalled at `0x300505D4`, the MCU spinning on an
+HDI08 ISR byte for a DSP that could not run. That specific stall is what the
+Scheduler above fixes; the reporting shape it hid behind has not changed.
+
+**A watchpoint sees MCU bus traffic and nothing else.** The wrapper it works
+through sits in front of the MCU memory map's targets, so `watch` answers "who
+among the MCU's accesses wrote this" and never "did a DSP DMA write this". A
+watchpoint record is also cleared at the start of each quantum's MCU phase, so a
+stop reply names an access the MCU made in that phase.
+
+**No symbols and no source-level anything.** The firmware is a stripped binary.
+
+**The stub is opt-in and absent by default.** A run without `--gdb` executes none
+of it, and `Scheduler` pays one null check for each quantum when no stub is
+attached.
 
 The listening socket binds loopback and never `INADDR_ANY`. It is an
 unauthenticated channel with full read and write access to the emulated machine.

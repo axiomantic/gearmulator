@@ -534,6 +534,15 @@ namespace g2
 			mark(TracePhase::Mcu, frameIndex);
 			(void) runQuantum(m_mcu, [this](const uint32_t _want) noexcept
 			{
+				/* THE RUNNER IS NULL IN EVERY BUILD THAT IS NOT BEING
+				 * DEBUGGED, and the branch is the one TraceSink already
+				 * established. An installed runner is asked for the SAME want
+				 * and answers with the cycles it actually spent, so this line
+				 * is the only thing TOOL-13's amendment changes about the
+				 * quantum. */
+				if(m_mcuRunner != nullptr)
+					return m_mcuRunner->runMcu(_want);
+
 				return m_board.runMcu(_want);
 			});
 
