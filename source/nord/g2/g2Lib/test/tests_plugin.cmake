@@ -44,6 +44,27 @@ if(EXISTS "${g2_parentOfG2Lib}/g2TestConsole/CMakeLists.txt")
 
 	add_test(NAME t0_console_subcommands COMMAND t0_console_subcommands)
 	set_tests_properties(t0_console_subcommands PROPERTIES LABELS "UnitTest")
+
+	# ----------------- `--impulse` reports an outcome word
+	#
+	# Check: ctest --test-dir build --no-tests=error -R ^t0_impulse_outcome$
+	#
+	# TIER T0. Its child runs with NMG2_ARTIFACTS UNSET, so it boots no firmware.
+	#
+	# NO PLAN BLOCK OWNS THIS REGISTRATION YET. It is written here rather than
+	# left out because the behaviour it holds -- that a machine which never ran,
+	# a chain that carried nothing, and an observer that saw nothing must not
+	# print the same thing -- has no other mechanism, and a behaviour with no
+	# registered test is a behaviour nothing re-checks. The owning block is OWED.
+	add_executable(t0_impulse_outcome t0_impulse_outcome.cpp)
+	set_property(TARGET t0_impulse_outcome PROPERTY FOLDER "G2/test")
+	target_compile_definitions(t0_impulse_outcome PRIVATE
+		G2_TEST_CONSOLE_EXECUTABLE="$<TARGET_FILE:g2TestConsole>")
+	target_include_directories(t0_impulse_outcome PRIVATE "${g2_parentOfG2Lib}")
+	add_dependencies(t0_impulse_outcome g2TestConsole)
+
+	add_test(NAME t0_impulse_outcome COMMAND t0_impulse_outcome)
+	set_tests_properties(t0_impulse_outcome PROPERTIES LABELS "UnitTest")
 else()
-	message(STATUS "g2TestConsole is not part of this configure; t0_console_subcommands is not registered")
+	message(STATUS "g2TestConsole is not part of this configure; t0_console_subcommands and t0_impulse_outcome are not registered")
 endif()

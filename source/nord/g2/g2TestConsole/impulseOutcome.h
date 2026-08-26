@@ -1,0 +1,147 @@
+#pragma once
+
+/* THE OUTCOME OF A TRANSPORT PROBE, AS ONE WORD.
+ *
+ * `--impulse` injects a known, non-silent sample at the codec source and
+ * observes whether and where it propagates. IT IS A TRANSPORT PROBE AND NOT AN
+ * AUDIO CLAIM: it answers "does the path carry data", never "does the machine
+ * make music". The default state of a Nord Modular is to not play sound and
+ * sound comes from loading patches -- plan section 24.6 row W3-418 carries the
+ * operator's ruling -- so a chain that carries nothing on an UNPATCHED machine
+ * is the emulator agreeing with the hardware and is not a defect in the
+ * transport.
+ *
+ * WHY A WORD AND NOT A FIGURE. Before this, three different answers printed the
+ * same shape and differed only in digits: a machine that never reached the play
+ * phase, a chain that reached it and carried nothing, and an observer that never
+ * received a frame at all. The third is the one that hides: an unobserved
+ * impulse and a blind observer both print `arrival=-1`. A mechanism whose
+ * silence is indistinguishable from its success is not a mechanism.
+ *
+ * The classification is a free function over a plain record so that every arm
+ * is reachable from a test without booting a machine. The console fills the
+ * record from the run; the test fills it directly. */
+
+namespace g2console
+{
+	enum class ImpulseOutcome
+	{
+		// The play phase was never reached: no artifact, an image that did not
+		// place, a halted or faulted MCU, or kernels that never landed. NOTHING
+		// ABOUT THE CHAIN WAS MEASURED, and the word says so rather than
+		// reporting a chain that carried nothing.
+		DidNotRun,
+
+		// Every arm below this line rests on the observer having observed
+		// something. This one says it did not, so no arm below is available.
+		InstrumentBlind,
+
+		// The observer received frames and none carried the pattern. THE CHAIN
+		// DID NOT CARRY IT TO THE SINK. Expected on a machine with no patch
+		// loaded.
+		Stopped,
+
+		// The pattern reached the codec sink, unchanged, at the derived frame.
+		Propagated,
+
+		// The pattern reached the codec sink, but late, early, changed, or
+		// beside a non-zero chain-health counter.
+		PropagatedOffSpec
+	};
+
+	struct ImpulseObservation
+	{
+		/* Did the machine reach the play phase at all. */
+		bool     reachedPlayPhase = false;
+
+		/* The observer's own known-positive/known-negative control, run on the
+		 * comparator this program uses and not on the chain. False means the
+		 * detector cannot detect, so a report of "no arrival" would say nothing
+		 * about the chain. */
+		bool     observerSelfTest = false;
+
+		/* Frames the sink actually delivered across the walk. ZERO IS THE
+		 * BLINDNESS CASE: the detector examined a frame it was handed by
+		 * nothing, and a zero-filled buffer that was never written looks
+		 * exactly like silence that was. */
+		unsigned framesPulled     = 0;
+
+		/* The walk quantum at which a non-silent frame first appeared at the
+		 * sink, or -1 for none. */
+		int      arrival          = -1;
+
+		/* Whether that frame carried the injected pattern unchanged. */
+		bool     arrivalExact     = false;
+
+		/* The derived expectation, (dspCount - 1) * hopFrames. */
+		unsigned expectedArrival  = 0;
+
+		/* Every chain-health counter read zero across the walk. */
+		bool     countersZero     = false;
+	};
+
+	/* THE ORDER OF THESE CLAUSES IS THE WHOLE DESIGN, AND IT RUNS FROM THE
+	 * WEAKEST PREMISE OUTWARDS. Each clause below rests on the one above it
+	 * having held: a chain verdict rests on the observer having seen something,
+	 * and the observer's report rests on the machine having run. Reversing any
+	 * two would let a later clause read a field the earlier one has just said
+	 * is meaningless. */
+	constexpr ImpulseOutcome classify(const ImpulseObservation& _o)
+	{
+		// Nothing ran, so every field below it describes a machine that was
+		// never driven and none of them may be read as a chain verdict.
+		if(!_o.reachedPlayPhase)
+			return ImpulseOutcome::DidNotRun;
+
+		/* THE ZERO IS NOT ALLOWED TO PASS UNPAIRED. An absence reported by an
+		 * instrument that cannot observe is not an absence, so both halves of
+		 * "the observer worked" are required before an arrival or its lack is
+		 * given any meaning: the detector proved on a known positive and a
+		 * known negative, and the sink having delivered at least one frame for
+		 * it to look at. A buffer nothing wrote reads exactly like silence. */
+		if(!_o.observerSelfTest || _o.framesPulled == 0)
+			return ImpulseOutcome::InstrumentBlind;
+
+		// The observer worked and saw no pattern: the chain did not carry it.
+		// On an unpatched machine this is the CORRECT answer.
+		if(_o.arrival < 0)
+			return ImpulseOutcome::Stopped;
+
+		if(_o.arrival == int(_o.expectedArrival) && _o.arrivalExact && _o.countersZero)
+			return ImpulseOutcome::Propagated;
+
+		return ImpulseOutcome::PropagatedOffSpec;
+	}
+
+	constexpr const char* name(const ImpulseOutcome _outcome)
+	{
+		switch(_outcome)
+		{
+		case ImpulseOutcome::DidNotRun:         return "DID-NOT-RUN";
+		case ImpulseOutcome::InstrumentBlind:   return "INSTRUMENT-BLIND";
+		case ImpulseOutcome::Stopped:           return "STOPPED";
+		case ImpulseOutcome::Propagated:        return "PROPAGATED";
+		case ImpulseOutcome::PropagatedOffSpec: return "PROPAGATED-OFF-SPEC";
+		}
+
+		return "UNCLASSIFIED";
+	}
+
+	/* THE EXIT STATUS SEPARATES "THE ANSWER IS NO" FROM "THERE IS NO ANSWER".
+	 * A caller that reads only the status still learns which of the two it got:
+	 * 1 is a chain that did not carry the pattern, 2 is a machine that never
+	 * ran, and 3 is an instrument that could not see. */
+	constexpr int exitStatus(const ImpulseOutcome _outcome)
+	{
+		switch(_outcome)
+		{
+		case ImpulseOutcome::Propagated:        return 0;
+		case ImpulseOutcome::Stopped:           return 1;
+		case ImpulseOutcome::PropagatedOffSpec: return 1;
+		case ImpulseOutcome::DidNotRun:         return 2;
+		case ImpulseOutcome::InstrumentBlind:   return 3;
+		}
+
+		return 1;
+	}
+}
