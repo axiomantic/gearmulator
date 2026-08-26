@@ -15,10 +15,69 @@
  * a check must reach, and four pieces of surface that only move the wall are a
  * worse object than one seam that makes a real mutation go red.
  *
- * `g_useJIT` is a `static constexpr` at dsp.h:36, so the branch that reads it
- * folds at compile time and the interpreter build pays nothing for it. One
- * build carries one backend and the property is structural with no run-time
- * observable.
+ * 1. The `Backend` enum, SCH-17's. It records which backend the binary was
+ *    built with; it does not select one.
+ *
+ * 2. The `Scheduler::Config` struct. Every rejectable value of design section
+ *    13.10.5 arrives through it, which is what makes the factory the single
+ *    rejection point.
+ *
+ * 3. The `Scheduler::create` factory, DECLARED and not defined.
+ *
+ * 4. SCH-19's `TracePhase` and `TraceSink`, and the `Config::trace` member
+ *    that carries one. A null sink records nothing and is the default, so a
+ *    production Scheduler pays one null check for each phase of each quantum.
+ *    IT IS PRODUCTION SURFACE WHOSE ONLY CONSUMER IS A CHECK, and it is here
+ *    because the swap, the panel, the start-of-frame tick and the MCU all run
+ *    SERIALLY in the Scheduler, outside the Executor -- so the order they run
+ *    in has no other decider. Those phases and the Executor dispatch are the
+ *    whole of a quantum here: the ingress and the egress are PLAY REGIME ONLY,
+ *    this class carries no regime member, and SCH-22 is what adds them and
+ *    their two records. The alternative was four accessors, one for each thing
+ *    a check must reach, and four pieces of surface that only move the wall are
+ *    a worse object than one seam that makes a real mutation go red.
+ *
+ * 5. SCH-19's `runFrames`, the quantum entry point, and the private
+ *    constructor that wires the Executor and the Board in.
+ *
+ * 6. TOOL-13's `McuRunner` and `setMcuRunner`. A null runner means the MCU
+ *    phase of a quantum calls `Board::runMcu`, which is what every build that
+ *    is not being debugged does, so a production Scheduler pays one further
+ *    null check for each quantum. It exists because a debugger needs a
+ *    decision point BETWEEN two MCU instructions and a quantum offers none;
+ *    a debugger that carried its own copy of design section 13.5's order
+ *    instead would be a second full-advance path that nothing keeps in step
+ *    with this one.
+ *
+ * THE RULE SCH-17 OWNS, STATED IN ONE SENTENCE.
+ *
+ *   `Scheduler::create` succeeds only when `config.backend == Backend::Jit`
+ *    AND `dsp56k::g_useJIT` is true. Any other combination returns a null
+ *    `Scheduler` object.
+ *
+ * Design section 11.4.3 states the rule and gives the consequences: in
+ * a JIT build only `Backend::Jit` is accepted; in an interpreter build no
+ * `Scheduler` can be created at all, which is the correct outcome because
+ * `runDspCycles` cannot terminate in such a build (the DSP's `m_cycles`
+ * counter is never written); and the `Interpreter` enumerator stays because
+ * the semantic cross-check harness of design section 11.4.3 drives
+ * `DSP::exec` directly and never constructs a `Scheduler`.
+ *
+ * WHY THE IMPLEMENTATION IS NOT INLINE.
+ *
+ * The alternative was an inline body, and it was the right answer while the
+ * factory was one branch: a header that grows through SCH-18, SCH-19, SCH-21,
+ * SCH-22, SCH-23, SCH-24, SCH-28 and SCH-30 has no business owning a
+ * translation unit while its whole content is a single comparison. That
+ * stopped being true at SCH-18, which lands the rejection table. The body is
+ * now in `scheduler.cpp`, and SCH-18 opens that file rather than SCH-19,
+ * because §7.4.2 gives a path to the FIRST WRITER IN THE DEPENDS CHAIN and
+ * SCH-19 is not inside SCH-18's closure -- the edge runs the other way.
+ *
+ * `g_useJIT` IS A `static constexpr` AT dsp.h:36, so the branch that reads it
+ * folds at compile time and the interpreter build pays nothing for it. The
+ * design records that one build carries one backend and that the property is
+ * structural with no run-time observable.
  */
 
 #pragma once
@@ -67,6 +126,37 @@ namespace g2
 		virtual ~TraceSink() = default;
 
 		virtual void onPhase(TracePhase _phase, uint64_t _frameIndex) noexcept = 0;
+	};
+
+	/* THE MCU RUNNER, AND IT IS NULL IN EVERY BUILD THAT IS NOT BEING DEBUGGED.
+	 * Task TOOL-13's amendment.
+	 *
+	 * WHAT IT REPLACES AND WHAT IT MUST NOT CHANGE. The run phase of one quantum
+	 * asks `g2::runQuantum` for `want` MCU cycles and `Board::runMcu` supplies
+	 * them. An installed runner is asked for the SAME want and must answer with
+	 * the cycles it actually spent, so the cycle-debt block's arithmetic is
+	 * untouched: a runner that returns less than it was asked for is the ordinary
+	 * short-spend case that block already floors at zero, and no credit is
+	 * banked for either party.
+	 *
+	 * WHY A HOOK AND NOT A SECOND QUANTUM LOOP. Design section 13.5's order is
+	 * stated once, in Scheduler::runFrames, and a debugger that wrote its own
+	 * copy of that order would be a second full-advance path which nothing keeps
+	 * in step with the first. The ONE thing a debugger needs that the quantum
+	 * does not give it is a decision point BETWEEN two MCU instructions, which is
+	 * where a breakpoint compare has to happen; this is that point and it is
+	 * nothing else.
+	 *
+	 * THE COST IN A BUILD WITH NO RUNNER IS ONE NULL TEST FOR EACH QUANTUM, which
+	 * is the arrangement `TraceSink` above already established. */
+	class McuRunner
+	{
+	public:
+		virtual ~McuRunner() = default;
+
+		/* Answers the cycles actually spent, which may be fewer than `_want`.
+		 * `noexcept`, matching runFrames and design section 13.10 rule 2. */
+		virtual uint32_t runMcu(uint32_t _want) noexcept = 0;
 	};
 
 	class Scheduler
@@ -163,6 +253,15 @@ namespace g2
 		 * serial executor runs the jobs on this same thread; a parallel one may
 		 * use workers inside run(), which returns only when every job has. */
 		void runFrames(size_t _frames) noexcept;
+
+		/* INSTALL OR REMOVE THE MCU RUNNER. A null argument restores
+		 * `Board::runMcu`, which is what every build that is not being debugged
+		 * runs on. The Scheduler BORROWS the runner and never destroys it, so a
+		 * runner must outlive the Scheduler or remove itself first -- GdbStub's
+		 * destructor does the latter. */
+		void setMcuRunner(McuRunner* _runner) noexcept { m_mcuRunner = _runner; }
+
+		McuRunner* mcuRunner() const noexcept { return m_mcuRunner; }
 
 		/* THE BOOT-TO-PLAY TRANSITION, AS ONE CALL, and the boot thread's last
 		 * Scheduler action. Design section 13.10 rule 3 states its five steps
@@ -336,7 +435,12 @@ namespace g2
 		 * check for each phase of each quantum and nothing else. */
 		TraceSink* m_trace;
 
-		/* Held by value: the Scheduler owns exactly one ChainAdapter.
+		/* NULL MEANS Board::runMcu, so a production Scheduler pays one null
+		 * check for each quantum and nothing else. */
+		McuRunner* m_mcuRunner = nullptr;
+
+		/* HELD BY VALUE, design section 13.10.5: the Scheduler owns exactly one
+		 * ChainAdapter. Its four constructor arguments come from the Config.
 		 *
 		 * The callbacks it hands to the Board's ESAIs outlive it, and this
 		 * object installs no uninstaller. A destructor that cleared them would

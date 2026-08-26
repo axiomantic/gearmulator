@@ -11,8 +11,17 @@
 // direct eighteen-register big-endian serialisation with no remapping. They
 // reach the machine through `Board::mcuReg` and `Board::setMcuReg`.
 //
-// `Board::onRead` and `Board::onWrite` are the exact callbacks the core was
-// given, so `m` and `M` take the path the core takes.
+// IT OWNS NO EMULATOR STATE, AND THAT IS A PROPERTY AND NOT AN INTENTION.
+// Nothing in `g2Lib` gains a debug member for this file: the stub holds a
+// reference to a `Board` it did not create, and it holds its breakpoints and its
+// watchpoints in its OWN containers.
+//
+// ONE EXCEPTION, AND IT IS NAMED RATHER THAN LEFT FOR A READER TO FIND. The
+// amendment below gave `Scheduler` a borrowed `McuRunner*`, null in every build
+// that is not being debugged, costing one null test for each quantum -- which is
+// the arrangement `Scheduler::TraceSink` already established. Nothing else in
+// `g2Lib` knows this file exists, and a machine with no stub attached runs the
+// same quantum it ran before.
 //
 // `Board::runMcu(1)` forwards to `mcf5307_exec(ctx, 1)`, whose loop runs while
 // `spent < maxCycles` -- so a budget of one runs exactly one instruction,
@@ -27,10 +36,83 @@
 // `MemoryMap::attach` puts something else there, so the stub interposes itself
 // and forwards. The originals are restored when the stub is destroyed.
 //
-// The listening socket binds INADDR_LOOPBACK and never INADDR_ANY. This is an
-// unauthenticated command channel with full read and write access to the
-// emulated machine; it must not be reachable from another host, and the bind is
-// where that is decided.
+// THE STUB IS OPT-IN AND ABSENT BY DEFAULT. `g2TestConsole --gdb <port>` starts
+// it; no test enables it, and `t1_boot` and every T0 check run exactly as they
+// do today. A debugger that changed timing when nobody was debugging would
+// invalidate the suite it exists to serve.
+//
+// LOOPBACK ONLY. The listening socket binds INADDR_LOOPBACK and never
+// INADDR_ANY. This is an unauthenticated command channel with full read and
+// write access to the emulated machine; it must not be reachable from another
+// host, and the bind is where that is decided.
+//
+// WHAT IT IS NOT. There is NO DSP56300 STUB -- that core has no stock GDB
+// target and would need its own register map and target description, which is a
+// second task and not a wider version of this one. There is no symbol loading
+// and no source-level anything: the firmware is a stripped binary.
+//
+// ====================================================================
+// THE AMENDMENT: THE SESSION DRIVES THE WHOLE MACHINE, NOT THE MCU ALONE.
+// ====================================================================
+//
+// THE DEFECT THIS CLOSES HAS AN ABSENCE FOR A SYMPTOM. The first revision
+// stepped `Board::runMcu` and nothing else. The moment the MCU issued a host
+// command and busy-waited for a DSP to answer -- which is what it does on every
+// ordinary boot, at `0x300505D4`, spinning on an inverted HDI08 ISR byte after
+// `CVR=0xD6` -- no DSP ever ran, the wait never ended, and the `c` ran out its
+// own bound with the machine still spinning. THE DEBUGGER THEN REPORTED A CLEAN,
+// QUIET, PLAUSIBLE MISS. A breakpoint on any DSP-interacting routine said "not
+// reached" when the truth was "never got there". A pass of 2026-08-26 took
+// exactly that reading against `0x30038D1E`, recognised it as unsound and threw
+// it away; the reading itself was indistinguishable from a real negative.
+//
+// THE FULL-ADVANCE PATH IS THE SCHEDULER'S AND THIS FILE DOES NOT WRITE A
+// SECOND ONE. `Scheduler::runFrames` is the only site of design section 13.5's
+// quantum order -- swap, ingress, panel, SOF, MCU, the eight DSPs, egress -- and
+// a debugger carrying its own copy of that order would be a second full-advance
+// path that nothing keeps in step with the first. What the stub adds is the ONE
+// thing a quantum does not offer: a decision point BETWEEN two MCU instructions,
+// where a breakpoint compare has to happen. `Scheduler::McuRunner` is that point
+// and it is nothing else. The stub installs itself as the runner; the runner
+// steps `Board::runMcu(1)` up to the quantum's own want, checking breakpoints and
+// watchpoints after each instruction, and answers with the cycles it spent.
+//
+// WHAT A `c` MEANS NOW. The whole machine advances, quantum by quantum, until a
+// breakpoint, a watchpoint, the machine's own halt or the bound. A breakpoint is
+// still an EQUALITY on the MCU program counter and it is still tested after
+// every single instruction, so the DSP advance cannot swallow or delay a hit.
+// ONE SKEW IS STATED RATHER THAN HIDDEN: the quantum in which the stop happens
+// runs its REMAINING phases to completion, so the DSP set can be up to one
+// quantum ahead of the MCU at the stop. Stopping mid-quantum would leave the
+// machine in a state the scheduler's own order never produces, which is a worse
+// lie than a bounded, named skew.
+//
+// WHAT AN `s` MEANS NOW, AND WHY IT IS THE SMALLER OF TWO DISTORTIONS. One `s`
+// retires exactly ONE MCU instruction and turns ONE whole quantum, so the DSP
+// set, the chain and the panel each advance by one block. THAT IS NOT
+// TIMING-FAITHFUL and the number is not close: a quantum's MCU budget is
+// thousands of cycles and a step spends one instruction's worth, and the cycle
+// debt rule banks no credit for the shortfall. It is chosen anyway, over the
+// alternative of freezing everything but the MCU, for two reasons. FIRST, BOTH
+// CHOICES DISTORT RATE AND ONLY ONE IS BOUNDED: freezing the DSPs distorts it
+// without limit, because no amount of stepping ever advances them, so a stepped
+// session can never cross the handshake this amendment exists to cross. SECOND,
+// IT IS THE DIRECTION THE HARDWARE ITSELF GOES: halting one core at a debugger
+// prompt does not halt the other nine, and a human at that prompt lets them
+// free-run for millions of cycles. One quantum is conservative beside that.
+// A QUESTION ABOUT TIMING IS THEREFORE A QUESTION FOR `c` AND A BREAKPOINT, AND
+// NOT FOR A STEPPING SESSION.
+//
+// NO SCHEDULER, NO CHANGE. `attachScheduler` is what turns any of this on. A
+// stub constructed against a Board alone behaves exactly as the first revision
+// did -- `s` steps the MCU, `c` steps the MCU -- which is what every existing
+// check of this file drives and what a caller with no Scheduler to give still
+// gets.
+//
+// BREAKPOINTS REMAIN MCU-SIDE ONLY. The DSPs now RUN; they are not
+// INSTRUMENTED. There is still no way to break on a DSP56300 program counter,
+// to read a DSP register through this session, or to watch a DSP memory
+// address, and none of that is a wider version of this task.
 
 #pragma once
 
@@ -42,6 +124,7 @@
 
 #include "board.h"
 #include "memoryMap.h"
+#include "scheduler.h"
 
 namespace g2
 {
@@ -62,9 +145,25 @@ namespace g2
 		GdbStub& operator=(GdbStub&&)      = delete;
 
 		/* Bind and listen on 127.0.0.1. A port of zero asks the operating system
-		 * for a free one. Returns the port actually bound, and zero on failure --
-		 * the caller has no listening socket in that case and nothing else here
-		 * will answer. */
+		 * for a free one, which is what the check uses so that two runs cannot
+		 * collide. Returns the port actually bound, and ZERO on failure -- the
+		 * caller has no listening socket in that case and nothing else here will
+		 * answer. */
+		/* GIVE THE SESSION THE WHOLE MACHINE. Without this the stub drives
+		 * `Board::runMcu` and nothing else, which is what the file header calls
+		 * out as the defect: a breakpoint past an HDI08 handshake then reports a
+		 * clean, plausible MISS rather than being reached.
+		 *
+		 * IT MAY BE CALLED ONCE AND THE STUB DOES NOT OWN THE SCHEDULER. The
+		 * stub installs itself as that Scheduler's `McuRunner` and removes
+		 * itself in its destructor, so the Scheduler must outlive the stub --
+		 * which the declaration order every caller already uses gives for free,
+		 * the Scheduler being declared before the stub and destroyed after it.
+		 *
+		 * IT DOES NOT ADVANCE THE MACHINE. Nothing here runs a quantum; the
+		 * debugger's own `s` and `c` are still what run it. */
+		void attachScheduler(Scheduler& _scheduler);
+
 		uint16_t listenOn(uint16_t _port);
 
 		uint16_t port() const { return m_port; }
@@ -114,6 +213,21 @@ namespace g2
 			Region           m_region;
 		};
 
+		/* THE MCU RUNNER THE SCHEDULER CALLS INSTEAD OF `Board::runMcu`. It is a
+		 * separate object rather than a base of GdbStub so that the stub's
+		 * public surface does not grow a `runMcu` the protocol layer could call
+		 * by mistake -- the same arrangement Watcher above uses for the bus. */
+		class McuDriver final : public McuRunner
+		{
+		public:
+			explicit McuDriver(GdbStub& _stub) : m_stub(_stub) {}
+
+			uint32_t runMcu(uint32_t _want) noexcept override { return m_stub.runMcuBudget(_want); }
+
+		private:
+			GdbStub& m_stub;
+		};
+
 		struct Watchpoint
 		{
 			uint32_t address = 0;
@@ -149,6 +263,20 @@ namespace g2
 		std::string writeMemory(const std::string& _arguments);
 		std::string step();
 		std::string resume();
+
+		/* THE MCU HALF OF ONE QUANTUM, INSTRUCTION BY INSTRUCTION. Called by
+		 * McuDriver with the want the cycle-debt block computed, it steps
+		 * `Board::runMcu(1)` until it has spent that many cycles, until the
+		 * instruction allowance runs out, or until a stop condition fires, and
+		 * answers the cycles it actually spent. */
+		uint32_t runMcuBudget(uint32_t _want) noexcept;
+
+		// TRUE when the MCU program counter equals an armed breakpoint address.
+		bool atBreakpoint() const;
+
+		/* Drive whole quanta until `m_stop`, the machine's halt or `_bound`.
+		 * The one site that turns the Scheduler, used by both `s` and `c`. */
+		void driveQuanta(uint64_t _bound);
 		std::string setPoint(const std::string& _arguments, bool _insert);
 
 		std::string stopReply() const;
@@ -173,5 +301,31 @@ namespace g2
 		std::vector<std::unique_ptr<Watcher>> m_watchers;
 
 		Hit m_hit;
+
+		/* NULL UNTIL attachScheduler, AND THAT IS THE WHOLE SWITCH between the
+		 * MCU-only session the first revision served and the whole-machine one
+		 * this file now serves. */
+		Scheduler* m_scheduler = nullptr;
+
+		McuDriver m_mcuDriver;
+
+		/* SET BY runMcuBudget WHEN THE MACHINE SHOULD STOP -- a breakpoint, a
+		 * watchpoint or the machine's own halt. It is what carries that decision
+		 * out of the middle of a quantum, which has no other return path. */
+		bool m_stop = false;
+
+		/* THE INSTRUCTIONS ONE DRIVE MAY RETIRE. Unbounded for a `c`, ONE for an
+		 * `s`, and it is what makes a step a step rather than a whole quantum of
+		 * MCU progress.
+		 *
+		 * IT RESTS AT UNBOUNDED AND NOT AT ZERO. The runner stays installed for
+		 * the stub's whole life, so a Scheduler driven by anything other than a
+		 * debugger command must still run the MCU's whole want; a resting
+		 * allowance of zero would silently starve the MCU of every quantum such
+		 * a caller turned. */
+		uint64_t m_allowance = ~uint64_t(0);
+
+		// Retired by the current drive, against the allowance.
+		uint64_t m_retired = 0;
 	};
 }
