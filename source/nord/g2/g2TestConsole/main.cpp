@@ -583,11 +583,59 @@ namespace
 		return buf;
 	}
 
+	/* DDR2 IS A MOVING POINTER AND A TERMINAL READ OF IT ANSWERS THE WRONG
+	 * QUESTION. M4's own row, clause (b), states what this check is for: "THE
+	 * DMA CHECK READS REGISTERS AND NOT TRAFFIC: it establishes that the kernel
+	 * PROGRAMMED each position's DMA block correctly, and nothing about whether
+	 * any sample has ever moved through it." DDR is the DESTINATION pointer of
+	 * a receive channel and `DmaChannel::execTransfer` advances it on every
+	 * transfer -- the `increment(m_ddr)`, `++m_ddr` and `m_ddr += m_dco + 1`
+	 * sites in `dma.cpp` -- and the emulator saves no base beside it. After
+	 * 500,000 frames it holds wherever the traversal has reached.
+	 *
+	 * MEASURED, 2026-08-26, BEFORE THIS LATCH EXISTED: all eight positions read
+	 * FAIL on DDR2 alone, $001D10 at the seven interior-or-tail positions and
+	 * $001D08 at the head, against the $001C00 and $001C04 design section 2.3
+	 * records. EVERY DCO2 AND DCO4 MATCHED. Nothing regressed: DCO does not
+	 * move, so the two registers that stayed put stayed correct.
+	 *
+	 * SO DDR2 IS LATCHED AT ITS FIRST NON-ZERO VALUE, WHICH IS THE VALUE THE
+	 * KERNEL PROGRAMMED. This is `t1_kernel_load`'s own mechanism, not a new
+	 * one: that file latches the same register the same way, at the same
+	 * one-frame granularity this loop drives, and its latched channel-2 DDR
+	 * reads $001C00 and $001C04 while its own terminal read is what the block
+	 * beside its `latchFirst` records as having been mistaken for a defect.
+	 *
+	 * WHAT THIS DOES NOT CLAIM: the sample is taken once per scheduler
+	 * iteration, so it is the first iteration boundary at or after the write
+	 * and not the writing instruction. A register written twice inside one
+	 * iteration would be latched at the second value. `g_framesPerIteration` is
+	 * 1, so that bound is the frame and is the same bound `t1_kernel_load`
+	 * states for itself. */
+	bool latchDdr2(g2::Board& _board, std::vector<dsp56k::TWord>& _latched)
+	{
+		bool complete = true;
+
+		for(unsigned position = 0; position < _latched.size(); ++position)
+		{
+			if(_latched[position] != 0u)
+				continue;
+
+			_latched[position] =
+				_board.dspSet().peripherals(position).getDMA().getDDR(g_dmaRxChannel);
+
+			if(_latched[position] == 0u)
+				complete = false;
+		}
+
+		return complete;
+	}
+
 	// Prints one line for each position and answers whether EVERY position
 	// matched. THE VERDICT IS THE WORST POSITION: `all` is a conjunction over
 	// the per-position results and never a separately computed summary, so a
 	// single FAIL row cannot coexist with a PASS verdict.
-	bool dumpDspDma(g2::Board& _board)
+	bool dumpDspDma(g2::Board& _board, const std::vector<dsp56k::TWord>& _ddr2Latched)
 	{
 		const unsigned count = _board.dspSet().dspCount();
 
@@ -602,7 +650,13 @@ namespace
 			// the harness maintained beside it.
 			dsp56k::Dma& dma = _board.dspSet().peripherals(position).getDMA();
 
-			const dsp56k::TWord ddr2 = dma.getDDR(g_dmaRxChannel);
+			/* DDR2 COMES FROM THE LATCH AND NOT FROM `dma`, for the reason the
+			 * block above latchDdr2 states. A position that never latched
+			 * carries zero, which no section 2.3 row expects, so it reports
+			 * FAIL rather than passing on an unwritten register. */
+			const dsp56k::TWord ddr2 = position < _ddr2Latched.size()
+			                         ? _ddr2Latched[position]
+			                         : dsp56k::TWord(0);
 			const dsp56k::TWord dco2 = dma.getDCO(g_dmaRxChannel);
 			const dsp56k::TWord dco4 = dma.getDCO(g_dmaTxChannel);
 
@@ -637,8 +691,12 @@ namespace
 		if(count == 0)
 			all = false;
 
+		// WHICH SAMPLE EACH REGISTER IS, said in the output rather than left to
+		// a reader who knows this file: DDR2 moves and the other two do not.
 		std::cout << "dsp-dma=" << (all ? "PASS" : "FAIL")
-		          << " (measured/expected, expectations from design section 2.3)"
+		          << " (measured/expected, expectations from design section 2.3;"
+		             " DDR2 is LATCHED at its first written value and DCO2/DCO4"
+		             " are read at the bound)"
 		          << std::endl;
 
 		return all;
@@ -749,9 +807,21 @@ namespace
 		std::string line0;
 		std::string line1;
 
+		/* THE DDR2 LATCH, SIZED FROM THE DSP SET'S OWN COUNT so it cannot
+		 * disagree with the loop that reads it back. It is armed only under the
+		 * flag: `--boot` alone must drive exactly the machine it drove before. */
+		std::vector<dsp56k::TWord> ddr2Latched;
+		bool                       ddr2Complete = false;
+
+		if(_dumpDspDma)
+			ddr2Latched.resize(board.dspSet().dspCount(), 0u);
+
 		for(; iteration < g_iterations; ++iteration)
 		{
 			scheduler->runFrames(g_framesPerIteration);
+
+			if(_dumpDspDma && !ddr2Complete)
+				ddr2Complete = latchDdr2(board, ddr2Latched);
 
 			if(board.mcuHalted())
 				break;
@@ -854,7 +924,7 @@ namespace
 		 *
 		 * IT IS SKIPPED ENTIRELY WITHOUT THE FLAG, so `--boot` alone answers on
 		 * the banner predicate exactly as it did before this task. */
-		const bool dmaOk = _dumpDspDma ? dumpDspDma(board) : true;
+		const bool dmaOk = _dumpDspDma ? dumpDspDma(board, ddr2Latched) : true;
 
 		/* BOTH CLAUSES, AND THE VERDICT IS THE WORSE OF THE TWO. A run whose
 		 * DMA registers matched but which never composed a banner read those
