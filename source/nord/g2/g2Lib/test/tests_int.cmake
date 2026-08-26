@@ -44,6 +44,20 @@ add_executable(t1_chain_health t1_chain_health.cpp)
 target_link_libraries(t1_chain_health PRIVATE g2Lib)
 set_property(TARGET t1_chain_health PROPERTY FOLDER "G2/test")
 
+# ----------------- the chain order: which hardware port carries which position
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_chain_order$
+#
+# TIER T1, gated exactly as t1_boot is. It boots the firmware, derives the
+# firmware's own port ordering twice by paths that share no arithmetic -- the
+# base table at 0x30116970 and the kernel's own DMA slot counts -- and asserts
+# that attachChainCallbacks puts chain position 0 on the head DSP and chain
+# position N - 1 on the tail DSP.
+
+add_executable(t1_chain_order t1_chain_order.cpp)
+target_link_libraries(t1_chain_order PRIVATE g2Lib)
+set_property(TARGET t1_chain_order PROPERTY FOLDER "G2/test")
+
 # ----------------- the gate, made visible to ctest and satisfiable by build
 #
 # ctest reads an exit status and never a summary line. gatedFixture.h owns the
@@ -85,6 +99,9 @@ set_tests_properties(t1_egress PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_C
 add_test(NAME t1_chain_health COMMAND t1_chain_health)
 set_tests_properties(t1_chain_health PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_gatedSkipExitCode})
 
+add_test(NAME t1_chain_order COMMAND t1_chain_order)
+set_tests_properties(t1_chain_order PROPERTIES LABELS "IntegrationTest" TIMEOUT 600 SKIP_RETURN_CODE ${g2_gatedSkipExitCode})
+
 # Only when the directory is really there. Handing the gate a path that does not
 # exist would trade the resolver's "unset" message for its "names no directory"
 # message and report a machine without artifacts as a machine misconfigured.
@@ -92,6 +109,7 @@ if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_boot APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 	set_property(TEST t1_egress APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 	set_property(TEST t1_chain_health APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+	set_property(TEST t1_chain_order APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 	message(STATUS "g2 gated tests: NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 else()
 	message(STATUS "g2 gated tests: no artifacts at '${NMG2_ARTIFACTS}', gated tests will report Skipped")

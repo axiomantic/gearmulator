@@ -51,6 +51,8 @@
 
 #include "scheduler.h"
 
+#include "chainOrder.h"
+
 #include "board.h"
 #include "dspSet.h"
 #include "cycleDebt.h"
@@ -210,6 +212,35 @@ namespace g2
 			return nullptr;
 		}
 
+		/* THE CHAIN ORDER, WHEN THE CALLER NAMED ONE. Empty is the production
+		 * value and means "derive it from the machine", which nothing here can
+		 * check; a named order is checked in full, because a Scheduler is not
+		 * rejectable after construction and the constructor has no channel to
+		 * report through. attachChainCallbacks applies the same rule at its own
+		 * site -- this is the rejection, not a second definition of validity. */
+		if(!_config.chainOrder.empty())
+		{
+			if(_config.chainOrder.size() != _config.dspCount)
+			{
+				_outStatus = Status::BadChainOrder;
+				return nullptr;
+			}
+
+			for(unsigned a = 0; a < _config.dspCount; ++a)
+			{
+				bool bad = _config.chainOrder[a] >= _config.dspCount;
+
+				for(unsigned b = a + 1u; b < _config.dspCount && !bad; ++b)
+					bad = _config.chainOrder[a] == _config.chainOrder[b];
+
+				if(bad)
+				{
+					_outStatus = Status::BadChainOrder;
+					return nullptr;
+				}
+			}
+		}
+
 		_outStatus = Status::Ok;
 		return std::unique_ptr<Scheduler>(new Scheduler(_config, _executor, _board));
 	}
@@ -290,12 +321,103 @@ namespace g2
 		 * shape from the first quantum onwards. */
 		rebuildDispatchSet();
 
-		/* LAST, AND THE ORDER IS LOAD-BEARING. This call publishes callbacks
-		 * that capture `this` into ESAIs the Board owns, so every member the
-		 * callbacks reach must already hold its final value when it runs.
-		 * Publishing a half-built object is the one ordering error here that
-		 * no compiler reports. */
-		attachChainCallbacks(m_chain, set);
+		/* THE CHAIN CANNOT BE WIRED HERE FROM THE MACHINE, AND THAT IS WHY THE
+		 * PRODUCTION PATH DOES NOT WIRE IT HERE AT ALL. attachChainCallbacks
+		 * needs the position-to-port order, chainOrder.h derives that order from
+		 * a table the FIRMWARE builds at boot, and this constructor runs before
+		 * the firmware has executed an instruction. The table is zero at this
+		 * point and reads as no order at all.
+		 *
+		 * SO THE ATTACH IS LATE, AND runFrames CARRIES IT. Attaching here with
+		 * an identity order instead would be a chain order guessed at the one
+		 * moment the machine cannot be asked, and it would be the wrong one:
+		 * the firmware does not put the head of the audio chain on slot 0. A
+		 * caller with no firmware to ask names its own order in the Config and
+		 * the block at the end of this constructor wires that one immediately.
+		 *
+		 * UNTIL IT LANDS THE PORTS ARE MADE IDLE, AND THAT IS NOT THE SAME AS
+		 * LEAVING THEM ALONE. dspSet.h carries the reason at
+		 * installIdleChainCallbacks: the library's own default receive callback
+		 * BLOCKS waiting for a host frame, so a port left wearing it stops the
+		 * thread that runs its DSP and this object never gets another quantum in
+		 * which to wire anything.
+		 *
+		 * THE WINDOW IS ONE QUANTUM WIDE AT MOST. The attach fires on the first
+		 * quantum after the first program lands, and a DSP that has landed no
+		 * program runs nothing.
+		 *
+		 * THE SCRATCH VECTOR IS SIZED HERE so that the late attach allocates
+		 * nothing inside a quantum. */
+		installIdleChainCallbacks(set);
+
+		m_chainOrder.assign(set.dspCount(), set.dspCount());
+
+		/* A CALLER THAT NAMED AN ORDER GETS IT NOW, AND KEEPS IT. create() has
+		 * already vetted it, so this attach cannot refuse; the return is read
+		 * rather than discarded so that a future rejection cannot be lost here.
+		 *
+		 * THE FLAG IS WHAT STOPS THE LATE ATTACH FROM OVERWRITING IT. A harness
+		 * that names an order is a harness that has no firmware to ask, and one
+		 * that has both gets the one it asked for.
+		 *
+		 * THIS IS THE LAST THING THE CONSTRUCTOR DOES, AND THE ORDER IS
+		 * LOAD-BEARING. It publishes callbacks that capture `this` into ESAIs
+		 * the Board owns, so every member the callbacks reach must already hold
+		 * its final value. Publishing a half-built object is the one ordering
+		 * error here that no compiler reports. */
+		m_configuredChainOrder = _config.chainOrder;
+
+		if(!m_configuredChainOrder.empty())
+			m_chainAttached = attachChainCallbacks(m_chain, set, m_configuredChainOrder) == Status::Ok;
+	}
+
+	/* THE LATE ATTACH, AND IT IS SELF-VALIDATING RATHER THAN TIMED. There is no
+	 * "boot has finished" signal to hang this on, and a fixed quantum count
+	 * would be a guess. The condition is the ANSWER ITSELF: readChainOrder names
+	 * every position only once the firmware has built its table, and
+	 * attachChainCallbacks refuses anything that is not a permutation of the
+	 * slots. Both refusals leave the chain unattached and this call tries again
+	 * on the next quantum.
+	 *
+	 * IT FAILS LOUDLY BY CONSTRUCTION. A machine whose table never appears is a
+	 * machine whose ESAIs never reach the ChainAdapter, so every mailbox stays
+	 * empty, every written flag stays clear and the codec sink stays silent --
+	 * rather than a machine that quietly ran the chain in the wrong order.
+	 *
+	 * IT WAITS FOR THE FIRST LANDED PROGRAM BEFORE IT READS ANYTHING. The
+	 * firmware needs the port base table to download a kernel at all, so a
+	 * landed program is proof the table exists; and a board whose SDRAM has no
+	 * target logs an anomaly for every unmapped read, which an unguarded probe
+	 * would produce once a quantum for the life of the run. */
+	bool Scheduler::chainAttached() const noexcept
+	{
+		return m_chainAttached;
+	}
+
+	void Scheduler::attachChainIfOrderKnown() noexcept
+	{
+		DspSet& set = m_board.dspSet();
+
+		const unsigned count = set.dspCount();
+
+		bool anyLanded = false;
+
+		for(unsigned slot = 0; slot < count && !anyLanded; ++slot)
+		{
+			const bool* const landed = set.programLanded(slot);
+			anyLanded = landed != nullptr && *landed;
+		}
+
+		if(!anyLanded)
+			return;
+
+		if(readChainOrder(m_board, count, m_chainOrder) != count)
+			return;
+
+		if(attachChainCallbacks(m_chain, set, m_chainOrder) != Status::Ok)
+			return;
+
+		m_chainAttached = true;
 	}
 
 	void Scheduler::mark(const TracePhase _phase, const uint64_t _frameIndex) const noexcept
@@ -361,6 +483,12 @@ namespace g2
 
 		for(size_t f = 0; f < _frames; ++f)
 		{
+			/* BEFORE THE SWAP AND BEFORE THE RUN PHASE, so the quantum that
+			 * wires the chain also runs its DSPs through it. After the attach
+			 * this is one predicted branch. */
+			if(!m_chainAttached)
+				attachChainIfOrderKnown();
+
 			const uint64_t frameIndex = m_frameIndex;
 
 			/* The frame index reaches every context before Executor::run, and
@@ -671,6 +799,18 @@ namespace g2
 
 		m_board.reset();
 		m_chain.reset();
+
+		/* A DERIVED ORDER IS RE-DERIVED RATHER THAN KEPT. Board::reset returns
+		 * the machine to its pre-boot state, and an order read from it before
+		 * that is an answer about a machine that no longer exists. The ESAIs
+		 * keep the callbacks they were last given until the next attach
+		 * replaces them, which is the same state a Scheduler that has not
+		 * attached yet leaves behind.
+		 *
+		 * AN ORDER THE CALLER NAMED SURVIVES, because it was never read from
+		 * the machine and the reset says nothing about it. */
+		if(m_configuredChainOrder.empty())
+			m_chainAttached = false;
 
 		for(unsigned p = 0; p < static_cast<unsigned>(m_underrunBase.size()); ++p)
 		{

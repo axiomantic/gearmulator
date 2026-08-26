@@ -33,6 +33,7 @@
 #include "chainAdapter.h"
 #include "dspSet.h"
 #include "esaiFrame.h"
+#include "status.h"
 
 #include "dsp56kEmu/esai.h"
 #include "dsp56kEmu/peripherals56311.h"
@@ -40,6 +41,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
 namespace
 {
@@ -99,6 +101,23 @@ int main()
 		{kPositions, 3u, g2::ChainTopology::Ring, kSecondBusFrameDivider},
 	};
 
+	/* THE POSITION-TO-PORT ORDER, ONE FOR EACH ROUND, AND ONLY THE FIRST IS THE
+	 * IDENTITY. attachChainCallbacks takes the order the firmware chooses, and
+	 * on the real machine it is not the identity -- chainOrder.h carries why. A
+	 * test that only ever handed it the identity would stay green against an
+	 * installer that ignored the argument, so the two other rounds hand it
+	 * permutations and every slot below is reached THROUGH the round's order. */
+	static const unsigned kOrders[][kPositions] =
+	{
+		{0, 1, 2, 3, 4, 5, 6, 7},
+		{7, 6, 5, 4, 3, 2, 1, 0},
+		{3, 7, 6, 5, 4, 2, 1, 0},
+	};
+
+	static_assert(sizeof(kOrders) / sizeof(kOrders[0]) ==
+	              sizeof(adapters) / sizeof(adapters[0]),
+		"every round needs its own position-to-port order");
+
 	g2::DspSet set;
 
 	uint64_t frameIndex = 0;
@@ -107,23 +126,30 @@ int main()
 	{
 		g2::ChainAdapter& adapter = adapters[round];
 
-		g2::attachChainCallbacks(adapter, set);
+		const std::vector<unsigned> order(kOrders[round], kOrders[round] + kPositions);
+
+		check(g2::attachChainCallbacks(adapter, set, order) == g2::Status::Ok,
+			"the installer accepted this round's position-to-port order", round, 0);
 
 		/* After the install, NEVER BEFORE. Enabling a transmitter drives one
 		 * execTX out of writeTransmitControlRegister, and the callback that
 		 * fires is whichever one is installed at that instant. */
 		for(unsigned i = 0; i < kPositions; ++i)
 		{
-			enableTransmitter(set.peripherals(i).getEsai());
-			enableReceiver(set.peripherals(i).getEsai());
-			enableReceiver(set.peripherals(i).getEsai1());
+			enableTransmitter(set.peripherals(order[i]).getEsai());
+			enableReceiver(set.peripherals(order[i]).getEsai());
+			enableReceiver(set.peripherals(order[i]).getEsai1());
 		}
 
 		for(unsigned i = 0; i + 1u < kPositions; ++i)
 		{
-			dsp56k::Esai& source     = set.peripherals(i).getEsai();
-			dsp56k::Esai& sinkAudio  = set.peripherals(i + 1u).getEsai();
-			dsp56k::Esai& sinkSecond = set.peripherals(i + 1u).getEsai1();
+			/* THE INDEX IS A CHAIN POSITION AND THE SLOT IT REACHES IS A
+			 * HARDWARE PORT. Adjacency is a property of POSITIONS, so the
+			 * arrival this loop asserts is position i's frame at position
+			 * i + 1 -- whichever slots this round's order put them on. */
+			dsp56k::Esai& source     = set.peripherals(order[i]).getEsai();
+			dsp56k::Esai& sinkAudio  = set.peripherals(order[i + 1u]).getEsai();
+			dsp56k::Esai& sinkSecond = set.peripherals(order[i + 1u]).getEsai1();
 
 			const dsp56k::TWord sample = 0x100000u + (round << 8) + i + 1u;
 

@@ -60,9 +60,35 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 namespace
 {
+
+	/* THE POSITION-TO-PORT ORDER EVERY Scheduler IN THIS FILE IS BUILT WITH, AND
+	 * NAMING IT IS THE POINT.
+	 *
+	 * On a real machine the order is the FIRMWARE's and it is not the identity;
+	 * a Scheduler built with an empty Config::chainOrder therefore leaves its
+	 * ports idle and wires the chain only once the firmware's own table can be
+	 * read. NO FIRMWARE RUNS IN THIS FILE -- the header above says so -- so such
+	 * a Scheduler would never wire its chain at all and every arrival this file
+	 * asserts would be an arrival of nothing.
+	 *
+	 * SO THE ORDER IS SUPPLIED, AND THE IDENTITY IS THE RIGHT ONE HERE: this
+	 * file drives the ESAIs itself and holds every position to the slot of the
+	 * same number, which is what makes its own assertions readable. It is a
+	 * harness's choice and never a claim about the machine.
+	 */
+	std::vector<unsigned> identityChainOrder()
+	{
+		std::vector<unsigned> order(g2::kJobCount);
+
+		for(unsigned i = 0; i < static_cast<unsigned>(g2::kJobCount); ++i)
+			order[i] = i;
+
+		return order;
+	}
 	int g_failures = 0;
 	int g_cases    = 0;
 
@@ -501,6 +527,7 @@ namespace
 	void caseHopForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
 		g2::Scheduler::Config config;
+		config.chainOrder = identityChainOrder();
 		config.hopFrames    = 2;
 		config.testOverride = true;
 
@@ -594,6 +621,7 @@ namespace
 	void caseSecondBusForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
 		g2::Scheduler::Config config;
+		config.chainOrder = identityChainOrder();
 
 		g2::Status status{};
 
@@ -715,6 +743,7 @@ namespace
 	void caseSecondBusDividerOneForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
 		g2::Scheduler::Config config;
+		config.chainOrder = identityChainOrder();
 		config.secondBusFrameDivider = 1;
 		config.testOverride          = true;
 
@@ -813,6 +842,7 @@ namespace
 	void caseSecondBusTopologyForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
 		g2::Scheduler::Config config;
+		config.chainOrder = identityChainOrder();
 		config.secondBusTopology = g2::ChainTopology::Line;
 
 		g2::Status status{};
@@ -912,6 +942,7 @@ namespace
 		RecordingExecutor executor;
 
 		g2::Scheduler::Config config;
+		config.chainOrder = identityChainOrder();
 		config.secondBusFrameDivider = 2;
 		config.testOverride          = true;
 		config.dspRate               = { 12345u, 67u };
@@ -986,7 +1017,8 @@ int main()
 	RecordingTrace     trace;
 
 	g2::Scheduler::Config config;
-	config.trace = &trace;
+	config.chainOrder = identityChainOrder();
+	config.trace      = &trace;
 
 	g2::Status status{};
 

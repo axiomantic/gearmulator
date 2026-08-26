@@ -173,6 +173,44 @@ namespace g2
 	 * A constructor parameter was rejected for the same reason it was there:
 	 * every declaration of a DspSet in this tree default-constructs it, the
 	 * Board's own member among them, and a parameter breaks all of them where
-	 * a free function breaks none. */
-	void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set);
+	 * a free function breaks none.
+	 *
+	 * _portOfPosition IS THE CHAIN ORDER AND IT IS REQUIRED. Entry `position`
+	 * holds the hardware port -- the SLOT INDEX of this set -- that carries that
+	 * chain position. chainOrder.h carries where the order comes from and why it
+	 * is not the identity; the short of it is that the firmware chooses which
+	 * DSP is the head of the audio chain and it does not choose slot 0. A
+	 * position's callbacks installed on the wrong slot put the machine's codec
+	 * input and output on DSPs that are not the chain's ends.
+	 *
+	 * THERE IS NO DEFAULT, AND THAT IS THE POINT. An identity default would be a
+	 * chain order embedded in this signature, silently correct-looking and
+	 * wrong on the real machine; a caller that has not got the order yet must
+	 * say so by not calling this.
+	 *
+	 * IT RETURNS RATHER THAN ASSERTING. Status::BadChainOrder for an order whose
+	 * length is not the slot count, or that is not a permutation of the slots --
+	 * an order that named one slot twice would leave another slot unwired and
+	 * two positions driving one DSP. THE REFUSAL IS BEFORE THE FIRST INSTALL, so
+	 * a refused call changes nothing and the set keeps whatever it wore. */
+	Status attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set,
+		const std::vector<unsigned>& _portOfPosition);
+
+	/* WHAT AN ESAI CARRIES BEFORE THE CHAIN ORDER IS KNOWN, AND IT IS NOT
+	 * NOTHING. dsp56k::Audio's constructor installs ring-buffer callbacks whose
+	 * receive half calls waitNotEmpty() -- it BLOCKS until a host supplies a
+	 * frame, and no host does on this machine. A port left wearing them stops
+	 * the thread that runs its DSP for ever, and the caller's own quantum never
+	 * returns to install anything better.
+	 *
+	 * SO THE PORTS ARE MADE IDLE RATHER THAN LEFT DEFAULT. A receive answers a
+	 * CLEARED frame and a transmit is discarded: an unwired chain end reads
+	 * silence and its output goes nowhere, which is what an unwired end is.
+	 *
+	 * BOTH ESAIs OF EVERY SLOT, and the frame index is left alone -- section
+	 * 13.10.2's rule that the scheduler's virtual frame index is the only
+	 * authoritative one holds here as it does for the real wrappers.
+	 *
+	 * IT IS TOTAL AND IT OVERWRITES. Calling it on a wired set unwires it. */
+	void installIdleChainCallbacks(DspSet& _set);
 }
