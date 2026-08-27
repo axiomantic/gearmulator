@@ -92,7 +92,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto secondTx0 = adapter.secondTxCallback(0u);
-		pos[0].secondEsai.writestatusRegister(0u);     /* M_TUE clear */
+		pos[0].secondEsai.writestatusRegister(0u);     /* no underrun outstanding */
 		secondTx0(frameIndex, frame);                  /* window quantum */
 		check(adapter.secondWritten(0u),
 			"1a setup: position 0's second-bus flag is set");
@@ -119,7 +119,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto audioTx0 = adapter.audioTxCallback(0u);
-		pos[0].audioEsai.writestatusRegister(0u);      /* M_TUE clear */
+		pos[0].audioEsai.writestatusRegister(0u);      /* no underrun outstanding */
 		audioTx0(frameIndex, frame);
 		check(adapter.audioWritten(0u),
 			"1b setup: position 0's audio flag is set");
@@ -154,7 +154,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto secondTx0 = adapter.secondTxCallback(0u);
-		pos[0].secondEsai.writestatusRegister(0u);     /* M_TUE clear */
+		pos[0].secondEsai.writestatusRegister(0u);     /* no underrun outstanding */
 
 		/* First delivery, on the window (frameIndex 0): the one callback the
 		 * scheduler asks for. No phase error - a lone, windowed delivery is
@@ -189,7 +189,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto audioTx0 = adapter.audioTxCallback(0u);
-		pos[0].audioEsai.writestatusRegister(0u);      /* M_TUE clear */
+		pos[0].audioEsai.writestatusRegister(0u);      /* no underrun outstanding */
 		frameIndex = 0u;
 		audioTx0(frameIndex, frame);
 		check(adapter.phaseErrorFrames(0u) == 0u,

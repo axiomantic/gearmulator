@@ -243,8 +243,16 @@ namespace
 
 	/* The second bus transmits on TX2 and not on TX0 (frame.h's register
 	 * table), so its transmitter has to be enabled as well as TX0's -- an
-	 * enabled-but-unwritten transmitter raises M_TUE on every frame, and the
-	 * written-flag rule reads that bit. */
+	 * enabled-but-unwritten transmitter underruns on every frame, and the
+	 * written-flag rule reads the latch that records it.
+	 *
+	 * IT USED TO SAY "raises M_TUE ... and the written-flag rule reads that
+	 * bit", and the second half of that was false. M_TUE is a SLOT-lifetime
+	 * status: writeSlotToFrame raises it and then triggers the transmit DMA,
+	 * whose service reaches Esai::writeTX and clears it again before the frame
+	 * is delivered. The rule reads Esai::txUnderrunInFrame(), which lives as
+	 * long as the frame it describes. The underrun itself is unchanged, and so
+	 * is everything this function is here to set up. */
 	void enableSecondTransmitter(dsp56k::Esai& _esai)
 	{
 		_esai.writeTransmitClockControlRegister(0);

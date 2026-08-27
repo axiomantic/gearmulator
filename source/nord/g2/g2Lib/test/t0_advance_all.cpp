@@ -15,11 +15,23 @@
  *   The order matters, because the flags describe the quantum that ended,
  *   not the one about to start.
  *
- * A build of g2Lib tests none of this: a target compiles and links whether or
- * not advanceAll counts or clears anything. These cases drive advanceAll
- * against real flags, set through the transmit wrappers and their
- * emulated-ESAI M_TUE condition, and assert the counters, the clearing, and
- * the mailbox-advance cadence.
+ * A build of g2Lib tests none of this: a target compiles and links whether
+ * or not advanceAll counts or clears anything, and before CHN-7 the three
+ * counters returned zero from a surface task. These cases drive advanceAll
+ * against real flags (set through the CHN-6 transmit wrappers, which read the
+ * emulated ESAI's transmit-underrun latch) and assert the counters, the
+ * clearing, and the mailbox-advance cadence.
+ *
+ * WHICH ROUTE INTO underrunFrames THIS FILE EXERCISES, AND WHICH IT DOES NOT.
+ * A flag is not kGoodDelivery for two reasons: no wrapper fired in the quantum,
+ * or a wrapper fired and the frame it carried had underrun. EVERY non-zero
+ * assertion below is the FIRST route -- the cases attach real ESAIs and then
+ * simply do not fire a wrapper. That route is real and this file guards it.
+ * The second route is not reachable from here at all, because these cases fire
+ * the wrappers by hand with a bare frame rather than driving the peripheral's
+ * transmit path, and it is t0_esai_underrun_gate that owns it. Keeping the two
+ * apart is the point: for a long time the second route could not occur, and a
+ * file asserting the first passed regardless.
  *
  * The flags are per-position and per-bus, so a divider of 2 makes the two
  * buses' cadences differ inside one run: window quanta are even frame
@@ -51,9 +63,11 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* One chain position's two real Esai objects, plus the DSP and memory an
-	 * Esai needs to stand up, so the written-flag condition (M_TUE clear) is
-	 * the real one here too. */
+	/* One chain position's two real Esai objects, plus the DSP and memory
+	 * an Esai needs to stand up. Mirrors the fixture of the CHN-5/CHN-6
+	 * tests: a real peripheral is behind every position, so the wrapper's
+	 * "no underrun outstanding" reading is a real one and not a null-Esai
+	 * default. */
 	struct PositionEsai
 	{
 		dsp56k::Memory         memory;
@@ -96,8 +110,9 @@ static void secondBusMailboxAdvanceGate()
 	dsp56k::Audio::RxFrame rx;
 
 	/* Position 1 transmits the value on its slot (TX2, register 2). The
-	 * second bus writes mailbox (1 + 1) % 2 = 0. M_TUE is left clear so the
-	 * write is a genuine delivery rather than a stale-frame underrun. */
+	 * second bus writes mailbox (1 + 1) % 2 = 0. The Esai has transmitted
+	 * nothing, so its underrun latch is clear and the write is a genuine
+	 * delivery rather than a stale-frame one. */
 	dsp56k::Audio::TxFrame tx;
 	tx.resize(g2::Frame::kSlots);
 	tx[1][2] = kV;
@@ -135,7 +150,6 @@ int main()
 	 * second-bus advance window land on even frame indices. */
 	static const unsigned kN = 2u;
 	static const unsigned kDivider = 2u;
-	const unsigned kMtu = 1u << dsp56k::Esai::M_TUE;
 
 	PositionEsai pos[2];
 	g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, kDivider);
@@ -165,9 +179,10 @@ int main()
 
 	/* ------------- Set up for case 2: position 0 delivers on both buses.
 	 *
-	 * Firing position 0's audio and second wrappers with M_TUE clear sets
-	 * exactly audioWritten[0] and secondWritten[0]; position 1's flags stay
-	 * clear. */
+	 * Firing position 0's audio and second wrappers with no underrun
+	 * outstanding sets exactly audioWritten[0] and secondWritten[0];
+	 * position 1's flags stay clear because NO WRAPPER FIRES for it, which
+	 * is the route into the counter this file owns. */
 	{
 		auto audioTx0 = adapter.audioTxCallback(0u);
 		auto secondTx0 = adapter.secondTxCallback(0u);
