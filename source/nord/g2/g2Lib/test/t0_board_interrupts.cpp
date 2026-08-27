@@ -39,12 +39,18 @@
 //
 // What is not here:
 //
-//   * Masking a source in IMR at MBAR+$044. InterruptController models three
-//     register groups and IMR is not one of them -- interruptController.h names
-//     $006 (IRQPAR), $048 (AVR) and $04C..$057 (the internal control block),
-//     and its writeRegister ignores every other offset. A mask between a
-//     source's pending bit and the arbiter is new arbitration in the
-//     controller.
+//   * The plan's Check line also names a case in which masking the source in
+//     IMR at MBAR+$044 suppresses the presentation without disturbing TER.
+//     THAT CASE IS NOT IMPLEMENTED AND IT IS NOT SILENTLY DROPPED.
+//     InterruptController models three register groups and IMR is not one of
+//     them -- interruptController.h names $006 (IRQPAR), $04B (AVR) and
+//     $04C..$057 (the internal control block), and its writeRegister ignores
+//     every other offset. A mask between a source's pending bit and the
+//     arbiter is new arbitration in the CONTROLLER, and BRD-34's own second
+//     property forbids exactly that ("THIS TASK ADDS NO ARBITRATION, NO
+//     PENDING BIT AND NO PRIORITY DECISION") while its Files: line carries no
+//     controller file. The case is therefore a task for whoever adds IMR to
+//     BRD-3's class, and it is recorded here rather than faked.
 //
 //   * Anything about the boot spin at 0x30055FBC.
 
@@ -160,7 +166,14 @@ namespace
 	// The MBAR-relative offsets.
 	constexpr uint32_t kIcrBase = 0x04Cu;   // ICR0, UM Table 8-2
 	constexpr uint32_t kIrqpar  = 0x006u;   // IRQPAR, UM Table 8-1
-	constexpr uint32_t kAvr     = 0x048u;   // AVR group, UM Table 8-1
+	// THE AVR REGISTER BYTE, the base of the longword group that contains it,
+	// and one Reserved byte of that group. All three from MCF5307 UM Table
+	// B-1, which lists `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER` and
+	// gives $048, $049 and $04A no row at all. This file owns its own copies
+	// so the two sides move independently.
+	constexpr uint32_t kAvrRegister      = 0x04Bu;
+	constexpr uint32_t kAvrGroupBase     = 0x048u;
+	constexpr uint32_t kAvrGroupReserved = 0x049u;
 	constexpr uint32_t kTmr1    = 0x140u;
 	constexpr uint32_t kTrr1    = 0x144u;
 	constexpr uint32_t kTer1    = 0x151u;
@@ -499,18 +512,10 @@ int main()
 	// group cannot run at all, which is the red this group was written to
 	// produce.
 	//
-	// WHAT THIS GROUP DOES NOT PROVE, STATED SO THE GREEN IS NOT OVERREAD.
-	// It writes AVR at MBAR+$048, which is where interruptController.h listens.
-	// THE FIRMWARE WRITES IT AT MBAR+$04B. UM Table 8-1 gives the $048 row four
-	// byte columns -- Reserved, Reserved, Reserved, AVR -- so the register byte
-	// is $04B and $048 is the group base, and BOOT:0x320E / CODE:0x3005827E
-	// both address $04B. isInterruptOwned rejects $04B today, so on the
-	// assembled machine the firmware's own AVR write does not reach this
-	// controller and a level 3 external interrupt would present with the
-	// autovector bit CLEAR. That is a defect in the controller's register
-	// surface and not in the wire this group asserts, it is recorded here
-	// rather than papered over, and repairing it is a task for whoever owns
-	// interruptController.h.
+	// THIS GROUP WRITES AVR AT MBAR+$04B, WHERE THE FIRMWARE WRITES IT. It
+	// asserts the wire from the device's service request to the core; case
+	// group 6 is what pins the register BYTE, and it is the group to read for
+	// the manual citation.
 	//
 	// THE ANTI-HARDCODE ASSERTION IS THE IRQPAR CASE. Level 3 alone is
 	// satisfied by a board that writes the constant 3 into the core. Only a
@@ -527,11 +532,11 @@ int main()
 		checkEqual(g_usbIrqUser, static_cast<void*>(&board),
 			"the IRQ callback carries THIS Board as its user pointer");
 
-		// The firmware's own AVR write, at the byte the model answers. Its
-		// bit 3 is what makes the level 3 presentation autovectored, and the
-		// Board must not supply it.
-		boardWrite(board, kMbarBase + kAvr, g_byte, 0x08u, status);
-		checkEqual(boardRead(board, kMbarBase + kAvr, g_byte, status), uint32_t(0x08u),
+		// The firmware's own AVR write, at MBAR+$04B. Its bit 3 is what makes
+		// the level 3 presentation autovectored, and the Board must not
+		// supply it.
+		boardWrite(board, kMbarBase + kAvrRegister, g_byte, 0x08u, status);
+		checkEqual(boardRead(board, kMbarBase + kAvrRegister, g_byte, status), uint32_t(0x08u),
 			"AVR reads back the 0x08 the firmware programs");
 
 		if(g_usbIrq != nullptr)
@@ -572,6 +577,114 @@ int main()
 				"THE LEVEL IS DERIVED AND NOT HARDCODED: IRQPAR[1] moves the same pin to level 6");
 			checkEqual(g_recorder.autovector, 0,
 				"AVR bit 6 is clear, so the level 6 presentation is NOT autovectored");
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 6. THE AVR BYTE THE FIRMWARE ACTUALLY WRITES, AT MBAR+$04B.
+	//
+	// WHY THIS GROUP WRITES $04B AND NOT $048. A test that writes where the
+	// MODEL listens cannot see a model listening at the wrong byte; only a
+	// test that writes where the FIRMWARE writes can.
+	// MCF5307 UM Table B-1 lists the register by address and width:
+	// `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER $00 R/W`. There is no row
+	// for $048, $049 or $04A -- Table 8-1 gives the $048 row four byte columns
+	// and names the first three Reserved -- so $048 is the group base and $04B
+	// is the register byte. Both firmware images agree: BOOT:0x320E and
+	// CODE:0x3005827E / CODE:0x30058522 each load $1000004B into a0 and touch
+	// the byte there, and no ALIGNED reference to $10000048 exists in either
+	// image. This group writes where the FIRMWARE writes.
+	{
+		g2::Board board(mbarOnlyConfig());
+
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+
+		// 6a. KNOWN POSITIVE. The router owns $04B, and the way that is
+		// visible from the bus is the interrupt block's byte-only rule: a
+		// wider access to an owned offset is refused.
+		boardWrite(board, kMbarBase + kAvrRegister, g_word, 0x0008u, status);
+		checkEqual(int(status), int(MCF5307_BUS_SIZE_ILLEGAL),
+			"KNOWN POSITIVE: a word write to $04B is refused, so the interrupt block owns it");
+
+		boardRead(board, kMbarBase + kAvrRegister, g_word, status);
+		checkEqual(int(status), int(MCF5307_BUS_SIZE_ILLEGAL),
+			"KNOWN POSITIVE: a word read of $04B is refused, so the interrupt block owns it");
+
+		// 6b. KNOWN NEGATIVE, SAME PREDICATE. $049 is a Reserved byte of the
+		// SAME longword group. isInterruptOwned is the one predicate that
+		// resolves both, and it must answer NO here, so the identical word
+		// access falls through to the SIM and is accepted. A predicate that
+		// swallowed the whole $048..$04B group would be red on this line.
+		boardWrite(board, kMbarBase + kAvrGroupReserved, g_word, 0x0008u, status);
+		checkEqual(int(status), int(MCF5307_BUS_OK),
+			"KNOWN NEGATIVE: a word write to the Reserved $049 is accepted, so the interrupt block does NOT own it");
+
+		boardRead(board, kMbarBase + kAvrGroupReserved, g_word, status);
+		checkEqual(int(status), int(MCF5307_BUS_OK),
+			"KNOWN NEGATIVE: a word read of the Reserved $049 is accepted, so the interrupt block does NOT own it");
+
+		// 6c. THE FIRMWARE'S OWN WRITE, ASSERTED FROM THE CONTROLLER'S STATE.
+		// boardRead alone would be satisfied by the SIM's flat backing store
+		// answering the byte it was handed, which is exactly what happened
+		// before this repair. readRegister is the CONTROLLER, so only a byte
+		// that actually reached the controller reads back here.
+		boardWrite(board, kMbarBase + kAvrRegister, g_byte, 0x08u, status);
+		checkEqual(int(status), int(MCF5307_BUS_OK),
+			"the firmware's byte write to $04B is accepted");
+		checkEqual(uint32_t(board.interrupts().readRegister(kAvrRegister)), uint32_t(0x08u),
+			"THE BYTE REACHES THE CONTROLLER: AVR reads back 0x08 from the controller itself");
+		checkEqual(boardRead(board, kMbarBase + kAvrRegister, g_byte, status), uint32_t(0x08u),
+			"and the same byte reads back through the MBAR window");
+
+		// 6d. END TO END. Nothing below writes $048. The AVR bit 3 programmed
+		// at $04B above is the only thing that can make this autovectored.
+		check(g_usbIrq != nullptr,
+			"the IRQ wire exists for the end-to-end autovector case");
+
+		if(g_usbIrq != nullptr)
+		{
+			g_recorder.reset();
+			g_usbIrq(g_usbIrqUser, 1);
+
+			checkEqual(g_recorder.calls, 1,
+				"the device's service request presented exactly once to the core");
+			checkEqual(g_recorder.level, 3,
+				"the presentation carries IRQ3's level 3");
+
+			// ASSERTED FROM THE CONTROLLER'S STATE, NOT FROM THE WRITE. These
+			// two read what the arbiter COMPUTED. A board that forwarded a
+			// hardcoded autovector to the core would be green on the recorder
+			// and red here.
+			checkEqual(board.interrupts().presentedLevel(), 3,
+				"CONTROLLER STATE: the arbiter's own winner is level 3");
+			checkEqual(board.interrupts().presentedAutovector(), 1,
+				"CONTROLLER STATE: THE AVR WRITE AT $04B REACHED THE ARBITER, so level 3 is autovectored");
+
+			checkEqual(g_recorder.autovector, 1,
+				"and that autovector bit is what the CORE was handed");
+			checkEqual(uint32_t(g_recorder.vector), uint32_t(0x00u),
+				"an autovectored external source carries no pass-through vector");
+		}
+
+		// 6e. $048 IS NOT THE REGISTER. Table B-1 gives it no row, so a byte
+		// written there must NOT reach the controller. Without this line the
+		// repair could be a widening that keeps the old wrong offset alive.
+		g2::Board second(mbarOnlyConfig());
+		boardWrite(second, kMbarBase + kAvrGroupBase, g_byte, 0x08u, status);
+		checkEqual(uint32_t(second.interrupts().readRegister(kAvrRegister)), uint32_t(0x00u),
+			"$048 IS RESERVED: a byte written to the group base does not reach AVR");
+
+		if(g_usbIrq != nullptr)
+		{
+			g_recorder.reset();
+			g_usbIrq(g_usbIrqUser, 1);
+
+			checkEqual(g_recorder.calls, 1,
+				"the request on the second board presented exactly once");
+			checkEqual(second.interrupts().presentedLevel(), 3,
+				"CONTROLLER STATE: the second board's arbiter presents level 3");
+			checkEqual(second.interrupts().presentedAutovector(), 0,
+				"CONTROLLER STATE: a $048 write leaves AVR clear, so level 3 is NOT autovectored");
 		}
 	}
 

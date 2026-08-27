@@ -14,9 +14,14 @@
 //     whose IL[2:0] (bits 4:2) and IP[1:0] (bits 1:0) carry the level and the
 //     within-level priority. MCF5307 UM section 8.3.4, Table 8-2 (memory map)
 //     and the ICR programming model on pp. 8-5..8-6.
-//   * The shared Autovector Control Register AVR at MBAR+$048, a bitmask over
+//   * The shared Autovector Control Register AVR at MBAR+$04B, a bitmask over
 //     levels 1..7 that autovectors the external pin at each level. MCF5307 UM
-//     section 8.3.4, p. 8-7.
+//     section 8.3.4, p. 8-7 for the bit layout, and Table B-1 for the ADDRESS:
+//     `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER $00 R/W`. Table 8-1's
+//     $048 row is four byte columns whose first three are Reserved, so $048 is
+//     the LONGWORD GROUP BASE and $04B is the register byte. Table B-1 gives
+//     $048, $049 and $04A no row at all, so this class answers none of them --
+//     and both G2 firmware images write the byte at $1000004B.
 //   * IRQPAR at MBAR+$006, which re-maps the external pins: IRQ5 to level 5 or
 //     4, IRQ3 to level 6 or 3, IRQ1 to level 1 or 2. IRQ7 is always level 7.
 //     MCF5307 UM section 8.3.4.1 and Table 8-4, pp. 8-9..8-10.
@@ -54,7 +59,7 @@ namespace g2
 	public:
 		// The MBAR-relative offsets this class answers. All three are facts
 		// from the MCF5307 User's Manual, sections 8.3.3 and 8.3.4.
-		static constexpr uint32_t gAvrOffset   = 0x048u;
+		static constexpr uint32_t gAvrOffset   = 0x04Bu;
 		static constexpr uint32_t gIcrBase     = 0x04Cu;
 		static constexpr uint32_t gIcrCount    = 12u;   // MBAR+$04C..$057
 		static constexpr uint32_t gIrqparOffset = 0x006u;
@@ -70,7 +75,7 @@ namespace g2
 		InterruptController(void* _user, InterruptPresentFn _present);
 
 		// Register surface. Offset is MBAR-relative. Only $006 (IRQPAR),
-		// $048 (AVR) and $04C..$057 (the internal control block) are modelled;
+		// $04B (AVR) and $04C..$057 (the internal control block) are modelled;
 		// any other offset is ignored by both read and write and reads zero.
 		void writeRegister(uint32_t _offset, uint8_t _value);
 		uint8_t readRegister(uint32_t _offset) const;
