@@ -87,13 +87,22 @@ jobs:
       # `--no-tests=error` governs a test RUN. In `-N` listing mode it is inert:
       # the listing exits 0 whether or not any test matched. So this step reads
       # what the listing PRINTS.
+      #
+      # IT TESTS FOR A PRESENCE AND NOT FOR THE ABSENCE OF A FAILURE STRING, and
+      # that is the whole point of the shape. `set -e` is dropped here so the
+      # message below is reached rather than pre-empted, which means a ctest that
+      # cannot run at all -- a missing build tree, a ctest that is not on PATH --
+      # leaves `listing` EMPTY. An empty string does not contain
+      # `Total Tests: 0`, so an absence test passed the step and GitHub scored
+      # the job green over a build tree that was never inspected. A test for
+      # `Total Tests: [1-9]` cannot be satisfied by silence.
       - name: Assert that the build registers at least one test
         shell: bash
         run: |
           set -uo pipefail
           listing=$(ctest --test-dir build --no-tests=error -N)
           printf '%s\n' "${listing}"
-          if printf '%s\n' "${listing}" | grep -q 'Total Tests: 0'; then
+          if ! printf '%s\n' "${listing}" | grep -qE 'Total Tests: [1-9]'; then
             echo "FAILURE: the build tree of ${GITHUB_REPOSITORY} registers no test at all."
             exit 1
           fi
