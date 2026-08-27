@@ -28,7 +28,8 @@
 //                                asserts zero on.
 //
 //   phaseErrorFrames(p)          A ChainAdapter driven DIRECTLY, with a real
-//                                emulated Esai so the M_TUE condition is real:
+//                                emulated Esai so the written-flag condition is
+//                                real:
 //                                one position's audio transmit wrapper fired
 //                                TWICE inside one quantum. The Scheduler cannot
 //                                be made to ask for a second transmit, which is
@@ -533,9 +534,14 @@ namespace
 
 		const g2::EsaiWriteTxCallback tx = adapter.audioTxCallback(0u);
 
-		// M_TUE CLEAR, so the first delivery sets the written flag. Without a
-		// set flag the second delivery could not be told from the first, and
-		// this known positive would be the green mirage it exists to refute.
+		// NO UNDERRUN OUTSTANDING on this Esai, so the first delivery sets the
+		// written flag. Without a set flag the second delivery could not be
+		// told from the first, and this known positive would be the green
+		// mirage it exists to refute. The status register is written here for
+		// the same reason it always was -- to pin the peripheral's starting
+		// state -- but the flag's source is Esai::txUnderrunInFrame(), not
+		// M_TUE, so this Esai having transmitted nothing is what makes the
+		// reading clear.
 		pos[0].audioEsai.writestatusRegister(0u);
 
 		dsp56k::Audio::TxFrame frame;

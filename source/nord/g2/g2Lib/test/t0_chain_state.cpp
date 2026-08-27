@@ -16,8 +16,9 @@
  *      vacuous, so that inequality is asserted before any equality is.
  *   2. EVERY COUNTER RISES ABOVE ZERO. underrunFrames, secondBusUnderrunFrames
  *      and phaseErrorFrames are each driven above zero by the driver's own
- *      conditions -- M_TUE set on a cadence for each bus, and an off-window
- *      second-bus transmit -- so "identical counters" is not 0 == 0.
+ *      conditions -- a WITHHELD transmit on a cadence for each bus, and an
+ *      off-window second-bus transmit -- so "identical counters" is not
+ *      0 == 0.
  *   3. THE IMAGE IS SIZED BY THE STRUCTURE. stateSize() is strictly positive
  *      and grows strictly with the ring depth, so a trio that reported a
  *      zero-byte image cannot pass.
@@ -87,7 +88,8 @@ namespace
 	/* One chain position's two real Esai objects (the audio bus on MemArea_X
 	 * and the second bus / ESAI_1 on MemArea_Y). The same fixture t0_written_flag
 	 * uses, for the same reason: the transmit wrappers read the emulated ESAI's
-	 * own M_TUE bit, so the flag rule needs a real peripheral behind it. */
+	 * own transmit-underrun latch, so the flag rule needs a real peripheral
+	 * behind it. */
 	struct PositionEsai
 	{
 		dsp56k::Memory         memory;
@@ -292,17 +294,26 @@ namespace
 	 *
 	 * THE THREE COUNTER CONDITIONS ARE DRIVEN ON PURPOSE AND EACH ONE IS A
 	 * DIFFERENT MECHANISM:
-	 *   - the audio M_TUE bit is SET on a 5-quantum cadence, which is what
-	 *     leaves an audio written flag clear and raises underrunFrames;
-	 *   - the second-bus M_TUE bit is SET on an 11-quantum cadence, which
+	 *   - the audio transmit is WITHHELD on a 5-quantum cadence, which leaves
+	 *     that position's audio flag at "no delivery" and raises
+	 *     underrunFrames;
+	 *   - the second-bus transmit is WITHHELD on an 11-quantum cadence, which
 	 *     raises secondBusUnderrunFrames on a window quantum;
 	 *   - a second-bus transmit is forced on a 7-quantum cadence whether or
-	 *     not the quantum is a window, which raises phaseErrorFrames. */
+	 *     not the quantum is a window, which raises phaseErrorFrames.
+	 *
+	 * THE FIRST TWO USED TO SET M_TUE BY HAND and rely on the wrapper reading
+	 * it. That poke is gone, and it is worth saying why rather than just
+	 * deleting it: the wrappers never could see M_TUE on a running machine,
+	 * because the transmit DMA clears it inside writeSlotToFrame before the
+	 * frame it belongs to is delivered. Withholding the transmit drives the
+	 * counters through the route that IS reachable from a synthetic driver.
+	 * The route where a frame arrives and is stale needs the peripheral's own
+	 * transmit path and belongs to t0_esai_underrun_gate, not to a file about
+	 * what survives a save and a load. */
 	void runQuanta(g2::ChainAdapter& _adapter, PositionEsai* const _esai,
 		const uint64_t _from, const unsigned _count)
 	{
-		const unsigned kMtu = 1u << dsp56k::Esai::M_TUE;
-
 		for(uint64_t f = _from; f < _from + _count; ++f)
 		{
 			uint64_t frameIndex = f;
@@ -319,18 +330,22 @@ namespace
 			/* 3. RUN -- every position, ascending. */
 			for(unsigned p = 0; p < kPositions; ++p)
 			{
-				_esai[p].audioEsai.writestatusRegister(((f + p) % 5u == 0u) ? kMtu : 0u);
-				const dsp56k::Audio::TxFrame audioTx = makeTxFrame(0u, f, p, 0u);
-				_adapter.audioTxCallback(p)(frameIndex, audioTx);
+				if((f + p) % 5u != 0u)
+				{
+					const dsp56k::Audio::TxFrame audioTx = makeTxFrame(0u, f, p, 0u);
+					_adapter.audioTxCallback(p)(frameIndex, audioTx);
+				}
 
 				const bool window   = (f % kDivider) == 0u;
 				const bool forced   = (f % 7u) == 0u;
 
 				if(window || forced)
 				{
-					_esai[p].secondEsai.writestatusRegister(((f + p) % 11u == 0u) ? kMtu : 0u);
-					const dsp56k::Audio::TxFrame secondTx = makeTxFrame(1u, f, p, 2u);
-					_adapter.secondTxCallback(p)(frameIndex, secondTx);
+					if((f + p) % 11u != 0u)
+					{
+						const dsp56k::Audio::TxFrame secondTx = makeTxFrame(1u, f, p, 2u);
+						_adapter.secondTxCallback(p)(frameIndex, secondTx);
+					}
 				}
 			}
 

@@ -21,7 +21,7 @@
  *      and pass every other row in this plan.
  *
  * The underrun pair is driven through the CHN-6 written flags (real
- * emulated-ESAI M_TUE condition) and consumed by the CHN-7 advanceAll
+ * emulated-ESAI transmit-underrun latch) and consumed by the CHN-7 advanceAll
  * cadence; the phase-error count is driven by firing the CHN-6 transmit
  * wrappers a second time. CHN-11 case 4 drives the SAME double condition
  * through the second bus inside the Scheduler; this row drives the wrapper
@@ -55,7 +55,8 @@ namespace
 
 	/* One chain position's two real Esai objects, mirroring the fixture the
 	 * CHN-5/CHN-6/CHN-7 tests use, so the CHN-6 written-flag condition
-	 * (M_TUE clear) is real here too. */
+	 * (a real peripheral behind every position, with no underrun
+	 * outstanding) is real here too. */
 	struct PositionEsai
 	{
 		dsp56k::Memory         memory;
@@ -100,7 +101,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto secondTx0 = adapter.secondTxCallback(0u);
-		pos[0].secondEsai.writestatusRegister(0u);     /* M_TUE clear */
+		pos[0].secondEsai.writestatusRegister(0u);     /* no underrun outstanding */
 		secondTx0(frameIndex, frame);                  /* window quantum */
 		check(adapter.secondWritten(0u),
 			"1a setup: position 0's second-bus flag is set");
@@ -127,7 +128,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto audioTx0 = adapter.audioTxCallback(0u);
-		pos[0].audioEsai.writestatusRegister(0u);      /* M_TUE clear */
+		pos[0].audioEsai.writestatusRegister(0u);      /* no underrun outstanding */
 		audioTx0(frameIndex, frame);
 		check(adapter.audioWritten(0u),
 			"1b setup: position 0's audio flag is set");
@@ -162,7 +163,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto secondTx0 = adapter.secondTxCallback(0u);
-		pos[0].secondEsai.writestatusRegister(0u);     /* M_TUE clear */
+		pos[0].secondEsai.writestatusRegister(0u);     /* no underrun outstanding */
 
 		/* First delivery, on the window (frameIndex 0): the one callback the
 		 * scheduler asks for. No phase error - a lone, windowed delivery is
@@ -197,7 +198,7 @@ int main()
 		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
 		auto audioTx0 = adapter.audioTxCallback(0u);
-		pos[0].audioEsai.writestatusRegister(0u);      /* M_TUE clear */
+		pos[0].audioEsai.writestatusRegister(0u);      /* no underrun outstanding */
 		frameIndex = 0u;
 		audioTx0(frameIndex, frame);
 		check(adapter.phaseErrorFrames(0u) == 0u,
