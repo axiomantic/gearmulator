@@ -42,3 +42,6 @@ t0_no_firmware
 
 # PLG-14, `--help` names exactly the subcommands g2TestConsole implements.
 t0_console_subcommands
+
+# DSP-14, the kernel download and the DMA constants.
+t1_kernel_load

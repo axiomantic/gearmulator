@@ -929,3 +929,25 @@ set_tests_properties(t1_gdb_dsp PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_gdb_dsp APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+
+# ----------------- Board-to-TransportHub consequence: the two targets that
+#                   compile ../board.cpp on their own
+#
+# THE COMPOSITION GAINED A g2::TransportHub BY VALUE, so every target that
+# compiles ../board.cpp without linking g2Lib must supply that member's object
+# too. There are exactly two, t0_sof_tick and t0_board_interrupts, and both are
+# named here.
+#
+# THIS BLOCK IS APPENDED RATHER THAN FOLDED INTO EITHER TARGET'S OWN BLOCK, for
+# the reason the INT-1, BRD-24 and BRD-26 consequence blocks above all state:
+# this file is written by more than one task and an edit inside another task's
+# block is how two writers lose each other's work.
+#
+# transportHub.cpp IS NOT AN mcf5307 SOURCE and pulls no library onto either
+# link line -- it includes only <atomic>, <cstring> and its own header -- so the
+# property both blocks protect, that no mcf5307 archive reaches these targets,
+# is untouched.
+
+target_sources(t0_sof_tick PRIVATE ../transportHub.cpp)
+target_sources(t0_board_interrupts PRIVATE ../transportHub.cpp)
