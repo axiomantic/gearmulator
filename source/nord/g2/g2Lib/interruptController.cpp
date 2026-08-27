@@ -32,7 +32,7 @@
 //     pp. 8-5..8-6. AVEC=0 means the source returns a vector during the
 //     interrupt-acknowledge cycle; AVEC=1 means the SIM generates the
 //     autovector.
-//   * The AVR at MBAR+$048, AVEC[7:1], a bitmask over levels that
+//   * The AVR at MBAR+$04B (UM Table B-1, AVCR), AVEC[7:1], a bitmask over levels that
 //     autovectors the external pin at each level: section 8.3.4, p. 8-7.
 //   * IRQPAR at MBAR+$006 and Table 8-4: IRQ5 is level 5 (IRQPAR[2]=0) or 4
 //     (IRQPAR[2]=1); IRQ3 is level 3 (IRQPAR[1]=0) or 6 (IRQPAR[1]=1); IRQ1 is
