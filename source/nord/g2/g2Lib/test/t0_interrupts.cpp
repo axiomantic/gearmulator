@@ -24,7 +24,8 @@
 //
 //  * Internal ICRs at MBAR+$04C..$057: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0]
 //    at bits 1:0. UM section 8.3.4 and Table 8-2, pp. 8-5..8-6.
-//  * AVR at MBAR+$048, AVEC[7:1]. UM section 8.3.4, p. 8-7.
+//  * AVR at MBAR+$04B, AVEC[7:1]. UM Table B-1 for the address and width,
+//    section 8.3.4 p. 8-7 for the bit layout.
 //  * IRQPAR at MBAR+$006: IRQ5 -> level 5 or 4, IRQ3 -> level 6 or 3, IRQ1 ->
 //    level 1 or 2, IRQ7 always 7. UM section 8.3.4.1 and Table 8-4, pp. 8-9..8-10.
 //  * Within a level the order is internal IP=11, then IP=10, then the external
@@ -92,7 +93,12 @@ namespace
 	// the two sides move independently.
 	constexpr uint32_t gIcrBase = 0x04Cu;
 	constexpr uint32_t gIcrCount = 12u;
-	constexpr uint32_t gAvrOffset = 0x048u;
+	// AVR is the AUTOVECTOR CONTROL REGISTER at MBAR+$04B. MCF5307 UM Table
+	// B-1 lists it by address and width -- `MBAR+$04B AVCR 8` -- and gives
+	// $048, $049 and $04A no row at all; Table 8-1's $048 row is four byte
+	// columns whose first three are Reserved, and both G2 firmware images load
+	// $1000004B to reach the byte.
+	constexpr uint32_t gAvrOffset = 0x04Bu;
 	constexpr uint32_t gIrqparOffset = 0x006u;
 	constexpr int gInternalSourceCount = 10;
 
