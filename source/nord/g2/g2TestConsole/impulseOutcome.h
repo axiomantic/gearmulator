@@ -78,6 +78,23 @@ namespace g2console
 
 		/* Every chain-health counter read zero across the walk. */
 		bool     countersZero     = false;
+
+		/* THE ARRIVAL INSTRUMENT'S OWN KNOWN POSITIVE, AND IT IS A DIFFERENT
+		 * CONTROL FROM observerSelfTest. That one drives the detector's two
+		 * predicates over two frames the PROGRAM built; it holds even when
+		 * nothing between the tail DSP and `Scheduler::pull` works, because no
+		 * part of that path is on its evidence. These two fields carry the
+		 * result of a walk in which a known sentinel was placed at the tail
+		 * position's TRANSMIT SOURCE and then read back OUT OF THE SINK, so
+		 * they are a statement about the arrival path itself.
+		 *
+		 * sinkControlArrival is the control walk's quantum at which the sink
+		 * first delivered a non-silent frame, or -1 for none; sinkControlExact
+		 * says the frame carried the sentinel unchanged. A path that mangles a
+		 * KNOWN value has not earned the right to be believed about an
+		 * unknown one, so both are required. */
+		int      sinkControlArrival = -1;
+		bool     sinkControlExact   = false;
 	};
 
 	/* THE ORDER OF THESE CLAUSES IS THE WHOLE DESIGN, AND IT RUNS FROM THE
@@ -99,7 +116,15 @@ namespace g2console
 		 * given any meaning: the detector proved on a known positive and a
 		 * known negative, and the sink having delivered at least one frame for
 		 * it to look at. A buffer nothing wrote reads exactly like silence. */
-		if(!_o.observerSelfTest || _o.framesPulled == 0)
+		/* AND THE THIRD HALF, WHICH THE FIRST TWO DO NOT COVER. The comparator
+		 * self-test proves the DETECTOR; the frame count proves the sink
+		 * DELIVERED something. Neither proves the path BETWEEN the tail DSP and
+		 * that delivery can carry a value: a sink that hands over a zero frame
+		 * every quantum satisfies both and reports `arrival=-1` forever. The
+		 * sink control is the known positive for exactly that path, and it must
+		 * have arrived AND arrived unchanged. */
+		if(!_o.observerSelfTest || _o.framesPulled == 0
+			|| _o.sinkControlArrival < 0 || !_o.sinkControlExact)
 			return ImpulseOutcome::InstrumentBlind;
 
 		// The observer worked and saw no pattern: the chain did not carry it.
