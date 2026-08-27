@@ -4,40 +4,61 @@
  *
  *   The transmit wrappers' written flag is NOT "the callback fired". The
  *   scheduler drives a transmit callback for every position on every quantum
- *   once its transmitters are enabled, so a flag set by arrival alone would be
- *   set on every quantum, underrunFrames (CHN-8) could never rise, and the
- *   assertion against it would be a green mirage.
+ *   once its transmitters are enabled, so a two-state flag set by arrival
+ *   alone would be set on every quantum, underrunFrames (CHN-8) could never
+ *   rise, and the assertion against it would be a green mirage.
  *
- *   The flag's source is the emulated ESAI's OWN M_TUE bit. The wrapper for
- *   position k sets the flag when the callback fires AND M_TUE is clear in
- *   Esai::readStatusRegister() at that instant, and leaves it clear otherwise.
- *   M_TUE rises in writeSlotToFrame (esai.cpp:380-384) before the frame is
- *   delivered at esai.cpp:95 and is not cleared until the interrupt path
- *   (esai.cpp:108-112) runs after, so at the instant the callback runs the bit
- *   states exactly whether the frame it carries is stale. That is why the
- *   wrapper captures its position's Esai&.
+ *   The flag records WHICH KIND of delivery arrived: a good frame, a frame
+ *   carrying a transmit underrun, or no frame at all. Its source is the
+ *   emulated ESAI's frame-lifetime underrun latch, Esai::txUnderrunInFrame(),
+ *   read at the instant the callback fires. audioWritten/secondWritten report
+ *   the GOOD case, so they are false for a stale delivery and false for no
+ *   delivery alike.
  *
- * THE TEST DRIVES THE FLAG'S REAL CONDITION, NOT A STAND-IN. Each case
- * constructs a real dsp56k::Esai, drives its status register directly through
- * writestatusRegister() to put M_TUE set or clear, then fires the position's
- * transmit wrapper and reads the flag back through ChainAdapter::audioWritten /
- * secondWritten. Section 12.3 states why the bit and not the callback's arrival
- * is the condition, and this pair is what proves the rule can discriminate.
+ * THE PREMISE THIS FILE USED TO STATE IS FALSE, AND IT IS QUOTED RATHER THAN
+ * DELETED, BECAUSE IT IS THE PREMISE THE DEFECT RESTED ON. It read: "M_TUE
+ * rises in writeSlotToFrame (esai.cpp:380-384) before the frame is delivered
+ * at esai.cpp:95 and is not cleared until the interrupt path (esai.cpp:108-112)
+ * runs after, so at the instant the callback runs the bit states exactly
+ * whether the frame it carries is stale."
+ *
+ * On a running machine the bit is ALREADY GONE by then, so the flag could never
+ * take its stale-delivery value. THE COUNTER FED BY THIS FLAG WAS NOT SILENT --
+ * the flag's other non-good value, "no frame delivered at all", was always
+ * reachable and underrunFrames counted it correctly the whole time. It is the
+ * stale-delivery value alone that could not occur, and this file is about that
+ * one.
+ *
+ * Why it could not occur: writeSlotToFrame ends by triggering the transmit
+ * DMA; the DMA is serviced synchronously, reaches
+ * Esai::writeTX, and writeTX clears M_TUE as soon as every enabled transmitter
+ * has been written -- before writeSlotToFrame has even returned, and slots
+ * before execTX delivers the frame that carries the stale slot. Measured over
+ * one booted --impulse run with every slot forced to underrun: 2,080,110 raises
+ * of M_TUE, 2,079,950 of them cleared inside writeSlotToFrame, and the audio
+ * wrapper observed the bit set 7 times in 224,495 callbacks. underrunFrames
+ * stayed 0. The bit is a SLOT-lifetime status; the wrappers need a
+ * FRAME-lifetime one, and txUnderrunInFrame() is it.
+ *
+ * AND THE OLD VERSION OF THIS FILE COULD NOT HAVE CAUGHT THAT. Each case
+ * constructed a real dsp56k::Esai and then drove its status register directly
+ * through writestatusRegister() to put M_TUE set or clear. That proves the READ
+ * discriminates. It never proves the CONDITION can occur, so it passed against
+ * a build in which that condition was unreachable. THE CASES BELOW PLANT THE CONDITION
+ * INSTEAD: a real transmit underrun, produced by the peripheral's own transmit
+ * path from a TX register that was not written in time (esaiUnderrunPlant.h).
+ * Whether the counters that feed on these flags then rise is CHN-8's row,
+ * t0_esai_underrun_gate.
  *
  * THE FLAGS ARE PER POSITION AND PER BUS, so the test asserts the separation
- * directly: firing position 0's AUDIO wrapper with M_TUE clear sets audio[0]
+ * directly: delivering a good frame on position 0's AUDIO bus sets audio[0]
  * and leaves audio[1], second[0] and second[1] clear.
  *
- * Section 7.7.1 gives the surface; the counters that feed on these flags are
- * CHN-8's, so this row reads the flags themselves.
+ * Section 7.7.1 gives the surface.
  */
 
 #include "chainAdapter.h"
-
-#include "dsp56kEmu/dsp.h"
-#include "dsp56kEmu/esai.h"
-#include "dsp56kEmu/memory.h"
-#include "dsp56kEmu/peripherals.h"
+#include "esaiUnderrunPlant.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -54,142 +75,138 @@ namespace
 			++failures;
 		}
 	}
-
-	dsp56k::DefaultMemoryValidator g_memoryValidator;
-
-	/* One chain position's two real Esai objects (the audio bus on MemArea_X
-	 * and the second bus / ESAI_1 on MemArea_Y). Mirrors the fixture the
-	 * dspJob-order test uses to stand up a dsp56k::Esai. */
-	struct PositionEsai
-	{
-		dsp56k::Memory         memory;
-		dsp56k::PeripheralsNop periphX;
-		dsp56k::PeripheralsNop periphY;
-		dsp56k::DSP            dsp;
-		dsp56k::Esai           audioEsai;
-		dsp56k::Esai           secondEsai;
-
-		PositionEsai()
-			: memory(g_memoryValidator, 0x080000, 0x800000, 0x200000)
-			, dsp(memory, &periphX, &periphY)
-			, audioEsai(periphX, dsp56k::MemArea_X)
-			, secondEsai(periphY, dsp56k::MemArea_Y)
-		{}
-	};
 }
 
 int main()
 {
 	/* Two positions, so both the per-position and the per-bus separation are
-	 * observable in one adapter. M_TUE is SrBit 14; writestatusRegister sets
-	 * the whole status register, so a bare bit or a cleared 0 is exact. */
+	 * observable in one adapter. */
 	static const unsigned kN = 2u;
-	const unsigned kMtu = 1u << dsp56k::Esai::M_TUE;
 
-	PositionEsai pos[2];
+	g2test::PositionEsai pos[2];
 	g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, 1u);
 	adapter.attachEsai(0u, pos[0].audioEsai, pos[0].secondEsai);
 	adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
 
-	uint64_t frameIndex = 0u;
-	dsp56k::Audio::TxFrame frame;
+	/* The wrappers are reached the way the DSP set reaches them: installed on
+	 * the peripheral, and fired by the peripheral when a frame completes. */
+	pos[0].audioEsai .setWriteTxCallback(adapter.audioTxCallback (0u));
+	pos[0].secondEsai.setWriteTxCallback(adapter.secondTxCallback(0u));
+	pos[1].audioEsai .setWriteTxCallback(adapter.audioTxCallback (1u));
+	pos[1].secondEsai.setWriteTxCallback(adapter.secondTxCallback(1u));
 
-	/* ------------- Case 1: the audio wrapper, M_TUE clear -> flag set.
+	g2test::EsaiTransmitDriver audio0 (pos[0].audioEsai);
+	g2test::EsaiTransmitDriver second0(pos[0].secondEsai);
+	g2test::EsaiTransmitDriver audio1 (pos[1].audioEsai);
+
+	audio0 .enable();
+	second0.enable();
+	audio1 .enable();
+
+	/* enable() runs the section to a frame boundary, so flags are already
+	 * touched. Start every case from a known-clear set. */
+	adapter.advanceAll(0u);
+
+	/* ------------- Case 1: a GOOD delivery on the audio bus -> flag set.
 	 *
-	 * Firing with the emulated ESAI's underrun bit clear must set position 0's
-	 * audio flag. It must touch NOTHING else: position 1's audio flag stays
-	 * clear (per-position) and both second flags stay clear (per-bus). */
+	 * A frame whose every slot was written in time must set position 0's audio
+	 * flag. It must touch NOTHING else: position 1's audio flag stays clear
+	 * (per-position) and both second flags stay clear (per-bus). */
 	{
-		auto tx0 = adapter.audioTxCallback(0u);
-		pos[0].audioEsai.writestatusRegister(0u);   /* M_TUE clear */
-		tx0(frameIndex, frame);
+		audio0.goodFrame(0x111111u);
 
 		check(adapter.audioWritten(0u),
-			"audio wrapper with M_TUE clear sets position 0's audio flag");
+			"a good audio delivery sets position 0's audio flag");
 		check(!adapter.audioWritten(1u),
-			"position 0's audio flush leaves position 1's audio flag clear");
+			"position 0's audio delivery leaves position 1's audio flag clear");
 		check(!adapter.secondWritten(0u),
-			"an audio flush does not set position 0's second-bus flag "
+			"an audio delivery does not set position 0's second-bus flag "
 			"(per-bus separation)");
 		check(!adapter.secondWritten(1u),
-			"an audio flush does not set position 1's second-bus flag");
+			"an audio delivery does not set position 1's second-bus flag");
 	}
 
-	/* ------------- Case 2: the audio wrapper, M_TUE set -> flag clear.
+	/* ------------- Case 2: a delivery carrying a REAL underrun -> flag clear.
 	 *
-	 * The wrapper must ACTIVELY clear a previously-set flag when the bit is
-	 * set, so a stale callback overwrites a good flag rather than leaving it
-	 * set. This is the case that discriminates the flag from "the callback
-	 * fired": the callback fires either way. */
+	 * The wrapper must ACTIVELY clear a previously-set flag when the frame it
+	 * receives carries an underrun, so a stale delivery overwrites a good flag
+	 * rather than leaving it set. This is the case that discriminates the flag
+	 * from "the callback fired": the callback fires either way, and the frame
+	 * arrives either way. */
 	{
-		auto tx0 = adapter.audioTxCallback(0u);
-		pos[0].audioEsai.writestatusRegister(0u);
-		tx0(frameIndex, frame);
+		audio0.goodFrame(0x222222u);
 		check(adapter.audioWritten(0u),
-			"precondition (M_TUE clear sets the flag)");
+			"precondition (a good delivery sets the flag)");
 
-		pos[0].audioEsai.writestatusRegister(kMtu);   /* M_TUE set */
-		tx0(frameIndex, frame);
+		audio0.staleFrame(0x222222u);
 		check(!adapter.audioWritten(0u),
-			"audio wrapper with M_TUE set leaves position 0's audio flag CLEAR "
-			"even though the callback fired");
+			"a delivery carrying a REAL transmit underrun leaves position 0's "
+			"audio flag CLEAR even though the callback fired");
 	}
 
-	/* ------------- Case 3: the audio wrapper's rule is M_TUE, not arrival.
+	/* ------------- Case 3: the rule is the delivery's quality, not arrival.
 	 *
-	 * Two firings with the bit set in between: the first sets the flag, the
-	 * second (bit clear) sets it again, and the third (bit set) clears it.
-	 * The flag tracks the bit across each firing, never the mere arrival. */
+	 * Three deliveries in a row: good, stale, good. The flag tracks the KIND of
+	 * each delivery, never the mere arrival -- an arrival flag would read set
+	 * after all three. */
 	{
-		auto tx0 = adapter.audioTxCallback(0u);
+		audio0.goodFrame(0x333333u);
+		check(adapter.audioWritten(0u), "good  -> set,   delivery 1");
 
-		pos[0].audioEsai.writestatusRegister(0u);
-		tx0(frameIndex, frame);
-		check(adapter.audioWritten(0u), "clear -> set, fire 1");
+		audio0.staleFrame(0x333333u);
+		check(!adapter.audioWritten(0u), "stale -> clear, delivery 2");
 
-		pos[0].audioEsai.writestatusRegister(kMtu);
-		tx0(frameIndex, frame);
-		check(!adapter.audioWritten(0u), "set   -> clear, fire 2");
-
-		pos[0].audioEsai.writestatusRegister(0u);
-		tx0(frameIndex, frame);
-		check(adapter.audioWritten(0u), "clear -> set, fire 3");
+		audio0.goodFrame(0x333333u);
+		check(adapter.audioWritten(0u), "good  -> set,   delivery 3");
 	}
 
-	/* ------------- Case 4: the second wrapper, same rule, own flag.
+	/* ------------- Case 4: the second bus, same rule, own flag.
 	 *
-	 * Firing position 0's SECOND wrapper responds to the second Esai's M_TUE
-	 * and owns m_secondWritten, and it must NOT touch the audio storage. To
-	 * show the audio flag is genuinely untouched (rather than merely false by
-	 * default), it is first driven to a known true state with an audio flush,
-	 * then the second flush must leave it true. */
+	 * Position 0's SECOND wrapper responds to the SECOND Esai's latch and owns
+	 * m_secondWritten, and it must NOT touch the audio storage. To show the
+	 * audio flag is genuinely untouched (rather than merely false by default),
+	 * it is first driven to a known true state, then the second-bus delivery
+	 * must leave it true. */
 	{
-		auto secondTx0 = adapter.secondTxCallback(0u);
-		auto audioTx0  = adapter.audioTxCallback(0u);
-
-		/* Drive the audio flag to a known TRUE first, so the per-bus
-		 * separation has something to be preserved against. */
-		pos[0].audioEsai.writestatusRegister(0u);
-		audioTx0(frameIndex, frame);
+		audio0.goodFrame(0x444444u);
 		check(adapter.audioWritten(0u),
-			"precondition (audio flag true before the second-bus flush)");
+			"precondition (audio flag true before the second-bus delivery)");
 
-		pos[0].secondEsai.writestatusRegister(0u);
-		secondTx0(frameIndex, frame);
+		second0.goodFrame(0x444444u);
 		check(adapter.secondWritten(0u),
-			"second wrapper with M_TUE clear sets position 0's second-bus flag");
+			"a good second-bus delivery sets position 0's second-bus flag");
 		check(adapter.audioWritten(0u),
-			"a second-bus flush leaves the audio flag UNCHANGED (per-bus "
+			"a second-bus delivery leaves the audio flag UNCHANGED (per-bus "
 			"separation)");
 		check(!adapter.secondWritten(1u),
-			"position 0's second flush leaves position 1's second flag clear "
+			"position 0's second delivery leaves position 1's second flag clear "
 			"(per-position separation)");
 
-		pos[0].secondEsai.writestatusRegister(kMtu);
-		secondTx0(frameIndex, frame);
+		second0.staleFrame(0x444444u);
 		check(!adapter.secondWritten(0u),
-			"second wrapper with M_TUE set leaves position 0's second-bus flag "
-			"clear even though the callback fired");
+			"a second-bus delivery carrying a REAL transmit underrun leaves "
+			"position 0's second-bus flag clear even though the callback fired");
+		check(adapter.audioWritten(0u),
+			"the stale SECOND-bus delivery still leaves the audio flag alone");
+	}
+
+	/* ------------- Case 5: the ESAI's own status bit is NOT the source.
+	 *
+	 * Setting M_TUE by hand -- which is how this file used to drive every case
+	 * above -- must now change NOTHING, because the wrappers do not read it.
+	 * Without this case a later change could quietly reinstate the dead input
+	 * and every case above would still pass. */
+	{
+		audio0.goodFrame(0x555555u);
+		check(adapter.audioWritten(0u), "precondition (flag set by a good delivery)");
+
+		pos[0].audioEsai.writestatusRegister(1u << dsp56k::Esai::M_TUE);
+		audio0.goodFrame(0x555555u);
+
+		check(adapter.audioWritten(0u),
+			"a hand-written M_TUE does NOT clear the flag: the wrapper reads "
+			"txUnderrunInFrame(), and M_TUE cannot survive to this instant on a "
+			"running machine");
 	}
 
 	if(failures != 0)

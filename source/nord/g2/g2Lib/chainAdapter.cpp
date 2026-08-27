@@ -135,14 +135,43 @@ namespace g2
 			m_secondEsai[position] = &second;
 	}
 
+	/* ------------- CHN-6: the three values a written flag can hold.
+	 *
+	 * The flag used to be a bool, and that is the shape of the defect it now
+	 * repairs. TWO different questions read it: the underrun rule asks whether
+	 * this position delivered a GOOD frame in this quantum, and the phase-error
+	 * rule asks whether it delivered AT ALL. A bool can answer only one of
+	 * them, so a stale delivery had to be encoded as "no delivery" and the
+	 * phase-error rule went blind on exactly the quanta the underrun rule
+	 * fires on. Three states answer both, in the same byte the state image
+	 * already carries. */
+	namespace
+	{
+		constexpr uint8_t kNoDelivery    = 0u;
+		constexpr uint8_t kGoodDelivery  = 1u;
+		constexpr uint8_t kStaleDelivery = 2u;
+
+		/* What one transmit wrapper writes into its position's flag. A null or
+		 * unattached Esai reports kNoDelivery, which is what the committed
+		 * conjunction did and is the right answer: a position with no
+		 * peripheral behind it delivered nothing. */
+		uint8_t deliveryState(const dsp56k::Esai* const _esai) noexcept
+		{
+			if(_esai == nullptr)
+				return kNoDelivery;
+
+			return _esai->txUnderrunInFrame() ? kStaleDelivery : kGoodDelivery;
+		}
+	}
+
 	bool ChainAdapter::audioWritten(const unsigned position) const noexcept
 	{
-		return position < m_audioWritten.size() && m_audioWritten[position] != 0u;
+		return position < m_audioWritten.size() && m_audioWritten[position] == kGoodDelivery;
 	}
 
 	bool ChainAdapter::secondWritten(const unsigned position) const noexcept
 	{
-		return position < m_secondWritten.size() && m_secondWritten[position] != 0u;
+		return position < m_secondWritten.size() && m_secondWritten[position] == kGoodDelivery;
 	}
 
 	/* ------------- the swap point. -------------------------------------------- */
@@ -169,8 +198,14 @@ namespace g2
 		const auto count = [this](const std::vector<uint8_t>& flags,
 		                          std::vector<uint64_t>& counters) noexcept
 		{
+			/* A quantum counts as an underrun when the position did not deliver
+			 * a GOOD frame on this bus: either nothing was delivered
+			 * (kNoDelivery, including a position with no Esai attached) or what
+			 * was delivered carried a transmit underrun (kStaleDelivery). The
+			 * first disjunct is the one the committed code had; the second is
+			 * the one it named and could not reach. */
 			for(unsigned p = 0u; p < m_dspCount; ++p)
-				if(!(p < flags.size() && flags[p] != 0u))
+				if(!(p < flags.size() && flags[p] == kGoodDelivery))
 					++counters[p];
 		};
 
@@ -264,12 +299,19 @@ namespace g2
 			 * did NOT ask for, on either bus. On the audio bus that condition
 			 * is one thing: the position has ALREADY delivered on this bus in
 			 * this quantum. "Already delivered" is exactly the position's
-			 * audio written flag being set at this instant - advanceAll clears
-			 * the audio flags every quantum, so a set audio flag at callback
-			 * time can only mean a previous audio transmit in this same
-			 * quantum. The check runs BEFORE this callback updates the flag,
-			 * so the lone, scheduler-driven delivery - the one callback the
-			 * scheduler asks for - is not counted, while a second one is. */
+			 * audio written flag being NON-ZERO at this instant - advanceAll
+			 * clears the audio flags every quantum, so a non-zero audio flag
+			 * at callback time can only mean a previous audio transmit in this
+			 * same quantum. The check runs BEFORE this callback updates the
+			 * flag, so the lone, scheduler-driven delivery - the one callback
+			 * the scheduler asks for - is not counted, while a second one is.
+			 *
+			 * NON-ZERO, NOT kGoodDelivery, AND THE DIFFERENCE IS LOAD-BEARING.
+			 * This rule asks about ARRIVAL; the underrun rule asks about
+			 * QUALITY. If this test demanded a good delivery, a quantum whose
+			 * first delivery underran would report no phase error however many
+			 * extra callbacks it carried - the underrun gate would blind this
+			 * one in exactly the regime both exist to describe. */
 			if(position < this->m_phaseError.size()
 				&& position < this->m_audioWritten.size()
 				&& this->m_audioWritten[position] != 0u)
@@ -279,24 +321,40 @@ namespace g2
 
 			/* CHN-6 WRITTEN-FLAG RULE (section 12.3). The flag is NOT "the
 			 * callback fired" - the scheduler drives a transmit callback for
-			 * every position on every quantum, so an arrival flag could never
-			 * be clear and underrunFrames could never rise (a green mirage).
-			 * The source is the emulated ESAI's own M_TUE bit, read at this
-			 * instant: M_TUE rises in writeSlotToFrame (esai.cpp:380-384)
-			 * before the frame is delivered and is not cleared until the
-			 * interrupt path (esai.cpp:108-112) runs after, so the bit states
-			 * whether the frame this callback carries is stale. Set the flag
-			 * true exactly when M_TUE is clear; actively clear it otherwise,
-			 * so a stale callback overwrites a good flag rather than leaving
-			 * it set. The wrapper reaches its position's Esai through
+			 * every position on every quantum, so a two-state arrival flag
+			 * could never be clear and underrunFrames could never rise (a
+			 * green mirage). It records WHICH KIND of delivery this was, and
+			 * the source is the emulated ESAI's frame-lifetime underrun latch,
+			 * Esai::txUnderrunInFrame(), read at this instant.
+			 *
+			 * IT USED TO READ THE M_TUE STATUS BIT HERE, AND THAT INPUT WAS
+			 * UNREACHABLE. Not the counter -- underrunFrames was never silent;
+			 * it counted the quanta in which no wrapper ran at all, which is
+			 * its primary meaning and is what every pre-existing assertion on
+			 * it tests. What could not reach it was the OTHER thing it was
+			 * meant to catch: a frame that WAS delivered and was stale. The
+			 * sentence that stood in this block claimed M_TUE "is
+			 * not cleared until the interrupt path runs after" the delivery.
+			 * That is false on a running machine and is quoted rather than
+			 * deleted, because it is the premise the defect rested on:
+			 * writeSlotToFrame raises M_TUE and then triggers the transmit
+			 * DMA, which is serviced synchronously, reaches Esai::writeTX and
+			 * clears M_TUE before writeSlotToFrame has even returned - slots
+			 * before this callback runs at the frame boundary. Measured over
+			 * one booted --impulse run with every slot forced to underrun:
+			 * 2,080,110 raises of M_TUE, 2,079,950 of them cleared inside
+			 * writeSlotToFrame, and this wrapper observed the bit set 7 times
+			 * out of 224,495 callbacks. underrunFrames stayed 0.
+			 *
+			 * The latch is the same fact with the frame's lifetime instead of
+			 * the slot's, so it is still standing when the frame it describes
+			 * arrives here. The wrapper reaches its position's Esai through
 			 * m_audioEsai, which attachEsai filled at construction. */
 			if(position < this->m_audioWritten.size())
 			{
 				const dsp56k::Esai* esai =
 					position < this->m_audioEsai.size() ? this->m_audioEsai[position] : nullptr;
-				const bool mTueClear = (esai != nullptr)
-					&& !(esai->readStatusRegister() & (1u << dsp56k::Esai::M_TUE));
-				this->m_audioWritten[position] = mTueClear ? 1u : 0u;
+				this->m_audioWritten[position] = deliveryState(esai);
 			}
 
 			/* Line: the transmit callback of position k writes mailbox k + 1's
@@ -359,17 +417,17 @@ namespace g2
 			}
 
 			/* CHN-6 WRITTEN-FLAG RULE, the second-bus half. Same condition as
-			 * the audio wrapper - M_TUE clear in readStatusRegister() at this
-			 * instant sets the position's SECOND-bus flag, otherwise clears
-			 * it - but it writes m_secondWritten, the per-bus storage that
-			 * lets CHN-7 count the two buses on different cadences. */
+			 * the audio wrapper - Esai::txUnderrunInFrame() at this instant
+			 * decides whether the position's SECOND-bus delivery was good or
+			 * stale - but it writes m_secondWritten, the per-bus storage that
+			 * lets CHN-7 count the two buses on different cadences. The second
+			 * bus is fed by a different Esai, so it needs the latch in its own
+			 * right: reading the audio bus's would say nothing about it. */
 			if(position < this->m_secondWritten.size())
 			{
 				const dsp56k::Esai* esai =
 					position < this->m_secondEsai.size() ? this->m_secondEsai[position] : nullptr;
-				const bool mTueClear = (esai != nullptr)
-					&& !(esai->readStatusRegister() & (1u << dsp56k::Esai::M_TUE));
-				this->m_secondWritten[position] = mTueClear ? 1u : 0u;
+				this->m_secondWritten[position] = deliveryState(esai);
 			}
 
 			/* The second bus transmits on TX2 (frame.h's reg table), so the

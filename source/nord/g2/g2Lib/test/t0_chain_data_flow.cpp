@@ -160,8 +160,9 @@ int main()
 			/* THE WRITTEN FLAG IS THE ONLY READING HERE THAT SEPARATES AN
 			 * ATTACHED POSITION FROM AN UNATTACHED ONE, AND IT IS READ THROUGH
 			 * THE ADAPTER THE INSTALLER WAS HANDED. A transmit wrapper whose
-			 * position holds no borrowed Esai pointer reads no M_TUE bit and
-			 * pins the flag to zero, yet still performs the mailbox write -- so
+			 * position holds no borrowed Esai pointer has no underrun latch to
+			 * read and pins the flag to "no delivery", yet still performs the
+			 * mailbox write -- so
 			 * every arrival assertion below stays green while the ESAI attach is
 			 * absent. Reading the flag CLEAR first and SET after makes this a
 			 * transition rather than a standing truth, so a flag pinned high

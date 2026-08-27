@@ -36,11 +36,11 @@
 #include <cstdint>
 #include <vector>
 
-/* CHN-6: the transmit wrappers inspect the emulated ESAI's M_TUE bit through
- * Esai::readStatusRegister(). The adapter stores only borrowed pointers to the
- * per-position ESAs (the DSP set owns them, section 13.10.2), so a forward
- * declaration is enough here; chainAdapter.cpp includes the full
- * dsp56kEmu/esai.h when it dereferences them. */
+/* CHN-6: the transmit wrappers inspect the emulated ESAI's frame-lifetime
+ * transmit-underrun latch through Esai::txUnderrunInFrame(). The adapter stores
+ * only borrowed pointers to the per-position ESAs (the DSP set owns them,
+ * section 13.10.2), so a forward declaration is enough here; chainAdapter.cpp
+ * includes the full dsp56kEmu/esai.h when it dereferences them. */
 namespace dsp56k { class Esai; }
 
 namespace g2
@@ -174,9 +174,9 @@ namespace g2
 		 * overwriting one another).
 		 *
 		 * CHN-6 owns the written-flag rule that these transmit wrappers
-		 * gain (the wrappers capture and inspect the emulated ESAI's M_TUE
-		 * bit); CHN-5 lays down the wiring the wrappers carry. CHN-12 tests
-		 * the wiring table for all three topologies. */
+		 * gain (the wrappers capture and inspect the emulated ESAI's
+		 * transmit-underrun latch); CHN-5 lays down the wiring the wrappers
+		 * carry. CHN-12 tests the wiring table for all three topologies. */
 		EsaiReadRxCallback  audioRxCallback (unsigned position);
 		EsaiWriteTxCallback audioTxCallback (unsigned position);
 		EsaiReadRxCallback  secondRxCallback(unsigned position);
@@ -184,15 +184,30 @@ namespace g2
 
 		/* ------------- CHN-6, the written-flag mechanism.
 		 *
-		 * Each transmit wrapper sets its position's WRITTEN flag: true
-		 * exactly when the callback fires AND the emulated ESAI's M_TUE
-		 * transmit-underrun bit is clear in Esai::readStatusRegister() at
-		 * that instant (section 12.3). M_TUE rises in writeSlotToFrame
-		 * (esai.cpp:380-384) before the frame is delivered and is not
-		 * cleared until the interrupt path (esai.cpp:108-112) runs after,
-		 * so at the instant the callback runs the bit states whether the
-		 * frame it carries is stale. This is the better measurement of
-		 * section 12.3 and the assertion behind the CHN-6 Check.
+		 * Each transmit wrapper records WHICH KIND of delivery its position
+		 * just received: a good frame, a frame carrying a transmit underrun,
+		 * or - when no wrapper fires in a quantum, or no Esai is attached -
+		 * no frame at all. The source is the emulated ESAI's frame-lifetime
+		 * underrun latch, Esai::txUnderrunInFrame(), read at the instant the
+		 * callback fires (section 12.3).
+		 *
+		 * IT READ THE M_TUE STATUS BIT HERE, AND THAT INPUT WAS UNREACHABLE.
+		 * The claim that stood in this block -- "M_TUE rises in
+		 * writeSlotToFrame before the frame is delivered and is not cleared
+		 * until the interrupt path runs after" -- is false on a running
+		 * machine, and it is quoted rather than deleted because it is the
+		 * premise the defect rested on. writeSlotToFrame raises M_TUE and
+		 * then triggers the transmit DMA, which is serviced synchronously and
+		 * reaches Esai::writeTX, which clears the bit again before
+		 * writeSlotToFrame returns - slots before the frame carrying the
+		 * stale slot is delivered.
+		 *
+		 * THE COUNTER FED BY THESE FLAGS WAS NEVER SILENT, and no paragraph
+		 * here should say it was. "No frame delivered this quantum" always
+		 * reached underrunFrames and is what every assertion on that counter
+		 * predating this change exercises. It is the OTHER value - "a frame
+		 * arrived and it was stale" - that could not occur, and the latch is
+		 * what makes it occur.
 		 *
 		 * attachEsai records the borrowed per-position Esai pointers a
 		 * position's transmit wrappers inspect. The DSP set calls it for
@@ -201,10 +216,11 @@ namespace g2
 		 * fire. It is CHN-6's seam so the rule is testable before CHN-7's
 		 * advanceAll consumes the flags.
 		 *
-		 * audioWritten/secondWritten read one position's flag back; they are
-		 * the test and diagnostic surface of the M_TUE rule. Nothing can SET
-		 * a flag outside ChainAdapter - a flag changes only when its own
-		 * transmit wrapper fires. */
+		 * audioWritten/secondWritten read one position's flag back and report
+		 * the GOOD case only, so they are false for a stale delivery and for
+		 * no delivery alike; they are the test and diagnostic surface of the
+		 * rule. Nothing can SET a flag outside ChainAdapter - a flag changes
+		 * only when its own transmit wrapper fires. */
 		void attachEsai(unsigned position, dsp56k::Esai& audio, dsp56k::Esai& second);
 		bool audioWritten (unsigned position) const noexcept;
 		bool secondWritten(unsigned position) const noexcept;
@@ -289,6 +305,15 @@ namespace g2
 		 * and its second transmit wrapper sets m_secondWritten, which is
 		 * what lets CHN-7 count the two buses on different cadences.
 		 *
+		 * EACH FLAG HAS THREE VALUES, NOT TWO, and chainAdapter.cpp names
+		 * them kNoDelivery / kGoodDelivery / kStaleDelivery. Two readers ask
+		 * different questions of the same byte: CHN-7's underrun count asks
+		 * whether the delivery was GOOD, and CHN-8's phase-error check asks
+		 * whether there was a delivery AT ALL. A two-valued flag can answer
+		 * only one of them, and encoding a stale delivery as "no delivery"
+		 * would blind the phase-error rule on exactly the quanta the underrun
+		 * rule fires on.
+		 *
 		 * m_audioEsai / m_secondEsai are the borrowed per-position Esai
 		 * pointers (owned by the DSP set), populated by attachEsai before
 		 * the factories are produced. */
@@ -300,8 +325,10 @@ namespace g2
 		/* ------------- CHN-7 private state: the two underrun counters.
 		 *
 		 * One uint64_t for each position for each bus. advanceAll step 1
-		 * increments m_underrun[position] on EVERY quantum when the
-		 * position's audio-bus written flag is clear; step 2 increments
+		 * increments m_underrun[position] on EVERY quantum in which the
+		 * position's audio-bus flag is not kGoodDelivery - so for a quantum
+		 * that delivered nothing AND for one that delivered a stale frame;
+		 * step 2 increments
 		 * m_secondUnderrun[position] ONLY on the second-bus window quanta
 		 * (frameIndex % secondBusFrameDivider == 0). The two are separate
 		 * storage, because the two buses advance at different rates, and
