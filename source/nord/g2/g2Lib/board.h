@@ -90,16 +90,34 @@ namespace g2
 		 * that wants conversions supplies them. */
 		Max1039Config adc;
 
-		/* THE ISP1181 ENDPOINT THE G2 PROTOCOL RUNS OVER. NO AUTHORITY IN THIS
-		 * PROJECT RECORDS IT, so plan section 1.3 rule 1 makes it
-		 * CONFIGURATION and not a constant this file invents. The default is
-		 * the lowest non-control endpoint the part's own buffer table gives a
-		 * 64-byte double buffer -- endpoint 2; endpoint 1 is 16 bytes and
-		 * endpoint 3 is single-buffered, and that table is the only property
-		 * of the part that discriminates among the three. IT IS A CHOICE AND
-		 * NOT A MEASUREMENT: a capture of the real device's descriptors is
-		 * what would close it, and none has been taken. */
-		int usbProtocolEndpoint = 2;
+		/* THE ISP1181 ENDPOINT THE G2 PROTOCOL RUNS OVER. Plan section 1.3
+		 * rule 1 keeps it CONFIGURATION and not a constant this file invents,
+		 * and a caller may still name another one.
+		 *
+		 * THE DEFAULT IS NOW A MEASUREMENT OF THE EMULATED FIRMWARE and no
+		 * longer a choice. `t1_usb_isr` boots the Clavia image, hands a real
+		 * `.pch2` to one endpoint and records every byte the firmware writes
+		 * to the CS3 command port. On endpoint 3 the firmware answers with
+		 * read-interrupt-register `0xC0`, endpoint-3 status `0x54`, READ
+		 * endpoint 3's buffer `0x14`, CLEAR endpoint 3's buffer `0x74` -- the
+		 * authority's OUT sequence, which is a DRAIN. The same file reads back
+		 * the DcEndpointConfiguration bytes the firmware itself writes and
+		 * finds EPDIR clear on endpoint 3's slot, so the firmware declared that
+		 * buffer host-to-device. Its control is endpoint 0 in the same run,
+		 * which answers `0xC0 0x50` and no more.
+		 *
+		 * WHAT DISCRIMINATED IT, AND WHAT DID NOT. The old default was
+		 * endpoint 2, taken from `fifoShape` in `src/isp1181/isp1181.nim`:
+		 * endpoint 2 is the lowest non-control endpoint with a 64-byte double
+		 * buffer. That table is a FIRMWARE CONFIGURATION and not a property of
+		 * the part -- ISP1362 Rev. 06 pp.51-53 put the size in FFOSZ[3:0] and
+		 * the buffering in DBLBUF, both fields of a register the firmware
+		 * writes -- and nothing read the firmware's writes back into it, so it
+		 * could not discriminate an endpoint at all. What the firmware DOES
+		 * with a delivered packet can, and it is what the default now rests
+		 * on. A capture of the real device's descriptors would still be a
+		 * better authority; none has been taken. */
+		int usbProtocolEndpoint = 3;
 	};
 
 	// The Board. Concrete, final, neither copyable nor movable. Constructed by
