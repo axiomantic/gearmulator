@@ -70,6 +70,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <vector>
 
 #include <mcf5307.h>
 
@@ -84,6 +85,7 @@
 #include "panel.h"
 #include "sim.h"
 #include "status.h"
+#include "transportHub.h"
 #include "uart0.h"
 
 namespace g2
@@ -106,6 +108,17 @@ namespace g2
 		 * annotation and a shipped default would make it look measured. A caller
 		 * that wants conversions supplies them. */
 		Max1039Config adc;
+
+		/* THE ISP1181 ENDPOINT THE G2 PROTOCOL RUNS OVER. NO AUTHORITY IN THIS
+		 * PROJECT RECORDS IT, so plan section 1.3 rule 1 makes it
+		 * CONFIGURATION and not a constant this file invents. The default is
+		 * the lowest non-control endpoint the part's own buffer table gives a
+		 * 64-byte double buffer -- endpoint 2; endpoint 1 is 16 bytes and
+		 * endpoint 3 is single-buffered, and that table is the only property
+		 * of the part that discriminates among the three. IT IS A CHOICE AND
+		 * NOT A MEASUREMENT: a capture of the real device's descriptors is
+		 * what would close it, and none has been taken. */
+		int usbProtocolEndpoint = 2;
 	};
 
 	// The Board. Concrete, final, neither copyable nor movable. Constructed by
@@ -289,6 +302,62 @@ namespace g2
 		                       mcf5307_bus_status* status);
 		static void     onWrite(void* user, uint32_t addr, int size,
 		                        uint32_t value, mcf5307_bus_status* status);
+
+		/* THE BOARD'S TRANSPORT HUB. Design section 15.1 puts the three
+		 * attachments -- the internal client, the forked G2-Edit socket and
+		 * the usbip adapter -- on ONE hub, and design section 13.10.6 puts
+		 * that hub on the Board. It is a MEMBER and not a pointer, so there is
+		 * no state in which a Board has no hub and no order in which an
+		 * attachment can reach one that does not exist yet.
+		 *
+		 * ATTACHING IS THE CALLER'S AND NOT THIS CLASS'S. The Board attaches
+		 * NOTHING: an attachment that the Board created would make attachment
+		 * 1 a component of the Board rather than a peer of the other two, and
+		 * design section 15.1's whole point is that the three are siblings. */
+		TransportHub& transport() noexcept { return m_transport; }
+
+		/* ONE QUANTUM'S WORTH OF ATTACHMENT-TO-DEVICE TRAFFIC. It drains the
+		 * hub exactly once and hands every drained frame to the USB device.
+		 *
+		 * IT IS CALLED FROM tickSofIfDue AND THAT IS WHY IT IS ALSO PUBLIC.
+		 * tickSofIfDue is the one Board method the Scheduler calls
+		 * UNCONDITIONALLY on every frame, immediately before runMcu (design
+		 * section 13.5), so it is already the fixed per-quantum boundary this
+		 * drain must sit on, and hooking it there adds no call to the
+		 * Scheduler and edits no file the sched track owns. It is reachable on
+		 * its own so that a check can drive one quantum's transport without
+		 * driving a SOF tick.
+		 *
+		 * IT ALLOCATES NOTHING. The drain target is sized once, with the hub,
+		 * in the constructor's member initialiser list. */
+		void pumpTransport() noexcept;
+
+		/* THE DEVICE'S TRANSMIT CALLBACK, PUBLIC FOR THE REASON onRead AND
+		 * onWrite ABOVE ARE PUBLIC: it is the exact function pointer handed to
+		 * isp1181_create, so a check that drives THIS drives the path the
+		 * DEVICE takes. A check that drove a private forwarding helper instead
+		 * would stay green with a null callback installed, which is the defect
+		 * measured for the bus pair and recorded above.
+		 *
+		 * `endpoint` IS ACCEPTED AND NOT FILTERED. The hub carries bytes and
+		 * names no endpoint, design section 15.3 puts the protocol's framing
+		 * in the payload itself, and no authority in this project records
+		 * which endpoints the device transmits on. Refusing an endpoint here
+		 * would be inventing that authority. */
+		static void     onUsbTx(void* user, int endpoint, const uint8_t* data,
+		                        size_t len);
+
+		/* THE DEVICE'S SERVICE REQUEST, PUBLIC FOR THE REASON onUsbTx ABOVE IS
+		 * PUBLIC: it is the exact function pointer handed to isp1181_create,
+		 * so a check that drives THIS drives the path the DEVICE takes.
+		 *
+		 * IT NAMES THE PIN AND NOTHING ELSE. The level, the autovector bit and
+		 * the vector are the interrupt controller's to derive -- from IRQPAR
+		 * and from AVR, both of which the firmware programs through the MBAR
+		 * window -- so this callback carries no level of its own. Naming a
+		 * level here would freeze at construction a value the firmware is
+		 * still free to move. */
+		static void     onUsbIrq(void* user, int asserted);
 
 		/* The units, so a caller can load the flash images, install the HDI08
 		 * callbacks the DSP side needs, feed UART0 and read each unit's own
@@ -500,6 +569,20 @@ namespace g2
 		 * creates it in the constructor and destroys it in the destructor, so
 		 * its lifetime is exactly the Board's; task BRD-22 owns both. */
 		isp1181_ctx* m_usb;
+
+		/* The endpoint pumpTransport delivers on, taken from BoardConfig
+		 * because no authority records it. */
+		int          m_usbProtocolEndpoint;
+
+		/* THE HUB, AND THE DRAIN TARGET IT FILLS. Both are sized in the
+		 * constructor's member initialiser list and neither grows again:
+		 * pumpTransport runs on the scheduler thread inside a quantum
+		 * boundary, where design section 13.10 rule 1 forbids allocation.
+		 * m_drained holds kMaxEndpoints x queueDepth entries, which is every
+		 * frame the hub can possibly hand out in one drain, so a drain can
+		 * never be cut short by this buffer. */
+		TransportHub              m_transport;
+		std::vector<StampedFrame> m_drained;
 
 		uint64_t     m_lastFrameIndex = 0;
 		bool         m_faulted        = false;
