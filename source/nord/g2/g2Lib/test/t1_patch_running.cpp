@@ -79,6 +79,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -441,6 +442,69 @@ namespace
 
 	constexpr unsigned g_overrunQuanta = 1024u;
 
+	/* ------------------------------- THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE
+	 *
+	 * THE SAME GAP THIS FILE'S HEADER NAMES FOR THE ROUTINE PROBE, ONE FIELD
+	 * OVER. The routine probe has a known positive and a known negative and
+	 * this file will not read its zero without them. The ARRIVAL figure below
+	 * had neither: `arrival=-1` was printed by an instrument nothing had ever
+	 * shown a frame to, so a chain that carried nothing and an arrival path
+	 * that could not report anything produced the same figure.
+	 *
+	 * The control places a sentinel at the TAIL position's transmit source and
+	 * reads it back out of the codec sink, through the same `pull` and the same
+	 * comparator the walk uses. Its sentinel is neither impulse word, so it
+	 * cannot be mistaken for the measurement it qualifies, and bit 23 is clear
+	 * so fromEsaiFrame's sign extension is the identity on it. */
+	constexpr uint32_t g_sinkControlWord     = 0x2B6D51u;
+	constexpr int32_t  g_sinkControlExpected = int32_t(g_sinkControlWord);
+
+	static_assert((g_sinkControlWord & 0x800000u) == 0u,
+		"the sentinel's sign bit must be clear, or fromEsaiFrame's sign extension moves it");
+	static_assert(g_sinkControlExpected != g_impulseLeft && g_sinkControlExpected != g_impulseRight,
+		"the control's sentinel must not be either impulse word");
+
+	constexpr uint32_t g_esaiTransmitters  = 6u;
+	constexpr unsigned g_sinkControlQuanta = 64u;
+	constexpr dsp56k::TWord g_dmaTxChannel = 4u;
+
+	/* THE TAIL IS FOUND AND NOT TYPED. The chain adapter's POSITION and the
+	 * hardware PORT are not the same number: dspSet.cpp binds
+	 * audioTxCallback(position) to peripherals(portOfPosition[position]), and
+	 * portOfPosition comes from the nine-entry table the firmware builds at
+	 * 0x30116970. Entry i holds the CS1 address of the port at chain position
+	 * i, and A3..A10 are eight ACTIVE-LOW one-cold selects, so the port number
+	 * is the index of the single line pulled down.
+	 *
+	 * THE CONFIGURATION IS COPIED AND NOT SHARED, plan section 1.3 rule 1, for
+	 * the reason the machine placement above is. */
+	unsigned portOfChainPosition(g2::Board& _board, const unsigned _wanted, const unsigned _count)
+	{
+		constexpr uint32_t g_portTableBase = 0x30116970u;
+
+		for(unsigned position = 0; position < _count; ++position)
+		{
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			const uint32_t entry =
+				g2::Board::onRead(&_board, g_portTableBase + position * 4u, 4, &status);
+
+			const uint8_t selects = uint8_t((entry >> 3) & 0xffu);
+			const uint8_t low     = uint8_t(~selects);
+
+			if(low == 0u || (low & uint8_t(low - 1u)) != 0u)
+				continue;
+
+			unsigned port = 0;
+			for(uint8_t bit = low; bit > 1u; bit >>= 1)
+				++port;
+
+			if(position == _wanted && port < _count)
+				return port;
+		}
+
+		return _count;
+	}
+
 	// t0_usb_ingress_byte's in-process container, built here for the same
 	// reason it is built there: a one-object `.pch2` whose single object is
 	// small enough for the endpoint the model gives it. It carries no Clavia
@@ -515,6 +579,16 @@ namespace
 		uint64_t nonZeroFrames  = 0;
 		int32_t  firstNonZeroL  = 0;
 		int32_t  firstNonZeroR  = 0;
+
+		// The arrival instrument's known positive, run after the walk on the
+		// same machine so it cannot move the measurement it qualifies.
+		unsigned sinkControlPort    = 0;
+		bool     sinkControlPortFound = false;
+		unsigned sinkControlQuanta  = 0;
+		int      sinkControlArrival = -1;
+		bool     sinkControlExact   = false;
+		int32_t  sinkControlL       = 0;
+		int32_t  sinkControlR       = 0;
 	};
 
 	// Boots one machine, optionally hands it `_patch`, opens the observation
@@ -752,6 +826,83 @@ namespace
 
 		_r.walkQuanta = walk;
 
+		// ---------------------------- the arrival instrument's known positive
+		//
+		// THE LINKS IT TRAVERSES: the tail DSP's X memory, its transmit DMA,
+		// the ESAI transmit register file, ESAI frame assembly, the installed
+		// WriteTxCallback (which is ChainAdapter::audioTxCallback(N-1)),
+		// fromEsaiFrame, mailbox N, ChainAdapter::advanceAll,
+		// extractCodecSink, CodecSink::push, Scheduler::pull, and the walk's
+		// own two predicates.
+		//
+		// THE LINKS IT DOES NOT: no DSP core executes any part of it, and
+		// positions 0..N-2, every receive callback, the mailbox hop chain and
+		// injectCodecSource are all UPSTREAM of the tail. It says the sink can
+		// report a frame the TAIL transmitted; it says nothing about whether
+		// anything reaches the tail. That is exactly the half `arrival=-1`
+		// needed and did not have.
+		{
+			const unsigned tailPort = portOfChainPosition(board, _r.dspCount - 1u, _r.dspCount);
+
+			_r.sinkControlPortFound = tailPort < _r.dspCount;
+			_r.sinkControlPort      = _r.sinkControlPortFound ? tailPort : 0u;
+
+			if(_r.sinkControlPortFound)
+			{
+				dsp56k::Peripherals56311& p = board.dspSet().peripherals(_r.sinkControlPort);
+				dsp56k::Esai&             tailEsai = p.getEsai();
+
+				for(unsigned q = 0; q < g_sinkControlQuanta && _r.sinkControlArrival < 0; ++q)
+				{
+					++_r.sinkControlQuanta;
+
+					const dsp56k::TWord enabled = tailEsai.hasEnabledTransmitters();
+
+					for(uint32_t reg = 0; reg < g_esaiTransmitters; ++reg)
+					{
+						if(enabled & (1u << reg))
+							tailEsai.writeTX(reg, g_sinkControlWord);
+					}
+
+					// AND THE BUFFER THE TRANSMIT DMA REFILLS THAT REGISTER
+					// FROM. writeSlotToFrame copies the register file into the
+					// slot and then triggers the transmit DMA, which is
+					// serviced synchronously and overwrites the register before
+					// the next slot is assembled, so a register-only injection
+					// reaches ONE slot and the codec sink reads TWO. The window
+					// is read off the DMA's own source register and the ESAI's
+					// own transmit word count, never typed.
+					{
+						const dsp56k::TWord source     = p.getDMA().getDSR(g_dmaTxChannel);
+						const dsp56k::TWord frameWords = tailEsai.getTxWordCount() + 1u;
+						const dsp56k::TWord base       = source - (source % frameWords);
+
+						dsp56k::Memory& tailMemory = board.dspSet().dsp(_r.sinkControlPort).memory();
+
+						for(dsp56k::TWord i = 0; i < frameWords * 2u; ++i)
+							tailMemory.set(dsp56k::MemArea_X, base + i, g_sinkControlWord);
+					}
+
+					(void) scheduler->push(&silence, 1);
+					scheduler->runFrames(1);
+
+					g2::Frame out{};
+
+					if(scheduler->pull(&out, 1) == 0)
+						continue;
+
+					if(out.slot[0] == 0 && out.slot[1] == 0)
+						continue;
+
+					_r.sinkControlArrival = int(q);
+					_r.sinkControlL       = out.slot[0];
+					_r.sinkControlR       = out.slot[1];
+					_r.sinkControlExact   = out.slot[0] == g_sinkControlExpected
+						&& out.slot[1] == g_sinkControlExpected;
+				}
+			}
+		}
+
 		return true;
 	}
 
@@ -791,6 +942,14 @@ namespace
 		          << " arrivalExact=" << (_r.arrivalExact ? 1 : 0)
 		          << " nonZeroFrames=" << _r.nonZeroFrames
 		          << " firstNonZero=" << _r.firstNonZeroL << "/" << _r.firstNonZeroR
+		          << std::endl;
+		std::cout << _label << ": sinkControl tailPosition="
+		          << (_r.dspCount > 0 ? _r.dspCount - 1u : 0u)
+		          << " tailPort=" << (_r.sinkControlPortFound ? int(_r.sinkControlPort) : -1)
+		          << " controlQuanta=" << _r.sinkControlQuanta
+		          << " sinkControlArrival=" << _r.sinkControlArrival
+		          << " sinkControlExact=" << (_r.sinkControlExact ? 1 : 0)
+		          << " sinkControlValue=" << _r.sinkControlL << "/" << _r.sinkControlR
 		          << std::endl;
 	}
 }
@@ -863,6 +1022,41 @@ int main()
 		// The preconditions of the measurement, asserted before the measurement,
 		// so that a silent machine is reported as the machine's failure and not
 		// as the patch's.
+		// ---------------- the arrival instrument's known positive, both runs
+		//
+		// THE ARRIVAL FIGURE THIS FILE PRINTS IS NOW READABLE. Before it, a
+		// chain that carried nothing and an arrival path that could not report
+		// anything both printed `arrival=-1`, and nothing here could tell them
+		// apart. Both runs are asserted because both print an arrival figure,
+		// and a control that held on one run would say nothing about the other.
+		//
+		// EVERY FIELD IS PINNED. The port is the one the FIRMWARE's table puts
+		// at chain position N-1 and is not the position number -- on this
+		// machine it is 0 against a position of 7, and a control that assumed
+		// otherwise drove chain position 1 and reported a dead path on a
+		// healthy machine. The arrival is quantum 0 because the tail writes
+		// mailbox N in the same quantum the egress phase reads it. Both slots
+		// carry the sentinel, so neither line of extractCodecSink is passing a
+		// value the other one supplied.
+		for(const std::pair<const char*, const RunResult&> run :
+			{std::pair<const char*, const RunResult&>{"control", control},
+			 std::pair<const char*, const RunResult&>{"patched", patched}})
+		{
+			const std::string label = run.first;
+
+			check(run.second.sinkControlPortFound,
+				label + ": the firmware's port table names a port at chain position "
+				+ std::to_string(run.second.dspCount - 1u));
+			check(run.second.sinkControlArrival == 0,
+				label + ": the sink control arrived on the first control quantum; observed "
+				+ std::to_string(run.second.sinkControlArrival));
+			check(run.second.sinkControlExact,
+				label + ": the sink control arrived unchanged in BOTH codec slots; observed "
+				+ std::to_string(run.second.sinkControlL) + "/"
+				+ std::to_string(run.second.sinkControlR) + " against "
+				+ std::to_string(g_sinkControlExpected));
+		}
+
 		check(control.programsLanded, "control: every DSP position took its program");
 		check(patched.programsLanded, "patched: every DSP position took its program");
 		check(!patched.halted,  "patched: the core is not halted when the window closes");

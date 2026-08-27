@@ -260,6 +260,71 @@ namespace
 	// findings about the machine and must not be reported as one.
 	constexpr unsigned g_sustainedQuanta = 2048u;
 
+	/* ------------------------------- THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE
+	 *
+	 * THIS TEST IS RED BY DESIGN AND ITS RED WAS AMBIGUOUS. `arrival >= 0`
+	 * failing says the pattern did not appear at the sink; it does NOT say
+	 * whether the chain declined to carry it or whether the arrival path could
+	 * not have reported it either way. The sustained probe below separates a
+	 * slow chain from a silent one and does not touch that question.
+	 *
+	 * The control does. It places a sentinel at the TAIL position's transmit
+	 * source and reads it back out of the codec sink through the same `pull`
+	 * and the same comparator the walk uses, so a failing `arrival` assertion
+	 * beside a passing control is a statement about the CHAIN and not about the
+	 * instrument. IT ADDS AN ASSERTION AND WEAKENS NONE: the arrival checks
+	 * below are untouched and still fail on an unpatched machine, which is what
+	 * milestone M6 asks them to do. */
+	constexpr uint32_t g_sinkControlWord     = 0x2B6D51u;
+	constexpr int32_t  g_sinkControlExpected = int32_t(g_sinkControlWord);
+
+	static_assert((g_sinkControlWord & 0x800000u) == 0u,
+		"the sentinel's sign bit must be clear, or fromEsaiFrame's sign extension moves it");
+	static_assert(g_sinkControlExpected != g_impulseLeft && g_sinkControlExpected != g_impulseRight,
+		"the control's sentinel must not be either impulse word");
+
+	constexpr uint32_t g_esaiTransmitters  = 6u;
+	constexpr unsigned g_sinkControlQuanta = 64u;
+	constexpr dsp56k::TWord g_dmaTxChannel = 4u;
+
+	/* THE TAIL IS FOUND AND NOT TYPED. The chain adapter's POSITION and the
+	 * hardware PORT are not the same number: dspSet.cpp binds
+	 * audioTxCallback(position) to peripherals(portOfPosition[position]), and
+	 * portOfPosition comes from the nine-entry table the firmware builds at
+	 * 0x30116970. Entry i holds the CS1 address of the port at chain position
+	 * i, and A3..A10 are eight ACTIVE-LOW one-cold selects, so the port number
+	 * is the index of the single line pulled down. On this machine position 7
+	 * is port 0.
+	 *
+	 * THE CONFIGURATION IS COPIED AND NOT SHARED, plan section 1.3 rule 1, for
+	 * the reason this file's machine placement is. */
+	unsigned portOfChainPosition(g2::Board& _board, const unsigned _wanted, const unsigned _count)
+	{
+		constexpr uint32_t g_portTableBase = 0x30116970u;
+
+		for(unsigned position = 0; position < _count; ++position)
+		{
+			mcf5307_bus_status status = MCF5307_BUS_OK;
+			const uint32_t entry =
+				g2::Board::onRead(&_board, g_portTableBase + position * 4u, 4, &status);
+
+			const uint8_t selects = uint8_t((entry >> 3) & 0xffu);
+			const uint8_t low     = uint8_t(~selects);
+
+			if(low == 0u || (low & uint8_t(low - 1u)) != 0u)
+				continue;
+
+			unsigned port = 0;
+			for(uint8_t bit = low; bit > 1u; bit >>= 1)
+				++port;
+
+			if(position == _wanted && port < _count)
+				return port;
+		}
+
+		return _count;
+	}
+
 	struct EgressResult
 	{
 		bool     placed          = false;
@@ -294,6 +359,16 @@ namespace
 		// The sustained probe. sustainedRan says it happened at all.
 		bool     sustainedRan    = false;
 		int      sustainedFirst  = -1;
+
+		// The arrival instrument's known positive, run last so it cannot move
+		// the measurement it qualifies.
+		unsigned sinkControlPort      = 0;
+		bool     sinkControlPortFound = false;
+		unsigned sinkControlQuanta    = 0;
+		int      sinkControlArrival   = -1;
+		bool     sinkControlExact     = false;
+		int32_t  sinkControlL         = 0;
+		int32_t  sinkControlR         = 0;
 	};
 
 	// Runs the whole thing on one booted machine. Returns false only when the
@@ -493,6 +568,82 @@ namespace
 			}
 		}
 
+		// ---------------------------- the arrival instrument's known positive
+		//
+		// THE LINKS IT TRAVERSES: the tail DSP's X memory, its transmit DMA,
+		// the ESAI transmit register file, ESAI frame assembly, the installed
+		// WriteTxCallback (ChainAdapter::audioTxCallback(N-1)), fromEsaiFrame,
+		// mailbox N, ChainAdapter::advanceAll, extractCodecSink,
+		// CodecSink::push, Scheduler::pull and the walk's own two predicates.
+		//
+		// THE LINKS IT DOES NOT: no DSP core executes any part of it, and
+		// positions 0..N-2, every receive callback, the mailbox hop chain and
+		// injectCodecSource are all UPSTREAM of the tail. It qualifies the
+		// arrival REPORTING path and makes no claim about the chain.
+		{
+			const unsigned tailPort =
+				portOfChainPosition(board, _result.dspCount - 1u, _result.dspCount);
+
+			_result.sinkControlPortFound = tailPort < _result.dspCount;
+			_result.sinkControlPort      = _result.sinkControlPortFound ? tailPort : 0u;
+
+			if(_result.sinkControlPortFound)
+			{
+				dsp56k::Peripherals56311& p = board.dspSet().peripherals(_result.sinkControlPort);
+				dsp56k::Esai&             tailEsai = p.getEsai();
+
+				for(unsigned q = 0; q < g_sinkControlQuanta && _result.sinkControlArrival < 0; ++q)
+				{
+					++_result.sinkControlQuanta;
+
+					const dsp56k::TWord enabled = tailEsai.hasEnabledTransmitters();
+
+					for(uint32_t reg = 0; reg < g_esaiTransmitters; ++reg)
+					{
+						if(enabled & (1u << reg))
+							tailEsai.writeTX(reg, g_sinkControlWord);
+					}
+
+					// AND THE BUFFER THE TRANSMIT DMA REFILLS THAT REGISTER
+					// FROM. writeSlotToFrame copies the register file into the
+					// slot and then triggers the transmit DMA, which is
+					// serviced synchronously and overwrites the register before
+					// the next slot is assembled, so a register-only injection
+					// reaches ONE slot and the codec sink reads TWO. The window
+					// is read off the DMA's own source register and the ESAI's
+					// own transmit word count, never typed.
+					{
+						const dsp56k::TWord source     = p.getDMA().getDSR(g_dmaTxChannel);
+						const dsp56k::TWord frameWords = tailEsai.getTxWordCount() + 1u;
+						const dsp56k::TWord base       = source - (source % frameWords);
+
+						dsp56k::Memory& tailMemory =
+							board.dspSet().dsp(_result.sinkControlPort).memory();
+
+						for(dsp56k::TWord i = 0; i < frameWords * 2u; ++i)
+							tailMemory.set(dsp56k::MemArea_X, base + i, g_sinkControlWord);
+					}
+
+					(void) scheduler->push(&silence, 1);
+					scheduler->runFrames(1);
+
+					g2::Frame out{};
+
+					if(scheduler->pull(&out, 1) == 0)
+						continue;
+
+					if(out.slot[0] == 0 && out.slot[1] == 0)
+						continue;
+
+					_result.sinkControlArrival = int(q);
+					_result.sinkControlL       = out.slot[0];
+					_result.sinkControlR       = out.slot[1];
+					_result.sinkControlExact   = out.slot[0] == g_sinkControlExpected
+						&& out.slot[1] == g_sinkControlExpected;
+				}
+			}
+		}
+
 		return true;
 	}
 
@@ -518,6 +669,14 @@ namespace
 		          << " overflowAfter=" << _r.overflowAfter << std::endl;
 		std::cout << "egress: sustainedRan=" << (_r.sustainedRan ? 1 : 0)
 		          << " sustainedFirst=" << _r.sustainedFirst << std::endl;
+		std::cout << "egress: sinkControl tailPosition="
+		          << (_r.dspCount > 0 ? _r.dspCount - 1u : 0u)
+		          << " tailPort=" << (_r.sinkControlPortFound ? int(_r.sinkControlPort) : -1)
+		          << " controlQuanta=" << _r.sinkControlQuanta
+		          << " sinkControlArrival=" << _r.sinkControlArrival
+		          << " sinkControlExact=" << (_r.sinkControlExact ? 1 : 0)
+		          << " sinkControlValue=" << _r.sinkControlL << "/" << _r.sinkControlR
+		          << std::endl;
 
 		std::cout << "egress: head of walk =";
 		for(size_t i = 0; i < _r.pulled.size(); ++i)
@@ -588,6 +747,25 @@ int main()
 			"no walk quantum ran against an empty CodecSource, so every injected frame was consumed by an ingress phase");
 		checkEqual(result.overflowAfter, 0u,
 			"no walk frame was refused by the CodecSource");
+
+		// ---------------- the arrival instrument's known positive
+		//
+		// IT RUNS BEFORE THE ARRIVAL CHECKS BECAUSE IT QUALIFIES THEM. A
+		// failing `arrival >= 0` beside a passing control is a statement about
+		// the CHAIN; the same failure beside a failing control is a statement
+		// about nothing.
+		check(result.sinkControlPortFound,
+			"the firmware's port table names a port at chain position "
+			+ std::to_string(result.dspCount - 1u));
+		check(result.sinkControlArrival == 0,
+			"the sink control arrived on the first control quantum: the tail writes mailbox N in the "
+			"same quantum the egress phase reads it; observed "
+			+ std::to_string(result.sinkControlArrival));
+		check(result.sinkControlExact,
+			"the sink control arrived unchanged in BOTH codec slots, so the arrival path can report a "
+			"frame it was handed; observed " + std::to_string(result.sinkControlL) + "/"
+			+ std::to_string(result.sinkControlR) + " against "
+			+ std::to_string(g_sinkControlExpected));
 
 		check(result.arrival >= 0,
 			"the injected pattern reached the codec sink at all within "

@@ -213,6 +213,8 @@ int main()
 		good.arrivalExact     = true;
 		good.expectedArrival  = 7;
 		good.countersZero     = true;
+		good.sinkControlArrival = 0;
+		good.sinkControlExact   = true;
 
 		check(std::string(name(classify(good))) == "PROPAGATED",
 			"a pattern that arrived unchanged at the derived frame, beside zero counters, is PROPAGATED");
@@ -259,6 +261,37 @@ int main()
 
 		check(std::string(name(classify(goodButBroken))) == "INSTRUMENT-BLIND",
 			"a failed observer self-test is INSTRUMENT-BLIND even when the record claims an exact arrival");
+
+		// THE ARRIVAL INSTRUMENT'S OWN KNOWN POSITIVE, WHICH IS NOT THE
+		// COMPARATOR SELF-TEST ABOVE. observerSelfTest drives the two
+		// predicates over two frames the PROGRAM built and never over a frame
+		// the SINK delivered, so it holds whatever the arrival path does. The
+		// three records below are `stopped` with only the control's own two
+		// fields moved, and each names a different way the arrival path can be
+		// dead while every other field still reads healthy.
+		ImpulseObservation deadSink = stopped;
+		deadSink.sinkControlArrival = -1;
+		deadSink.sinkControlExact   = false;
+
+		check(std::string(name(classify(deadSink))) == "INSTRUMENT-BLIND",
+			"a sink control that never arrived is INSTRUMENT-BLIND: an arrival path that cannot report a frame it was HANDED cannot report an absence either");
+
+		check(std::string(name(classify(deadSink))) != std::string(name(classify(stopped))),
+			"deadSink and stopped differ in the control's fields alone and the two outcomes differ: a dead arrival path is told apart from a chain that carried nothing");
+
+		ImpulseObservation corruptSink = stopped;
+		corruptSink.sinkControlArrival = 0;
+		corruptSink.sinkControlExact   = false;
+
+		check(std::string(name(classify(corruptSink))) == "INSTRUMENT-BLIND",
+			"a sink control that arrived CHANGED is INSTRUMENT-BLIND: a path that mangles a known value cannot be trusted to have carried an unknown one unchanged");
+
+		ImpulseObservation claimedButUnproven = good;
+		claimedButUnproven.sinkControlArrival = -1;
+		claimedButUnproven.sinkControlExact   = false;
+
+		check(std::string(name(classify(claimedButUnproven))) == "INSTRUMENT-BLIND",
+			"an arrival claimed by an arrival path whose control never arrived is INSTRUMENT-BLIND, not PROPAGATED");
 
 		ImpulseObservation late = good;
 		late.arrival            = 9;
