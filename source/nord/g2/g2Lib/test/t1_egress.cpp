@@ -1,17 +1,47 @@
 // Task INT-2. Tier T1: this test needs the Clavia firmware artifacts and SKIPS
 // with a reason when NMG2_ARTIFACTS does not resolve.
 //
-// Plan section 16 (INT-2), section 6 milestone M5, design sections 18.3, 12.3
+// Plan section 16 (INT-2), section 6 milestone M6, design sections 18.3, 12.3
 // and 14.4.
 //
-// WHAT THIS TEST IS. M5's own acceptance says "audio moves through the chain",
-// and this file is the registered half of it: a known pattern is injected at
-// the CODEC SOURCE of a machine that has really booted, and the frame index at
+// WHAT THIS TEST GATES, AND WHY IT IS M6's. A known pattern is injected at the
+// CODEC SOURCE of a machine that has really booted, and the frame index at
 // which it reappears at the CODEC SINK is compared against the delay the
-// chain's OWN GEOMETRY predicts. INT-2's Check: line requires the same
-// assertion "as a registered test and not only through the console", because a
-// milestone whose only instrument is a console invocation is a milestone
-// nothing can fail -- plan section 24.6 rows W3-396, W3-397 and W3-406.
+// chain's OWN GEOMETRY predicts. That is an ARRIVAL assertion, and arrival
+// needs a machine that has been given ROUTING. Routing arrives with a LOADED
+// PATCH, so this file gates AUDIO BEHIND A LOADED PATCH, which is M6's claim:
+// "renders the golden fixture". INT-2's Check: line requires the assertion "as
+// a registered test and not only through the console", because a milestone
+// whose only instrument is a console invocation is a milestone nothing can
+// fail -- plan section 24.6 rows W3-396, W3-397 and W3-406.
+//
+// THE PREMISE THAT STOOD HERE IS STRUCK AND QUOTED rather than deleted -- plan
+// section 1.3 rule 12, the form t1_boot.cpp and chainAdapter.h use -- because
+// it was correct on the day it was written and a reader who finds no trace of
+// it will re-derive it. It read:
+//
+//     "WHAT THIS TEST IS. M5's own acceptance says 'audio moves through the
+//      chain', and this file is the registered half of it."
+//
+// THE HALF THAT IS FALSE IS THE MILESTONE, AND IT IS THE ONLY HALF THAT
+// CHANGES. Operator ruling of 2026-08-26, plan section 24.6 row W3-431: M5 is
+// a TRANSPORT claim -- "a frame tick reaches every DSP, and every DSP's
+// transmit buffer is delivered to the chain in the firmware's own order" --
+// and this file asserts none of that. It was never the registered half of the
+// claim M5 now makes. The injection, the geometry and the comparison below are
+// unchanged.
+//
+// WHY IT IS RED, AND WHY THAT RED IS CORRECT. It runs against an UNPATCHED
+// machine. The mailbox line propagates INSIDE the transmit callback -- position
+// k's transmit writes mailbox k + 1 -- so an injected pattern moves one hop
+// only if a DSP RECEIVES it and RE-TRANSMITS it, and an unpatched DSP has no
+// routing to do that with. The operator's ruling, given from ownership of the
+// hardware, is that the default state of a Nord Modular is to not play sound
+// and that sound comes from loading patches. A red that names a MISSING INPUT
+// is not a defect in the transport, and it is not repaired by weakening the
+// thing that reports it: nothing below is deleted, relaxed or skipped to make
+// this file green. It goes green when a patch is loaded -- plan task PROTO-11
+// -- and not before.
 //
 // WHERE THE EXPECTED DELAY COMES FROM, AND WHY IT IS NOT A LITERAL. The audio
 // bus is a Line of dspCount + 1 mailboxes. The ingress phase writes mailbox 0's
