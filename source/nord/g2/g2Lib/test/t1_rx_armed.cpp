@@ -361,6 +361,51 @@ namespace
 			"--impulse did not report DID-NOT-RUN: the receive path came up within the drive bound; exit status was "
 			+ std::to_string(run.exitCode));
 
+		// ---------------- the ARRIVAL instrument's own known positive
+		//
+		// EVERY `arrival=-1` IN THIS PROJECT USED TO BE UNFALSIFIABLE, and the
+		// self-test beside it did not fix that. `observerSelfTest` drives the
+		// detector's two predicates over two frames the console built on its
+		// own stack; it reads 1 with the tail's transmit callback deleted, with
+		// the mailbox swap frozen and with `Scheduler::pull` copying nothing.
+		// So a broken arrival path and a chain that carried nothing printed the
+		// same figure and no line told them apart.
+		//
+		// The sink control is the known positive for that path: a sentinel
+		// placed in the TAIL position's ESAI transmit register file and in the
+		// transmit-DMA source buffer that refills it, read back out of the
+		// codec sink through the same `pull` and the same comparator the walk
+		// uses. THE WHOLE LINE IS ASSERTED and every figure on it is load
+		// bearing:
+		//
+		//   tailPosition=7   the chain adapter's position N-1, whose transmit
+		//                    callback writes the mailbox the egress reads
+		//   tailPort=0       the HARDWARE port that position resolves to,
+		//                    through the firmware's own table. It is NOT 7, and
+		//                    a control that assumed it was drove chain position
+		//                    1 and reported a dead path on a healthy machine
+		//   controlQuanta=1  the tail writes mailbox N in the same quantum the
+		//                    egress phase reads it, so the sentinel is due on
+		//                    the first control quantum and not later
+		//   sinkControlArrival=0        it arrived on that quantum
+		//   sinkControlExact=1          it arrived unchanged
+		//   sinkControlValue=2846033/2846033   BOTH codec slots carry
+		//                    $2B6D51, so neither slot of extractCodecSink is
+		//                    passing a value the other one supplied
+		check(carriesLine(lines,
+			"impulse: sinkControl tailPosition=7 tailPort=0 sentinel=$2b6d51 controlQuanta=1"
+			" sinkControlArrival=0 sinkControlExact=1 sinkControlValue=2846033/2846033"),
+			"the arrival instrument has a known positive: a sentinel placed at the tail position's transmit "
+			"source came back out of the codec sink unchanged, on the first control quantum, in both slots");
+
+		// AND THE CONSEQUENCE, READ OFF THE EXIT STATUS. 3 is INSTRUMENT-BLIND,
+		// which is what the command now returns when the arrival path cannot
+		// report a frame it was HANDED. Refusing it is what turns this run's
+		// `arrival=-1` from a silence of unknown cause into a measurement.
+		check(run.exitCode != 3,
+			"--impulse did not report INSTRUMENT-BLIND: the arrival path is proven, so its `arrival=-1` is a "
+			"measured absence; exit status was " + std::to_string(run.exitCode));
+
 		return g_failures == before;
 	}
 }

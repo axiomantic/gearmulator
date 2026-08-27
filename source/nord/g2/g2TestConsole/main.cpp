@@ -965,6 +965,32 @@ namespace
 
 	constexpr unsigned g_impulseOverrunQuanta = 1024u;
 
+	/* THE SENTINEL THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE PLACES AT THE TAIL
+	 * POSITION'S TRANSMIT SOURCE, and it is deliberately NEITHER of the two
+	 * impulse words: a control that reused them could not be told apart from
+	 * the measurement it qualifies.
+	 *
+	 * BIT 23 IS CLEAR, so `fromEsaiFrame`'s sign extension is the identity on
+	 * it and the expected slot value is the written word itself. That is a
+	 * property of the number and the expectation is derived from it here rather
+	 * than typed twice. */
+	constexpr uint32_t g_sinkControlWord     = 0x2B6D51u;
+	constexpr int32_t  g_sinkControlExpected = int32_t(g_sinkControlWord);
+
+	static_assert((g_sinkControlWord & 0x800000u) == 0u,
+		"the sentinel's sign bit must be clear, or fromEsaiFrame's sign extension moves it");
+	static_assert(g_sinkControlExpected != g_impulseLeft && g_sinkControlExpected != g_impulseRight,
+		"the control's sentinel must not be either impulse word, or the control cannot be told from the measurement");
+
+	/* The ESAI has six transmitters (TX0..TX5); the enabled mask decides which
+	 * of them this writes. */
+	constexpr uint32_t g_esaiTransmitters = 6u;
+
+	/* The control's own bound. The tail's transmit callback writes mailbox N in
+	 * the same quantum the egress phase reads it, so an arrival is due at
+	 * quantum 0; this is headroom and not an expectation. */
+	constexpr unsigned g_sinkControlQuanta = 64u;
+
 	/* THE OUTCOME IS PRINTED ON EVERY EXIT PATH, INCLUDING THE ONES THAT LEAVE
 	 * BEFORE A BOARD EXISTS. A path that returned a bare status printed figures
 	 * that a reader had to reconstruct an answer from, and the reconstruction
@@ -993,13 +1019,19 @@ namespace
 		case g2console::ImpulseOutcome::InstrumentBlind:
 			return "NO ANSWER. The observer could not observe, so the absence of an arrival says"
 			       " nothing about the chain: framesPulled=" + std::to_string(_o.framesPulled)
-			       + " observerSelfTest=" + std::to_string(_o.observerSelfTest ? 1 : 0);
+			       + " observerSelfTest=" + std::to_string(_o.observerSelfTest ? 1 : 0)
+			       + " sinkControlArrival=" + std::to_string(_o.sinkControlArrival)
+			       + " sinkControlExact=" + std::to_string(_o.sinkControlExact ? 1 : 0);
 
 		case g2console::ImpulseOutcome::Stopped:
 			return "the observer received " + std::to_string(_o.framesPulled)
 			       + " frames from the codec sink and the injected sample was in none of them, so"
-			         " the path did not carry it to the sink. The observer is proven able to see"
-			         " one (observerSelfTest=1), so this is a measured absence and not a blind one";
+			         " the path did not carry it to the sink. The arrival path is proven able to"
+			         " REPORT one -- a sentinel placed in the tail position's ESAI transmit"
+			         " register file and transmit-DMA source buffer came back out of the sink"
+			         " unchanged at control quantum "
+			       + std::to_string(_o.sinkControlArrival)
+			       + " -- so this is a measured absence and not a blind one";
 
 		case g2console::ImpulseOutcome::Propagated:
 			return "the injected sample reached the codec sink unchanged at frame "
@@ -1636,6 +1668,153 @@ namespace
 			}
 		}
 
+		/* ----------------------------- THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE
+		 *
+		 * WHAT THE SELF-TEST BELOW DOES NOT PROVE. It drives the detector's two
+		 * predicates over `impulseFrame` and `silence`, two frames THIS PROGRAM
+		 * built on its own stack. Not one byte of the arrival path is on its
+		 * evidence: it reads 1 with the tail's transmit callback deleted, with
+		 * `fromEsaiFrame` returning zeros, with the mailbox swap frozen, with
+		 * `extractCodecSink` reading the wrong mailbox and with `Scheduler::pull`
+		 * copying nothing. So `arrival=-1` beside `observerSelfTest=1` still had
+		 * two readings -- a chain that carried nothing, and an arrival path that
+		 * could not have reported anything -- and told them apart nowhere.
+		 *
+		 * WHAT THIS CONTROL DOES. It places a sentinel at the TAIL position's
+		 * TRANSMIT SOURCE -- its ESAI transmit register file AND the DSP-memory
+		 * window the transmit DMA refills that register from -- and then reads
+		 * that sentinel back OUT OF THE SINK, through the same `pull` and the
+		 * same comparator the walk above used. The sentinel goes in at the
+		 * earliest point that still traverses the whole arrival path rather
+		 * than at the reporting line: everything downstream of the transmit
+		 * buffer is the machine's own code and none of it is bypassed.
+		 *
+		 * THE LINKS IT TRAVERSES, and they are the links the walk's `arrival`
+		 * depends on:
+		 *
+		 *   the tail DSP's X memory -> the transmit DMA -> m_tx, and
+		 *   Esai::writeTX -> m_tx           the transmit register file
+		 *   Esai::execTX  -> writeSlotToFrame -> m_txFrame    frame assembly
+		 *   Esai::writeTXimpl -> the installed WriteTxCallback, which the DSP
+		 *                        set bound to ChainAdapter::audioTxCallback(N-1)
+		 *   fromEsaiFrame(in, kAudioReg)    the chain's Tx conversion point
+		 *   m_audio[N].write()              the tail mailbox
+		 *   ChainAdapter::advanceAll        the swap
+		 *   ChainAdapter::extractCodecSink  the egress read
+		 *   CodecSink::push / Scheduler::pull
+		 *   the walk's own two predicates
+		 *
+		 * THE LINKS IT DOES NOT TRAVERSE, stated so no reader credits it with
+		 * them: no DSP core executes any part of it -- the sentinel is placed
+		 * in the transmit buffer rather than computed into it -- and positions
+		 * 0..N-2, every receive callback, the mailbox hop chain and
+		 * `injectCodecSource` are all UPSTREAM of the tail and are not on its
+		 * path. It is a control for the ARRIVAL instrument and not for the
+		 * chain: it says the sink can report a frame the tail transmitted, and
+		 * says nothing about whether anything reaches the tail.
+		 *
+		 * IT RUNS AFTER THE WALK, ON THE SAME MACHINE, so it cannot move the
+		 * measurement it qualifies: `arrival` and `framesPulled` are already
+		 * latched above.
+		 *
+		 * EVERY ENABLED TRANSMITTER IS WRITTEN, not just register 0. Esai's
+		 * underrun latch fires when the written mask does not cover the enabled
+		 * mask, and a control that latched an underrun would be measuring the
+		 * underrun path rather than the arrival path. */
+		int  sinkControlArrival = -1;
+		bool sinkControlExact   = false;
+		int32_t sinkControlL    = 0;
+		int32_t sinkControlR    = 0;
+		unsigned sinkControlQuanta = 0;
+
+		unsigned sinkControlPort = 0;
+		bool     sinkControlPortFound = false;
+
+		/* THE TAIL IS FOUND AND NOT TYPED, for the reason the head is: the
+		 * chain adapter's POSITION and the hardware PORT are not the same
+		 * number. dspSet.cpp's attachChainCallbacks binds
+		 * audioTxCallback(position) to peripherals(portOfPosition[position]),
+		 * and portOfPosition comes from the firmware's own nine-entry table.
+		 * On this machine position 7 is port 0, so a control that wrote
+		 * peripherals(7) would be driving chain position 1 -- six hops
+		 * upstream of the mailbox extractCodecSink reads -- and would report a
+		 * dead arrival path while the path was healthy. That run was taken and
+		 * is the reason this reads the table. */
+		for(unsigned port = 0; port < dspCount; ++port)
+		{
+			if(chainPositionOfPort(board, port, dspCount) != dspCount - 1u)
+				continue;
+
+			sinkControlPort      = port;
+			sinkControlPortFound = true;
+			break;
+		}
+
+		if(sinkControlPortFound)
+		{
+			dsp56k::Esai& tailEsai = board.dspSet().peripherals(sinkControlPort).getEsai();
+
+			for(unsigned q = 0; q < g_sinkControlQuanta && sinkControlArrival < 0; ++q)
+			{
+				++sinkControlQuanta;
+
+				const dsp56k::TWord enabled = tailEsai.hasEnabledTransmitters();
+
+				for(uint32_t reg = 0; reg < g_esaiTransmitters; ++reg)
+				{
+					if(enabled & (1u << reg))
+						tailEsai.writeTX(reg, g_sinkControlWord);
+				}
+
+				/* AND THE BUFFER THE TRANSMIT DMA REFILLS THAT REGISTER FROM,
+				 * because the register alone reaches ONE slot and the codec
+				 * sink reads TWO. Esai::writeSlotToFrame copies the register
+				 * file into the slot and then triggers the transmit DMA, which
+				 * is serviced synchronously and overwrites the register before
+				 * the next slot is assembled -- so a register-only injection
+				 * arrives in slot 0 and slot 1 carries whatever the DSP's
+				 * transmit buffer held. Planting the buffer as well makes the
+				 * sentinel the value EVERY slot of the frame is sourced from,
+				 * and it puts the transmit DMA on the control's path rather
+				 * than around it.
+				 *
+				 * THE WINDOW IS READ OFF THE DMA, NOT TYPED. DSR4 is the
+				 * channel's live source address and the ESAI's own transmit
+				 * word count gives the frame's length; two frames' worth from
+				 * the frame-aligned base covers the half-buffer the DMA is
+				 * reading and the one it moves to next. */
+				{
+					dsp56k::Dma& tailDma = board.dspSet().peripherals(sinkControlPort).getDMA();
+
+					const dsp56k::TWord source     = tailDma.getDSR(g_dmaTxChannel);
+					const dsp56k::TWord frameWords = tailEsai.getTxWordCount() + 1u;
+					const dsp56k::TWord base       = source - (source % frameWords);
+
+					dsp56k::Memory& tailMemory = board.dspSet().dsp(sinkControlPort).memory();
+
+					for(dsp56k::TWord i = 0; i < frameWords * 2u; ++i)
+						tailMemory.set(dsp56k::MemArea_X, base + i, g_sinkControlWord);
+				}
+
+				(void) scheduler->push(&silence, 1);
+				scheduler->runFrames(1);
+
+				g2::Frame out{};
+
+				if(scheduler->pull(&out, 1) == 0)
+					continue;
+
+				if(out.slot[0] == 0 && out.slot[1] == 0)
+					continue;
+
+				sinkControlArrival = int(q);
+				sinkControlL       = out.slot[0];
+				sinkControlR       = out.slot[1];
+				sinkControlExact   = out.slot[0] == g_sinkControlExpected
+					&& out.slot[1] == g_sinkControlExpected;
+			}
+		}
+
 		/* THE OBSERVER'S OWN KNOWN POSITIVE AND KNOWN NEGATIVE, RUN ON THE
 		 * DETECTOR AND NOT ON THE CHAIN. The loop above reports an absence, and
 		 * an absence reported by a detector that cannot detect is not evidence.
@@ -1679,6 +1858,19 @@ namespace
 		          << " observerSelfTest=" << (observerSelfTest ? 1 : 0)
 		          << " arrival=" << arrival
 		          << " arrivalExact=" << (arrivalExact ? 1 : 0) << std::endl;
+		/* THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE, ON ITS OWN LINE, BESIDE THE
+		 * MEASUREMENT IT QUALIFIES. A reader who sees sinkControlArrival>=0 and
+		 * sinkControlExact=1 is looking at an `arrival=-1` that MEANS the chain
+		 * carried nothing; a reader who sees sinkControlArrival=-1 is looking at
+		 * an arrival path that could not report a frame it was handed, and the
+		 * walk's -1 says nothing at all. */
+		std::cout << "impulse: sinkControl tailPosition=" << (dspCount > 0 ? dspCount - 1u : 0u)
+		          << " tailPort=" << (sinkControlPortFound ? int(sinkControlPort) : -1)
+		          << " sentinel=$" << std::hex << g_sinkControlWord << std::dec
+		          << " controlQuanta=" << sinkControlQuanta
+		          << " sinkControlArrival=" << sinkControlArrival
+		          << " sinkControlExact=" << (sinkControlExact ? 1 : 0)
+		          << " sinkControlValue=" << sinkControlL << "/" << sinkControlR << std::endl;
 
 		/* THE SEVEN CHAIN-HEALTH COUNTERS, REPORTED BY THIS COMMAND BECAUSE M5's
 		 * OWN ROW ASKS FOR THEM HERE. The three per-position figures are
@@ -1878,6 +2070,8 @@ namespace
 		observation.arrivalExact     = arrivalExact;
 		observation.expectedArrival  = expected;
 		observation.countersZero     = countersZero;
+		observation.sinkControlArrival = sinkControlArrival;
+		observation.sinkControlExact   = sinkControlExact;
 
 		const g2console::ImpulseOutcome outcome = g2console::classify(observation);
 
@@ -2060,7 +2254,11 @@ namespace
 		             " INSTRUMENT-BLIND (exit 3) -- so a chain that carried nothing, a machine that"
 		             " never ran and an observer that saw nothing are told apart. An unpatched Nord"
 		             " Modular is silent by design, so STOPPED is the expected answer with no patch"
-		             " loaded and is not a defect in the transport" << std::endl;
+		             " loaded and is not a defect in the transport. It also runs the ARRIVAL"
+		             " instrument's own known positive: a sentinel placed at the tail position's"
+		             " transmit source and read back out of the codec sink, so an `arrival=-1` is a"
+		             " measured absence rather than a silence of unknown cause. A control that does"
+		             " not come back is INSTRUMENT-BLIND" << std::endl;
 		std::cout << "options:" << std::endl;
 		std::cout << "  --dump-dsp-dma   modifier of --boot: additionally print each DSP"
 		             " position's DDR2, DCO2 and DCO4 and check them against design section 2.3;"
