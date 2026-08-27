@@ -18,7 +18,8 @@
  * THE INSTRUMENT, AND ITS TWO CONTROLS. The instrument is the part's own peek
  * command (0xD2) issued at the CS3 command port and read back at the CS3 data
  * port, with the peek target selected by the endpoint-configuration command
- * (0x20 + endpoint). A non-zero reading means nothing on its own, so it is
+ * (0x20 + the endpoint's CONFIGURATION SLOT, which is not its number).
+ * A non-zero reading means nothing on its own, so it is
  * never reported without a reading that IS zero, taken on THE SAME HANDLE
  * through THE SAME two bus calls:
  *
@@ -81,6 +82,12 @@ namespace
 
 	constexpr int g_byte = 1;
 
+	/* THE ENDPOINT UNDER TEST IS THE SHIPPED DEFAULT AND NOT A LITERAL HERE.
+	 * This file measures the ingress path of the endpoint the protocol runs
+	 * over, and `board.h` is where that is recorded; a literal would go stale
+	 * silently the next time the default moves. */
+	const int g_protocolEndpoint = g2::BoardConfig{}.usbProtocolEndpoint;
+
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
 
@@ -92,16 +99,39 @@ namespace
 		return config;
 	}
 
+	/* THE CONFIGURATION SLOT ORDER, WHICH IS NOT THE ENDPOINT NUMBER. ISP1362
+	 * Rev. 06 section 15.1.1 orders the sixteen `0x20`..`0x2F` slots control
+	 * OUT, control IN, then endpoints 1 to 14, so endpoint 0 is slot 0,
+	 * endpoint 1 is slot 2, endpoint 2 is slot 3 and endpoint 3 is slot 4. The
+	 * peek answers about the buffer the last configuration command selected,
+	 * and that operand is one of THESE. Passing an endpoint number straight
+	 * through selects a buffer one place low for every endpoint above 0; the
+	 * read still succeeds and answers the model's benign 0x00, so the wrong
+	 * answer arrives looking exactly like an empty buffer. */
+	constexpr int g_bufferSlotOfEndpoint[4] = {0, 2, 3, 4};
+
+	int bufferSlotOfEndpoint(const int _endpoint)
+	{
+		if(_endpoint < 0 || _endpoint >= 4)
+			return -1;
+		return g_bufferSlotOfEndpoint[_endpoint];
+	}
+
 	/* THE INSTRUMENT. Two writes and one read, all three through the same
 	 * public bus callbacks the core drives. It reads the head byte of the OUT
 	 * buffer the given endpoint delivers into, and answers the model's benign
 	 * 0x00 when that buffer holds nothing. */
 	uint8_t peekHeadByte(g2::Board& _board, const int _endpoint)
 	{
+		const int slot = bufferSlotOfEndpoint(_endpoint);
+
+		if(slot < 0)
+			return 0x00u;
+
 		mcf5307_bus_status status = MCF5307_BUS_OK;
 
 		g2::Board::onWrite(&_board, g_commandPort, g_byte,
-			uint32_t(g_endpointConfigBase) + uint32_t(_endpoint), &status);
+			uint32_t(g_endpointConfigBase) + uint32_t(slot), &status);
 		g2::Board::onWrite(&_board, g_commandPort, g_byte,
 			uint32_t(g_peekCommand), &status);
 
@@ -191,9 +221,9 @@ int main()
 	 * no frame has crossed. Without this, a non-zero reading in case 2 could
 	 * be the peek command answering rather than a packet arriving. */
 	{
-		g2::Board board(makeConfig(2));
+		g2::Board board(makeConfig(g_protocolEndpoint));
 
-		checkEqualByte(peekHeadByte(board, 2), 0x00u,
+		checkEqualByte(peekHeadByte(board, g_protocolEndpoint), 0x00u,
 			"case 1: the peek reads 0x00 before any frame has crossed");
 	}
 
@@ -206,14 +236,14 @@ int main()
 	 * written here as a literal, so the case cannot pass against a device that
 	 * answers a fixed byte that happens to match. */
 	{
-		g2::Board board(makeConfig(2));
+		g2::Board board(makeConfig(g_protocolEndpoint));
 
 		const uint8_t firstByte = deliverOneObject(board, 0x21u, 15u, 71u);
 
 		check(firstByte != 0x00u,
 			"case 2 precondition: the object's first byte is not the benign value");
 
-		checkEqualByte(peekHeadByte(board, 2), firstByte,
+		checkEqualByte(peekHeadByte(board, g_protocolEndpoint), firstByte,
 			"case 2: the CS3 data port answers the patch object's first byte");
 	}
 
@@ -221,11 +251,11 @@ int main()
 	 * THE SAME MEASUREMENT WITH A DIFFERENT BYTE. A device that answered one
 	 * fixed non-zero value would pass case 2 and fail here. */
 	{
-		g2::Board board(makeConfig(2));
+		g2::Board board(makeConfig(g_protocolEndpoint));
 
 		const uint8_t firstByte = deliverOneObject(board, 0x4Au, 20u, 72u);
 
-		checkEqualByte(peekHeadByte(board, 2), firstByte,
+		checkEqualByte(peekHeadByte(board, g_protocolEndpoint), firstByte,
 			"case 3: a different object's first byte is answered as that byte");
 	}
 
@@ -237,8 +267,8 @@ int main()
 	 * kind. The reading is 0x00, which is what makes case 2's reading a
 	 * measurement of DELIVERY.
 	 *
-	 * The peek still selects endpoint 2, because the peek target is set by the
-	 * configuration command and 9 names no buffer to peek at. */
+	 * The peek still selects the protocol endpoint, because the peek target is
+	 * set by the configuration command and 9 names no buffer to peek at. */
 	{
 		g2::Board board(makeConfig(9));
 
@@ -247,7 +277,7 @@ int main()
 		check(firstByte == 0x21u,
 			"case 4 precondition: the refused board carries the same first byte as case 2");
 
-		checkEqualByte(peekHeadByte(board, 2), 0x00u,
+		checkEqualByte(peekHeadByte(board, g_protocolEndpoint), 0x00u,
 			"case 4: a delivery on an endpoint the model refuses leaves the buffer empty");
 	}
 

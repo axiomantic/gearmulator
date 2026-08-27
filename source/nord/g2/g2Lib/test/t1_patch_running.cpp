@@ -171,7 +171,8 @@ namespace
 	// t0_usb_ingress_byte's instrument, unchanged and for its reasons: the
 	// part's own peek command (0xD2) issued at the CS3 command port and read
 	// back at the CS3 data port, with the peek target selected by the
-	// endpoint-configuration command (0x20 + endpoint). It reads the head byte
+	// endpoint-configuration command (0x20 + the endpoint's CONFIGURATION SLOT,
+	// which is not its number). It reads the head byte
 	// of the OUT buffer the given endpoint delivers into, and answers the
 	// model's benign 0x00 when that buffer holds nothing.
 	//
@@ -186,21 +187,44 @@ namespace
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
 
+	// THE CONFIGURATION SLOT ORDER, WHICH IS NOT THE ENDPOINT NUMBER. ISP1362
+	// Rev. 06 section 15.1.1 orders the sixteen `0x20`..`0x2F` slots control
+	// OUT, control IN, then endpoints 1 to 14, so endpoint 0 is slot 0,
+	// endpoint 1 is slot 2, endpoint 2 is slot 3 and endpoint 3 is slot 4. The
+	// peek command answers about the buffer the last configuration command
+	// selected, and that operand is one of THESE. Passing an endpoint number
+	// straight through selects a buffer one place low for every endpoint above
+	// 0, the read still succeeds, and the wrong answer arrives looking exactly
+	// like the right one.
+	constexpr int g_bufferSlotOfEndpoint[4] = {0, 2, 3, 4};
+
+	int bufferSlotOfEndpoint(const int _endpoint)
+	{
+		if(_endpoint < 0 || _endpoint >= 4)
+			return -1;
+		return g_bufferSlotOfEndpoint[_endpoint];
+	}
+
 	// The synthetic object the known positive delivers. Its type byte is not
 	// 0x00, so a reading of it cannot be confused with the benign answer; it is
 	// also NOT 0x21, which is the type byte of the first object in every file
 	// of the corpus, so a reading of it cannot be confused with the PATCH's
 	// either. Its whole framed length is 3 + 15 = 18 bytes, well inside the
-	// 64-byte capacity the model gives endpoint 2.
+	// 64-byte capacity the model gives the protocol endpoint.
 	constexpr uint8_t g_probeObjectType   = 0x4Au;
 	constexpr size_t  g_probeObjectLength = 15u;
 
 	uint8_t peekHeadByte(g2::Board& _board, const int _endpoint)
 	{
+		const int slot = bufferSlotOfEndpoint(_endpoint);
+
+		if(slot < 0)
+			return 0x00u;
+
 		mcf5307_bus_status status = MCF5307_BUS_OK;
 
 		g2::Board::onWrite(&_board, g_commandPort, g_byteWidth,
-			uint32_t(g_endpointConfigBase) + uint32_t(_endpoint), &status);
+			uint32_t(g_endpointConfigBase) + uint32_t(slot), &status);
 		g2::Board::onWrite(&_board, g_commandPort, g_byteWidth,
 			uint32_t(g_peekCommand), &status);
 
@@ -725,12 +749,24 @@ namespace
 				_r.loadReturned = true;
 			}
 
-			// ONE QUANTUM, so Board::pumpTransport drains what pch2Load put in
-			// the hub and hands each frame to the device with isp1181_rx. Then
-			// the CS3 reading, which is the only observable that says whether
-			// any byte of the patch is IN THE DEVICE.
-			scheduler->runFrames(1);
+			// THE PUMP, WITH NO MCU CYCLE AFTER IT, AND THAT ORDERING IS THE
+			// MEASUREMENT. Board::pumpTransport drains what pch2Load put in the
+			// hub and hands each frame to the device with isp1181_rx; it is
+			// public because tickSofIfDue calls it, and calling it directly
+			// delivers the frame WITHOUT letting the core run.
+			//
+			// AN EARLIER FORM RAN ONE QUANTUM FIRST AND COULD NOT TELL TWO
+			// WORLDS APART. The pump and the firmware's service both happen
+			// inside that quantum, so "the packet arrived and the firmware
+			// drained it" and "the packet never arrived" both leave the buffer
+			// empty and both read 0x00. This reading is the ARRIVAL; the
+			// reading after the window is the DRAIN.
+			board.pumpTransport();
 			_r.peekAfterHandover = peekHeadByte(board, g2::BoardConfig{}.usbProtocolEndpoint);
+
+			// The quantum the earlier form took first. It is still run, because
+			// the window below expects a machine that has serviced the packet.
+			scheduler->runFrames(1);
 
 			// ------------------------------------------------ the window opens
 			//
@@ -773,9 +809,11 @@ namespace
 				_r.probeLoaded =
 					g2::pch2Load(probeFile.data(), probeFile.size(), client) == g2::Pch2LoadResult::Loaded;
 
-				scheduler->runFrames(1);
+				board.pumpTransport();
 
 				_r.peekProbeObject = peekHeadByte(board, g2::BoardConfig{}.usbProtocolEndpoint);
+
+				scheduler->runFrames(1);
 			}
 		}
 
@@ -1083,17 +1121,13 @@ int main()
 
 		// THE KNOWN POSITIVE IS TAKEN ON THE CONTROL RUN AND ONLY THERE, and
 		// that is a property of the instrument rather than a weakening of it.
-		// The peek reads the HEAD of the endpoint's OUT FIFO. On the control run
-		// the FIFO is empty when the probe object arrives, so the head IS the
-		// probe object. On the patched run the patch's own first packet is still
-		// sitting at that head -- the model gives endpoint 2 two buffers and the
-		// firmware drained neither -- so the probe object queues BEHIND it and
-		// the head is still the patch's byte.
-		//
-		// An earlier form of this file asserted the probe's type byte on BOTH
-		// runs and went red on the patched one. THE ASSERTION WAS WRONG, NOT THE
-		// MACHINE: it assumed a buffer of one. It is recorded here rather than
-		// silently deleted, because the next reader will otherwise re-derive it.
+		// The peek reads the HEAD of the endpoint's OUT FIFO, and on the control
+		// run the FIFO is empty when the probe object arrives, so the head IS
+		// the probe object -- with no firmware service in the story at all. The
+		// patched run's own reading is REPORTED in the verdict below rather than
+		// asserted here, because on that run the head depends on whether the
+		// firmware has serviced the patch packet yet, and that is the thing this
+		// file is measuring rather than a precondition it may assume.
 		check(control.peekProbeObject == g_probeObjectType,
 			std::string("KNOWN POSITIVE, on a BOOTED machine: a small object delivered through the"
 			            " same client, hub, pump and bus calls is readable at the CS3 data port as"

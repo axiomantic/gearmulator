@@ -7,9 +7,9 @@
 //
 // WHAT THIS FILE ANSWERS AND t1_patch_running DOES NOT. t1_patch_running proves
 // a byte of a real `.pch2` sits in the device register file of a machine that
-// has really booted, and it reports that the firmware NEVER TOOK it out. It
-// says nothing about WHY, because it observes neither the interrupt line nor
-// the command port. This file observes both.
+// has really booted, and it reports whether the buffer is still holding it
+// afterwards. It says nothing about HOW it left, because it observes neither
+// the interrupt line nor the command port. This file observes both.
 //
 //   1. THE COMMAND STREAM. Every byte the firmware writes to the CS3 COMMAND
 //      port, in order. The port split is the device model's own: the chip's A0
@@ -46,12 +46,25 @@
 //
 // THE TWO RUNS DELIVER TO DIFFERENT ENDPOINTS, and the endpoint is a Board
 // configuration value rather than anything this file reaches past the Board to
-// set. Run A uses the shipped default, endpoint 2, and hands over a REAL
+// set. Run A uses the shipped default, ENDPOINT 3, and hands over a REAL
 // `.pch2`. Run B moves `BoardConfig::usbProtocolEndpoint` to 0 and hands over
 // the small in-process container, because the model gives endpoint 0 a
 // SINGLE 64-byte OUT buffer and the corpus's largest framed object is 2492
 // bytes: a real patch frame would be REFUSED at that endpoint and would raise
 // no bit at all, so a zero from it would measure the buffer and not the wire.
+//
+// WHY ENDPOINT 3 AND NOT ENDPOINT 2, AND THE DISCRIMINATOR IS THIS FILE'S OWN
+// COMMAND RECORDER. `BoardConfig::usbProtocolEndpoint` was 2, chosen from the
+// buffer table -- endpoint 2 is the lowest non-control endpoint the model gives
+// a 64-byte double buffer -- and that table is a FIRMWARE CONFIGURATION and not
+// a property of the part, so it never discriminated anything. What does
+// discriminate is what the firmware DOES with a packet, and this file records
+// it: on endpoint 3 the boot-time stream is followed by read-interrupt-register,
+// endpoint-3 status, READ endpoint 3's buffer, CLEAR endpoint 3's buffer -- the
+// authority's OUT sequence, a DRAIN. On endpoint 2 the firmware issues nothing
+// at all. Row 6 below reads back the DcEndpointConfiguration bytes the firmware
+// itself wrote and reports EPDIR per slot, which is the same answer from the
+// configuration side.
 //
 // EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). A release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
@@ -196,6 +209,13 @@ namespace
 	// bytes that file leaves `ccUnspecified` stay unspecified.
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
+
+	// SIXTEEN AND NOT FIVE. `0x20`..`0x2F` is the whole family ISP1362 Rev. 06
+	// section 15.1.1 states, and the recorder below files what the FIRMWARE
+	// wrote. The device model carries a buffer for only the first five of them
+	// and refuses the rest, but a refusal is the model's answer and not
+	// evidence about the firmware, so the recorder keeps every slot.
+	constexpr int g_configSlots = 16;
 	constexpr uint8_t g_writeIntEnable     = 0xC2u;
 	constexpr uint8_t g_readIntRegister    = 0xC0u;
 
@@ -207,16 +227,41 @@ namespace
 	constexpr uint8_t g_statusFirst = 0x50u;
 	constexpr uint8_t g_statusLast  = 0x54u;
 
-	// The three further opcodes the measured stream contains, numbered by
+	// The two further opcodes the measured stream contains, numbered by
 	// `src/isp1181/commands.nim` and named here so the expected sequence below
 	// reads as words rather than as bytes. The endpoint forms are the family
 	// base plus (endpoint - 1), which is that file's own arithmetic: the status
-	// family's endpoint base is 0x52 for endpoint 1, so endpoint 2 is 0x53; the
-	// buffer-write family's is 0x02, so endpoint 2 is 0x03; the validate
-	// family's is 0x62, so endpoint 2 is 0x63.
-	constexpr uint8_t g_statusEndpoint2     = 0x53u;
-	constexpr uint8_t g_writeEndpoint2In    = 0x03u;
-	constexpr uint8_t g_validateEndpoint2In = 0x63u;
+	// family's endpoint base is 0x52 for endpoint 1, so endpoint 3 is 0x54; the
+	// buffer-read family's is 0x12, so endpoint 3 is 0x14; the buffer-clear
+	// family's is 0x72, so endpoint 3 is 0x74.
+	//
+	// THE PAIR IS THE AUTHORITY'S *OUT* SEQUENCE AND THAT IS THE FINDING. A
+	// read followed by a clear takes a packet the HOST sent out of the device.
+	// The IN sequence -- buffer write then validate -- would be the firmware
+	// REPLYING, and it is what an endpoint the firmware had configured for
+	// transmission would show instead.
+	constexpr uint8_t g_statusEndpoint3    = 0x54u;
+	constexpr uint8_t g_readEndpoint3Out   = 0x14u;
+	constexpr uint8_t g_clearEndpoint3Out  = 0x74u;
+
+	// EPDIR, ISP1362 Rev. 06 Table 110: the bit of DcEndpointConfiguration that
+	// says which way a single endpoint buffer faces. 1 is IN, device to host.
+	constexpr uint8_t g_epdirBit = 0x40u;
+
+	// THE CONFIGURATION SLOT ORDER, WHICH IS NOT THE ENDPOINT NUMBER. ISP1362
+	// Rev. 06 section 15.1.1 orders the sixteen slots control OUT, control IN,
+	// then endpoints 1 to 14, so endpoint 0 is slot 0, endpoint 1 is slot 2,
+	// endpoint 2 is slot 3 and endpoint 3 is slot 4. The peek command's target
+	// is one of THESE, not an endpoint number, and reading it as an endpoint
+	// number silently peeks the neighbouring buffer for every endpoint above 0.
+	constexpr int g_bufferSlotOfEndpoint[4] = {0, 2, 3, 4};
+
+	int bufferSlotOfEndpoint(const int _endpoint)
+	{
+		if(_endpoint < 0 || _endpoint >= 4)
+			return -1;
+		return g_bufferSlotOfEndpoint[_endpoint];
+	}
 
 	std::string describeOpcodes(const std::vector<uint8_t>& _opcodes)
 	{
@@ -520,6 +565,24 @@ namespace
 					m_runs.emplace_back(opcode, uint64_t(1));
 				else
 					++m_runsDropped;
+
+				// THE ENDPOINT-CONFIGURATION SLOT THE NEXT DATA BYTE BELONGS TO.
+				// `0x20`..`0x2F` are one write each of DcEndpointConfiguration,
+				// and the byte that follows on the DATA port is the register
+				// value. Any other opcode ends the pairing, so a data byte that
+				// belongs to some other command can never be filed as a
+				// configuration.
+				if(opcode >= g_endpointConfigBase &&
+				   opcode < uint8_t(g_endpointConfigBase + g_configSlots))
+					m_configSlotPending = int(opcode) - int(g_endpointConfigBase);
+				else
+					m_configSlotPending = -1;
+			}
+			else if((_offset & g_commandSelect) == 0 && m_recording && m_configSlotPending >= 0)
+			{
+				m_configWritten[m_configSlotPending] = uint8_t(_value & 0xffu);
+				m_configSeen[m_configSlotPending]    = true;
+				m_configSlotPending                  = -1;
 			}
 
 			if(m_inner == nullptr)
@@ -558,6 +621,12 @@ namespace
 
 		uint64_t sequenceDropped() const { return m_sequenceDropped; }
 
+		// The DcEndpointConfiguration byte the FIRMWARE wrote to one slot, and
+		// whether it wrote one at all. An absent slot is not a zero: zero is a
+		// legal register value and would read as "configured OUT".
+		bool    configSeen(const int _slot) const { return _slot >= 0 && _slot < g_configSlots && m_configSeen[_slot]; }
+		uint8_t configByte(const int _slot) const { return _slot >= 0 && _slot < g_configSlots ? m_configWritten[_slot] : uint8_t(0); }
+
 		// Every distinct opcode in `[first, last]` that appears at all.
 		std::vector<uint8_t> presentInRange(const uint8_t _first, const uint8_t _last) const
 		{
@@ -581,23 +650,41 @@ namespace
 		uint64_t                                  m_runsDropped     = 0;
 		uint64_t                                  m_sequenceDropped = 0;
 
+		int     m_configSlotPending = -1;
+		uint8_t m_configWritten[g_configSlots] = {};
+		bool    m_configSeen[g_configSlots]    = {};
+
 		static constexpr size_t m_runCap      = 4096;
 		static constexpr size_t m_sequenceCap = 4096;
 	};
 
 	// ------------------------------------------------------- the CS3 peek instrument
 	//
-	// t0_usb_ingress_byte's instrument, unchanged and for its reasons. It is
-	// driven through Board::onWrite/onRead, so it reaches the recorder as well
-	// as the device -- which is why the recorder is switched off around it.
+	// t0_usb_ingress_byte's instrument, and it is driven through
+	// Board::onWrite/onRead so it reaches the recorder as well as the device --
+	// which is why the recorder is switched off around it.
+	//
+	// IT TAKES AN ENDPOINT AND SELECTS A SLOT, and the translation is the whole
+	// correctness of the instrument. The peek command answers about the buffer
+	// the last endpoint-configuration command selected, and that command's
+	// operand is a CONFIGURATION SLOT. Passing the endpoint number straight
+	// through selects a buffer one place low for every endpoint above 0 and the
+	// read still succeeds, so the wrong answer arrives looking exactly like the
+	// right one: endpoint 2 answered about endpoint 1's buffer, which is always
+	// empty, and the instrument reported the model's benign 0x00.
 	uint8_t peekHeadByte(g2::Board& _board, Cs3Recorder& _recorder, const int _endpoint)
 	{
+		const int slot = bufferSlotOfEndpoint(_endpoint);
+
+		if(slot < 0)
+			return 0x00u;
+
 		_recorder.setRecording(false);
 
 		mcf5307_bus_status status = MCF5307_BUS_OK;
 
 		g2::Board::onWrite(&_board, g_commandPortAbs, g_byteWidth,
-			uint32_t(g_endpointConfigBase) + uint32_t(_endpoint), &status);
+			uint32_t(g_endpointConfigBase) + uint32_t(slot), &status);
 		g2::Board::onWrite(&_board, g_commandPortAbs, g_byteWidth,
 			uint32_t(g_peekCommand), &status);
 
@@ -688,6 +775,7 @@ namespace
 		bool     loadReturned   = false;
 		g2::Pch2LoadResult loadResult = g2::Pch2LoadResult::Loaded;
 
+		uint8_t  peekAfterPump     = 0;
 		uint8_t  peekAfterHandover = 0;
 		uint8_t  peekAfterWindow   = 0;
 
@@ -724,6 +812,11 @@ namespace
 		std::map<uint8_t, uint64_t>               commandCounts;
 		std::vector<std::pair<uint8_t, uint64_t>> commandRuns;
 		uint64_t commandRunsDropped = 0;
+
+		// The DcEndpointConfiguration bytes the FIRMWARE wrote, per slot, and
+		// whether it wrote each one at all.
+		uint8_t  configByte[g_configSlots] = {};
+		bool     configSeen[g_configSlots] = {};
 
 		// Audio.
 		size_t   primedPulled  = 0;
@@ -888,6 +981,21 @@ namespace
 			_r.loadResult   = g2::pch2Load(_object.data(), _object.size(), client);
 			_r.loadReturned = true;
 
+			// THE ARRIVAL READING, TAKEN BEFORE THE CORE CAN RUN. The pump and
+			// the service both happen inside the first quantum, so a peek taken
+			// after that quantum cannot tell "the packet arrived and the
+			// firmware drained it" from "the packet never arrived": both read
+			// 0x00. Board::pumpTransport is public and is the same call
+			// tickSofIfDue makes, so calling it here delivers the frame to the
+			// device with NO MCU cycle in between. This reading is therefore
+			// the arrival, and the reading after the quantum is the drain.
+			//
+			// THE EXTRA PUMP IS NOT A SECOND DELIVERY. It drains the hub; the
+			// pump inside the quantum then finds it empty and delivers nothing.
+			board.pumpTransport();
+
+			_r.peekAfterPump = peekHeadByte(board, recorder, _r.endpoint);
+
 			for(uint32_t i = 0; i < g_observeQuanta; ++i)
 			{
 				// THE FIRST QUANTUM IS THE PUMP QUANTUM: Board::pumpTransport
@@ -943,6 +1051,12 @@ namespace
 		_r.statusOpcodesSeen    = recorder.presentInRange(g_statusFirst, g_statusLast);
 		_r.commandsAfterBoot    = recorder.sequenceFrom(_r.commandBytesBoot);
 		_r.sequenceDropped      = recorder.sequenceDropped();
+
+		for(int slot = 0; slot < g_configSlots; ++slot)
+		{
+			_r.configSeen[slot] = recorder.configSeen(slot);
+			_r.configByte[slot] = recorder.configByte(slot);
+		}
 
 		_r.statusReads = 0;
 		for(const uint8_t opcode : _r.statusOpcodesSeen)
@@ -1012,6 +1126,7 @@ namespace
 
 		std::cout << l << ": loadResult="
 		          << (_r.loadReturned ? g2::pch2LoadResultName(_r.loadResult) : "(not offered)")
+		          << " peekAfterPump=" << hex8(_r.peekAfterPump)
 		          << " peekAfterHandover=" << hex8(_r.peekAfterHandover)
 		          << " peekAfterWindow=" << hex8(_r.peekAfterWindow) << std::endl;
 
@@ -1122,8 +1237,8 @@ int main()
 
 		// -------------------------------------------- run A: the real path
 		RunResult real;
-		real.label    = "ep2-patch";
-		real.endpoint = 2;
+		real.label    = "ep3-patch";
+		real.endpoint = g2::BoardConfig{}.usbProtocolEndpoint;
 		if(!runOnce(directory, patch, real))
 			return false;
 		report(real);
@@ -1140,11 +1255,11 @@ int main()
 
 		// ----------------------------------------- the instrument, asserted first
 		check(real.windowFetches > 0,
-			"ep2-patch: the fetch counter saw instruction words at all during the window");
+			"ep3-patch: the fetch counter saw instruction words at all during the window");
 		check(real.hitsKnownPositive > 0,
-			"ep2-patch KNOWN POSITIVE: the address the machine itself was sitting at is counted by the same probe");
+			"ep3-patch KNOWN POSITIVE: the address the machine itself was sitting at is counted by the same probe");
 		check(real.hitsKnownNegative == 0,
-			"ep2-patch KNOWN NEGATIVE: an address inside the vector table is never fetched as an instruction word");
+			"ep3-patch KNOWN NEGATIVE: an address inside the vector table is never fetched as an instruction word");
 		check(control0.hitsKnownPositive > 0,
 			"ep0-small KNOWN POSITIVE: the same probe fires there too");
 		check(control0.hitsKnownNegative == 0,
@@ -1159,20 +1274,46 @@ int main()
 			std::to_string(real.commandBytesBoot));
 
 		// The preconditions.
-		check(real.programsLanded, "ep2-patch: every DSP position took its program");
+		check(real.programsLanded, "ep3-patch: every DSP position took its program");
 		check(control0.programsLanded, "ep0-small: every DSP position took its program");
-		check(!real.halted, "ep2-patch: the core is not halted when the window closes");
-		check(!real.faulted, "ep2-patch: the board reports no fault when the window closes");
+		check(!real.halted, "ep3-patch: the core is not halted when the window closes");
+		check(!real.faulted, "ep3-patch: the board reports no fault when the window closes");
 
 		// ------------------------------------------------------------- THE ROWS
 
-		// 1. The packet is in the device.
-		check(real.peekAfterHandover != 0x00u,
-			std::string("ep2-patch: a byte of the real `.pch2` is at the CS3 data port after the"
-			            " hand-over; read ") + hex8(real.peekAfterHandover));
-		check(control0.peekAfterHandover != 0x00u,
+		// 1. The packet is in the device, AND THEN IT IS NOT, and the pair is
+		//    what makes the second reading a drain.
+		//
+		//    A SINGLE READING AFTER THE PUMP QUANTUM CANNOT ANSWER THIS. The
+		//    delivery and the firmware's service both happen inside that one
+		//    quantum, so "the packet arrived and the firmware took it" and "the
+		//    packet never arrived" both leave the buffer empty and both read
+		//    0x00. The first reading is taken after Board::pumpTransport and
+		//    before any MCU cycle, so it is the ARRIVAL; the second is taken
+		//    after the quantum, so the move between them is the DRAIN.
+		check(real.peekAfterPump != 0x00u,
+			std::string("ep3-patch: a byte of the real `.pch2` is at the CS3 data port once the"
+			            " transport has pumped and BEFORE the core has run; read ") +
+			hex8(real.peekAfterPump));
+		check(real.peekAfterHandover == 0x00u,
+			std::string("ep3-patch: the same buffer is EMPTY after the pump quantum -- the firmware"
+			            " drained it, which is what its READ-then-CLEAR pair below does; read ") +
+			hex8(real.peekAfterHandover));
+		check(control0.peekAfterPump != 0x00u,
 			std::string("ep0-small: a byte of the small container is at the CS3 data port of"
-			            " ENDPOINT 0 after the hand-over; read ") + hex8(control0.peekAfterHandover));
+			            " ENDPOINT 0 once the transport has pumped; read ") +
+			hex8(control0.peekAfterPump));
+
+		// THE CONTROL FOR THE DRAIN, AND IT IS AN ENDPOINT THE FIRMWARE DOES
+		// NOT SERVICE. On endpoint 0 the firmware reads the interrupt register
+		// and the status and issues no buffer command, so the packet is STILL
+		// THERE after the same number of quanta. A reading that fell to 0x00 in
+		// both runs would be the instrument, not the firmware.
+		check(control0.peekAfterWindow == control0.peekAfterPump,
+			std::string("ep0-small: the packet is still in the endpoint 0 buffer after ") +
+			std::to_string(g_observeQuanta) + " quanta -- the firmware never drained it, so the"
+			" ep3-patch fall to 0x00 is a drain and not the instrument; read " +
+			hex8(control0.peekAfterWindow) + " against " + hex8(control0.peekAfterPump));
 
 		// 2. The line asserts, AND THE EVIDENCE IS THE TAKEN EXCEPTION AND NOT
 		//    THE SAMPLED LEVEL.
@@ -1221,7 +1362,7 @@ int main()
 			            " count above is the FIRMWARE'S handler and not an exception landing in the"
 			            " harness's own filler; counted ") + std::to_string(control0.hitsBlanket));
 		check(real.hitsIsr == 1,
-			std::string("ep2-patch: the same routine is entered exactly once on the endpoint the"
+			std::string("ep3-patch: the same routine is entered exactly once on the endpoint the"
 			            " machine actually uses; counted ") + std::to_string(real.hitsIsr));
 
 		// 4. THE ANSWER. The clearing route, and the opcode tracks the ENDPOINT.
@@ -1229,30 +1370,76 @@ int main()
 		//    THE TWO RUNS ARE EACH OTHER'S CONTROL. A model whose status family
 		//    were mis-decoded, or a firmware that issued one fixed opcode, would
 		//    put the SAME byte in both streams. 0x50 is control OUT status and
-		//    0x53 is endpoint 2's, and each appears in the run that delivered to
+		//    0x54 is endpoint 3's, and each appears in the run that delivered to
 		//    that endpoint.
 		check(control0.statusOpcodesSeen == std::vector<uint8_t>{ g_statusFirst },
 			std::string("ep0-small: the firmware issues status-read ") + hex8(g_statusFirst) +
 			" -- control OUT status, the route the model takes bit 8 back by -- and no other opcode"
 			" of the family; saw " + describeOpcodes(control0.statusOpcodesSeen));
-		check(real.statusOpcodesSeen == std::vector<uint8_t>{ g_statusEndpoint2 },
-			std::string("ep2-patch: the firmware issues status-read ") + hex8(g_statusEndpoint2) +
-			" -- endpoint 2's status, the route the model takes bit 11 back by -- and no other opcode"
+		check(real.statusOpcodesSeen == std::vector<uint8_t>{ g_statusEndpoint3 },
+			std::string("ep3-patch: the firmware issues status-read ") + hex8(g_statusEndpoint3) +
+			" -- endpoint 3's status, the route the model takes bit 12 back by -- and no other opcode"
 			" of the family; saw " + describeOpcodes(real.statusOpcodesSeen));
 
 		// 5. THE ORDER. A status read that arrived before the interrupt-register
 		//    read would not be a service of that interrupt.
 		check(real.commandsAfterBoot == std::vector<uint8_t>{
-				g_readIntRegister, g_statusEndpoint2, g_writeEndpoint2In, g_validateEndpoint2In },
-			std::string("ep2-patch: the commands the firmware issues AFTER the boot are exactly"
-			            " read-interrupt-register, endpoint-2 status, write endpoint-2 IN buffer,"
-			            " validate endpoint-2 IN buffer -- a complete service that reads the register,"
-			            " clears the bit and replies; saw ") + describeOpcodes(real.commandsAfterBoot));
+				g_readIntRegister, g_statusEndpoint3, g_readEndpoint3Out, g_clearEndpoint3Out },
+			std::string("ep3-patch: the commands the firmware issues AFTER the boot are exactly"
+			            " read-interrupt-register, endpoint-3 status, READ endpoint 3's buffer,"
+			            " CLEAR endpoint 3's buffer -- the authority's OUT sequence, a complete"
+			            " service that reads the register, clears the bit and DRAINS the packet;"
+			            " saw ") + describeOpcodes(real.commandsAfterBoot));
 		check(control0.commandsAfterBoot == std::vector<uint8_t>{
 				g_readIntRegister, g_statusFirst },
 			std::string("ep0-small: the commands after the boot are exactly read-interrupt-register"
 			            " then control OUT status, and no reply follows; saw ") +
 			describeOpcodes(control0.commandsAfterBoot));
+
+		// 6. THE SAME ANSWER FROM THE CONFIGURATION SIDE, and it is what makes
+		//    the endpoint choice a MEASUREMENT rather than a reading of a
+		//    buffer table.
+		//
+		//    `fifoShape` in `src/isp1181/isp1181.nim` labels endpoint 2's buffer
+		//    64 bytes double-buffered and endpoint 3's 64 bytes single, and that
+		//    file's own head block says both numbers are FIRMWARE CONFIGURATION
+		//    -- ISP1362 Rev. 06 pp.51-53 put the size in FFOSZ[3:0] and the
+		//    scheme in DBLBUF, both inside DcEndpointConfiguration. Nothing
+		//    reads the firmware's writes back into that table, so the table is
+		//    an inherited assertion and cannot discriminate an endpoint.
+		//
+		//    The bytes the FIRMWARE writes to `0x20`+slot can. EPDIR, bit 6 of
+		//    the same register, says which way a single endpoint buffer faces,
+		//    and it is the one field that decides whether a host packet has
+		//    anywhere to land. This row asserts nothing about DBLBUF or FFOSZ:
+		//    it asserts that the firmware CONFIGURED the endpoint this Board
+		//    delivers to, and that it configured it OUT.
+		{
+			const int slot = bufferSlotOfEndpoint(real.endpoint);
+
+			check(real.configSeen[slot],
+				std::string("ep3-patch KNOWN POSITIVE for the configuration recorder: the firmware"
+				            " wrote a DcEndpointConfiguration byte to slot ") + std::to_string(slot) +
+				" -- endpoint " + std::to_string(real.endpoint) + "'s -- during the boot");
+
+			check(real.configSeen[slot] && (real.configByte[slot] & g_epdirBit) == 0,
+				std::string("ep3-patch: the firmware configured endpoint ") +
+				std::to_string(real.endpoint) + " OUT -- EPDIR is 0 in the byte it wrote, " +
+				hex8(real.configByte[slot]) +
+				" -- so a packet from the host has a buffer to land in there");
+		}
+
+		for(int slot = 0; slot < g_configSlots; ++slot)
+		{
+			if(!real.configSeen[slot])
+				continue;
+
+			std::cout << "verdict: the firmware configured buffer slot " << slot << " with "
+			          << hex8(real.configByte[slot]) << " -- EPDIR is "
+			          << ((real.configByte[slot] & g_epdirBit) != 0 ? "1, IN, device to host"
+			                                                        : "0, OUT, host to device")
+			          << std::endl;
+		}
 
 		// ------------------------------------------------------- the verdict lines
 		std::cout << "verdict: status-read opcodes 0x50-0x54 are "
@@ -1261,7 +1448,7 @@ int main()
 
 		std::cout << "verdict: status-read opcodes 0x50-0x54 are "
 		          << (real.statusOpcodesSeen.empty() ? "ABSENT from" : "PRESENT in")
-		          << " the ep2-patch command stream" << std::endl;
+		          << " the ep3-patch command stream" << std::endl;
 
 		std::cout << "verdict: write-interrupt-enable " << hex8(g_writeIntEnable) << " was issued "
 		          << real.commandCounts.count(g_writeIntEnable) << " distinct-opcode times ("
@@ -1271,7 +1458,7 @@ int main()
 		          << std::endl;
 
 		std::cout << "verdict: the ISR at " << hex32(g_probeIsr) << " was "
-		          << (real.hitsIsr > 0 ? "ENTERED" : "NOT ENTERED") << " on ep2-patch and "
+		          << (real.hitsIsr > 0 ? "ENTERED" : "NOT ENTERED") << " on ep3-patch and "
 		          << (control0.hitsIsr > 0 ? "ENTERED" : "NOT ENTERED") << " on ep0-small"
 		          << std::endl;
 
@@ -1281,7 +1468,7 @@ int main()
 		              : "TOOK the packet out of the endpoint 0 buffer")
 		          << " across " << g_observeQuanta << " quanta" << std::endl;
 
-		std::cout << "verdict: audio -- ep2-patch arrival=" << real.arrival
+		std::cout << "verdict: audio -- ep3-patch arrival=" << real.arrival
 		          << " nonZeroFrames=" << real.nonZeroFrames
 		          << ", ep0-small arrival=" << control0.arrival
 		          << " nonZeroFrames=" << control0.nonZeroFrames << std::endl;
