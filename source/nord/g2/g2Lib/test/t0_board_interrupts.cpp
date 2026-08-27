@@ -159,6 +159,8 @@ namespace
 
 	// The MBAR-relative offsets.
 	constexpr uint32_t kIcrBase = 0x04Cu;   // ICR0, UM Table 8-2
+	constexpr uint32_t kIrqpar  = 0x006u;   // IRQPAR, UM Table 8-1
+	constexpr uint32_t kAvr     = 0x048u;   // AVR group, UM Table 8-1
 	constexpr uint32_t kTmr1    = 0x140u;
 	constexpr uint32_t kTrr1    = 0x144u;
 	constexpr uint32_t kTer1    = 0x151u;
@@ -209,6 +211,11 @@ namespace
 namespace
 {
 	int g_coreToken = 0;
+
+	// The IRQ callback and the user pointer the Board handed to
+	// isp1181_create, captured by the stub below.
+	isp1181_irq_fn g_usbIrq = nullptr;
+	void* g_usbIrqUser = nullptr;
 }
 
 extern "C"
@@ -268,8 +275,16 @@ extern "C"
 		g_recorder.autovector = autovector;
 	}
 
-	isp1181_ctx* isp1181_create(void*, isp1181_irq_fn, isp1181_tx_fn)
+	// THE IRQ CALLBACK IS RECORDED AT THE POINT THE BOARD HANDS IT OVER, and
+	// case group 5 drives THAT POINTER. A case that called a named Board
+	// method instead would stay green with a null callback still installed at
+	// isp1181_create -- which is exactly the defect, so the observation has to
+	// be taken here and nowhere else.
+	isp1181_ctx* isp1181_create(void* const user, const isp1181_irq_fn irq,
+	                            isp1181_tx_fn)
 	{
+		g_usbIrq = irq;
+		g_usbIrqUser = user;
 		return reinterpret_cast<isp1181_ctx*>(&g_coreToken);
 	}
 
@@ -288,6 +303,29 @@ extern "C"
 
 	void isp1181_write(isp1181_ctx*, uint32_t, uint8_t)
 	{
+	}
+
+	/* THE BOARD NOW DRAINS ITS TRANSPORT HUB INTO THE DEVICE ON EVERY QUANTUM
+	 * BOUNDARY, so board.cpp references this entry point and a target that
+	 * links no mcf5307 archive must supply it. It is a SINK and not a
+	 * recorder: nothing in this file drives the hub, so no frame ever reaches
+	 * it, and a recorder here would be state no case reads. */
+	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
+	{
+	}
+
+	/* THE BOARD MOVES ITS HANDLE OFF THE STUB BACKEND AT CONSTRUCTION, so
+	 * board.cpp references this entry point too and a target that links no
+	 * mcf5307 archive must supply it.
+	 *
+	 * IT ANSWERS 1, WHICH IS "THE HANDLE MOVED". The Board reads the return
+	 * only to detect a REFUSAL, and a refusal is a state this file's fake
+	 * device cannot be in: there is no backend here to refuse. Answering 0
+	 * would make every Board in this file print the refusal line, which is
+	 * output no case here asks for. */
+	int isp1181_set_backend(isp1181_ctx*, int)
+	{
+		return 1;
 	}
 }
 
@@ -443,6 +481,98 @@ int main()
 			"the fallback carries the timer's AVEC bit and not the UART's");
 		checkEqual(uint32_t(g_recorder.vector), uint32_t(0x00u),
 			"the fallback carries the timer's empty vector and not the UART's 0x42");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 5. THE USB DEVICE'S SERVICE REQUEST REACHES THE CORE AS AN
+	// AUTOVECTORED LEVEL 3, AND THE LEVEL IS DERIVED AND NOT WRITTEN DOWN.
+	//
+	// The level, the autovector bit and the vector number were read out of the
+	// G2 firmware, not guessed: BOOT:0x31FE writes its handler to VBR+108 --
+	// vector 27, the ColdFire autovector formula 24+level at level 3 -- sets
+	// AVR to 0x08 and clears IMR bit 3, and CODE reaches the same three
+	// effects through install_autovector(3, 0x30053C38) at its only call site.
+	// IRQPAR is never written by either image, so IRQ3 stays at its level 3.
+	//
+	// WHAT IS DRIVEN IS THE POINTER THE BOARD HANDED TO isp1181_create. A
+	// Board that still passes nullptr there records a null callback and this
+	// group cannot run at all, which is the red this group was written to
+	// produce.
+	//
+	// WHAT THIS GROUP DOES NOT PROVE, STATED SO THE GREEN IS NOT OVERREAD.
+	// It writes AVR at MBAR+$048, which is where interruptController.h listens.
+	// THE FIRMWARE WRITES IT AT MBAR+$04B. UM Table 8-1 gives the $048 row four
+	// byte columns -- Reserved, Reserved, Reserved, AVR -- so the register byte
+	// is $04B and $048 is the group base, and BOOT:0x320E / CODE:0x3005827E
+	// both address $04B. isInterruptOwned rejects $04B today, so on the
+	// assembled machine the firmware's own AVR write does not reach this
+	// controller and a level 3 external interrupt would present with the
+	// autovector bit CLEAR. That is a defect in the controller's register
+	// surface and not in the wire this group asserts, it is recorded here
+	// rather than papered over, and repairing it is a task for whoever owns
+	// interruptController.h.
+	//
+	// THE ANTI-HARDCODE ASSERTION IS THE IRQPAR CASE. Level 3 alone is
+	// satisfied by a board that writes the constant 3 into the core. Only a
+	// board that names the PIN and lets the controller apply UM Table 8-4
+	// moves to level 6 when IRQPAR[1] is set, and case 5c asserts exactly
+	// that move.
+	{
+		g2::Board board(mbarOnlyConfig());
+
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+
+		check(g_usbIrq != nullptr,
+			"THE IRQ WIRE EXISTS: the Board handed isp1181_create a non-null IRQ callback");
+		checkEqual(g_usbIrqUser, static_cast<void*>(&board),
+			"the IRQ callback carries THIS Board as its user pointer");
+
+		// The firmware's own AVR write, at the byte the model answers. Its
+		// bit 3 is what makes the level 3 presentation autovectored, and the
+		// Board must not supply it.
+		boardWrite(board, kMbarBase + kAvr, g_byte, 0x08u, status);
+		checkEqual(boardRead(board, kMbarBase + kAvr, g_byte, status), uint32_t(0x08u),
+			"AVR reads back the 0x08 the firmware programs");
+
+		if(g_usbIrq != nullptr)
+		{
+			// 5a. The assert.
+			g_recorder.reset();
+			g_usbIrq(g_usbIrqUser, 1);
+
+			checkEqual(g_recorder.calls, 1,
+				"the device's service request presented exactly once to the core");
+			checkEqual(g_recorder.level, 3,
+				"IRQ3 AT ITS IRQPAR RESET LEVEL: the presentation carries level 3");
+			checkEqual(g_recorder.autovector, 1,
+				"AVR BIT 3 REACHES THE CORE: the level 3 presentation is autovectored");
+			checkEqual(uint32_t(g_recorder.vector), uint32_t(0x00u),
+				"an autovectored external source carries no pass-through vector");
+
+			// 5b. The deassert. A board that presented only on assert would
+			// leave the core holding a level 3 the device no longer requests.
+			g_recorder.reset();
+			g_usbIrq(g_usbIrqUser, 0);
+
+			checkEqual(g_recorder.calls, 1,
+				"the deassert presented exactly once");
+			checkEqual(g_recorder.level, 0,
+				"the deassert drops the presentation to MCF5307_IRQ_NONE");
+
+			// 5c. THE LEVEL IS THE CONTROLLER'S, NOT THE BOARD'S. IRQPAR[1]
+			// moves IRQ3 to level 6 by UM Table 8-4. A hardcoded level 3
+			// anywhere on this path is red here.
+			boardWrite(board, kMbarBase + kIrqpar, g_byte, 0x02u, status);
+			g_recorder.reset();
+			g_usbIrq(g_usbIrqUser, 1);
+
+			checkEqual(g_recorder.calls, 1,
+				"the request under IRQPAR[1] presented exactly once");
+			checkEqual(g_recorder.level, 6,
+				"THE LEVEL IS DERIVED AND NOT HARDCODED: IRQPAR[1] moves the same pin to level 6");
+			checkEqual(g_recorder.autovector, 0,
+				"AVR bit 6 is clear, so the level 6 presentation is NOT autovectored");
+		}
 	}
 
 	if(g_failures)
