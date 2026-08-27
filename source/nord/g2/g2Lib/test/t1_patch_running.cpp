@@ -36,13 +36,40 @@
 // THE INSTRUMENT'S CONTROLS, BOTH FROM THE SAME POPULATION. A zero from a
 // counter that never fires is not a measurement.
 //
-//   known positive   the address the MACHINE ITSELF is sitting at when the
-//                    window opens, read off Board::mcuReg(17) and installed as
-//                    a probe at that instant. It is not chosen by this file,
-//                    and it is fetched through the identical counter.
+//   known positive   the MOST-VISITED address of the window, chosen by taking
+//                    the argmax of a histogram this file keeps over every
+//                    16-bit read in the window. It is not chosen by this file
+//                    and it is not named anywhere in it; it is whatever address
+//                    THIS RUN read most, and it is counted by the identical
+//                    counter as every probe.
 //   known negative   an address inside the vector TABLE. Vectors are read as
 //                    32-bit longwords and never fetched as instruction words,
 //                    so the same counter must read 0 there.
+//
+// WHY THE ARGMAX AND NOT THE WINDOW-OPEN PC. An earlier form read the known
+// positive off Board::mcuReg(17) at the instant the window opened. That is a
+// machine-derived address, and it was still the wrong one: on the CONTROL arm
+// the window happened to open in the idle loop and the address collected
+// 213261 hits, while on the PATCHED arm it opened INSIDE AN INTERRUPT HANDLER
+// at 0x30053DA8 and the address collected exactly ONE. Both arms passed a
+// `> 0` gate, so the instrument looked calibrated on both -- but every zero the
+// patched arm reported was being weighed against a known positive of 1, which
+// is not a control at all. The defect is not that the address came from the
+// machine; it is that it came from ONE INSTANT of the machine, and one instant
+// is not a measure of how hard the counter can fire. The argmax is a measure of
+// exactly that, and it is still read off the run rather than typed here.
+//
+// WHAT THE ARGMAX IS NOT. It is not certified to be an instruction: it is the
+// most-read 16-bit location, and a hot 16-bit DATA read would win the argmax
+// just as legitimately. That does not weaken its job. Its job is to answer
+// "how large a count can this counter produce on THIS arm", so that a zero
+// elsewhere has a scale to be read against, and a data address answers that
+// question exactly as well as an instruction address does.
+//
+// ONE CONSEQUENCE, STATED SO NOBODY READS A TAUTOLOGY AS EVIDENCE. Because the
+// known positive is the maximum, `knownPositive >= hitsTarget` holds by
+// construction for every probe in this file. No such comparison is asserted
+// below, and none would mean anything if it were.
 //
 // AND THE CONTROL THAT MAKES THE ANSWER AN ANSWER: the whole run happens TWICE
 // on the same code path, once WITHOUT a patch and once WITH one. A probe count
@@ -71,6 +98,7 @@
 
 #include "dsp56kBase/logging.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
@@ -301,36 +329,100 @@ namespace
 	class Ram final : public g2::BusTarget
 	{
 	public:
-		explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
+		explicit Ram(const size_t _size)
+			: m_bytes(_size, 0u)
+			, m_wordHits(_size / 2u, 0u)
+		{
+		}
 
-		// One instruction-fetch counter. `absolute` is an SDRAM address; the
-		// counter fires on a 16-bit read at exactly that offset.
-		struct Probe
+		// THE COUNTER IS A HISTOGRAM AND NOT A PROBE LIST, and that is what
+		// makes the known positive a property of the RUN. A fixed probe list can
+		// only answer about addresses this file names; a histogram over every
+		// 16-bit read lets the file ASK the run which address it read most, and
+		// take that answer as its control. One counter per 16-bit word of SDRAM.
+		struct Hottest
 		{
 			uint32_t absolute = 0;
-			uint32_t offset   = 0;
 			uint64_t hits     = 0;
 		};
 
-		size_t addProbe(const uint32_t _absolute)
+		// The count at one absolute SDRAM address. Zero for an address outside
+		// the window or at an odd offset, because an odd offset gets no counter
+		// -- see the read path for why that is a fidelity choice and not a gap.
+		uint64_t hitsAt(const uint32_t _absolute) const
 		{
-			Probe p;
-			p.absolute = _absolute;
-			p.offset   = _absolute - g2::g_sdramBase;
-			m_probes.push_back(p);
-			return m_probes.size() - 1;
+			if(_absolute < g2::g_sdramBase)
+				return 0;
+
+			const uint32_t offset = _absolute - g2::g_sdramBase;
+
+			if((offset & 1u) != 0u)
+				return 0;
+
+			const size_t index = size_t(offset) >> 1;
+
+			return index < m_wordHits.size() ? uint64_t(m_wordHits[index]) : 0u;
 		}
 
-		const Probe& probe(const size_t _index) const { return m_probes[_index]; }
+		// THE KNOWN POSITIVE, SELECTED BY THE RUN. The argmax over every counter
+		// -- the address this run read more times than any other. Ties go to the
+		// LOWEST address, so the selection is deterministic across runs and a
+		// re-run reports the same address for the same reason.
+		Hottest hottest() const
+		{
+			return hottestInRange(g2::g_sdramBase,
+				g2::g_sdramBase + uint32_t(m_wordHits.size() << 1));
+		}
+
+		// THE SAME ARGMAX, RESTRICTED TO ONE HALF-OPEN ADDRESS RANGE, and the
+		// caller passes the extent of the FIRMWARE IMAGE IT JUST READ FROM DISK.
+		//
+		// WHY THE RESTRICTION EARNS ITS PLACE. The unrestricted argmax answers
+		// "how hard can this counter fire", and the first run of it answered
+		// with an address 0x86F0 bytes PAST THE END of the loaded image -- so
+		// the machine reaches it as a 16-bit DATA read and not as an instruction
+		// fetch. The probes this file cares about are instruction addresses, so
+		// a data-read control and an instruction-fetch zero are two different
+		// populations, and a control from the wrong population proves only that
+		// the counter runs. Restricting the argmax to the bytes the image
+		// actually supplied puts the control back in the probes' own population.
+		// The range is still not typed here: it is where the image was placed
+		// and how long the file was.
+		Hottest hottestInRange(const uint32_t _loAbsolute, const uint32_t _hiAbsolute) const
+		{
+			Hottest best;
+
+			if(_hiAbsolute <= _loAbsolute || _loAbsolute < g2::g_sdramBase)
+				return best;
+
+			const size_t lo = (size_t(_loAbsolute - g2::g_sdramBase) + 1u) >> 1;
+			const size_t hi = std::min(size_t(_hiAbsolute - g2::g_sdramBase) >> 1, m_wordHits.size());
+
+			for(size_t index = lo; index < hi; ++index)
+			{
+				if(uint64_t(m_wordHits[index]) <= best.hits)
+					continue;
+
+				best.hits     = uint64_t(m_wordHits[index]);
+				best.absolute = g2::g_sdramBase + uint32_t(index << 1);
+			}
+
+			return best;
+		}
 
 		// Zeroes every counter, so that a window's counts are the WINDOW's and
 		// not the boot's.
 		void resetProbes()
 		{
-			for(Probe& p : m_probes)
-				p.hits = 0;
-			m_wordFetches = 0;
+			std::fill(m_wordHits.begin(), m_wordHits.end(), 0u);
+			m_wordFetches  = 0;
+			m_oddWordReads = 0;
 		}
+
+		// 16-bit reads at an ODD offset, which get no histogram counter.
+		// REPORTED rather than dropped: if this were ever large, the histogram
+		// would be missing reads it should be seeing.
+		uint64_t oddWordReads() const { return m_oddWordReads; }
 
 		// Every 16-bit read in the window, whatever its address. It is what
 		// separates "the probed address was not fetched" from "the counter was
@@ -353,10 +445,22 @@ namespace
 			{
 				++m_wordFetches;
 
-				for(Probe& p : m_probes)
+				// AN ODD OFFSET GETS NO COUNTER, and folding it into the even
+				// bucket below it would be worse than dropping it: the histogram
+				// picks a MAXIMUM, so two addresses sharing one bucket would
+				// inflate that bucket and could hand the argmax to an address
+				// that was never read that many times. Instruction words are
+				// even-aligned, so this drops no fetch; the count is reported so
+				// that claim is checkable rather than assumed.
+				if((_offset & 1u) != 0u)
 				{
-					if(p.offset == _offset)
-						++p.hits;
+					++m_oddWordReads;
+				}
+				else
+				{
+					const size_t index = size_t(_offset) >> 1;
+					if(index < m_wordHits.size())
+						++m_wordHits[index];
 				}
 			}
 
@@ -424,8 +528,9 @@ namespace
 		uint64_t contentWrites() const { return m_contentWrites; }
 
 	private:
-		std::vector<uint8_t> m_bytes;
-		std::vector<Probe>   m_probes;
+		std::vector<uint8_t>  m_bytes;
+		std::vector<uint32_t> m_wordHits;
+		uint64_t             m_oddWordReads  = 0;
 		uint64_t             m_wordFetches   = 0;
 		uint32_t             m_watchBase     = 0;
 		uint32_t             m_watchLength   = 0;
@@ -580,8 +685,31 @@ namespace
 		unsigned hopFrames      = 0;
 		unsigned lookaheadFrames = 0;
 
-		uint32_t windowPc       = 0;   // the known positive's address
+		uint32_t windowPc       = 0;   // where the core sat when the window opened
+		uint64_t windowPcHits   = 0;   // and how often the window read THAT address
 		uint64_t windowFetches  = 0;
+		uint64_t oddWordReads   = 0;
+
+		// THE KNOWN POSITIVE OF THIS ARM: the argmax of this arm's own
+		// histogram. Each arm selects its own, because each arm is a separate
+		// run of the machine and one arm's figure says nothing about the other.
+		uint32_t knownPositiveAddr = 0;
+		uint64_t knownPositiveHits = 0;
+
+		// THE POPULATION-MATCHED KNOWN POSITIVE: the same argmax restricted to
+		// the bytes the firmware image supplied. The probes are instruction
+		// addresses inside that image, so this is the control that shares their
+		// population, and it is the figure the verdict lines quote.
+		uint32_t imageBase           = 0;
+		uint32_t imageEnd            = 0;
+		uint32_t codeKnownPositiveAddr = 0;
+		uint64_t codeKnownPositiveHits = 0;
+
+		// One address supplied by the CALLER, measured on this arm. It is how
+		// the two arms are compared at a COMMON address: each arm's argmax is a
+		// different address, so their counts are not comparable to each other.
+		uint32_t crossAddr = 0;
+		uint64_t crossHits = 0;
 
 		// The three CS3 readings, in the order they are taken.
 		uint8_t  peekAfterHandover = 0;  // one quantum after pch2Load returned
@@ -620,8 +748,10 @@ namespace
 	// not be placed at all; a machine that ran and moved nothing returns true
 	// with a result that says so, because "the machine is silent" is a
 	// MEASUREMENT and must reach the assertions rather than a bail-out.
+	// `_crossAddress` is 0 on the first arm and the FIRST arm's known positive
+	// on the second, so the two arms can be compared at one common address.
 	bool runOnce(const std::string& _directory, const std::vector<uint8_t>& _patch,
-		const bool _deliver, RunResult& _r)
+		const bool _deliver, const uint32_t _crossAddress, RunResult& _r)
 	{
 		const std::vector<uint8_t> code = readFile(_directory + "/CODE_30000400.bin");
 
@@ -658,12 +788,6 @@ namespace
 		}
 
 		board.memory().attach(g2::Region::Sdram, &ram);
-
-		const size_t iNegative = ram.addProbe(g_probeNegative);
-		const size_t iTarget   = ram.addProbe(g_probeTarget);
-		const size_t iCallerA  = ram.addProbe(g_probeCallerA);
-		const size_t iCallerB  = ram.addProbe(g_probeCallerB);
-		const size_t iAssembly = ram.addProbe(g_probeAssembly);
 
 		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
 
@@ -770,25 +894,47 @@ namespace
 
 			// ------------------------------------------------ the window opens
 			//
-			// THE KNOWN POSITIVE IS READ OFF THE MACHINE HERE, not chosen above:
-			// it is the address the core is sitting at at this instant, so it is
-			// an address the machine itself demonstrably reaches.
+			// The address the core is sitting at at this instant. It is RECORDED
+			// and it is no longer the known positive -- see the header for what
+			// selecting it cost. It is still printed, because the two arms open
+			// their windows in different places and that fact is the evidence
+			// for the repair.
 			_r.windowPc = board.mcuReg(g_regPc);
-
-			const size_t iPositive = ram.addProbe(_r.windowPc);
 
 			ram.resetProbes();
 
 			for(uint32_t i = 0; i < g_observeQuanta; ++i)
 				scheduler->runFrames(1);
 
+			// NOTHING BELOW NAMES AN ADDRESS THIS FILE CHOSE AS ITS CONTROL. The
+			// known positive is whatever the run read most; the file only asks.
+			const Ram::Hottest hottest = ram.hottest();
+
+			_r.knownPositiveAddr = hottest.absolute;
+			_r.knownPositiveHits = hottest.hits;
+
+			// The image extent comes from where this run PLACED the image and
+			// how many bytes the file held. Neither number is written here.
+			_r.imageBase = g_entryPc;
+			_r.imageEnd  = g_entryPc + uint32_t(code.size());
+
+			const Ram::Hottest inImage = ram.hottestInRange(_r.imageBase, _r.imageEnd);
+
+			_r.codeKnownPositiveAddr = inImage.absolute;
+			_r.codeKnownPositiveHits = inImage.hits;
+
+			_r.crossAddr = _crossAddress;
+			_r.crossHits = _crossAddress != 0 ? ram.hitsAt(_crossAddress) : 0u;
+
 			_r.windowFetches     = ram.wordFetches();
-			_r.hitsKnownPositive = ram.probe(iPositive).hits;
-			_r.hitsKnownNegative = ram.probe(iNegative).hits;
-			_r.hitsTarget        = ram.probe(iTarget).hits;
-			_r.hitsCallerA       = ram.probe(iCallerA).hits;
-			_r.hitsCallerB       = ram.probe(iCallerB).hits;
-			_r.hitsAssembly      = ram.probe(iAssembly).hits;
+			_r.oddWordReads      = ram.oddWordReads();
+			_r.windowPcHits      = ram.hitsAt(_r.windowPc);
+			_r.hitsKnownPositive = hottest.hits;
+			_r.hitsKnownNegative = ram.hitsAt(g_probeNegative);
+			_r.hitsTarget        = ram.hitsAt(g_probeTarget);
+			_r.hitsCallerA       = ram.hitsAt(g_probeCallerA);
+			_r.hitsCallerB       = ram.hitsAt(g_probeCallerB);
+			_r.hitsAssembly      = ram.hitsAt(g_probeAssembly);
 
 			// THE SECOND READING. If the first was non-zero and this one is
 			// 0x00, the firmware TOOK the packet out during the window; if both
@@ -958,12 +1104,33 @@ namespace
 		          << " faulted=" << (_r.faulted ? 1 : 0)
 		          << " dspCount=" << _r.dspCount << std::endl;
 		std::cout << _label << ": windowQuanta=" << g_observeQuanta
-		          << " windowPc=" << hex32(_r.windowPc)
-		          << " windowWordFetches=" << _r.windowFetches << std::endl;
-		std::cout << _label << ": probe " << hex32(_r.windowPc)
-		          << " (known positive) = " << _r.hitsKnownPositive
-		          << " | probe " << hex32(g_probeNegative)
+		          << " windowWordFetches=" << _r.windowFetches
+		          << " oddWordReads=" << _r.oddWordReads << std::endl;
+
+		// BOTH FIGURES, ON THIS ARM, SIDE BY SIDE. The window-open PC is the
+		// address the OLD known positive would have been; printing its count
+		// next to the new one is how a reader sees, per arm, what the repair
+		// changed -- and it is per arm because the two arms differ.
+		std::cout << _label << ": windowOpenPc=" << hex32(_r.windowPc)
+		          << " readsAtWindowOpenPc=" << _r.windowPcHits
+		          << "  (this was the OLD known positive)" << std::endl;
+		std::cout << _label << ": KNOWN POSITIVE, any address (most-read of this run) "
+		          << hex32(_r.knownPositiveAddr) << " = " << _r.knownPositiveHits
+		          << (_r.knownPositiveAddr >= _r.imageEnd || _r.knownPositiveAddr < _r.imageBase
+		              ? "  (OUTSIDE the firmware image: a 16-bit DATA read, not an instruction fetch)"
+		              : "  (inside the firmware image)")
+		          << std::endl;
+		std::cout << _label << ": KNOWN POSITIVE, in-image (image " << hex32(_r.imageBase)
+		          << ".." << hex32(_r.imageEnd) << ") " << hex32(_r.codeKnownPositiveAddr)
+		          << " = " << _r.codeKnownPositiveHits
+		          << "  <- the probes' own population" << std::endl;
+		std::cout << _label << ": probe " << hex32(g_probeNegative)
 		          << " (known negative) = " << _r.hitsKnownNegative << std::endl;
+
+		if(_r.crossAddr != 0)
+			std::cout << _label << ": at the CONTROL arm's known positive "
+			          << hex32(_r.crossAddr) << " this arm read " << _r.crossHits
+			          << std::endl;
 		std::cout << _label << ": probe " << hex32(g_probeTarget) << " = " << _r.hitsTarget
 		          << " | " << hex32(g_probeCallerA) << " = " << _r.hitsCallerA
 		          << " | " << hex32(g_probeCallerB) << " = " << _r.hitsCallerB
@@ -1035,27 +1202,68 @@ int main()
 		// what makes any probe count in the patched run a statement about the
 		// PATCH rather than about the firmware's ordinary idle.
 		RunResult control;
-		if(!runOnce(directory, patch, false, control))
+		if(!runOnce(directory, patch, false, 0u, control))
 			return false;
 		report("control", control);
 
 		// -------------------------------------------------------- the measurement
+		//
+		// The control's known positive is handed to the patched arm so the two
+		// can be read at one COMMON address. Each arm still selects its own.
 		RunResult patched;
-		if(!runOnce(directory, patch, true, patched))
+		if(!runOnce(directory, patch, true, control.knownPositiveAddr, patched))
 			return false;
 		report("patched", patched);
 
 		// The instrument, asserted before anything is read off it.
 		check(control.windowFetches > 0,
 			"the fetch counter saw instruction words at all during the control window");
-		check(control.hitsKnownPositive > 0,
-			"KNOWN POSITIVE: the address the machine itself was sitting at is counted by the same probe");
 		check(control.hitsKnownNegative == 0,
 			"KNOWN NEGATIVE: an address inside the vector table is never fetched as an instruction word");
-		check(patched.hitsKnownPositive > 0,
-			"KNOWN POSITIVE, patched run: the same probe fires there too");
 		check(patched.hitsKnownNegative == 0,
 			"KNOWN NEGATIVE, patched run: the vector-table address is still never fetched");
+
+		// ------------------------------------------------- THE SENSITIVITY GATE
+		//
+		// A `> 0` GATE IS WHAT LET THE BLIND ARM THROUGH. The patched arm's known
+		// positive was 1, which passes `> 0` and measures nothing: every zero on
+		// that arm was being read against a counter that had fired once. So the
+		// gate is a FLOOR and not a presence test, and it is stated per arm
+		// because the arms carry different numbers.
+		//
+		// THE FLOOR IS A PROPERTY OF THIS FILE AND THE ADDRESS IS NOT, and that
+		// division is deliberate. The file may say how large a known positive has
+		// to be before a zero read against it is worth printing; it may not say
+		// WHERE that count is to be found, because that is the machine's answer.
+		// 1000 is three orders of magnitude above the blind arm's 1 and two below
+		// the healthy arm's 213261, so it fires on an instrument that has gone
+		// blind and not on one that has merely moved.
+		constexpr uint64_t g_sensitivityFloor = 1000u;
+
+		for(const std::pair<const char*, const RunResult&> run :
+			{std::pair<const char*, const RunResult&>{"control", control},
+			 std::pair<const char*, const RunResult&>{"patched", patched}})
+		{
+			const std::string label = run.first;
+
+			check(run.second.knownPositiveHits >= g_sensitivityFloor,
+				label + ": KNOWN POSITIVE, the most-read address of this run ("
+				+ hex32(run.second.knownPositiveAddr) + "), is read at least "
+				+ std::to_string(g_sensitivityFloor)
+				+ " times, so a zero on this arm is read against a real count; observed "
+				+ std::to_string(run.second.knownPositiveHits));
+
+			// THE ONE THE PROBES ARE ACTUALLY WEIGHED AGAINST. The unrestricted
+			// argmax can be satisfied by a hot DATA read; this one cannot,
+			// because it is confined to the bytes the image supplied.
+			check(run.second.codeKnownPositiveHits >= g_sensitivityFloor,
+				label + ": KNOWN POSITIVE, in-image, the most-read address inside the loaded"
+				" firmware image (" + hex32(run.second.codeKnownPositiveAddr)
+				+ "), is read at least " + std::to_string(g_sensitivityFloor)
+				+ " times, so a zero at an instruction address on this arm is read against a"
+				" count from the SAME population; observed "
+				+ std::to_string(run.second.codeKnownPositiveHits));
+		}
 
 		// The preconditions of the measurement, asserted before the measurement,
 		// so that a silent machine is reported as the machine's failure and not
@@ -1161,9 +1369,14 @@ int main()
 		              : "TOOK the packet out of the endpoint buffer")
 		          << " across " << g_observeQuanta << " quanta" << std::endl;
 
+		// THE TWO ARMS ARE COMPARED AT A COMMON ADDRESS AND NOT AT THEIR OWN.
+		// Each arm's known positive is a DIFFERENT address, so comparing the two
+		// arms' known-positive COUNTS compares two different things and would
+		// report "DIFFERENT" for a machine that did the same work. The common
+		// address is the control's known positive, measured on both arms.
 		std::cout << "verdict: the MCU instruction-fetch stream is "
 		          << (patched.windowFetches == control.windowFetches &&
-		              patched.hitsKnownPositive == control.hitsKnownPositive
+		              patched.crossHits == control.knownPositiveHits
 		              ? "IDENTICAL with and without the patch, so the patch changed nothing the core did"
 		              : "DIFFERENT with and without the patch")
 		          << std::endl;
@@ -1178,6 +1391,25 @@ int main()
 		          << " on the patched run and "
 		          << (control.hitsTarget > 0 ? "FIRED" : "DID NOT FIRE")
 		          << " on the control run" << std::endl;
+
+		// THE SCALE EVERY ZERO ABOVE IS READ AGAINST, PER ARM AND NEVER POOLED.
+		// Quoting one arm's known positive beside the other arm's zero is the
+		// exact defect this instrument was repaired for, so each arm states its
+		// own number and the reader is told which arm it belongs to.
+		for(const std::pair<const char*, const RunResult&> run :
+			{std::pair<const char*, const RunResult&>{"control", control},
+			 std::pair<const char*, const RunResult&>{"patched", patched}})
+		{
+			std::cout << "verdict: on the " << run.first << " arm a zero at "
+			          << hex32(g_probeTarget)
+			          << " is weighed against an IN-IMAGE known positive of "
+			          << run.second.codeKnownPositiveHits << " at "
+			          << hex32(run.second.codeKnownPositiveAddr)
+			          << " (and an any-address known positive of "
+			          << run.second.knownPositiveHits << " at "
+			          << hex32(run.second.knownPositiveAddr) << "), out of "
+			          << run.second.windowFetches << " word reads in the window" << std::endl;
+		}
 
 		return g_failures == 0;
 	});
