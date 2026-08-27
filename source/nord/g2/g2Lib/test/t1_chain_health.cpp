@@ -16,15 +16,39 @@
 //                                the same Scheduler accessors the golden run
 //                                asserts zero on.
 //
-//   phaseErrorFrames(p)          A ChainAdapter driven directly, with a real
-//                                emulated Esai so the M_TUE condition is real:
-//                                one position's audio transmit wrapper fired
-//                                twice inside one quantum. The Scheduler cannot
-//                                be made to ask for a second transmit, which is
-//                                the whole point of the counter; the Scheduler's
-//                                own accessor is this adapter reading minus a
-//                                baseline it takes at beginPlayPhase, which is
-//                                the limit of this known positive.
+//   phaseErrorFrames(p)          TWO known positives, and the second one is what
+//                                makes the golden run's phase-error zero mean
+//                                anything.
+//
+//                                THE FIRST drives a ChainAdapter DIRECTLY, with
+//                                a real emulated Esai so the written-flag
+//                                condition is real: one position's audio
+//                                transmit wrapper fired TWICE inside one
+//                                quantum. It pins the RULE, at the site that
+//                                implements it.
+//
+//                                THE SECOND drives the SAME condition on a
+//                                Scheduler and reads it back through
+//                                Scheduler::phaseErrorFrames, the accessor the
+//                                golden run asserts zero on. It is needed
+//                                because that accessor is the adapter reading
+//                                MINUS a baseline taken at beginPlayPhase, and
+//                                the first known positive says nothing about the
+//                                subtraction: with the first alone, an accessor
+//                                that answered a constant zero left this file
+//                                and every other file naming the counter GREEN.
+//
+//                                THE SCHEDULER CANNOT BE MADE TO ASK FOR A
+//                                SECOND TRANSMIT -- that is the whole point of
+//                                the counter -- so the second delivery is
+//                                injected the way a harness with no firmware
+//                                drives any ESAI: Config::chainOrder names the
+//                                position-to-port order, which wires the chain
+//                                at construction, and transmitDspFrame runs two
+//                                whole transmit frames on one position's ESAI
+//                                inside one quantum. The scheduler asked for
+//                                neither, and the counter it did not ask for is
+//                                exactly what the accessor must report.
 //
 //   underflowFrames              A pull for more than the CodecSink holds.
 //   overflowFrames               A push for more than the CodecSource can take.
@@ -51,6 +75,7 @@
 
 #include "../board.h"
 #include "../chainAdapter.h"
+#include "../esaiFrame.h"
 #include "../executor.h"
 #include "../frame.h"
 #include "../memoryMap.h"
@@ -528,8 +553,129 @@ namespace
 			"is per position and not shared");
 	}
 
-	// Known positive for underrunFrames(position) and
-	// secondBusUnderrunFrames(position), through the Scheduler accessors the
+	// KNOWN POSITIVE for phaseErrorFrames(position), through the SCHEDULER
+	// accessor the golden run asserts zero on.
+	//
+	// WHAT THIS ONE COVERS THAT knownPositivePhaseError DOES NOT: the BASELINE
+	// SUBTRACTION. Scheduler::phaseErrorFrames is the adapter reading minus
+	// m_phaseErrorBase, captured at beginPlayPhase, and an accessor that
+	// answered a constant zero satisfied every assertion in this file until this
+	// case existed.
+	//
+	// THE ORDER OF THE THREE STEPS IS LOAD-BEARING. The baseline is taken by
+	// beginPlayPhase, so the two transmits are driven AFTER it -- a delivery
+	// before it would be absorbed into the baseline and read back as zero, which
+	// is the very shape this case exists to detect.
+	void knownPositiveSchedulerPhaseError()
+	{
+		constexpr unsigned kLookahead    = 4u;
+		constexpr unsigned kMaxHostBlock = 3u;
+
+		g2::Board          board;
+		g2::SerialExecutor executor;
+
+		g2::Scheduler::Config config;
+		config.lookaheadFrames    = kLookahead;
+		config.maxHostBlockFrames = kMaxHostBlock;
+
+		// THE ORDER IS NAMED RATHER THAN DERIVED, which is what Config::chainOrder
+		// is for: this harness has no firmware to ask and drives the ESAIs itself.
+		// The identity is legal HERE for that reason and for no other -- on a real
+		// machine the firmware chooses the order and it is not the identity.
+		config.chainOrder.resize(config.dspCount);
+		for(unsigned p = 0; p < config.dspCount; ++p)
+			config.chainOrder[p] = p;
+
+		g2::Status status{};
+
+		const std::unique_ptr<g2::Scheduler> scheduler =
+			g2::Scheduler::create(config, executor, board, status);
+
+		if(!scheduler)
+		{
+			check(false, "KNOWN POSITIVE (scheduler phaseErrorFrames): a firmware-free Scheduler with a named "
+				"chain order could be created; g2::Status = " + std::to_string(uint32_t(status)));
+			return;
+		}
+
+		checkEqual(board.dspSet().dspCount(), config.dspCount,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): the named order covers every port the board has");
+
+		check(scheduler->chainAttached(),
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): a named order wires the chain at construction, so a "
+			"transmit driven below reaches the adapter the Scheduler reads");
+
+		// THE ENABLE COMES BEFORE THE PLAY PHASE. An enabled transmitter is what
+		// makes dspJob's step 3 deliver on this position every quantum, which is
+		// the delivery THE SCHEDULER ASKS FOR -- and the zero asserted below is
+		// the statement that those deliveries are not counted.
+		dsp56k::Esai& esai = board.dspSet().peripherals(config.chainOrder[0]).getEsai();
+
+		esai.writeTransmitClockControlRegister(0);
+		esai.writeTransmitControlRegister(1u << dsp56k::Esai::M_TE0);
+
+		scheduler->runFrames(config.secondBusFrameDivider * kLookahead);
+		scheduler->beginPlayPhase();
+
+		checkEqual(scheduler->phaseErrorFrames(0u), 0u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): every delivery the scheduler asked for during the "
+			"boot run and the priming run is uncounted, so the reading is zero once the baseline is taken");
+
+		// EACH TRANSMIT BELOW IS ONE THE SCHEDULER DID NOT ASK FOR, AND THE FIRST
+		// OF THEM ALREADY COUNTS. The scheduler's own step-3 delivery for the
+		// current quantum has already happened -- runFrames returns between
+		// quanta and advanceAll clears the written flags at the head of a
+		// quantum, not at its tail -- so the flag is standing when the first call
+		// below fires. That is what "a transmit the scheduler did not ask for"
+		// MEANS on this bus, and asserting a zero here instead would be asserting
+		// the opposite of the rule.
+		//
+		// THE STEP OF ONE IS THE ASSERTION AND A NON-ZERO READING IS NOT. A
+		// counter that saturated, or that counted the whole quantum rather than
+		// the callback, would satisfy "greater than zero" at both readings.
+		//
+		// THE RETURN OF transmitDspFrame IS THE OBSERVABLE THAT THE FRAME RAN. It
+		// answers 0 when no transmitter is enabled, and a pair of no-ops would
+		// otherwise leave the counter unmoved for a reason that has nothing to do
+		// with the accessor under test.
+		const uint32_t firstSlots = g2::transmitDspFrame(esai);
+
+		checkEqual(firstSlots, esai.getTxWordCount() + 1u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): the first unasked-for transmit frame really ran");
+
+		checkEqual(scheduler->phaseErrorFrames(0u), 1u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): an audio transmit the scheduler did not ask for "
+			"raises Scheduler::phaseErrorFrames at that position");
+
+		const uint32_t secondSlots = g2::transmitDspFrame(esai);
+
+		checkEqual(secondSlots, esai.getTxWordCount() + 1u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): the second unasked-for transmit frame really ran");
+
+		checkEqual(scheduler->phaseErrorFrames(0u), 2u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): a second unasked-for transmit raises it by EXACTLY "
+			"one again, so the reading steps with the callbacks and does not saturate");
+
+		checkEqual(scheduler->phaseErrorFrames(1u), 0u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): the neighbouring position is untouched, so the "
+			"Scheduler's reading is per position and not shared");
+
+		// THE MAXIMUM READSEVEN TAKES IS THE SHAPE THE GOLDEN RUN ASSERTS ON, so
+		// the raised counter is read back through it too. A readSeven that dropped
+		// the phase-error reduction would leave the golden run's phase-error
+		// assertion unreachable while every reading above still moved.
+		const Seven seven = readSeven(*scheduler, board.dspSet().dspCount());
+		reportSeven(seven, "known-positive scheduler phase error");
+
+		check(seven.phaseError > 0,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): readSeven -- the reduction the golden run asserts "
+			"zero on -- carries the raised counter");
+		checkEqual(seven.phaseErrorAt, 0u,
+			"KNOWN POSITIVE (scheduler phaseErrorFrames): readSeven names the position that moved");
+	}
+
+	// KNOWN POSITIVE for underrunFrames(position) and
+	// secondBusUnderrunFrames(position), through the SCHEDULER accessors the
 	// golden run asserts zero on.
 	//
 	// A firmware-free Board: every run gate is shut, no transmit callback ever
@@ -627,6 +773,7 @@ int main()
 		std::cout << "--- part A: known positives" << std::endl;
 
 		knownPositivePhaseError();
+		knownPositiveSchedulerPhaseError();
 		knownPositiveUnderruns();
 
 		// ---------------------------------------------------------------------
