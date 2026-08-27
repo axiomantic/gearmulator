@@ -87,7 +87,29 @@ jobs:
       # The patterns below are assembled from split string literals ON PURPOSE.
       # This step scans EVERY workflow file in the repository, including this
       # one. A pattern written as one literal would match its own definition
-      # and the step would fail on itself for ever.
+      # and the step would fail on itself for ever. THE PROBE STRINGS BELOW ARE
+      # SPLIT AT DIFFERENT POINTS FROM THE PATTERNS, which is what makes them a
+      # control and not a tautology: two independent spellings of one string
+      # must still meet.
+      #
+      # THIS STEP IS AN ABSENCE TEST, SO IT CARRIES CONTROLS. A loop over a glob
+      # that expanded to nothing prints nothing and exits 0, which is byte for
+      # byte what a clean tree prints. The scan that examined no file and the
+      # scan that found no violation were indistinguishable, and this step
+      # guards the clean-room payload boundary -- the place where a silent GREEN
+      # costs the most. Two controls close it:
+      #
+      #   1. the scope directory exists
+      #   2. the glob matched at least one file, counted and asserted
+      #
+      # and a third proves the instrument is alive:
+      #
+      #   3. every pattern still matches its own probe, so a pattern broken by
+      #      an edit to its split literal cannot report a clean tree it never
+      #      inspected
+      #
+      # WHAT COUNTS AS A PAYLOAD VIOLATION IS UNCHANGED. The controls fail the
+      # step for a different and clearly labelled reason: the scan did not run.
       - name: no-clavia-upload
         env:
           VISIBILITY: ${{ inputs.visibility }}
@@ -100,6 +122,39 @@ jobs:
           pe="fixtures/proto""col/"
           pf="[._]dum""p\b"
           patterns="${pa}|${pb}|${pc}|${pd}|${pe}|${pf}"
+          fail=0
+
+          # CONTROL 3: THE INSTRUMENT IS ALIVE. Each probe spells the string the
+          # pattern is meant to name, split at a different point, so no whole
+          # pattern appears as contiguous text in this file and the step still
+          # cannot fail on itself.
+          probe_a="nm""g2-artifacts"
+          probe_b="go""lden/"
+          probe_c="cap""tures/"
+          probe_d="co""rpus/"
+          probe_e="fixtures/pro""tocol/"
+          probe_f="x.du""mp "
+          for pair in "pa:${probe_a}" "pb:${probe_b}" "pc:${probe_c}" \
+                      "pd:${probe_d}" "pe:${probe_e}" "pf:${probe_f}"; do
+            name="${pair%%:*}"
+            probe="${pair#*:}"
+            eval "pat=\${${name}}"
+            if ! printf '%s\n' "${probe}" | grep -qE "${pat}"; then
+              echo "FAILURE no-clavia-upload: pattern ${name} no longer matches its own probe."
+              echo "A pattern that names nothing reports a clean tree it never inspected."
+              fail=1
+            fi
+          done
+
+          # CONTROL 1: THE SCOPE EXISTS. A checkout that did not land, or a
+          # repository with no workflow directory, leaves nothing to scan.
+          scope="under-test/.github/workflows"
+          if [ ! -d "${scope}" ]; then
+            echo "FAILURE no-clavia-upload: the scope ${scope} is not a directory."
+            echo "Nothing was scanned, so this step proved nothing about the payload boundary."
+            fail=1
+          fi
+
           # The allow-list is the set of jobs the plan places INSIDE the private
           # repository. That is exactly one workflow file, and it is allow-listed
           # only when the calling repository is the private one.
@@ -107,19 +162,32 @@ jobs:
           if [ "${VISIBILITY}" = "private" ]; then
             allow="t1-t2.yml"
           fi
-          fail=0
-          for f in under-test/.github/workflows/*.yml under-test/.github/workflows/*.yaml; do
+          scanned=0
+          examined=0
+          for f in "${scope}"/*.yml "${scope}"/*.yaml; do
             [ -e "$f" ] || continue
+            scanned=$((scanned + 1))
             base=$(basename "$f")
             if [ -n "${allow}" ] && [ "${base}" = "${allow}" ]; then
               echo "allow-listed: ${base}"
               continue
             fi
+            examined=$((examined + 1))
             if grep -nEi "${patterns}" "$f"; then
               echo "FAILURE no-clavia-upload: ${f} names the private repository or an artifact-tree path."
               fail=1
             fi
           done
+
+          # CONTROL 2: THE GLOB MATCHED SOMETHING. `scanned` counts files the
+          # glob produced, allow-listed ones included, because the question this
+          # control answers is whether the loop had any input at all.
+          if [ "${scanned}" -eq 0 ]; then
+            echo "FAILURE no-clavia-upload: the glob under ${scope} matched no file."
+            echo "An empty scan and a clean scan print the same thing; this is the empty one."
+            fail=1
+          fi
+          echo "no-clavia-upload: ${scanned} workflow file(s) matched, ${examined} examined."
           exit "${fail}"
 
       # REPO-7, THE SKIP DISCIPLINE. Design section 18.5 steps 3 and 4.
