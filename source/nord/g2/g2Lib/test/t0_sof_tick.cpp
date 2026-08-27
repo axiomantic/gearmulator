@@ -346,6 +346,29 @@ extern "C"
 	void isp1181_write(isp1181_ctx*, const uint32_t, const uint8_t)
 	{
 	}
+
+	/* THE BOARD NOW DRAINS ITS TRANSPORT HUB INTO THE DEVICE ON EVERY QUANTUM
+	 * BOUNDARY, so board.cpp references this entry point and a target that
+	 * links no mcf5307 archive must supply it. It is a SINK and not a
+	 * recorder: nothing in this file drives the hub, so no frame ever reaches
+	 * it, and a recorder here would be state no case reads. */
+	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
+	{
+	}
+
+	/* THE BOARD MOVES ITS HANDLE OFF THE STUB BACKEND AT CONSTRUCTION, so
+	 * board.cpp references this entry point too and a target that links no
+	 * mcf5307 archive must supply it.
+	 *
+	 * IT ANSWERS 1, WHICH IS "THE HANDLE MOVED". The Board reads the return
+	 * only to detect a REFUSAL, and a refusal is a state this file's fake
+	 * device cannot be in: there is no backend here to refuse. Answering 0
+	 * would make every Board in this file print the refusal line, which is
+	 * output no case here asks for. */
+	int isp1181_set_backend(isp1181_ctx*, int)
+	{
+		return 1;
+	}
 }
 
 int main()

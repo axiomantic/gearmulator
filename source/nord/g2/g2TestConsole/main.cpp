@@ -942,7 +942,178 @@ namespace
 		return g2console::exitStatus(g2console::ImpulseOutcome::DidNotRun);
 	}
 
-	int impulse()
+	/* ------------------------------------------ THE RECEIVE-BUFFER PROBE
+	 *
+	 * `--impulse --rx-probe`. IT ANSWERS ONE QUESTION AND NOT THE ONE --impulse
+	 * ANSWERS: does the injected pattern reach the HEAD DSP's ESAI RECEIVE
+	 * PATH -- the words the receive DMA deposits in that DSP's X memory --
+	 * during the play phase?
+	 *
+	 * WHY IT EXISTS. --impulse reports arrival at the CODEC SINK. A silent sink
+	 * has two causes that its three counters cannot separate: (a) the DSP
+	 * receives the pattern and, unpatched, has no routing that would re-transmit
+	 * it, and (b) the pattern never reaches the DSP's receive buffer at all.
+	 * Both predict framesPulled == walkQuanta, underrun == 0 and arrival == -1.
+	 * This probe reads the receive side directly, which is the observable the
+	 * two hypotheses disagree about.
+	 *
+	 * NO ADDRESS HERE IS ASSUMED. The four DMA pointer registers of the two
+	 * audio channels are LATCHED at their first non-zero value during boot and
+	 * PRINTED, so the reader sees which address is the receive DESTINATION and
+	 * which is the transmit SOURCE rather than being told. The census window
+	 * below is wide enough to hold either and the wide scan does not use an
+	 * address at all.
+	 *
+	 * A ZERO PROVES NOTHING WITHOUT A KNOWN POSITIVE, so the probe plants a
+	 * word this program owns at a known X address, runs the SAME scanner over
+	 * it, prints the address the scanner returned, removes the plant and scans
+	 * again. Both the positive and the negative are printed as VALUES. */
+	constexpr dsp56k::TWord g_rxProbeMask24 = 0x00FFFFFFu;
+
+	// The census window: wide enough to hold the $001C00 receive area and the
+	// $001D00 transmit area together, with margin on both sides. It is a
+	// REPORTING window and not a claim -- the wide scan below covers all of
+	// internal X and needs no window at all.
+	constexpr dsp56k::TWord g_rxProbeWindowLow  = 0x001000u;
+	constexpr dsp56k::TWord g_rxProbeWindowHigh = 0x002100u;
+
+	// The wide scan: all of internal X memory, on the early quanta. The head is
+	// chain position 0, so a pattern that reaches it at all reaches it within a
+	// few quanta of the injection; 64 is that bound with two orders of margin.
+	constexpr dsp56k::TWord g_rxProbeWideHigh   = 0x010000u;
+	constexpr unsigned      g_rxProbeWideQuanta = 64u;
+
+	// Where the known positive is planted. Inside the wide scan, far outside
+	// the census window, and the old value is put back.
+	constexpr dsp56k::TWord g_rxProbePlantWide   = 0x00FF00u;
+	// A second plant, inside the census window, so the window's own addressing
+	// is proven and not assumed.
+	constexpr dsp56k::TWord g_rxProbePlantWindow = 0x001C10u;
+
+	struct RxScanResult
+	{
+		bool          found    = false;
+		dsp56k::TWord addr     = 0;
+		int           which    = 0;   // 1 = the left word, 2 = the right word
+		dsp56k::TWord value    = 0;
+		unsigned      nonZero  = 0;
+	};
+
+	// ONE SCANNER, USED BY THE MEASUREMENT AND BY ITS KNOWN POSITIVE ALIKE. A
+	// known positive run through a different code path proves nothing about the
+	// path that reported the absence.
+	RxScanResult rxScan(const dsp56k::DSP& _dsp, const dsp56k::TWord _low,
+		const dsp56k::TWord _high, const dsp56k::TWord _wantLeft,
+		const dsp56k::TWord _wantRight)
+	{
+		RxScanResult r;
+
+		const dsp56k::Memory& memory = _dsp.memory();
+
+		for(dsp56k::TWord a = _low; a < _high; ++a)
+		{
+			const dsp56k::TWord w = memory.get(dsp56k::MemArea_X, a);
+
+			if(w != 0u)
+				++r.nonZero;
+
+			if(r.found)
+				continue;
+
+			if(w == _wantLeft || w == _wantRight)
+			{
+				r.found = true;
+				r.addr  = a;
+				r.value = w;
+				r.which = (w == _wantLeft) ? 1 : 2;
+			}
+		}
+
+		return r;
+	}
+
+	// The four audio-channel DMA pointers of one position, each latched at its
+	// first non-zero value. THE LATCH IS THE POINT: DSR and DDR both MOVE as
+	// transfers run, so a terminal read reports wherever the traversal reached
+	// and not the address the kernel programmed.
+	struct RxProbeDma
+	{
+		dsp56k::TWord dsr2 = 0;   // receive channel source      (expect an ESAI register)
+		dsp56k::TWord ddr2 = 0;   // receive channel destination (expect X memory)
+		dsp56k::TWord dsr4 = 0;   // transmit channel source     (expect X memory)
+		dsp56k::TWord ddr4 = 0;   // transmit channel destination(expect an ESAI register)
+
+		/* The two control registers OR-accumulated over the BOOT drive, so a
+		 * channel that was armed and later completed is told apart from one
+		 * that was never armed at all. The play-phase accumulator is separate. */
+		dsp56k::TWord dcr2Boot = 0;
+		dsp56k::TWord dcr4Boot = 0;
+	};
+
+	/* HOW MANY POSITIONS HAVE THE ESAI RECEIVE DMA REQUEST REGISTERED.
+	 *
+	 * This is the audio path's own arming, read from the DMA controller that
+	 * carries it, and it is the property `--impulse` waits for before it hands
+	 * the machine to `beginPlayPhase()`. It is NOT a proxy: nothing here reads
+	 * a program-load flag, a memory word or a cycle count.
+	 *
+	 * IT IS STICKY, AND ONLY FOR A REASON THAT COULD CHANGE. `finishTransfer`
+	 * clears DE without calling `removeTriggerTarget`, so a channel that armed
+	 * once stays registered for the rest of the run. Two things would make this
+	 * predicate wrong:
+	 *
+	 *   - dsp56300 unregistering the target on completion. The predicate would
+	 *     then go false between transfers and a healthy machine could run to
+	 *     the bound.
+	 *   - `setDCR` unregisters on ANY reconfiguration, so a kernel that armed
+	 *     the channel and then rewrote DCR would show a window of false. The
+	 *     drive polls every iteration and leaves on the first all-armed
+	 *     reading, so it cannot MISS such a window -- but what it saw would be
+	 *     an arming that has since been withdrawn.
+	 *
+	 * AND IT REPORTS REGISTRATION, NOT TRAFFIC. A channel registered against a
+	 * source that never asserts satisfies this forever. `--rx-probe` reads the
+	 * destination buffers for that reason, and it is a separate instrument. */
+	unsigned countRxArmed(g2::Board& _board, const unsigned _dspCount)
+	{
+		unsigned armed = 0;
+
+		for(unsigned port = 0; port < _dspCount; ++port)
+		{
+			if(_board.dspSet().peripherals(port).getDMA().hasTrigger(
+				dsp56k::DmaChannel::RequestSource::EsaiReceiveData))
+				++armed;
+		}
+
+		return armed;
+	}
+
+	bool latchRxProbeDma(g2::Board& _board, std::vector<RxProbeDma>& _latched)
+	{
+		bool complete = true;
+
+		for(unsigned port = 0; port < _latched.size(); ++port)
+		{
+			const dsp56k::Dma& dma = _board.dspSet().peripherals(port).getDMA();
+
+			RxProbeDma& l = _latched[port];
+
+			l.dcr2Boot |= dma.getDCR(g_dmaRxChannel);
+			l.dcr4Boot |= dma.getDCR(g_dmaTxChannel);
+
+			if(l.dsr2 == 0u) l.dsr2 = dma.getDSR(g_dmaRxChannel);
+			if(l.ddr2 == 0u) l.ddr2 = dma.getDDR(g_dmaRxChannel);
+			if(l.dsr4 == 0u) l.dsr4 = dma.getDSR(g_dmaTxChannel);
+			if(l.ddr4 == 0u) l.ddr4 = dma.getDDR(g_dmaTxChannel);
+
+			if(l.dsr2 == 0u || l.ddr2 == 0u || l.dsr4 == 0u || l.ddr4 == 0u)
+				complete = false;
+		}
+
+		return complete;
+	}
+
+	int impulse(const bool _rxProbe)
 	{
 		installLogFilter();
 
@@ -1011,18 +1182,50 @@ namespace
 
 		const unsigned dspCount = board.dspSet().dspCount();
 
-		/* The drive leaves on the properties the play phase needs: display
-		 * content composed, the settle window served, and every DSP position's
-		 * program landed. A fixed count would either cost the full bound every
-		 * run or hand beginPlayPhase a machine still downloading kernels. */
-		uint32_t iteration = 0;
-		uint32_t settle    = 0;
-		bool     booted    = false;
-		bool     landed    = false;
+		/* THE DRIVE LEAVES ON A PROPERTY OF THE AUDIO PATH, AND NOT ON PROGRAM
+		 * LOADING.
+		 *
+		 * It used to leave the moment every position reported `programLanded`.
+		 * That is a fact about the KERNEL DOWNLOAD and it says nothing about
+		 * audio: in this firmware `programLanded` goes true at boot iteration
+		 * 44,515 and the ESAI receive DMA request is not armed on any position
+		 * until 231,296 -- more than five times later. At the moment of the
+		 * boot-time DMA configuration the rx-arming code is not even resident;
+		 * P:$000250-$000270 disassembles as all zeros, because it arrives in a
+		 * later-loaded DSP program.
+		 *
+		 * So the old exit handed `beginPlayPhase()` a machine whose receive
+		 * path was still dead, and the STOPPED verdict it produced was a
+		 * statement about transport not yet existing rather than about routing.
+		 *
+		 * THE PREDICATE IS NOW `countRxArmed == dspCount`, BOUNDED BY
+		 * g_iterations exactly as the old one was. A drive that reaches the
+		 * bound without arming reports DID-NOT-RUN and not STOPPED: a machine
+		 * whose receive path never came up did not measure the chain at all,
+		 * and reporting that as a silent chain is the confusion `impulseOutcome`
+		 * exists to refuse. `landed` is unchanged and still reported -- it is
+		 * the precondition for polling, not the exit. */
+		uint32_t iteration    = 0;
+		uint32_t settle       = 0;
+		bool     booted       = false;
+		bool     landed       = false;
+		bool     rxArmed      = false;
+		unsigned rxArmedPorts = 0;
+
+		// The probe's DMA pointer latch, filled as the kernel programs each
+		// position. Empty and untouched when the probe is off.
+		std::vector<RxProbeDma> rxDma(_rxProbe ? dspCount : 0u);
+		bool                    rxDmaComplete = false;
 
 		for(; iteration < g_iterations; ++iteration)
 		{
 			scheduler->runFrames(g_framesPerIteration);
+
+			/* CALLED ON EVERY ITERATION AND NOT ONLY UNTIL THE LATCH FILLS: the
+			 * pointer latch is idempotent once full, and the two control
+			 * registers are OR-accumulated across the WHOLE boot drive. */
+			if(_rxProbe)
+				rxDmaComplete = latchRxProbeDma(board, rxDma) || rxDmaComplete;
 
 			if(board.mcuHalted())
 				break;
@@ -1044,11 +1247,24 @@ namespace
 			}
 
 			if(landedCount == dspCount)
-			{
 				landed = true;
+
+			if(!landed)
+				continue;
+
+			if(countRxArmed(board, dspCount) == dspCount)
+			{
+				rxArmed = true;
 				break;
 			}
 		}
+
+		/* THE REPORTED COUNT IS READ AFTER THE DRIVE AND NOT CARRIED OUT OF IT,
+		 * so a run that never reached the poll -- one that halted, or one whose
+		 * programs never landed -- still reports a measured number rather than
+		 * the initial zero. The registration is sticky within a run, so the
+		 * reading here is the run's maximum. */
+		rxArmedPorts = countRxArmed(board, dspCount);
 
 		const bool halted  = board.mcuHalted();
 		const bool faulted = board.faulted();
@@ -1086,12 +1302,251 @@ namespace
 		bool     arrivalExact = false;
 		unsigned framesPulled = 0;
 
+		/* ---------------------------------- the receive-buffer probe's state.
+		 *
+		 * THE HEAD IS FOUND AND NOT TYPED. chainPositionOfPort reads the
+		 * firmware's own position-to-port table, so the port this probe reads
+		 * is the machine's head and not this program's guess at it. */
+		const dsp56k::TWord rxWantLeft  = dsp56k::TWord(g_impulseLeft)  & g_rxProbeMask24;
+		const dsp56k::TWord rxWantRight = dsp56k::TWord(g_impulseRight) & g_rxProbeMask24;
+
+		unsigned headPort      = 0;
+		bool     headPortFound = false;
+
+		if(_rxProbe)
+		{
+			for(unsigned port = 0; port < dspCount; ++port)
+			{
+				if(chainPositionOfPort(board, port, dspCount) != 0u)
+					continue;
+
+				headPort      = port;
+				headPortFound = true;
+				break;
+			}
+		}
+
+		/* THE KNOWN POSITIVE AND ITS NEGATIVE, RUN BEFORE THE WALK ON THE SAME
+		 * SCANNER THE WALK USES. Each plant is written, scanned for, removed,
+		 * and scanned for again, and every one of the four answers is printed
+		 * as a VALUE. A scanner that cannot see a word this program put there
+		 * cannot report an absence of one the machine did not. */
+		RxScanResult kpWidePlanted, kpWideRemoved, kpWindowPlanted, kpWindowRemoved;
+
+		if(_rxProbe && headPortFound)
+		{
+			dsp56k::Memory& memory = board.dspSet().dsp(headPort).memory();
+
+			const dsp56k::TWord savedWide   = memory.get(dsp56k::MemArea_X, g_rxProbePlantWide);
+			const dsp56k::TWord savedWindow = memory.get(dsp56k::MemArea_X, g_rxProbePlantWindow);
+
+			memory.set(dsp56k::MemArea_X, g_rxProbePlantWide, rxWantLeft);
+			kpWidePlanted = rxScan(board.dspSet().dsp(headPort), 0u, g_rxProbeWideHigh,
+				rxWantLeft, rxWantRight);
+			memory.set(dsp56k::MemArea_X, g_rxProbePlantWide, savedWide);
+			kpWideRemoved = rxScan(board.dspSet().dsp(headPort), 0u, g_rxProbeWideHigh,
+				rxWantLeft, rxWantRight);
+
+			memory.set(dsp56k::MemArea_X, g_rxProbePlantWindow, rxWantRight);
+			kpWindowPlanted = rxScan(board.dspSet().dsp(headPort),
+				g_rxProbeWindowLow, g_rxProbeWindowHigh, rxWantLeft, rxWantRight);
+			memory.set(dsp56k::MemArea_X, g_rxProbePlantWindow, savedWindow);
+			kpWindowRemoved = rxScan(board.dspSet().dsp(headPort),
+				g_rxProbeWindowLow, g_rxProbeWindowHigh, rxWantLeft, rxWantRight);
+		}
+
+		// What the walk measures. -1 means the scanner ran and saw nothing.
+		int           rxWideQuantum   = -1;
+		dsp56k::TWord rxWideAddr      = 0;
+		int           rxWideWhich     = 0;
+		int           rxWindowQuantum = -1;
+		dsp56k::TWord rxWindowAddr    = 0;
+		unsigned      rxWindowPort    = 0;
+		int           rxWindowWhich   = 0;
+
+		// The census: the largest number of non-zero X words the census window
+		// held at any quantum, at the head, with the quantum that carried it.
+		unsigned rxMaxNonZero   = 0;
+		int      rxMaxNonZeroAt = -1;
+
+		// The receive DMA's destination pointer as it MOVES during the walk. A
+		// pointer that moves is a receive channel that transferred.
+		dsp56k::TWord rxDdr2First = 0;
+		dsp56k::TWord rxDdr2Min   = 0xFFFFFFu;
+		dsp56k::TWord rxDdr2Max   = 0;
+
+		/* THE DELIVERY-LEVEL KNOWN POSITIVE, AND IT IS NOT A PLANTED ONE.
+		 *
+		 * Each position's receive buffer is the eight X words at the address
+		 * ITS OWN latched DDR2 names, and its transmit buffer the eight at its
+		 * latched DSR4. If ANY position's receive buffer ever holds a non-zero
+		 * word, the ESAI-to-DMA-to-X-memory path demonstrably delivers audio on
+		 * this machine, and the head's own answer is then an absence measured
+		 * against a working mechanism rather than against an untested one. The
+		 * transmit half is the same question asked of the other direction. */
+		constexpr dsp56k::TWord kRxBufWords = 8u;
+
+		std::vector<int>           rxBufFirstQ(_rxProbe ? dspCount : 0u, -1);
+		std::vector<dsp56k::TWord> rxBufFirstAddr(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<dsp56k::TWord> rxBufFirstVal(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<unsigned>      rxBufMaxNz(_rxProbe ? dspCount : 0u, 0u);
+
+		/* WHETHER THE RECEIVE SIDE EVER REQUESTED A TRANSFER AT ALL, which is
+		 * the question a buffer of zeros cannot answer on its own. The ESAI
+		 * status register is OR-accumulated over the walk, so a bit that was
+		 * set at ANY quantum is set here even if it was cleared before the next
+		 * sample; M_RDF is the receive DMA's own request line and M_TDE is the
+		 * transmit one, so the two directions are read off ONE instrument and
+		 * the transmit column is the receive column's control. The two DMA
+		 * pointers are tracked the same way, min and max over the walk. */
+		std::vector<dsp56k::TWord> esaiSrOr(_rxProbe ? dspCount : 0u, 0u);
+		/* THE CHANNEL-ENABLE BIT IS WHAT `DmaChannel::execTransfer` GATES ON,
+		 * so a channel whose De was clear at every sample transferred nothing
+		 * however loudly its peripheral requested. OR-accumulated for the same
+		 * reason the status register is: a bit set at any quantum is set here.
+		 * The transmit channel is the receive channel's control. */
+		std::vector<dsp56k::TWord> dcr2Or(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<dsp56k::TWord> dcr4Or(_rxProbe ? dspCount : 0u, 0u);
+
+		/* THE EMULATOR'S OWN RECORD OF "A CHANNEL IS ARMED FOR THIS PERIPHERAL
+		 * REQUEST". DmaChannel::arm registers the channel as a request target
+		 * only when its DE bit is set, so this is the same question the DE bit
+		 * answers, asked of a DIFFERENT structure -- and Dma::hasTrigger holds
+		 * across a quantum rather than being sampled at its boundary, which is
+		 * the exact weakness of the DE sample. The transmit source is the
+		 * receive source's control, on the same call. */
+		std::vector<uint8_t> rxTriggerEver(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<uint8_t> txTriggerEver(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<dsp56k::TWord> ddr2Min(_rxProbe ? dspCount : 0u, 0xFFFFFFu);
+		std::vector<dsp56k::TWord> ddr2Max(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<dsp56k::TWord> dsr4Min(_rxProbe ? dspCount : 0u, 0xFFFFFFu);
+		std::vector<dsp56k::TWord> dsr4Max(_rxProbe ? dspCount : 0u, 0u);
+
+		std::vector<int>           txBufFirstQ(_rxProbe ? dspCount : 0u, -1);
+		std::vector<dsp56k::TWord> txBufFirstAddr(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<dsp56k::TWord> txBufFirstVal(_rxProbe ? dspCount : 0u, 0u);
+		std::vector<unsigned>      txBufMaxNz(_rxProbe ? dspCount : 0u, 0u);
+
+		// Walks the eight words at `_base` and records the first non-zero and
+		// the largest non-zero count. ONE body for both directions, so a
+		// positive on one side and an absence on the other are the same
+		// instrument's two answers.
+		const auto censusBuffer = [&](const dsp56k::DSP& _dsp, const dsp56k::TWord _base,
+			const unsigned _q, int& _firstQ, dsp56k::TWord& _firstAddr,
+			dsp56k::TWord& _firstVal, unsigned& _maxNz)
+		{
+			if(_base == 0u)
+				return;
+
+			const dsp56k::Memory& memory = _dsp.memory();
+
+			unsigned nz = 0;
+
+			for(dsp56k::TWord i = 0; i < kRxBufWords; ++i)
+			{
+				const dsp56k::TWord w = memory.get(dsp56k::MemArea_X, _base + i);
+
+				if(w == 0u)
+					continue;
+
+				++nz;
+
+				if(_firstQ < 0)
+				{
+					_firstQ    = int(_q);
+					_firstAddr = _base + i;
+					_firstVal  = w;
+				}
+			}
+
+			if(nz > _maxNz)
+				_maxNz = nz;
+		};
+
 		for(unsigned q = 0; q < walk; ++q)
 		{
 			const g2::Frame& in = (q == 0) ? impulseFrame : silence;
 
 			(void) scheduler->push(&in, 1);
 			scheduler->runFrames(1);
+
+			if(_rxProbe && headPortFound)
+			{
+				const dsp56k::TWord ddr2 =
+					board.dspSet().peripherals(headPort).getDMA().getDDR(g_dmaRxChannel);
+
+				if(q == 0)
+					rxDdr2First = ddr2;
+				if(ddr2 < rxDdr2Min)
+					rxDdr2Min = ddr2;
+				if(ddr2 > rxDdr2Max)
+					rxDdr2Max = ddr2;
+
+				// The census window, at EVERY position and EVERY quantum. A
+				// pattern that stopped one DSP short of the head would show
+				// here and nowhere else.
+				for(unsigned port = 0; port < dspCount; ++port)
+				{
+					{
+						dsp56k::Peripherals56311& p = board.dspSet().peripherals(port);
+
+						esaiSrOr[port] |= p.getEsai().readStatusRegister();
+						dcr2Or[port]   |= p.getDMA().getDCR(g_dmaRxChannel);
+						dcr4Or[port]   |= p.getDMA().getDCR(g_dmaTxChannel);
+
+						if(p.getDMA().hasTrigger(dsp56k::DmaChannel::RequestSource::EsaiReceiveData))
+							rxTriggerEver[port] = 1u;
+						if(p.getDMA().hasTrigger(dsp56k::DmaChannel::RequestSource::EsaiTransmitData))
+							txTriggerEver[port] = 1u;
+
+						const dsp56k::TWord d2 = p.getDMA().getDDR(g_dmaRxChannel);
+						const dsp56k::TWord s4 = p.getDMA().getDSR(g_dmaTxChannel);
+
+						if(d2 < ddr2Min[port]) ddr2Min[port] = d2;
+						if(d2 > ddr2Max[port]) ddr2Max[port] = d2;
+						if(s4 < dsr4Min[port]) dsr4Min[port] = s4;
+						if(s4 > dsr4Max[port]) dsr4Max[port] = s4;
+					}
+
+					censusBuffer(board.dspSet().dsp(port), rxDma[port].ddr2, q,
+						rxBufFirstQ[port], rxBufFirstAddr[port], rxBufFirstVal[port],
+						rxBufMaxNz[port]);
+					censusBuffer(board.dspSet().dsp(port), rxDma[port].dsr4, q,
+						txBufFirstQ[port], txBufFirstAddr[port], txBufFirstVal[port],
+						txBufMaxNz[port]);
+
+					const RxScanResult w = rxScan(board.dspSet().dsp(port),
+						g_rxProbeWindowLow, g_rxProbeWindowHigh, rxWantLeft, rxWantRight);
+
+					if(port == headPort && w.nonZero > rxMaxNonZero)
+					{
+						rxMaxNonZero   = w.nonZero;
+						rxMaxNonZeroAt = int(q);
+					}
+
+					if(rxWindowQuantum < 0 && w.found)
+					{
+						rxWindowQuantum = int(q);
+						rxWindowAddr    = w.addr;
+						rxWindowWhich   = w.which;
+						rxWindowPort    = port;
+					}
+				}
+
+				// The wide scan, head only, on the early quanta.
+				if(q < g_rxProbeWideQuanta && rxWideQuantum < 0)
+				{
+					const RxScanResult wide = rxScan(board.dspSet().dsp(headPort),
+						0u, g_rxProbeWideHigh, rxWantLeft, rxWantRight);
+
+					if(wide.found)
+					{
+						rxWideQuantum = int(q);
+						rxWideAddr    = wide.addr;
+						rxWideWhich   = wide.which;
+					}
+				}
+			}
 
 			g2::Frame out{};
 
@@ -1142,6 +1597,14 @@ namespace
 		          << " programsLanded=" << (landed ? 1 : 0)
 		          << " halted=" << (halted ? 1 : 0)
 		          << " faulted=" << (faulted ? 1 : 0) << std::endl;
+		/* WHY THE DRIVE STOPPED, IN ONE WORD, BESIDE THE COUNT THAT DECIDED IT.
+		 * `rx-armed` and `bound` are the two answers the predicate itself can
+		 * give; `halted` is the machine leaving under the caller. A reader who
+		 * sees `bound` is looking at a run whose receive path never came up,
+		 * which is a DIFFERENT fact from a chain that carried nothing. */
+		std::cout << "impulse: bootExit="
+		          << (rxArmed ? "rx-armed" : (halted ? "halted" : "bound"))
+		          << " rxArmedPorts=" << rxArmedPorts << "/" << dspCount << std::endl;
 		std::cout << "impulse: primedPulled=" << primedPulled
 		          << " walkQuanta=" << walk
 		          << " framesPulled=" << framesPulled
@@ -1188,17 +1651,157 @@ namespace
 
 		std::cout << "impulse: countersZero=" << (countersZero ? 1 : 0) << std::endl;
 
+		/* ------------------------------------- THE RECEIVE-BUFFER PROBE'S REPORT.
+		 *
+		 * EVERY LINE PRINTS THE COMPUTED VALUE BESIDE ITS NAME. No sentence
+		 * here is a conclusion the program decided in advance: the reader is
+		 * handed the addresses, the counts and the two known-positive answers,
+		 * and the narration is checkable against them. */
+		if(_rxProbe)
+		{
+			std::cout << "rx-probe: headPortFound=" << (headPortFound ? 1 : 0)
+			          << " headPort=" << headPort
+			          << " dspCount=" << dspCount
+			          << " dmaLatchComplete=" << (rxDmaComplete ? 1 : 0) << std::endl;
+
+			for(unsigned port = 0; port < rxDma.size(); ++port)
+			{
+				const unsigned position = chainPositionOfPort(board, port, dspCount);
+
+				std::cout << "rx-probe: port " << port
+				          << " chainPosition=" << position
+				          << " latched DSR2=" << dmaHex(rxDma[port].dsr2)
+				          << " DDR2=" << dmaHex(rxDma[port].ddr2)
+				          << " DSR4=" << dmaHex(rxDma[port].dsr4)
+				          << " DDR4=" << dmaHex(rxDma[port].ddr4)
+				          << " live DDR2=" << dmaHex(board.dspSet().peripherals(port)
+				                                      .getDMA().getDDR(g_dmaRxChannel))
+				          << " live DSR4=" << dmaHex(board.dspSet().peripherals(port)
+				                                      .getDMA().getDSR(g_dmaTxChannel))
+				          << " bootDCR2or=" << dmaHex(rxDma[port].dcr2Boot)
+				          << " bootDE2everSet="
+				          << ((rxDma[port].dcr2Boot >> dsp56k::DmaChannel::De) & 1u)
+				          << " bootDCR4or=" << dmaHex(rxDma[port].dcr4Boot)
+				          << " bootDE4everSet="
+				          << ((rxDma[port].dcr4Boot >> dsp56k::DmaChannel::De) & 1u)
+				          << std::endl;
+			}
+
+			std::cout << "rx-probe: KNOWN_POSITIVE wide plant addr=" << dmaHex(g_rxProbePlantWide)
+			          << " value=" << dmaHex(rxWantLeft)
+			          << " -> found=" << (kpWidePlanted.found ? 1 : 0)
+			          << " at=" << dmaHex(kpWidePlanted.addr)
+			          << " which=" << kpWidePlanted.which
+			          << " nonZeroWordsInScan=" << kpWidePlanted.nonZero
+			          << " ; after removal found=" << (kpWideRemoved.found ? 1 : 0)
+			          << " nonZeroWordsInScan=" << kpWideRemoved.nonZero << std::endl;
+
+			std::cout << "rx-probe: KNOWN_POSITIVE window plant addr=" << dmaHex(g_rxProbePlantWindow)
+			          << " value=" << dmaHex(rxWantRight)
+			          << " -> found=" << (kpWindowPlanted.found ? 1 : 0)
+			          << " at=" << dmaHex(kpWindowPlanted.addr)
+			          << " which=" << kpWindowPlanted.which
+			          << " nonZeroWordsInScan=" << kpWindowPlanted.nonZero
+			          << " ; after removal found=" << (kpWindowRemoved.found ? 1 : 0)
+			          << " nonZeroWordsInScan=" << kpWindowRemoved.nonZero << std::endl;
+
+			std::cout << "rx-probe: searchedFor left=" << dmaHex(rxWantLeft)
+			          << " right=" << dmaHex(rxWantRight)
+			          << " window=[" << dmaHex(g_rxProbeWindowLow) << ","
+			          << dmaHex(g_rxProbeWindowHigh) << ") allPositions everyQuantum"
+			          << " wide=[$000000," << dmaHex(g_rxProbeWideHigh) << ") headOnly firstQuanta="
+			          << g_rxProbeWideQuanta << std::endl;
+
+			std::cout << "rx-probe: RESULT windowQuantum=" << rxWindowQuantum
+			          << " windowPort=" << rxWindowPort
+			          << " windowAddr=" << dmaHex(rxWindowAddr)
+			          << " windowWhich=" << rxWindowWhich
+			          << " wideQuantum=" << rxWideQuantum
+			          << " wideAddr=" << dmaHex(rxWideAddr)
+			          << " wideWhich=" << rxWideWhich << std::endl;
+
+			/* THE DELIVERY-LEVEL POSITIVE OR ITS ABSENCE, PER POSITION AND AS
+			 * VALUES. `rxBufFirstQ` is the quantum at which that position's
+			 * receive buffer first held ANY non-zero word; -1 means it never
+			 * did. The transmit half is the same figure for the other
+			 * direction. A reader compares the two columns rather than being
+			 * told what they mean. */
+			for(unsigned port = 0; port < rxDma.size(); ++port)
+			{
+				std::cout << "rx-probe: buffers port " << port
+				          << " chainPosition=" << chainPositionOfPort(board, port, dspCount)
+				          << " rxBuf@" << dmaHex(rxDma[port].ddr2)
+				          << " firstNonZeroQ=" << rxBufFirstQ[port]
+				          << " at=" << dmaHex(rxBufFirstAddr[port])
+				          << " val=" << dmaHex(rxBufFirstVal[port])
+				          << " maxNonZero=" << rxBufMaxNz[port] << "/8"
+				          << " | txBuf@" << dmaHex(rxDma[port].dsr4)
+				          << " firstNonZeroQ=" << txBufFirstQ[port]
+				          << " at=" << dmaHex(txBufFirstAddr[port])
+				          << " val=" << dmaHex(txBufFirstVal[port])
+				          << " maxNonZero=" << txBufMaxNz[port] << "/8" << std::endl;
+			}
+
+			/* THE REQUEST LINES AND THE POINTERS, RECEIVE BESIDE TRANSMIT. The
+			 * transmit column is the receive column's control: the two are the
+			 * same register and the same accumulator, so a transmit answer that
+			 * moves while the receive answer does not is a difference in the
+			 * machine and not in the instrument. */
+			for(unsigned port = 0; port < rxDma.size(); ++port)
+			{
+				dsp56k::Peripherals56311& p = board.dspSet().peripherals(port);
+
+				const dsp56k::TWord sr = esaiSrOr[port];
+
+				std::cout << "rx-probe: esai port " << port
+				          << " chainPosition=" << chainPositionOfPort(board, port, dspCount)
+				          << " rxEnabled=" << p.getEsai().hasEnabledReceivers()
+				          << " txEnabled=" << p.getEsai().hasEnabledTransmitters()
+				          << " rxWordCount=" << p.getEsai().getRxWordCount()
+				          << " txWordCount=" << p.getEsai().getTxWordCount()
+				          << " srOr=" << dmaHex(sr)
+				          << " RDFeverSet=" << ((sr >> dsp56k::Esai::M_RDF) & 1u)
+				          << " ROEeverSet=" << ((sr >> dsp56k::Esai::M_ROE) & 1u)
+				          << " TDEeverSet=" << ((sr >> dsp56k::Esai::M_TDE) & 1u)
+				          << " DDR2=[" << dmaHex(ddr2Min[port]) << "," << dmaHex(ddr2Max[port])
+				          << "] DSR4=[" << dmaHex(dsr4Min[port]) << "," << dmaHex(dsr4Max[port])
+				          << "] DCR2or=" << dmaHex(dcr2Or[port])
+				          << " DE2everSet=" << ((dcr2Or[port] >> dsp56k::DmaChannel::De) & 1u)
+				          << " DCR4or=" << dmaHex(dcr4Or[port])
+				          << " DE4everSet=" << ((dcr4Or[port] >> dsp56k::DmaChannel::De) & 1u)
+				          << " rxRequestArmed=" << unsigned(rxTriggerEver[port])
+				          << " txRequestArmed=" << unsigned(txTriggerEver[port])
+				          << std::endl;
+			}
+
+			std::cout << "rx-probe: headCensus maxNonZeroWordsInWindow=" << rxMaxNonZero
+			          << " atQuantum=" << rxMaxNonZeroAt
+			          << " headDDR2 firstQuantum=" << dmaHex(rxDdr2First)
+			          << " min=" << dmaHex(rxDdr2Min)
+			          << " max=" << dmaHex(rxDdr2Max)
+			          << " moved=" << ((rxDdr2Max > rxDdr2Min) ? 1 : 0) << std::endl;
+		}
+
 		reportSuppressedLogLines();
 
 		/* THE VERDICT, AND IT IS THE WORST OF ITS CLAUSES. A machine that never
 		 * booted read its arrival off a chain that was not running, and a
 		 * pattern that arrived at the wrong frame or changed on the way is a
 		 * failure of the row and not a note beside it. */
-		/* The verdict is the classifier's, and it is one word before it is a
-		 * status: a reader is told which answer this was rather than handed a
-		 * conjunction's false and left to reconstruct it. */
+		/* THE VERDICT IS THE CLASSIFIER'S, AND IT IS ONE WORD BEFORE IT IS A
+		 * STATUS. The clauses that used to be AND-ed into a single bool are the
+		 * classifier's fields now, so a reader is told WHICH answer this was
+		 * rather than handed the conjunction's false and left to reconstruct it.
+		 *
+		 * `rxArmed` IS A CONDITION OF HAVING REACHED THE PLAY PHASE AT ALL, and
+		 * that is where it belongs rather than in a sixth outcome arm. A drive
+		 * that reached its bound with the receive path still dead did not
+		 * measure the chain, so it is DID-NOT-RUN (status 2) and NOT STOPPED
+		 * (status 1). Reporting it as STOPPED would be exactly the confusion
+		 * this classifier was built to refuse: an absence of measurement wearing
+		 * the word for a measured absence. */
 		g2console::ImpulseObservation observation;
-		observation.reachedPlayPhase = booted && landed && !halted && !faulted
+		observation.reachedPlayPhase = booted && landed && rxArmed && !halted && !faulted
 			&& primedPulled == size_t(config.lookaheadFrames);
 		observation.observerSelfTest = observerSelfTest;
 		observation.framesPulled     = framesPulled;
@@ -1390,6 +1993,13 @@ namespace
 		std::cout << "  --dump-dsp-dma   modifier of --boot: additionally print each DSP"
 		             " position's DDR2, DCO2 and DCO4 and check them against design section 2.3;"
 		             " a mismatch exits non-zero" << std::endl;
+		std::cout << "  --rx-probe       modifier of --impulse: additionally read the DSPs' ESAI"
+		             " RECEIVE side during the play phase -- the four audio-channel DMA pointers"
+		             " latched at the value the kernel programmed, and a scan of X memory for the"
+		             " injected pattern at every position on every quantum plus a whole-internal-X"
+		             " scan at the head. It plants a known word and scans for it first, and prints"
+		             " that answer beside the measurement, so an absence is a measured one. It"
+		             " prints and does not judge: the exit status is --impulse's own" << std::endl;
 	}
 
 	/* A refusal names the subcommand that refused, and the usage text is not a
@@ -1479,14 +2089,24 @@ int main(int _argc, char** _argv)
 	 * shrug, for the reason `--boot`'s modifier loop states. */
 	if(command == "--impulse")
 	{
-		if(_argc != 2)
+		/* THE MODIFIER LOOP IS `--boot`'s, FOR THE SAME REASON: an option this
+		 * subcommand does not know is an error and not a shrug. */
+		bool rxProbe = false;
+
+		for(int i = 2; i < _argc; ++i)
 		{
-			diagnose("--impulse", "takes no option");
+			if(std::string(_argv[i]) == "--rx-probe")
+			{
+				rxProbe = true;
+				continue;
+			}
+
+			diagnose("--impulse", std::string("unrecognised option '") + _argv[i] + "'");
 			usage();
 			return 2;
 		}
 
-		return named("--impulse", impulse());
+		return named("--impulse", impulse(rxProbe));
 	}
 
 	/* TASK PLG-14. `--help` IS A HANDLED WORD AND NOT A FALL-THROUGH. Before

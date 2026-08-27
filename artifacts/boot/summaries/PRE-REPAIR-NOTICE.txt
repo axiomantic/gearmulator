@@ -1,0 +1,24 @@
+PRE-REPAIR NOTICE — THE `handshakePorts=0` LINES IN THIS DIRECTORY ARE OBSOLETE EVIDENCE.
+Written 2026-08-27. Nothing in this directory is deleted or edited; each transcript remains an
+honest record of the run that produced it.
+
+WHAT IS OBSOLETE, AND WHY.
+  Nine transcripts here print `boot: handshakePorts=0`:
+    t1_boot_bannerdump.txt          t1_boot_brd32_preinit.txt      t1_boot_brd32_preinit_1u.txt
+    t1_boot_cfi_id_fix.txt          t1_boot_cs2trace.txt           t1_boot_g2x.txt
+    t1_boot_head_4fd2fa79.txt       t1_boot_pre_sch35.txt          t1_boot_settle.txt
+  ONE UNIT IS ONE TRANSCRIPT FILE PRINTING THAT LINE; the count is 9, and the tenth file here,
+  t1_boot_post_sch35_jit203.txt, prints no handshake line at all.
+  All nine are dated 2026-08-24 and ALL NINE PREDATE THE LATCH REPAIR.
+
+  §24.6 row W3-394 of nmg2-artifacts/docs/plans/2026-08-04-nmg2-emulator-impl.md measured that the
+  HF0->HF2 handshake is a TRANSIENT: a machine whose handshake COMPLETED and a machine whose
+  handshake NEVER RAN both present `icr=0 isr=0` at the end of the run. A terminal LEVEL READ
+  therefore cannot tell a healthy machine from a dead one. The repair RE-POINTED the identifier
+  `handshakePorts` from that level read to a LATCH, and added `handshakeAtEnd` as the level figure,
+  reported only. The zeros above are the OLD identifier and do not mean what their name now means.
+
+DO NOT COMPARE AGAINST THESE FILES. THE CURRENT BASELINE IS:
+  /Users/eek/Development/nmg2-artifacts/baselines/int6-t1_boot-handshake-latched-2026-08-27.txt
+  It names its own population -- tree, sha, build directory, binary, command, exit status -- and
+  records `boot: handshakePorts=8 (latched) handshakeAtEnd=0 (level read, reported only)`.

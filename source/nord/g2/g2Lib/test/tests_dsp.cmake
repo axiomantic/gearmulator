@@ -127,3 +127,28 @@ set_tests_properties(t1_kernel_load PROPERTIES LABELS "IntegrationTest" TIMEOUT 
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_kernel_load APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+# ----------------- the ESAI receive frame is zeroed storage
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_rx_frame_zeroed$
+#
+# frame.h states the precondition -- "a frame handed to toEsaiFrame must
+# already be zeroed elsewhere" -- and nothing in g2Lib can satisfy it, because
+# the storage belongs to dsp56k::Audio::Frame in the vendored tree. This row
+# CHECKS it from the consumer that depends on it, over storage the row poisons
+# itself so the pre-fix failure is deterministic rather than a coin flip.
+#
+# IT ASSERTS AN UNMODELLED INPUT AND NOT A SILENT ONE. Receiver 1 is enabled by
+# the real firmware and fed by SDI1 on real hardware; this emulation models
+# register 0 only. The zero the row asserts is the correct reading of an input
+# nothing drives, and the row's own header says so in those words.
+#
+# IT LINKS g2Lib AND NOTHING ELSE, the arrangement every other g2 test uses:
+# the dsp56300 core arrives through g2Lib's own PUBLIC link.
+
+add_executable(t0_rx_frame_zeroed t0_rx_frame_zeroed.cpp)
+target_link_libraries(t0_rx_frame_zeroed PRIVATE g2Lib)
+set_property(TARGET t0_rx_frame_zeroed PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_rx_frame_zeroed COMMAND t0_rx_frame_zeroed)
+set_tests_properties(t0_rx_frame_zeroed PROPERTIES LABELS "UnitTest")
