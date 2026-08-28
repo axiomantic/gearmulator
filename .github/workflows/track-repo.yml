@@ -54,11 +54,139 @@ jobs:
 
       # The four lint scripts live in the tools repository, which is PUBLIC.
       # Reading it needs no credential of any kind.
+      #
+      # `lint-current` IS A MOVING ALIAS IN nmg2-tools, AND THE PIN IS TEMPORARY
+      # BY CONSTRUCTION. The lint code and the register data file this job reads
+      # live on an unmerged PR stack there. A foreign-repository checkout with
+      # no `ref:` takes that repository's DEFAULT branch, which carries older
+      # copies, so an unpinned job lints against stale rules and says nothing
+      # about it. `lint-current` names the stack branch that is current. One
+      # push in nmg2-tools moves every consuming repository forward, so no
+      # consumer is edited when the stack grows.
+      #
+      # DELETE THE `ref:` LINE when the stack merges into that default branch.
+      # Until then two failure modes exist, and BOTH ARE LOUD ON PURPOSE: a
+      # deleted alias makes this step error, and an alias that falls behind the
+      # stack makes the next step fail. Do not add a fallback ref, `|| true`, or
+      # `continue-on-error`. The silence those produce is the exact defect the
+      # pin exists to remove.
+      #
+      # `fetch-depth: 0` is required by the staleness step below, which needs
+      # merge bases.
       - name: Check out the lint scripts
         uses: actions/checkout@v4
         with:
           repository: axiomantic/nmg2-tools
+          ref: lint-current
+          fetch-depth: 0
           path: lint-tools
+
+      # A PIN THAT MERELY FALLS BEHIND FAILS SILENTLY. Only a DELETED alias is
+      # loud on its own. If the alias simply stops being the tip, these guards
+      # keep running, stay green, and read older rules. This step makes that
+      # case loud too.
+      #
+      # THE SCOPE IS DERIVED, NOT KEPT BY HAND. The read set is computed from
+      # the `-m nmg2_tools.<module>` entry points and the `--register` path that
+      # appear in the steps of THIS file, plus the import closure of those entry
+      # points inside the checkout. A hand-kept path list is correct on the day
+      # it is written and silently wrong the day a step starts reading something
+      # new. Drift elsewhere in the tools repository cannot change a verdict
+      # here and is deliberately not reported.
+      #
+      # A THREE-DOT DIFF asks what a branch INTRODUCED that `lint-current`
+      # lacks, and ignores work `lint-current` has that the branch does not. A
+      # branch lower in the stack is behind by design, and that is not
+      # staleness.
+      #
+      # THIS IS AN ABSENCE TEST, SO IT CARRIES CONTROLS. Each one turns a
+      # scan-that-never-ran into a RED with its own reason, instead of the
+      # silent exit 0 that is byte for byte what a fresh alias prints:
+      #
+      #   1. this workflow file is present, so the read set has a source
+      #   2. at least two entry points were derived from it
+      #   3. at least one `tools/*` branch was fetched to compare against
+      - name: lint-current-is-not-behind
+        working-directory: lint-tools
+        run: |
+          set -euo pipefail
+
+          wf="$GITHUB_WORKSPACE/under-test/.github/workflows/track-repo.yml"
+
+          # CONTROL 1: the read set has a source.
+          if [ ! -f "$wf" ]; then
+            echo "CONTROL FAILED: $wf is missing, so the read set could not be derived."
+            exit 1
+          fi
+
+          roots=$(grep -oE -- '-m nmg2_tools\.[a-z_]+' "$wf" | sed 's|^-m ||' | sort -u || true)
+          registers=$(grep -oE -- '--register [^ ]+' "$wf" | sed 's|^--register ||' | sort -u || true)
+          nroots=$(printf '%s\n' "$roots" | sed '/^$/d' | wc -l | tr -d ' ')
+
+          # CONTROL 2: the derivation found the entry points it was meant to find.
+          if [ "$nroots" -lt 2 ]; then
+            echo "CONTROL FAILED: derived $nroots lint entry point(s) from $wf; expected at least 2."
+            echo "The read set would have been narrower than what this job runs."
+            exit 1
+          fi
+
+          readset=$(ROOTS="$roots" REGISTERS="$registers" python3 - <<'PY'
+          import importlib, os, sys
+          sys.path.insert(0, os.getcwd())
+          cwd = os.path.realpath(os.getcwd()) + os.sep
+          for r in os.environ["ROOTS"].split():
+              importlib.import_module(r)
+          paths = set()
+          for m in list(sys.modules.values()):
+              f = getattr(m, "__file__", None)
+              if not f:
+                  continue
+              f = os.path.realpath(f)
+              if f.startswith(cwd) and os.path.isfile(f):
+                  paths.add(os.path.relpath(f, cwd))
+          paths.update(p for p in os.environ.get("REGISTERS", "").split() if os.path.isfile(p))
+          print("\n".join(sorted(paths)))
+          PY
+          )
+          echo "Read set derived from $nroots entry point(s) in this job's own steps:"
+          echo "$readset" | while IFS= read -r member; do echo "  $member"; done
+
+          if ! git fetch --quiet origin '+refs/heads/tools/*:refs/remotes/stack/*'; then
+            echo "FAILED: could not fetch the tools/* branches of axiomantic/nmg2-tools."
+            exit 1
+          fi
+          n=$(git for-each-ref --format='%(refname:short)' refs/remotes/stack | wc -l | tr -d ' ')
+
+          # CONTROL 3: the comparison examined something.
+          if [ "$n" -eq 0 ]; then
+            echo "CONTROL FAILED: no tools/* branch was fetched, so this step compared"
+            echo "lint-current against nothing and proved nothing."
+            exit 1
+          fi
+          echo "lint-current is $(git rev-parse HEAD). Comparing it against $n tools/* branch(es)."
+
+          stale=0
+          for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/stack); do
+            # $readset is split on purpose: it is a list of pathspecs.
+            # shellcheck disable=SC2086
+            drift=$(git diff --name-only "HEAD...$b" -- $readset)
+            if [ -n "$drift" ]; then
+              echo "STALE: lint-current lacks changes carried by $b:"
+              echo "$drift" | while IFS= read -r changed; do echo "  $changed"; done
+              stale=1
+            fi
+          done
+
+          if [ "$stale" -ne 0 ]; then
+            echo
+            echo "The lint-current alias in axiomantic/nmg2-tools is behind the stack, so"
+            echo "these guards would have run older rules and reported nothing about it."
+            echo "Move that alias to the branch that carries the changes listed above."
+            echo "No consuming repository needs an edit."
+            exit 1
+          fi
+
+          echo "OK: lint-current carries every tools/* change to the files this job reads."
 
       - name: Set up Python
         uses: actions/setup-python@v5
