@@ -235,16 +235,28 @@ namespace
 		return uint8_t(value & 0xffu);
 	}
 
-	// The largest framed object in a `.pch2`, counting its 3-byte header, and
-	// how many objects it holds. Both are computed from the file this run loaded
-	// and neither is written here as a literal, so a different patch reports its
-	// own figures.
+	// The largest FRAMED object in a `.pch2`, counting its 3-byte header, and
+	// how many objects it holds. Both are COMPUTED from the file this run
+	// loaded and neither is written here as a literal, so a different patch
+	// reports its own figures.
+	//
+	// IT ALSO COUNTS WHAT THE SPLIT COSTS AND WHAT THE CORPUS CANNOT ANSWER.
+	// `_packets` is how many max-packet-size packets the whole container takes,
+	// and `_exactMultiples` is how many of its framed objects have a length
+	// that is an EXACT MULTIPLE of that packet size. The second figure is the
+	// one that decides whether this file can say anything about the trailing
+	// zero-length packet at all: the convention only ever applies to an exact
+	// multiple, so a corpus containing none of them cannot exercise it, and
+	// saying so as a computed number is the difference between a measurement
+	// and an assumption. Both are COMPUTED from the file this run loaded.
 	void measureObjects(const std::vector<uint8_t>& _file, unsigned& _count, size_t& _largest,
-		uint8_t& _firstType)
+		uint8_t& _firstType, size_t _packetSize, unsigned& _packets, unsigned& _exactMultiples)
 	{
-		_count     = 0;
-		_largest   = 0;
-		_firstType = 0;
+		_count           = 0;
+		_largest         = 0;
+		_firstType       = 0;
+		_packets         = 0;
+		_exactMultiples  = 0;
 
 		size_t at = 0;
 		while(at < _file.size() && _file[at] != 0)
@@ -269,6 +281,18 @@ namespace
 
 			if(_count == 0)
 				_firstType = _file[at];
+
+			if(_packetSize != 0)
+			{
+				// A frame of N bytes costs ceil(N / packetSize) packets, and a
+				// frame of ZERO bytes still costs one -- it is an empty packet,
+				// not an absent one.
+				_packets += unsigned(framed == 0 ? 1
+				                   : (framed + _packetSize - 1) / _packetSize);
+
+				if(framed != 0 && (framed % _packetSize) == 0)
+					++_exactMultiples;
+			}
 
 			++_count;
 			at += framed;
@@ -1097,9 +1121,12 @@ namespace
 		          << " offered=" << _r.usb.offered
 		          << " accepted=" << _r.usb.accepted
 		          << " refused=" << _r.usb.refused
+		          << " completed=" << _r.usb.completed
 		          << " stallReports=" << _r.usb.stallReports
 		          << " held=" << (_r.usb.held ? 1 : 0)
 		          << " heldAttempts=" << _r.usb.heldAttempts
+		          << " heldOffset=" << _r.usb.heldOffset
+		          << "/" << _r.usb.heldSize
 		          << std::endl;
 		std::cout << _label << ": primedPulled=" << _r.primedPulled
 		          << " walkQuanta=" << _r.walkQuanta
@@ -1146,15 +1173,45 @@ int main()
 			return false;
 		}
 
-		unsigned objectCount   = 0;
-		size_t   largestObject = 0;
-		uint8_t  firstType     = 0;
-		measureObjects(patch, objectCount, largestObject, firstType);
+		// THE PACKET SIZE IS READ FROM BoardConfig AND NOT WRITTEN HERE. The
+		// Board the arms below construct takes it from the same default, so a
+		// change to that default moves the expectation and the machine
+		// together instead of turning this file red.
+		const size_t packetSize = g2::BoardConfig{}.usbMaxPacketBytes;
+
+		unsigned objectCount    = 0;
+		size_t   largestObject  = 0;
+		uint8_t  firstType      = 0;
+		unsigned packetsNeeded  = 0;
+		unsigned exactMultiples = 0;
+		measureObjects(patch, objectCount, largestObject, firstType,
+			packetSize, packetsNeeded, exactMultiples);
 
 		std::cout << "patch: " << patchPath << " (" << patch.size() << " bytes, "
 		          << objectCount << " objects, largest framed object "
 		          << largestObject << " bytes, first object type "
 		          << hex32(firstType) << ")" << std::endl;
+
+		std::cout << "patch: at a " << packetSize << "-byte max packet size the "
+		          << objectCount << " objects take " << packetsNeeded
+		          << " packets, and " << exactMultiples
+		          << " of them have a length that is an exact multiple of it"
+		          << std::endl;
+
+		// THE LARGEST OBJECT AGAINST THE PART'S OWN CEILING, ASSERTED SO THAT
+		// THE SPLIT CANNOT BE ARGUED AWAY AS AN ARTEFACT OF ONE CONFIGURATION.
+		// ISP1362 Rev. 06 Table 16 (p.52) gives a non-isochronous endpoint
+		// exactly four legal buffer sizes -- 8, 16, 32 and 64 bytes, with
+		// `0100` to `1111` reserved -- and Table 109 (p.105) states the same
+		// bound as "interrupt/bulk: N <= 64 bytes". So no DcEndpointConfiguration
+		// byte exists that would make this object deliverable in one packet,
+		// and the only question the split answers is whether this stack cuts
+		// it up or drops it.
+		check(largestObject > packetSize,
+			std::string("this container really does carry an object no legal bulk"
+			            " endpoint could take whole: largest framed object ")
+			+ std::to_string(largestObject) + " bytes against a "
+			+ std::to_string(packetSize) + "-byte maximum packet");
 
 		// ---------------------------------------------------------- the control
 		//
@@ -1336,10 +1393,21 @@ int main()
 				+ std::to_string(u.offered) + " == " + std::to_string(u.accepted)
 				+ " + " + std::to_string(u.refused));
 
-			check(u.drained == u.accepted + u.undeliverable + (u.held ? 1u : 0u),
+			/* THE INVARIANT READS `completed` AND NOT `accepted`, AND THAT IS
+			 * A UNIT REPAIR RATHER THAN A WEAKENING. `accepted` counts
+			 * PACKETS since pumpTransport began splitting a frame into
+			 * max-packet-size pieces, and `drained` has always counted FRAMES;
+			 * the old form compared the two directly and went red on this arm
+			 * the moment the split landed -- 19 frames left the hub against 70
+			 * accepted packets. `completed` is incremented exactly once, when a
+			 * frame's LAST packet is taken, so it is the frame-shaped figure
+			 * this equality needs. `undeliverable` is the third destination a
+			 * drained frame can reach: it left the hub and was never offered.
+			 * board.h states the same thing at the declaration. */
+			check(u.drained == u.completed + u.undeliverable + (u.held ? 1u : 0u),
 				std::string("NOTHING DRAINED IS LOST: ") + std::to_string(u.drained)
-				+ " frames left the hub, " + std::to_string(u.accepted)
-				+ " are in the device, " + std::to_string(u.undeliverable)
+				+ " frames left the hub, " + std::to_string(u.completed)
+				+ " crossed to the device whole, " + std::to_string(u.undeliverable)
 				+ " were too large to offer and " + (u.held ? "1 is" : "0 are")
 				+ " still held for another offer");
 
@@ -1350,6 +1418,44 @@ int main()
 			check(u.undeliverable == 0u,
 				std::string("no frame left the hub too large to be offered to the device: ")
 				+ std::to_string(u.undeliverable));
+		}
+
+		// ------------------------------------ HOW MUCH OF THE PATCH ARRIVED
+		//
+		// THE QUESTION THIS WHOLE CHANGE EXISTS TO ANSWER, ASSERTED WITH ITS
+		// UNIT NAMED. ONE unit here is ONE PROTOCOL FRAME the hub handed the
+		// Board -- one `.pch2` object, plus the one-object probe container the
+		// arm also loads -- and NOT one packet, one object of the file, or one
+		// byte. Before the split this arm drained 2 frames and completed 1;
+		// the other 17 objects never left the hub, because a frame the device
+		// would not take blocked the drain behind it for the rest of the run.
+		//
+		// IT IS A FRACTION AND IT IS ASSERTED AS ONE. A count on its own would
+		// go green on a run that pushed fewer frames, which is the failure this
+		// project has paid for before: the denominator is what the arm really
+		// offered, read from the same struct as the numerator.
+		{
+			const g2::Board::UsbTransportStats& u = patched.usb;
+
+			check(u.drained > 0,
+				std::string("frames really left the hub on the patched arm, so the"
+				            " fraction below is read against a real denominator; ")
+				+ std::to_string(u.drained) + " frames");
+
+			check(u.completed == u.drained && !u.held,
+				std::string("EVERY frame the hub handed this Board reached the device"
+				            " WHOLE: ") + std::to_string(u.completed) + " of "
+				+ std::to_string(u.drained) + " frames completed, "
+				+ std::to_string(u.accepted) + " packets accepted and "
+				+ std::to_string(u.refused) + " NAKed and retried, "
+				+ (u.held ? "1 frame is still held" : "nothing is still held"));
+
+			std::cout << "measurement: " << u.completed << " of " << u.drained
+			          << " protocol frames crossed to the firmware whole, in "
+			          << u.accepted << " packets; " << u.refused
+			          << " packets were NAKed and re-offered, and "
+			          << u.stallReports << " frames outlived the NAK retry ceiling"
+			          << std::endl;
 		}
 
 		// -------------------------------------------------------- the verdict lines

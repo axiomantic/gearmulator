@@ -421,6 +421,8 @@ namespace g2
 		, m_usbCs3(m_usb)
 		, m_usb(nullptr)
 		, m_usbProtocolEndpoint(_config.usbProtocolEndpoint)
+		, m_usbMaxPacketBytes(_config.usbMaxPacketBytes)
+		, m_usbZeroLengthTerminator(_config.usbTerminateWithZeroLengthPacket)
 		, m_transport(g_transportMaxFrameBytes, g_transportQueueDepth)
 		, m_drained(TransportHub::kMaxEndpoints * g_transportQueueDepth)
 		, m_heldBytes(g_transportMaxFrameBytes)
@@ -508,6 +510,8 @@ namespace g2
 		UsbTransportStats s = m_usbStats;
 		s.held         = m_heldValid;
 		s.heldAttempts = m_heldAttempts;
+		s.heldOffset   = m_heldValid ? m_heldOffset : 0u;
+		s.heldSize     = m_heldValid ? m_heldSize   : 0u;
 		return s;
 	}
 
@@ -593,6 +597,23 @@ namespace g2
 				return;
 			}
 
+			/* A PACKET SIZE OF ZERO CANNOT SPLIT ANYTHING, AND IT IS REPORTED
+			 * FOR THE SAME REASON THE BRANCH ABOVE IS. The cursor below
+			 * advances by the packet size, so a zero would hold this frame
+			 * for ever while the stall line blamed the device. That is a
+			 * configuration fault in BoardConfig::usbMaxPacketBytes and it is
+			 * named as one here rather than left to be misdiagnosed. */
+			if(m_usbMaxPacketBytes == 0)
+			{
+				std::fprintf(stderr,
+					"board: BoardConfig::usbMaxPacketBytes is 0, so a %zu-byte"
+					" frame cannot be split into any packet at all. It is being"
+					" reported rather than delivered as one oversized packet or"
+					" silently dropped.\n", frame.size);
+				++m_usbStats.stallReports;
+				return;
+			}
+
 			m_heldSize = frame.size;
 
 			if(m_heldSize != 0 && frame.data != nullptr)
@@ -600,10 +621,59 @@ namespace g2
 
 			m_heldValid    = true;
 			m_heldAttempts = 0;
+			m_heldOffset   = 0;
+
+			/* WHETHER THIS FRAME OWES A TRAILING EMPTY PACKET, DECIDED ONCE,
+			 * WHEN THE FRAME IS TAKEN.
+			 *
+			 * THE FIRST CLAUSE IS NOT THE CONVENTION AND MUST NOT BE FOLDED
+			 * INTO THE SECOND. A frame of zero bytes IS one empty packet --
+			 * that is the whole frame, not a terminator after it -- and the
+			 * pump offered exactly that before the split existed. Deleting
+			 * this clause would make a zero-length frame vanish whenever the
+			 * flag is off, which is a behaviour removed rather than a case
+			 * simplified.
+			 *
+			 * THE SECOND CLAUSE IS THE CONVENTION, AND BoardConfig RECORDS
+			 * THAT NEITHER DOCUMENT STATES IT. Its default is off. */
+			m_heldNeedsZlp = (m_heldSize == 0) ||
+				(m_usbZeroLengthTerminator &&
+					(m_heldSize % m_usbMaxPacketBytes) == 0);
 		}
 
 		if(!m_heldValid)
 			return;
+
+		/* ONE PACKET, NOT ONE FRAME. THIS IS THE SPLIT.
+		 *
+		 * WHY IT IS HERE AND NOT IN THE PRODUCER OR IN THE DEVICE. On a real
+		 * G2 the PC's host controller cuts a bulk transfer into
+		 * max-packet-size packets and the firmware reassembles them; the
+		 * peripheral is never handed a packet larger than the buffer it
+		 * configured, and ISP1362 Rev. 06 Table 132 (p.118) gives the error
+		 * code for when it is -- `1011`, "overflow; the received packet was
+		 * larger than the available buffer space". This Board stands exactly
+		 * where that host controller stands. Splitting in `pch2Load` or
+		 * `InternalClient` would push a wire constraint up into the protocol
+		 * layer, which composes messages and knows of no endpoint; splitting
+		 * inside the device model would give the part a fragmentation it does
+		 * not have and would hide the overflow the real firmware must handle.
+		 *
+		 * WHY THE FRAME BOUNDARY SURVIVES ANYWAY. TransportHub still carries
+		 * one protocol message per frame, `pch2Load` still originates one
+		 * frame per object, and the hub's stamping is untouched -- the drain
+		 * still happens exactly once per quantum and still takes at most one
+		 * frame. The only new thing is that a frame now leaves this Board over
+		 * several quanta instead of one.
+		 *
+		 * ONE PACKET PER QUANTUM, FOR THE REASON ONE FRAME PER QUANTUM WAS
+		 * ALREADY THE RULE. Endpoint 3 is single-buffered, so a second packet
+		 * offered before the firmware has emptied the first meets a NAK; the
+		 * comment at the head of this function carries the two citations. */
+		const bool   bytesRemain = m_heldOffset < m_heldSize;
+		const size_t remaining   = bytesRemain ? m_heldSize - m_heldOffset : 0u;
+		const size_t packetSize  = remaining < m_usbMaxPacketBytes
+		                         ? remaining : m_usbMaxPacketBytes;
 
 		++m_usbStats.offered;
 		++m_heldAttempts;
@@ -613,11 +683,36 @@ namespace g2
 		 * MCF5307_MUST_USE so this call cannot go back to discarding it
 		 * without a compiler diagnostic. Discarding it is the defect this
 		 * function was rewritten to remove. */
-		if(isp1181_rx(m_usb, m_usbProtocolEndpoint, m_heldBytes.data(), m_heldSize) == 1)
+		if(isp1181_rx(m_usb, m_usbProtocolEndpoint,
+			m_heldBytes.data() + m_heldOffset, packetSize) == 1)
 		{
 			++m_usbStats.accepted;
-			m_heldValid    = false;
 			m_heldAttempts = 0;
+
+			/* THE CURSOR ADVANCES ONLY ON ACCEPTANCE, WHICH IS WHAT MAKES A
+			 * NAK COST NOTHING. A refused packet leaves the cursor where it
+			 * was and the same bytes are offered again at the next quantum,
+			 * so the retry the previous change introduced now retries a
+			 * PACKET rather than a whole frame -- the identical guarantee at
+			 * a finer grain, and no byte crosses twice. */
+			if(bytesRemain)
+				m_heldOffset += packetSize;
+			else
+				m_heldNeedsZlp = false;
+
+			/* THE FRAME IS COMPLETED WHEN ITS LAST PACKET IS TAKEN, AND
+			 * `completed` IS COUNTED HERE AND NOWHERE ELSE. `accepted` above
+			 * counts packets, so the no-loss invariant reads THIS counter;
+			 * board.h states why the two cannot be the same number. */
+			if(!bytesRemain || m_heldOffset >= m_heldSize)
+			{
+				if(!m_heldNeedsZlp)
+				{
+					++m_usbStats.completed;
+					m_heldValid  = false;
+					m_heldOffset = 0;
+				}
+			}
 			return;
 		}
 
@@ -674,15 +769,24 @@ namespace g2
 			 * buffer EMPTY and the packet too LONG for it. The cause lives in
 			 * that log, one line per refusal, and the line below sends the
 			 * reader there rather than inventing an answer. */
+			/* IT NAMES THE PACKET AND THE FRAME IT SITS IN, BECAUSE THE TWO
+			 * ARE NO LONGER THE SAME THING. A line that reported only the
+			 * frame length would say "862-byte frame" while the device was
+			 * refusing a 64-byte packet, which is the wrong figure to take to
+			 * the device's log; and one that reported only the packet would
+			 * hide how far the frame had got. The offset is what tells a
+			 * reader whether this frame is stuck at its first packet or at
+			 * its last. */
 			std::fprintf(stderr,
-				"board: the USB device has refused the same %zu-byte frame on"
-				" endpoint %d for %llu consecutive quanta, which is longer than"
-				" the %llu ms ceiling of the ISP1362's own NAK retry time-out."
-				" The frame is STILL HELD and is being re-offered; nothing has"
-				" been discarded. WHY the device refuses it is in the device's"
-				" own log, read through isp1181_log_written,"
-				" isp1181_log_retained and isp1181_log_line.\n",
-				m_heldSize, m_usbProtocolEndpoint,
+				"board: the USB device has refused the same %zu-byte packet at"
+				" offset %zu of a %zu-byte frame on endpoint %d for %llu"
+				" consecutive quanta, which is longer than the %llu ms ceiling"
+				" of the ISP1362's own NAK retry time-out. The frame is STILL"
+				" HELD and is being re-offered; nothing has been discarded. WHY"
+				" the device refuses it is in the device's own log, read through"
+				" isp1181_log_written, isp1181_log_retained and"
+				" isp1181_log_line.\n",
+				packetSize, m_heldOffset, m_heldSize, m_usbProtocolEndpoint,
 				static_cast<unsigned long long>(m_heldAttempts),
 				static_cast<unsigned long long>(g_nakRetryCeilingMs));
 		}
