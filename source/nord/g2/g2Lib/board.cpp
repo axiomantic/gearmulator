@@ -71,6 +71,7 @@
 
 #include "hdi08Bridge.h"
 
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 
@@ -472,6 +473,7 @@ namespace g2
 		, m_usbProtocolEndpoint(_config.usbProtocolEndpoint)
 		, m_transport(g_transportMaxFrameBytes, g_transportQueueDepth)
 		, m_drained(TransportHub::kMaxEndpoints * g_transportQueueDepth)
+		, m_heldBytes(g_transportMaxFrameBytes)
 	{
 		// Every unit is attached before the core exists, so no callback can
 		// reach a half-built decode.
@@ -576,28 +578,177 @@ namespace g2
 		          << std::endl;
 	}
 
+	Board::UsbTransportStats Board::usbTransport() const noexcept
+	{
+		UsbTransportStats s = m_usbStats;
+		s.held         = m_heldValid;
+		s.heldAttempts = m_heldAttempts;
+		return s;
+	}
+
 	void Board::pumpTransport() noexcept
 	{
-		/* ONE DRAIN, AT THE BOUNDARY. transportHub.h makes the count of drains
-		 * the quantum count -- "drainToDevice runs exactly once for each
-		 * quantum" -- so a second drain in one quantum would advance the hub's
-		 * frame index past the machine's and stamp two frames that crossed
-		 * together with different indices. */
-		const size_t drained = m_transport.drainToDevice(m_drained.data(), m_drained.size());
+		++m_usbStats.pumps;
+
+		/* ONE FRAME PER QUANTUM, AND THE DEVICE'S SHAPE IS WHY. The endpoint
+		 * the firmware configures carries a SINGLE buffer, and ISP1362 Rev. 06
+		 * section 12.1.2 step 3 (p.49) says what the second packet of a
+		 * quantum meets: "If the endpoint is enabled, the SIE checks the
+		 * contents of the ESR. If the endpoint is empty, the data from USB is
+		 * stored in the buffer memory during the data phase else a NAK
+		 * handshake is sent." Section 15.2.5 (p.115) says how long that
+		 * lasts: "Any subsequent packets are refused by returning a NAK
+		 * condition, until the buffer is unlocked". So offering a second
+		 * frame before the firmware has cleared the first CANNOT succeed --
+		 * and the run that motivated this code measured exactly that, 17
+		 * refusals in one quantum, every one of them reporting a buffer that
+		 * held 1 of 1.
+		 *
+		 * ONE DRAIN, AT THE BOUNDARY, STILL. transportHub.h makes the count of
+		 * drains the quantum count -- "drainToDevice runs exactly once for
+		 * each quantum" -- so a second drain in one quantum would advance the
+		 * hub's frame index past the machine's and stamp two frames that
+		 * crossed together with different indices. The drain therefore ALWAYS
+		 * happens; what changes with back-pressure is the `max` it is given,
+		 * and a max of 0 leaves every queued frame where it is. */
+		/* A BOARD WITH NO DEVICE NOW TAKES NOTHING OUT OF THE HUB EITHER, AND
+		 * THAT IS THE SAME RULE AND NOT A SECOND ONE. The old body drained the
+		 * whole queue and then returned without offering any of it, so a null
+		 * handle discarded every frame in silence -- the identical defect at a
+		 * different address. A max of 0 leaves them queued, and the producer
+		 * learns through TransportHub::toDevice's false when the queue fills.
+		 * m_usbStats.pumps still counts these quanta, so a Board that is
+		 * pumping and delivering nothing is visible rather than inferred. */
+		const size_t max = (m_usb == nullptr || m_heldValid) ? 0u : 1u;
+
+		const size_t drained = m_transport.drainToDevice(m_drained.data(), max);
+
+		m_usbStats.drained += drained;
 
 		if(m_usb == nullptr)
 			return;
 
-		for(size_t i = 0; i < drained; ++i)
+		if(drained != 0)
 		{
-			const ProtocolFrame& frame = m_drained[i].frame;
+			/* THE BYTES ARE COPIED AND NOTHING HERE READS ONE. Design section
+			 * 15.3: "the emulator does not implement the protocol by hand,
+			 * the firmware implements it; the emulator only carries the
+			 * bytes." A Board that inspected a frame here would be a second
+			 * implementation of the protocol. The copy is a LIFETIME
+			 * requirement and not an inspection: the hub's pointer dies at the
+			 * next drain and this frame may outlive several. */
+			const ProtocolFrame& frame = m_drained[0].frame;
 
-			/* THE BYTES ARE HANDED OVER UNCHANGED AND NOTHING HERE READS ONE.
-			 * Design section 15.3: "the emulator does not implement the
-			 * protocol by hand, the firmware implements it; the emulator only
-			 * carries the bytes." A Board that inspected a frame here would be
-			 * a second implementation of the protocol. */
-			isp1181_rx(m_usb, m_usbProtocolEndpoint, frame.data, frame.size);
+			/* A FRAME TOO LARGE TO HOLD IS REPORTED, NEVER TRUNCATED. The hub
+			 * makes this unreachable -- TransportHub::toDevice refuses a frame
+			 * larger than maxFrameBytes and this buffer is sized to the same
+			 * figure from the same constant -- so the branch exists to make
+			 * the ONE way that guarantee could ever break audible rather than
+			 * to handle a case that occurs. A silent clamp here would hand the
+			 * firmware a short frame that looked delivered. */
+			if(frame.size > m_heldBytes.size())
+			{
+				std::fprintf(stderr,
+					"board: a %zu-byte frame left the hub and does not fit the"
+					" %zu-byte hold buffer; it CANNOT be delivered and is being"
+					" reported rather than truncated or silently dropped.\n",
+					frame.size, m_heldBytes.size());
+				++m_usbStats.stallReports;
+				return;
+			}
+
+			m_heldSize = frame.size;
+
+			if(m_heldSize != 0 && frame.data != nullptr)
+				std::memcpy(m_heldBytes.data(), frame.data, m_heldSize);
+
+			m_heldValid    = true;
+			m_heldAttempts = 0;
+		}
+
+		if(!m_heldValid)
+			return;
+
+		++m_usbStats.offered;
+		++m_heldAttempts;
+
+		/* THE RETURN IS READ. `isp1181_rx` answers 1 when an OUT buffer holds
+		 * the packet and 0 for the NAK, and the header marks it
+		 * MCF5307_MUST_USE so this call cannot go back to discarding it
+		 * without a compiler diagnostic. Discarding it is the defect this
+		 * function was rewritten to remove. */
+		if(isp1181_rx(m_usb, m_usbProtocolEndpoint, m_heldBytes.data(), m_heldSize) == 1)
+		{
+			++m_usbStats.accepted;
+			m_heldValid    = false;
+			m_heldAttempts = 0;
+			return;
+		}
+
+		++m_usbStats.refused;
+
+		/* THE FRAME IS NOT DROPPED, AND THE STALL IS NOT SILENT.
+		 *
+		 * WHY IT IS NEVER DROPPED. Back-pressure already has an end-to-end
+		 * path: a held frame stops the drain, the hub's queue fills, and
+		 * TransportHub::toDevice answers false to the producer -- a refusal
+		 * the producer already has to handle. Nothing in that chain has to
+		 * throw a frame away, so nothing does.
+		 *
+		 * WHY IT STILL SHOUTS, AND WHERE THE NUMBER COMES FROM. A frame the
+		 * firmware never takes would otherwise stall this Board in perfect
+		 * silence, which is the same failure shape in a new place. The
+		 * threshold is the LARGEST NAK retry window the ISP1362 can be
+		 * programmed with: Table 108 (p.104) gives HcATLPTDDoneThresholdTimeOut
+		 * the field PTDDoneTimeOut[7:0], the "Maximum allowable time in ms for
+		 * the host controller to retry a transaction with NAK returned", so
+		 * its ceiling is 0xFF ms. A frame still refused after longer than any
+		 * time-out that register can express is, on the datasheet's own scale,
+		 * no longer flow control.
+		 *
+		 * THE SCOPE OF THAT CITATION IS NOT STRETCHED. Section 14.9.9 is the
+		 * ISP1362's HOST controller, not the peripheral the G2 carries, and
+		 * the host retrying a NAKed transaction here is the PC's stack rather
+		 * than that register. It is quoted for the one thing it settles and
+		 * the only thing this code needs: what a NAK obliges a host to do, and
+		 * on what scale the obligation is bounded. It is a time, not a count
+		 * of attempts, which is why this constant is derived from a
+		 * millisecond figure and the SOF frame rather than chosen as a number
+		 * of tries.
+		 *
+		 * IT REPEATS. A stall that outlives one window is reported again at
+		 * every further window, so a reader who joins late still sees it. */
+		constexpr uint64_t g_nakRetryCeilingMs = 255u;
+
+		const uint64_t stallQuanta = g_nakRetryCeilingMs * g_quantaPerSofFrame;
+
+		if(m_heldAttempts % stallQuanta == 0u)
+		{
+			++m_usbStats.stallReports;
+
+			/* stderr THROUGH fprintf AND NOT std::cout. This function is
+			 * noexcept and runs at a quantum boundary; a stream insertion that
+			 * threw here would call std::terminate. */
+			/* IT REPORTS WHAT THIS SIDE KNOWS AND NAMES WHO KNOWS THE REST.
+			 * `isp1181_rx` answers one bit, and mcf5307.h lists seven distinct
+			 * conditions behind it -- a full buffer and an oversized packet
+			 * among them. The Board cannot tell them apart and must not guess:
+			 * an earlier draft of this line asserted the firmware was not
+			 * clearing the buffer, and the device's own log then reported the
+			 * buffer EMPTY and the packet too LONG for it. The cause lives in
+			 * that log, one line per refusal, and the line below sends the
+			 * reader there rather than inventing an answer. */
+			std::fprintf(stderr,
+				"board: the USB device has refused the same %zu-byte frame on"
+				" endpoint %d for %llu consecutive quanta, which is longer than"
+				" the %llu ms ceiling of the ISP1362's own NAK retry time-out."
+				" The frame is STILL HELD and is being re-offered; nothing has"
+				" been discarded. WHY the device refuses it is in the device's"
+				" own log, read through isp1181_log_written,"
+				" isp1181_log_retained and isp1181_log_line.\n",
+				m_heldSize, m_usbProtocolEndpoint,
+				static_cast<unsigned long long>(m_heldAttempts),
+				static_cast<unsigned long long>(g_nakRetryCeilingMs));
 		}
 	}
 
