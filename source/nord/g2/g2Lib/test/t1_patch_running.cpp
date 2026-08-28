@@ -665,6 +665,12 @@ namespace
 		uint64_t crossHits = 0;
 
 		// The three CS3 readings, in the order they are taken.
+		// THE BOARD'S OWN ACCOUNT OF WHAT THE DEVICE DID WITH THE BYTES, read
+		// off the Board that produced it. It is per-Board and needs no
+		// subtraction: an earlier file-scope diagnostic pooled this arm with
+		// the control arm and every reader had to undo the pooling by hand.
+		g2::Board::UsbTransportStats usb;
+
 		uint8_t  peekAfterHandover = 0;  // one quantum after pch2Load returned
 		uint8_t  peekAfterWindow   = 0;  // g_observeQuanta later
 		uint8_t  peekProbeObject   = 0;  // after a SMALL object goes the same way
@@ -1032,6 +1038,10 @@ namespace
 			}
 		}
 
+		// LAST, SO IT COVERS EVERY QUANTUM THIS ARM RAN. The Board is still
+		// alive here; the figures are its own and belong to this arm alone.
+		_r.usb = board.usbTransport();
+
 		return true;
 	}
 
@@ -1082,6 +1092,15 @@ namespace
 		          << " afterProbeObject=0x" << unsigned(_r.peekProbeObject)
 		          << std::dec << " (probe object type " << hex32(g_probeObjectType)
 		          << ", probeLoaded=" << (_r.probeLoaded ? 1 : 0) << ")" << std::endl;
+		std::cout << _label << ": usb pumps=" << _r.usb.pumps
+		          << " drained=" << _r.usb.drained
+		          << " offered=" << _r.usb.offered
+		          << " accepted=" << _r.usb.accepted
+		          << " refused=" << _r.usb.refused
+		          << " stallReports=" << _r.usb.stallReports
+		          << " held=" << (_r.usb.held ? 1 : 0)
+		          << " heldAttempts=" << _r.usb.heldAttempts
+		          << std::endl;
 		std::cout << _label << ": primedPulled=" << _r.primedPulled
 		          << " walkQuanta=" << _r.walkQuanta
 		          << " arrival=" << _r.arrival
@@ -1293,6 +1312,36 @@ int main()
 			std::string("a byte of a REAL `.pch2` is readable at the CS3 data port of a BOOTED"
 			            " machine as the patch's own first object type ") + hex32(firstType) +
 			"; read " + hex32(patched.peekAfterHandover));
+
+		// ---------------------------------------- the transport loses NOTHING
+		//
+		// THE NO-LOSS INVARIANT, ASSERTED AND NOT NARRATED. Every frame this
+		// Board took out of the hub either sits in the device or is still held
+		// for another offer; there is no third destination. That is the whole
+		// content of the repair, and before it these two cases were BOTH red:
+		// the pump handed each drained frame to `isp1181_rx`, discarded the
+		// answer, and 17 of 19 frames on this arm vanished with every visible
+		// signal reading healthy.
+		//
+		// THEY ARE ASSERTED ON BOTH ARMS. A control arm that offers one frame
+		// and a patched arm that offers tens of thousands are the same
+		// invariant, and an arithmetic slip that held only for the busy arm
+		// would be a real defect.
+		for(const RunResult* const arm : { &control, &patched })
+		{
+			const g2::Board::UsbTransportStats& u = arm->usb;
+
+			check(u.offered == u.accepted + u.refused,
+				std::string("every offer to the device is either accepted or refused: ")
+				+ std::to_string(u.offered) + " == " + std::to_string(u.accepted)
+				+ " + " + std::to_string(u.refused));
+
+			check(u.drained == u.accepted + (u.held ? 1u : 0u),
+				std::string("NOTHING DRAINED IS LOST: ") + std::to_string(u.drained)
+				+ " frames left the hub, " + std::to_string(u.accepted)
+				+ " are in the device and " + (u.held ? "1 is" : "0 are")
+				+ " still held for another offer");
+		}
 
 		// -------------------------------------------------------- the verdict lines
 		//

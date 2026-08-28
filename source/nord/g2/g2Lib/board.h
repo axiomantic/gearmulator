@@ -270,15 +270,55 @@ namespace g2
 		 * its own so that a check can drive one quantum's transport without
 		 * driving a SOF tick.
 		 *
-		 * It allocates nothing. The drain target is sized once, with the hub,
-		 * in the constructor's member initialiser list. */
+		 * IT ALLOCATES NOTHING. The drain target is sized once, with the hub,
+		 * in the constructor's member initialiser list.
+		 *
+		 * A FRAME THE DEVICE REFUSES IS HELD AND RE-OFFERED, NOT DISCARDED.
+		 * `isp1181_rx` answers 0 for a NAK, and mcf5307.h states what that
+		 * costs: "THE PACKET IS GONE IN EVERY ONE OF THOSE CASES - a refusal
+		 * here is a dropped packet and not a deferred one". So the deferral
+		 * has to live on THIS side of the call, and it does: the refused
+		 * bytes are copied into Board-owned storage and offered again at the
+		 * next quantum, ahead of anything still queued. usbTransport() is how
+		 * a caller reads what that cost. */
 		void pumpTransport() noexcept;
 
-		/* The device's transmit callback, public for the reason onRead and
-		 * onWrite above are public: it is the exact function pointer handed to
-		 * isp1181_create, so a check that drives this drives the path the
-		 * device takes. A check that drove a private forwarding helper instead
-		 * would stay green with a null callback installed.
+		/* WHAT THE DEVICE DID WITH THE BYTES THIS BOARD HANDED IT, PER BOARD.
+		 *
+		 * IT IS A MEMBER AND NOT A FILE-SCOPE TALLY, AND THAT IS THE WHOLE
+		 * POINT. A diagnostic that counted at file scope pooled two Boards in
+		 * one process into one figure, and every reader of it had to subtract
+		 * one arm from the other by hand before the number meant anything.
+		 * These counters belong to the Board that earned them.
+		 *
+		 * `offered` counts calls to `isp1181_rx`, so it counts RE-offers of
+		 * one held frame as well as first offers; `accepted` and `refused`
+		 * partition it exactly. `drained` counts frames taken out of the hub,
+		 * so `drained == accepted + (held ? 1 : 0)` holds at every quantum
+		 * boundary and IS the no-loss invariant: nothing this Board takes out
+		 * of the hub can go anywhere except into the device or into the hold.
+		 * `stallReports` counts the loud lines written for a frame the device
+		 * would not take within the datasheet's own NAK retry window. */
+		struct UsbTransportStats
+		{
+			uint64_t pumps        = 0;
+			uint64_t drained      = 0;
+			uint64_t offered      = 0;
+			uint64_t accepted     = 0;
+			uint64_t refused      = 0;
+			uint64_t stallReports = 0;
+			uint64_t heldAttempts = 0;
+			bool     held         = false;
+		};
+
+		UsbTransportStats usbTransport() const noexcept;
+
+		/* THE DEVICE'S TRANSMIT CALLBACK, PUBLIC FOR THE REASON onRead AND
+		 * onWrite ABOVE ARE PUBLIC: it is the exact function pointer handed to
+		 * isp1181_create, so a check that drives THIS drives the path the
+		 * DEVICE takes. A check that drove a private forwarding helper instead
+		 * would stay green with a null callback installed, which is the defect
+		 * measured for the bus pair and recorded above.
 		 *
 		 * `endpoint` is accepted and not filtered. The hub carries bytes and
 		 * names no endpoint, the protocol's framing is in the payload itself,
@@ -510,6 +550,21 @@ namespace g2
 		 * buffer. */
 		TransportHub              m_transport;
 		std::vector<StampedFrame> m_drained;
+
+		/* THE ONE REFUSED FRAME THIS BOARD STILL OWNS, AND ITS OWN COPY OF
+		 * THE BYTES. It cannot be a pointer into the hub: transportHub.h
+		 * gives a drained frame a lifetime that ends at the NEXT drain, and
+		 * pumpTransport drains on every quantum whether it takes a frame or
+		 * not, so a held pointer would dangle exactly one quantum later. The
+		 * buffer is sized with the hub in the constructor's member
+		 * initialiser list and never grows, because design section 13.10
+		 * rule 1 forbids allocation at a quantum boundary. */
+		std::vector<uint8_t> m_heldBytes;
+		size_t               m_heldSize     = 0;
+		bool                 m_heldValid    = false;
+		uint64_t             m_heldAttempts = 0;
+
+		UsbTransportStats    m_usbStats;
 
 		uint64_t     m_lastFrameIndex = 0;
 		bool         m_faulted        = false;
