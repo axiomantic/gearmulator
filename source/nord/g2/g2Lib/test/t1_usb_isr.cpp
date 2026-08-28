@@ -1361,9 +1361,14 @@ int main()
 			std::string("ep0-small: the blanket handler this harness wrote is never entered, so the"
 			            " count above is the FIRMWARE'S handler and not an exception landing in the"
 			            " harness's own filler; counted ") + std::to_string(control0.hitsBlanket));
-		check(real.hitsIsr == 1,
-			std::string("ep3-patch: the same routine is entered exactly once on the endpoint the"
-			            " machine actually uses; counted ") + std::to_string(real.hitsIsr));
+		// THE ep3-patch ARM'S OWN ENTRY COUNT IS ASSERTED IN SECTION 5 AND NOT
+		// HERE, because the number it must equal is the number of complete OUT
+		// services, which section 5 is where this file computes. It used to be
+		// asserted here as `== 1` beside the control's; that literal was a
+		// property of a transport that delivered ONE packet and never the
+		// property this case is about. Nothing is dropped -- the check is
+		// stronger there, since it ties the count to a figure measured from the
+		// firmware's own command stream instead of to a constant.
 
 		// 4. THE ANSWER. The clearing route, and the opcode tracks the ENDPOINT.
 		//
@@ -1383,13 +1388,81 @@ int main()
 
 		// 5. THE ORDER. A status read that arrived before the interrupt-register
 		//    read would not be a service of that interrupt.
-		check(real.commandsAfterBoot == std::vector<uint8_t>{
-				g_readIntRegister, g_statusEndpoint3, g_readEndpoint3Out, g_clearEndpoint3Out },
-			std::string("ep3-patch: the commands the firmware issues AFTER the boot are exactly"
-			            " read-interrupt-register, endpoint-3 status, READ endpoint 3's buffer,"
-			            " CLEAR endpoint 3's buffer -- the authority's OUT sequence, a complete"
-			            " service that reads the register, clears the bit and DRAINS the packet;"
-			            " saw ") + describeOpcodes(real.commandsAfterBoot));
+		//
+		//    THE SEQUENCE IS NOW THAT GROUP REPEATED, AND THE REPETITION IS THE
+		//    MEASUREMENT. This case used to assert the four opcodes appeared
+		//    EXACTLY ONCE, and that was true only while the endpoint took
+		//    exactly one packet: `Board::pumpTransport` offered each protocol
+		//    frame whole, endpoint 3's buffer is 64 bytes, and every frame
+		//    larger than that was refused for ever, so the firmware serviced
+		//    the endpoint once and then had nothing further to drain. Since the
+		//    pump splits a frame into max-packet-size packets the firmware
+		//    services the endpoint ONCE PER PACKET, and a one-group expectation
+		//    now measures the defect rather than the route.
+		//
+		//    IT IS NOT WEAKENED TO A PREFIX OR A SUBSTRING CHECK. Every group
+		//    is compared in full and the length must be a whole number of
+		//    groups, so a truncated service -- a read with no clear, which is
+		//    exactly the shape that would leave the buffer locked -- is red
+		//    here. What is dropped is only the claim that there is ONE group,
+		//    which was never a property of the firmware.
+		{
+			const std::vector<uint8_t> group{
+				g_readIntRegister, g_statusEndpoint3, g_readEndpoint3Out, g_clearEndpoint3Out };
+
+			const size_t seen = real.commandsAfterBoot.size();
+
+			bool everyGroupWhole = (seen != 0) && (seen % group.size() == 0);
+
+			for(size_t at = 0; everyGroupWhole && at < seen; at += group.size())
+			{
+				for(size_t i = 0; i < group.size(); ++i)
+				{
+					if(real.commandsAfterBoot[at + i] != group[i])
+						everyGroupWhole = false;
+				}
+			}
+
+			check(everyGroupWhole,
+				std::string("ep3-patch: the commands the firmware issues AFTER the boot are"
+				            " read-interrupt-register, endpoint-3 status, READ endpoint 3's buffer,"
+				            " CLEAR endpoint 3's buffer -- the authority's OUT sequence, a complete"
+				            " service that reads the register, clears the bit and DRAINS the packet"
+				            " -- repeated whole, once for each packet the split delivered; ")
+				+ std::to_string(seen) + " opcodes is "
+				+ std::to_string(seen / group.size()) + " complete services with "
+				+ std::to_string(seen % group.size()) + " left over");
+
+			/* ONE HANDLER ENTRY FOR EACH COMPLETE SERVICE, AND THIS IS WHERE
+			 * "the line DEASSERTED and the handler did not re-enter" IS NOW
+			 * SAID. The old form of that claim was `hitsIsr == 1` on this arm.
+			 * It was green only while the endpoint took one packet, and a
+			 * transport that delivers 69 packets makes 1 the wrong constant
+			 * without making the property wrong.
+			 *
+			 * IT IS TIED TO A FIGURE FROM THE FIRMWARE'S OWN COMMAND STREAM
+			 * AND NOT TO A LITERAL, so the pair still discriminates exactly
+			 * what the literal did: a bit that never left the interrupt
+			 * register would re-enter the handler on every quantum and put
+			 * this count in the thousands against 69 services, and a handler
+			 * that stopped being entered would put it below. `> 0` would be
+			 * green in every one of those worlds. */
+			check(real.hitsIsr == seen / group.size(),
+				std::string("ep3-patch: the service routine is entered EXACTLY ONCE for each"
+				            " complete endpoint-3 OUT service -- so the line DEASSERTED after"
+				            " every packet and the handler never re-entered on a stale bit;"
+				            " entered ") + std::to_string(real.hitsIsr) + " times against "
+				+ std::to_string(seen / group.size()) + " services, out of "
+				+ std::to_string(g_observeQuanta) + " quanta, by the same counter that read "
+				+ std::to_string(real.hitsKnownPositive) + " at the known positive");
+
+			// THE COUNT IS REPORTED AND NOT ASSERTED. It is the packet count of
+			// one particular `.pch2` at one particular max packet size, and an
+			// equality on it would go red for a different patch or a differently
+			// configured endpoint -- neither of which is a fault.
+			std::cout << "ep3-patch: the firmware performed " << (seen / group.size())
+			          << " complete endpoint-3 OUT services after the boot" << std::endl;
+		}
 		check(control0.commandsAfterBoot == std::vector<uint8_t>{
 				g_readIntRegister, g_statusFirst },
 			std::string("ep0-small: the commands after the boot are exactly read-interrupt-register"
