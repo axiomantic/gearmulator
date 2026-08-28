@@ -104,6 +104,7 @@
 
 #include "dsp56kBase/logging.h"
 
+#include "dsp56kEmu/dma.h"
 #include "dsp56kEmu/esai.h"
 #include "dsp56kEmu/memory.h"
 #include "dsp56kEmu/peripherals.h"
@@ -411,9 +412,28 @@ namespace
 		uint32_t bootQuanta = 0;
 		bool     booted     = false;
 		bool     landed     = false;
+		bool     rxArmed    = false;
+		unsigned rxArmedPorts = 0;
 		bool     halted     = false;
 		bool     faulted    = false;
 	};
+
+	// The audio path's own arming, read from the DMA controller that carries it.
+	// This is g2TestConsole's countRxArmed, and it is the property --impulse's
+	// drive waits for before handing the machine to beginPlayPhase().
+	unsigned countRxArmed(g2::Board& _board, const unsigned _dspCount)
+	{
+		unsigned armed = 0;
+
+		for(unsigned port = 0; port < _dspCount; ++port)
+		{
+			if(_board.dspSet().peripherals(port).getDMA().hasTrigger(
+				dsp56k::DmaChannel::RequestSource::EsaiReceiveData))
+				++armed;
+		}
+
+		return armed;
+	}
 
 	bool placeAndBoot(const std::string& _directory, Machine& _m)
 	{
@@ -499,12 +519,19 @@ namespace
 			}
 
 			if(landed == _m.dspCount)
-			{
 				_m.landed = true;
+
+			if(!_m.landed)
+				continue;
+
+			if(countRxArmed(_m.board, _m.dspCount) == _m.dspCount)
+			{
+				_m.rxArmed = true;
 				break;
 			}
 		}
 
+		_m.rxArmedPorts = countRxArmed(_m.board, _m.dspCount);
 		_m.halted  = _m.board.mcuHalted();
 		_m.faulted = _m.board.faulted();
 
@@ -512,8 +539,21 @@ namespace
 		          << " dspCount=" << _m.dspCount
 		          << " booted=" << (_m.booted ? 1 : 0)
 		          << " programsLanded=" << (_m.landed ? 1 : 0)
+		          << " rxArmed=" << (_m.rxArmed ? 1 : 0)
+		          << " rxArmedPorts=" << _m.rxArmedPorts << "/" << _m.dspCount
 		          << " halted=" << (_m.halted ? 1 : 0)
 		          << " faulted=" << (_m.faulted ? 1 : 0) << std::endl;
+
+		/* A DRIVE THAT REACHED THE BOUND WITHOUT ARMING DID NOT MEASURE THE
+		 * CHAIN, AND IT MUST NOT BE ALLOWED TO REPORT SEVEN QUIET ZEROS.
+		 * g2TestConsole calls that case DID-NOT-RUN rather than STOPPED for the
+		 * same reason: the seven counters this file asserts zero on are all
+		 * satisfied by a machine whose receive path never came up, so without
+		 * this observable the whole gate would pass on exactly the machine it
+		 * cannot speak about. */
+		check(_m.rxArmed,
+			"the boot drive reached ESAI receive-DMA arming on every position before the hand-off "
+			"(rxArmedPorts " + std::to_string(_m.rxArmedPorts) + "/" + std::to_string(_m.dspCount) + ")");
 
 		return true;
 	}
