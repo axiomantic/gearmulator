@@ -391,6 +391,209 @@ int main()
 		}
 	}
 
+	/* ------------------------------------------------------------- case 8.
+	 * THE SPLIT, AND THE PLANTED CONTROL THAT BRINGS THE DEFECT BACK.
+	 *
+	 * WHAT IS BEING DISCRIMINATED. `Fifo.accept` in the device model refuses
+	 * for exactly two reasons -- the buffer is FULL, or the packet is LARGER
+	 * THAN THE BUFFER -- and a refusal on its own does not say which. This
+	 * case removes the first reason by construction: it is the FIRST offer
+	 * ever made to a freshly constructed Board, so that endpoint's buffer
+	 * cannot hold anything, and a refusal here can only be the size one.
+	 *
+	 * THE TWO ARMS DIFFER IN ONE FIELD. Both push the same 169-byte frame --
+	 * the length of the first object the real `.pch2` corpus refuses, taken
+	 * from that measurement rather than chosen. The control arm sets
+	 * `usbMaxPacketBytes` above the frame, which is exactly the behaviour the
+	 * pump had before the split: one packet, whole frame, refused for size and
+	 * held for ever. Reverting the split by hand would test the same thing
+	 * once; this tests it on every run.
+	 *
+	 * NOTHING HERE BOOTS A MACHINE, so nothing drains the endpoint and neither
+	 * arm can COMPLETE its frame. That is deliberate -- completion is measured
+	 * in t1_patch_running against a booted firmware. What is measured here is
+	 * the first offer, which is the one the two arms disagree about. */
+	{
+		constexpr size_t frameBytes = 169;
+
+		uint8_t big[frameBytes];
+		fillPattern(big, sizeof(big), 7u);
+
+		/* THE SPLIT ARM. The first packet is a full max-packet-size piece of
+		 * the frame and the empty buffer takes it. */
+		{
+			g2::BoardConfig cfg;
+			check(cfg.usbMaxPacketBytes < frameBytes,
+				"the split arm's packet size really is smaller than the frame,"
+				" so this arm exercises a split at all");
+
+			g2::Board split(cfg);
+			g2::InternalClient client(split.transport(), 512, 4);
+
+			check(client.send(g2::ProtocolFrame{ big, sizeof(big) }),
+				"the oversized frame is originated on the split arm");
+
+			split.tickSofIfDue(0);
+
+			const g2::Board::UsbTransportStats u = split.usbTransport();
+
+			checkEqual(u.drained,   1u, "the split arm drained the frame");
+			checkEqual(u.offered,   1u, "the split arm offered exactly one packet");
+			checkEqual(u.accepted,  1u,
+				"THE SPLIT WORKS: an empty endpoint buffer TAKES the first"
+				" max-packet-size piece of a frame it could never take whole");
+			checkEqual(u.refused,   0u, "the split arm's first packet was not refused");
+			checkEqual(u.completed, 0u,
+				"one packet of several is not a completed frame");
+			check(u.held, "the rest of the frame is still held");
+			checkEqual(u.heldOffset, cfg.usbMaxPacketBytes,
+				"the cursor advanced by exactly one packet");
+			checkEqual(u.heldSize, frameBytes,
+				"the held frame is the whole originated frame");
+		}
+
+		/* THE PLANTED CONTROL. The split is disabled by raising the packet
+		 * size above the frame, and the size refusal returns. */
+		{
+			g2::BoardConfig cfg;
+			cfg.usbMaxPacketBytes = frameBytes + 1;
+
+			g2::Board whole(cfg);
+			g2::InternalClient client(whole.transport(), 512, 4);
+
+			check(client.send(g2::ProtocolFrame{ big, sizeof(big) }),
+				"the oversized frame is originated on the control arm");
+
+			whole.tickSofIfDue(0);
+
+			const g2::Board::UsbTransportStats u = whole.usbTransport();
+
+			checkEqual(u.drained,  1u, "the control arm drained the frame");
+			checkEqual(u.offered,  1u, "the control arm offered exactly one packet");
+			checkEqual(u.accepted, 0u,
+				"PLANTED CONTROL: with the split disabled the device takes NOTHING");
+			checkEqual(u.refused,  1u,
+				"PLANTED CONTROL: the refusal returns, and on an untouched"
+				" endpoint buffer it can only be the SIZE refusal");
+			checkEqual(u.heldOffset, 0u,
+				"a refused packet leaves the cursor where it was, so no byte"
+				" crossed twice");
+
+			/* IT IS NOT FLOW CONTROL, AND THIS IS WHAT PROVES IT. A full
+			 * buffer is relieved by a drain; a packet larger than the buffer
+			 * never is. Nothing drains here, but the distinction is still
+			 * visible: the split arm above met the SAME buffer in the SAME
+			 * state and was accepted, so the state is not what refused this
+			 * one. */
+			for(uint64_t f = 1; f < 16; ++f)
+				whole.tickSofIfDue(f);
+
+			const g2::Board::UsbTransportStats after = whole.usbTransport();
+
+			checkEqual(after.accepted, 0u,
+				"PLANTED CONTROL: fifteen further quanta do not help, because a"
+				" packet longer than the buffer is not waiting for room");
+			check(after.refused > u.refused,
+				"the control arm keeps re-offering the frame rather than"
+				" discarding it");
+		}
+	}
+
+	/* ------------------------------------------------------------- case 9.
+	 * THE ZERO-LENGTH TERMINATOR, ON A FRAME WHOSE LENGTH IS AN EXACT MULTIPLE
+	 * OF THE PACKET SIZE.
+	 *
+	 * WHY THIS FRAME IS PLANTED RATHER THAN FOUND. The convention that a bulk
+	 * transfer of an exact multiple of the maximum packet size needs a
+	 * trailing empty packet applies to no other length, and t1_patch_running
+	 * computes and prints how many objects of the real corpus have such a
+	 * length. A corpus that contains none cannot exercise the path at all, so
+	 * the frame is constructed here to exactly two packets.
+	 *
+	 * WHAT IS ASSERTED AND WHAT IS NOT. This case asserts what the BOARD does:
+	 * off, the frame costs two packets; on, it costs three and the third
+	 * carries no bytes. It does NOT assert which of the two the firmware
+	 * wants. Neither ISP1362 Rev. 06 nor AN10008-01 states a bulk
+	 * exact-multiple rule -- BoardConfig records the search -- so that remains
+	 * UNKNOWN, and a case that asserted an answer would be inventing one. What
+	 * this buys is that the answer is now REACHABLE by a flag rather than by a
+	 * rewrite, and that neither setting can drift in silence. */
+	{
+		g2::BoardConfig base;
+		const size_t packet = base.usbMaxPacketBytes;
+
+		check(packet != 0, "the packet size is non-zero, so an exact multiple exists");
+
+		std::vector<uint8_t> exact(packet * 2);
+		fillPattern(exact.data(), exact.size(), 8u);
+
+		/* THE TERMINATOR OFF -- the default. */
+		{
+			g2::Board off(base);
+			g2::InternalClient client(off.transport(), 4096, 4);
+
+			check(client.send(g2::ProtocolFrame{ exact.data(), exact.size() }),
+				"the exact-multiple frame is originated with the terminator off");
+
+			// One packet per quantum, and nothing drains this endpoint, so the
+			// second packet needs the buffer freed. It is freed by taking it.
+			off.tickSofIfDue(0);
+			const g2::Board::UsbTransportStats first = off.usbTransport();
+
+			checkEqual(first.accepted, 1u, "the first of two packets is taken");
+			checkEqual(first.heldOffset, packet, "the cursor sits one packet in");
+			checkEqual(first.completed, 0u, "one of two packets is not a frame");
+		}
+
+		/* THE TERMINATOR ON. The frame owes a third, empty packet, so it is
+		 * NOT completed when its last byte is across. */
+		{
+			g2::BoardConfig cfg = base;
+			cfg.usbTerminateWithZeroLengthPacket = true;
+
+			g2::Board on(cfg);
+			g2::InternalClient client(on.transport(), 4096, 4);
+
+			check(client.send(g2::ProtocolFrame{ exact.data(), exact.size() }),
+				"the exact-multiple frame is originated with the terminator on");
+
+			on.tickSofIfDue(0);
+			const g2::Board::UsbTransportStats u = on.usbTransport();
+
+			checkEqual(u.accepted,   1u, "the first of three packets is taken");
+			checkEqual(u.heldOffset, packet, "the cursor sits one packet in");
+			checkEqual(u.completed,  0u,
+				"a frame that still owes its terminator is not completed");
+			check(u.held, "the frame is still held for its remaining packets");
+		}
+
+		/* THE FLAG CHANGES SOMETHING, AND A SHORT FRAME IS UNAFFECTED BY IT.
+		 * A terminator applied to every frame would be the plausible wrong
+		 * implementation, and it would look identical on the case above. */
+		{
+			g2::BoardConfig cfg = base;
+			cfg.usbTerminateWithZeroLengthPacket = true;
+
+			g2::Board on(cfg);
+			g2::InternalClient client(on.transport(), 4096, 4);
+
+			uint8_t shortFrame[3];
+			fillPattern(shortFrame, sizeof(shortFrame), 9u);
+
+			check(client.send(g2::ProtocolFrame{ shortFrame, sizeof(shortFrame) }),
+				"a SHORT frame is originated with the terminator on");
+
+			on.tickSofIfDue(0);
+			const g2::Board::UsbTransportStats u = on.usbTransport();
+
+			checkEqual(u.accepted,  1u, "the short frame crosses in one packet");
+			checkEqual(u.completed, 1u,
+				"a frame that is ALREADY short owes no terminator and is"
+				" completed by its own last packet");
+			check(!u.held, "nothing is held after a short frame completes");
+		}
+	}
+
 	if(failures != 0)
 	{
 		printf("t0_board_transport: %d failure(s)\n", failures);
