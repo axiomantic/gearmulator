@@ -822,8 +822,38 @@ if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 endif()
 
 
-# The Board holds a g2::TransportHub by value, so a target that compiles
-# ../board.cpp without linking g2Lib must supply that member's object too.
+# ----------------- TOOL-18, the GDB-with-traffic harness's script client
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_gdb_script$
+#
+# TIER T0 AND NOT GATED: the test reads no firmware artifact. It places the
+# same synthetic machine t0_gdb_stub places, serves the stub over a loopback
+# socket, and drives the packet sequence gdbScript.py runs -- the RSP client
+# promoted from the 2026-08-28 session's scratch client. The watchpoint case
+# is the one the t0_gdb_stub tier cannot reach: the delivery driven through
+# pch2Load -> InternalClient -> TransportHub crosses into the device on the
+# SAME machine the stub serves, so the stop names an address only real
+# traffic writes.
+#
+# IT LINKS g2Lib AND Threads AND COMPILES ONE SOURCE DIRECTLY. g2PatchLoad.cpp
+# lives in g2JucePlugin and is not a g2Lib source, exactly as
+# t0_board_transport records; Threads is the client thread, which owns the
+# socket while the main thread pumps the stub.
+
+add_executable(t0_gdb_script
+	t0_gdb_script.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2PatchLoad.cpp)
+target_link_libraries(t0_gdb_script PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t0_gdb_script PRIVATE Threads::Threads)
+set_property(TARGET t0_gdb_script PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_gdb_script COMMAND t0_gdb_script)
+set_tests_properties(t0_gdb_script PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- Board-to-TransportHub consequence: the two targets that
+#                   compile ../board.cpp on their own
 #
 # transportHub.cpp is not an mcf5307 source and pulls no library onto either
 # link line -- it includes only <atomic>, <cstring> and its own header -- so the
