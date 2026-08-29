@@ -276,6 +276,32 @@ either belongs in that repository's fork, not here.
 
 ## Debugging the MCF5307 with GDB
 
+**USE THE DEBUGGER EARLY AND OFTEN. This is a standing rule for every agent,
+human or dispatched subagent, and it applies BEFORE any other technique.** For
+any question about the running firmware — is this routine reached, who writes
+this address, what do the registers hold, when does this flag change — the GDB
+session is the FIRST tool to reach for, not the last. The failure mode this
+rule exists to prevent is measured, not hypothetical: this project has burned
+days building one-off probe scaffolds (fetch histograms, ring snapshots,
+register captures) inside `t1_patch_running.cpp` to answer questions a single
+GDB breakpoint or watchpoint answers in one run. **Before adding any new
+instrument to a test file, before guessing from static disassembly, before
+reasoning from a histogram: arm a breakpoint.** Static disassembly enumerates
+candidate code paths; only the debugger tells you which one the machine
+actually took. Reserve scaffolds for questions the stub genuinely cannot reach
+(DSP-side state, whole-run statistics, cross-quantum aggregates) — and note the
+known-positive discipline below, which applies to GDB runs exactly as it does
+to every other instrument here.
+
+**When a subagent is dispatched on firmware-tracing work, its dispatch prompt
+must say this explicitly**: "Use `g2TestConsole --gdb` for runtime questions;
+breakpoints and watchpoints first, scaffolds only for what the stub cannot
+reach. For static structure questions (what does this routine do, who calls
+it), use the Ghidra headless decompiler per `nmg2-artifacts/AGENTS.md` §0.1 —
+decompile first to plan where to break, then break to confirm. Neither alone
+is evidence." An agent that inherits only this file's later paragraphs tends to
+default to disassembly and print-probes.
+
 `g2TestConsole --gdb <port>` places the same machine `--boot` places — the OS
 image at `0x30000400`, the vector table, the reset — and then serves a GDB
 remote session on `127.0.0.1:<port>`, blocking until a debugger attaches. A port
@@ -354,6 +380,38 @@ stop reply names an access the MCU made in that phase.
 **The stub is opt-in and absent by default.** A run without `--gdb` executes none
 of it, and `Scheduler` pays one null check for each quantum when no stub is
 attached.
+
+**The scripted client: `gdbScript.py` (task TOOL-18).** `lldb`'s `gdb-remote`
+client cannot drive this stub — the session's measured finding of 2026-08-28 —
+so the repo ships a minimal RSP client at
+`source/nord/g2/g2TestConsole/gdbScript.py` (stdlib only, class-based,
+importable). An operator session looks like:
+
+```bash
+NMG2_ARTIFACTS=<artifacts> g2TestConsole --gdb 0 &          # prints the bound port
+python3 source/nord/g2/g2TestConsole/gdbScript.py --port <bound> --script myscript
+```
+
+The script file is one `break 0xADDR` or `watch 0xADDR` per line (a `watch` is
+a write watchpoint, `Z2`); the client arms each one, runs one
+continue-until-stop per line, and prints one `stop pc=0x… hit=<kind>@0x…
+count=N` line per stop. A stop that names no armed point prints `hit=none` — a
+miss is REPORTED as a miss, and the `pc` field is read from the machine's
+register file, not from the client's belief, so a client that lies about the
+hit is caught by its own pc line. `D` ends the session and exits the console
+cleanly.
+
+**Bare session or harness?** Use a bare session (`m68k-elf-gdb`/`lldb`/
+`gdbScript.py` by hand) for boot-path and no-traffic questions: is this routine
+reached on boot, who writes this address during the banner, what do the
+registers hold at the fault. Use the harness — `gdbScript.py` driven against a
+machine that has `InternalClient` traffic originated into it, the way
+`t0_gdb_script.cpp` does — for anything on the USB delivery path: the 2026-08-28
+session measured that with no producer attached the endpoint-3 interrupt bit is
+never asserted and `0x30055D36`/`0x30055DD0` and the `0x302A26F8` queue
+watchpoint never fire, and that absence says nothing about the patch path. A
+breakpoint question about the delivery path answered from a no-traffic session
+is an unsound negative.
 
 The listening socket binds loopback and never `INADDR_ANY`. It is an
 unauthenticated channel with full read and write access to the emulated machine.
