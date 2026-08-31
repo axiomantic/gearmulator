@@ -240,3 +240,31 @@ if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_patch_load_accepted APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
 
+# ----------------- The host automation surface: the slot pool and allocation
+#
+# THE TEST COMPILES ../../g2JucePlugin/g2Parameters.cpp DIRECTLY AND LINKS NO
+# LIBRARY. That file is not a g2Lib source, and the task that writes it does
+# not declare g2JucePlugin/CMakeLists.txt, so the source does not reach this
+# target through either library. The dependency is real either way: the pool
+# is slot bookkeeping over a caller's parameter identities and needs nothing
+# the emulator links.
+#
+# TIER T0 AND UNGATED: no artifact is read and no machine is booted.
+#
+# WHAT THE TEST HOLDS. The pool size and the reported parameter count as
+# numbers, the const list built one time, the fixed allocation order,
+# exhaustion leaving the last identities unbound while the pool and the
+# reported count stay fixed, slot reuse, and the map of one patch being
+# identical whether or not another patch loaded first -- which is the case
+# that goes red if survivor pinning is reintroduced. Every case reports
+# through the test's own failure counter, so NDEBUG changes none of them:
+# nothing in the file is an assert() and nothing catches an exception.
+
+add_executable(t0_automation
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_automation.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Parameters.cpp)
+target_include_directories(t0_automation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+set_property(TARGET t0_automation PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_automation COMMAND t0_automation)
+set_tests_properties(t0_automation PROPERTIES LABELS "UnitTest")
