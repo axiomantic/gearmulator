@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
-#include <stdexcept>
+#include <string>
 
 namespace g2
 {
@@ -43,28 +43,40 @@ namespace g2
 
 	Flash::~Flash() = default;
 
-	void Flash::loadCs0(const uint8_t* _data, size_t _size)
+	bool Flash::loadCs0(const uint8_t* _data, size_t _size)
 	{
 		if(_size > m_cs0.size())
-			throw std::logic_error("loadCs0: data larger than CS0 size");
+		{
+			baseLib::logging::logToConsole("Refused CS0 image of "
+				+ std::to_string(_size) + " bytes: CS0 is "
+				+ std::to_string(m_cs0.size()) + " bytes");
+			return false;
+		}
 		std::copy(_data, _data + _size, m_cs0.begin());
+		return true;
 	}
 
-	void Flash::loadCs0(const std::vector<uint8_t>& _data)
+	bool Flash::loadCs0(const std::vector<uint8_t>& _data)
 	{
-		loadCs0(_data.data(), _data.size());
+		return loadCs0(_data.data(), _data.size());
 	}
 
-	void Flash::loadCs2(const uint8_t* _data, size_t _size)
+	bool Flash::loadCs2(const uint8_t* _data, size_t _size)
 	{
 		if(_size > m_cs2.size())
-			throw std::logic_error("loadCs2: data larger than CS2 size");
+		{
+			baseLib::logging::logToConsole("Refused CS2 image of "
+				+ std::to_string(_size) + " bytes: CS2 is "
+				+ std::to_string(m_cs2.size()) + " bytes");
+			return false;
+		}
 		std::copy(_data, _data + _size, m_cs2.begin());
+		return true;
 	}
 
-	void Flash::loadCs2(const std::vector<uint8_t>& _data)
+	bool Flash::loadCs2(const std::vector<uint8_t>& _data)
 	{
-		loadCs2(_data.data(), _data.size());
+		return loadCs2(_data.data(), _data.size());
 	}
 
 	bool Flash::containsCs0(uint32_t _addr) const

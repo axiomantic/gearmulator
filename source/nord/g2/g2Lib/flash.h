@@ -19,14 +19,20 @@ namespace g2
 		~Flash();
 
 		// Load the CS0 image. Bytes past _size are left at the constructor's
-		// fill value (0xFF). Throws std::logic_error when _size exceeds the
-		// configured size.
-		void loadCs0(const uint8_t* _data, size_t _size);
-		void loadCs0(const std::vector<uint8_t>& _data);
+		// fill value (0xFF).
+		//
+		// An image larger than the configured size is REFUSED: the call
+		// returns false, logs the refusal with both sizes, and leaves the
+		// contents untouched. The return is the error channel because the
+		// rest of g2Lib reports through a return value rather than an
+		// exception, and because a truncating load would put an image the
+		// caller never asked for in front of the boot vector.
+		[[nodiscard]] bool loadCs0(const uint8_t* _data, size_t _size);
+		[[nodiscard]] bool loadCs0(const std::vector<uint8_t>& _data);
 
 		// Load the CS2 image. Same contract as loadCs0.
-		void loadCs2(const uint8_t* _data, size_t _size);
-		void loadCs2(const std::vector<uint8_t>& _data);
+		[[nodiscard]] bool loadCs2(const uint8_t* _data, size_t _size);
+		[[nodiscard]] bool loadCs2(const std::vector<uint8_t>& _data);
 
 		// Address-range predicates.
 		bool containsCs0(uint32_t _addr) const;

@@ -56,21 +56,22 @@ namespace g2
 		std::vector<AnomalyEntry> m_entries;
 	};
 
-	namespace
+	// The fixed eight-hex-digit form the SIM's own trace uses, so that a line
+	// in this log is lexically compatible with one the SIM writes.
+	//
+	// External linkage, not an unnamed namespace: record() below is inline and
+	// calls this, and an inline function that names an internal-linkage entity
+	// gives every translation unit a different definition.
+	inline std::string anomalyHex32(const uint32_t _value)
 	{
-		// The fixed eight-hex-digit form the SIM's own trace uses, so that a
-		// line in this log is lexically compatible with one the SIM writes.
-		std::string anomalyHex32(const uint32_t _value)
-		{
-			static const char* digits = "0123456789abcdef";
-			std::string result = "0x";
-			for(int shift = 28; shift >= 0; shift -= 4)
-				result += digits[(_value >> shift) & 0xfu];
-			return result;
-		}
+		static const char* digits = "0123456789abcdef";
+		std::string result = "0x";
+		for(int shift = 28; shift >= 0; shift -= 4)
+			result += digits[(_value >> shift) & 0xfu];
+		return result;
 	}
 
-	void AnomalyLog::record(const char* _reason, const bool _isWrite, const int _sizeBits, const uint32_t _offset)
+	inline void AnomalyLog::record(const char* _reason, const bool _isWrite, const int _sizeBits, const uint32_t _offset)
 	{
 		AnomalyEntry entry;
 		entry.reason = _reason ? _reason : "";
