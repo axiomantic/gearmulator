@@ -7,8 +7,7 @@
 //
 // WHAT THIS PROGRAM IS. `g2TestConsole --boot` boots the Clavia OS image
 // directly at 0x30000400 and PRINTS display 0's 32 character cells. It asserts
-// nothing. INT-1's Check puts the assertions in `t1_boot`, which is a ctest
-// target; this program is the operator-facing window onto the same boot, and
+// nothing; this program is the operator-facing window onto the same boot, and
 // its output is meant to be read by a person bringing the machine up.
 //
 // IT EXISTS BECAUSE ITS ABSENCE WAS ITSELF A DEFECT. Until this file existed
@@ -22,58 +21,6 @@
 // `g2Lib/test/t1_boot.cpp` AND IS DOCUMENTED THERE. Two of them -- CS0's base
 // and CS4's base -- are INVENTED BY THIS HARNESS because no authority records
 // them, and they are labelled at their site rather than presented as measured.
-//
-// ------------------------------------------------------------------ TASK W3-396
-//
-// THIS FILE DRIFTED FROM `t1_boot.cpp` AND THIS SECTION RECORDS WHAT IT MISSED,
-// because a reader who finds the two files agreeing today will otherwise not
-// know which one was wrong. Plan section 24.6 row W3-396 is the audit. Measured
-// before the repair, this program printed
-//
-//     iterations=65000 halted=0 faulted=0 pc=0x300505d6
-//     display0.line0="                "
-//     display0.line1="                "
-//
-// -- sixteen spaces on both lines, no banner, and EXIT 0, because the "did the
-// firmware compose anything" predicate below read `>= 0x20` and a screenful of
-// 0x20 spaces satisfies it. That program counter is the pre-SCH-35 RXDF spin.
-//
-// FOUR REPAIRS LANDED IN `t1_boot` AND NONE OF THEM LANDED HERE:
-//
-//   INT-7  -- this file created its OWN mcf5307_ctx and drove it with
-//             mcf5307_exec, beside a Board whose own core was never reset. That
-//             second core is the two-core defect: the Board's core stayed
-//             halted, returned zero cycles from every Board::runMcu, and BRD-33
-//             feeds those cycles to the MCF5307 timers, so the timers never
-//             advanced and no interrupt-driven behaviour was reachable. The
-//             Board's core is now reset through Board::resetMcu and advanced by
-//             Scheduler::runFrames ALONE.
-//
-//   INT-8  -- VBR was never set, so an exception would fetch its vector from
-//             the wrong table. It is set here for the reason t1_boot sets it:
-//             booting CODE directly skips the code that would set it up.
-//
-//   W3-394 -- the iteration bound was 0xFDE8, the firmware's own handshake
-//             retry count, and the real boot needs roughly 425,000 iterations
-//             to reach the patch browser.
-//
-//   W3-395 -- the display was sampled AT THE END. The banner is a TRANSIENT:
-//             the firmware composes it and the patch browser then overwrites
-//             it, so a terminal sample reads the browser and not the banner.
-//             The banner is LATCHED when it appears.
-//
-// A FIFTH DIFFERENCE IS NOT A DRIFT BUT A BUG THIS FILE ALWAYS HAD: W3-374's
-// CGRAM decode. The display cells hold DISPLAY CODES, not ASCII, and five
-// descender characters are stored as CGRAM aliases 0x08..0x0C. `Version 1.62
-// Exp` contains a `p`, so without the decode this program prints line 1 as
-// `Ex\x09` and reports a correct machine as a wrong one.
-//
-// WHERE THIS FILE DELIBERATELY DIFFERS FROM `t1_boot`, and each site says so
-// again at the site: it PRINTS where the harness ASSERTS, so it carries none of
-// the harness's positive controls, none of its landmark fetch counters and
-// none of its HDI08 handshake latch. Those exist to make a check fail; this
-// program has no checks to make fail, and duplicating them here would be a
-// second copy of an instrument with no reader.
 
 #include "board.h"
 #include "executor.h"
@@ -83,9 +30,8 @@
 #include "status.h"
 #include "artifactResolver.h"
 
-// TASK M4 CLAUSE 1 reads the DMA registers of each position's peripheral set.
 // board.h already reaches dma.h through dspSet.h and peripherals56311.h; the
-// include is written out because this file NAMES dsp56k::Dma and dsp56k::TWord.
+// include is written out because this file names dsp56k::Dma and dsp56k::TWord.
 #include "dsp56kEmu/dma.h"
 
 #include "dsp56kBase/logging.h"
@@ -105,18 +51,17 @@ namespace
 {
 	// ------------------------------------------------ the ESAI underrun log filter
 	//
-	// PORTED FROM `t1_boot.cpp` UNCHANGED IN BEHAVIOUR, and it is here for the
-	// same reason it is there: dsp56kEmu's Esai::writeSlotToFrame calls LOG()
-	// once per transmit slot whose data was never written, nothing drains the
-	// ESAIs until the codec queues arrive with task SCH-22, and this program now
-	// turns hundreds of thousands of Scheduler frames. Without the filter the
-	// two display lines a person ran this program to read are buried.
+	// dsp56kEmu's Esai::writeSlotToFrame calls LOG() once per transmit slot
+	// whose data was never written, nothing drains the ESAIs until the codec
+	// queues arrive, and this program turns hundreds of thousands of Scheduler
+	// frames. Without the filter the two display lines a person ran this program
+	// to read are buried.
 	//
-	// IT HIDES THE REPETITION OF A REAL AND EXPECTED CONDITION AND NOTHING ELSE.
-	// A quiet run is NOT evidence that the ESAIs are being drained; once SCH-22
-	// lands, a run that still reports underruns is reporting a defect, and the
-	// kept lines are what makes that visible. Set G2_LOG_ESAI_UNDERRUN to
-	// install no filter at all.
+	// It hides the repetition of a real and expected condition and nothing else.
+	// A quiet run is not evidence that the ESAIs are being drained; once the
+	// codec queues arrive, a run that still reports underruns is reporting a
+	// defect, and the kept lines are what makes that visible. Set
+	// G2_LOG_ESAI_UNDERRUN to install no filter at all.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
 	constexpr uint64_t g_underrunLinesKept = 4;
@@ -140,7 +85,7 @@ namespace
 		Logging::setLogFunc(&filterLog);
 	}
 
-	// The count is REPORTED rather than discarded, so "the log was silenced"
+	// The count is reported rather than discarded, so "the log was silenced"
 	// stays a statement about volume and not about evidence.
 	void reportSuppressedLogLines()
 	{
@@ -171,9 +116,9 @@ namespace
 	constexpr int g_regPc  = 17;
 	constexpr int g_regVbr = 18;
 
-	// The size a byte access presents to Board::onRead, IN THE CORE'S UNIT.
-	// mcf5307.h states it twice, once per callback typedef: `size` is a COUNT OF
-	// BYTES and never a width in bits.
+	// The size a byte access presents to Board::onRead, in the core's unit.
+	// mcf5307.h states it twice, once per callback typedef: `size` is a count of
+	// bytes and never a width in bits.
 	constexpr int g_byte = 1;
 
 	// MEASURED, plan section 6.6.3: the loader's `movel #0x10000001,%d0` /
@@ -203,39 +148,37 @@ namespace
 	constexpr uint32_t g_cs5Size   = 0x00000010u;
 	constexpr uint32_t g_sdramSize = 0x00800000u;
 
-	// ------------------------------------------------ the vector table, TASK INT-8
+	// ------------------------------------------------------- the vector table
 	//
-	// MEASURED FROM THE OS IMAGE and documented in full at `t1_boot.cpp`'s own
-	// INT-8 block: CODE_30000400.bin at 0x30058218 builds 256 identical
-	// longwords at 0x30000000 and points VBR at that base. Booting CODE directly
-	// skips the code that would set it up, so the harness supplies it.
+	// Measured from the OS image: CODE_30000400.bin at 0x30058218 builds 256
+	// identical longwords at 0x30000000 and points VBR at that base. Booting
+	// CODE directly skips the code that would set it up, so the harness supplies
+	// it.
 	//
-	// IT IS A FLOOR AND NOT A FIX, AND IT IS LABELLED AS ONE HERE TOO. t1_boot
-	// measured that the firmware has filled the table itself by the time the
-	// first exception is taken, so omitting the table leaves the run identical
-	// -- what is load-bearing is VBR. The table holds only for an exception
-	// taken before the firmware's own fill, a window no run has yet entered.
+	// It is a floor and not a fix. The firmware has filled the table itself by
+	// the time the first exception is taken, so omitting the table leaves the
+	// run identical -- what is load-bearing is VBR. The table holds only for an
+	// exception taken before the firmware's own fill.
 	constexpr uint32_t g_vectorTableBase    = 0x30000000u;
 	constexpr uint32_t g_vectorTableEntries = 256u;
 	constexpr uint32_t g_vectorHandler      = 0x300585CEu;
 
 	// ------------------------------------------------ what "display content" means
 	//
-	// THE BYTE THE DISPLAY CLEAR WRITES. MEASURED: the OS clears all four
+	// The byte the display clear writes. Measured: the OS clears all four
 	// displays to spaces before it composes anything, and 0x20 is the byte it
-	// stores. It is named because it is the ONE value a "the firmware composed
-	// something" predicate must refuse to be satisfied by. This program's
-	// previous predicate read `>= 0x20` and a blank screen satisfied it, so a
-	// boot that reached nothing exited 0.
+	// stores. It is named because it is the one value a "the firmware composed
+	// something" predicate must refuse to be satisfied by: a predicate reading
+	// `>= 0x20` is satisfied by a blank screen.
 	constexpr uint8_t g_clearByte = 0x20u;
 
-	// THE G2 DISPLAY DOES NOT HOLD ASCII. Plan section 24.6 row W3-374: the
-	// display helper at 0x30056FEA is a TABLE-TRANSLATING copy, and the firmware
-	// remaps exactly five entries onto the CGRAM alias range 0x08..0x0C --
+	// The G2 display does not hold ASCII. The display helper at 0x30056FEA is a
+	// table-translating copy, and the firmware remaps exactly five entries onto
+	// the CGRAM alias range 0x08..0x0C --
 	//
 	//     'g' -> 0x08   'p' -> 0x09   'q' -> 0x0A   'y' -> 0x0B   'j' -> 0x0C
 	//
-	// -- the five DESCENDERS, whose glyph bitmaps it then uploads. A cell
+	// -- the five descenders, whose glyph bitmaps it then uploads. A cell
 	// holding 0x09 is a correctly displayed 'p'. `Version 1.62 Exp` contains
 	// one, so a console without this decode misreports a correct machine.
 	constexpr uint8_t g_cgramFirst = 0x08u;
@@ -259,7 +202,7 @@ namespace
 		return _byte >= g_cgramFirst && _byte <= g_cgramLast;
 	}
 
-	// A cell is CONTENT if it is an ordinary printable byte, or one of the five
+	// A cell is content if it is an ordinary printable byte, or one of the five
 	// CGRAM glyphs. The second clause is what stops a line whose only printable
 	// character is a descender from counting as blank.
 	constexpr bool isDisplayContent(const uint8_t _byte)
@@ -269,31 +212,29 @@ namespace
 
 	// ------------------------------------------------------------ the drive bounds
 
-	/* THE ITERATION BOUND, TASK W3-394. It is a STOP so that a machine which
-	 * never converges terminates rather than hanging; it is not a figure the
-	 * firmware publishes. The previous value, 0xFDE8, was the firmware's own
-	 * handshake retry count and it is demonstrably too small for a boot: the
-	 * real boot needs roughly 425,000 iterations to reach the patch browser.
-	 * Sized above that, and the run costs roughly ninety seconds. It is the
-	 * SAME figure `t1_boot` uses, deliberately: the two programs boot the same
+	/* The iteration bound is a stop so that a machine which never converges
+	 * terminates rather than hanging; it is not a figure the firmware publishes.
+	 * The real boot needs roughly 425,000 iterations to reach the patch browser,
+	 * and the firmware's own handshake retry count of 0xFDE8 is far too small.
+	 * Sized above that, and the run costs roughly ninety seconds. It is the same
+	 * figure `t1_boot` uses, deliberately: the two programs boot the same
 	 * firmware and a console that gave up earlier than the harness would report
 	 * a failure the harness does not see. */
 	constexpr uint32_t g_iterations = 500000u;
 
-	/* ONE SCHEDULER FRAME PER ITERATION, AND IT IS THE WHOLE DRIVE. Task INT-7:
-	 * there is ONE core, the Board's, so the frame turns the DSP set, the chain,
-	 * the panel AND the MCU. The mcf5307_exec calls that used to sit here were
-	 * DELETED rather than repointed at Board::runMcu, because a second budget
-	 * applied to the same core would double-count the cycles the scheduler
-	 * already allocated -- and BRD-33 feeds those cycles to the timers, so
-	 * double-counting them would falsify a timer tick. */
+	/* One scheduler frame per iteration, and it is the whole drive. There is one
+	 * core, the Board's, so the frame turns the DSP set, the chain, the panel and
+	 * the MCU. No separate mcf5307_exec budget may be applied to the same core:
+	 * it would double-count the cycles the scheduler already allocated, and those
+	 * cycles feed the timers, so double-counting them would falsify a timer
+	 * tick. */
 	constexpr size_t g_framesPerIteration = 1;
 
-	/* HOW LONG THE FIRMWARE IS GIVEN AFTER THE FIRST PRINTABLE CHARACTER, TASK
-	 * W3-395. The banner is written A CHARACTER AT A TIME, so a capture on the
-	 * first content byte catches a partial line -- the measured symptom in
-	 * `t1_boot` was line 0 reading "Nord" and stopping. The latch therefore
-	 * waits until the display has been quiet for this many iterations. */
+	/* How long the firmware is given after the first printable character. The
+	 * banner is written a character at a time, so a capture on the first content
+	 * byte catches a partial line -- the measured symptom in `t1_boot` was line 0
+	 * reading "Nord" and stopping. The latch therefore waits until the display
+	 * has been quiet for this many iterations. */
 	constexpr uint32_t g_bannerSettleIterations = 20000u;
 
 	// The SDRAM the firmware executes from. board.cpp attaches the seven units
@@ -305,16 +246,16 @@ namespace
 	public:
 		explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
 
-		/* THE BANNER OBSERVATION LIVES HERE, ON THE WRITE, AND NOT ON THE BYTES
-		 * THAT SURVIVE, exactly as in `t1_boot.cpp`. Every SDRAM access the core
-		 * makes arrives at this object, so this is the firmware's own write path.
+		/* The banner observation lives here, on the write, and not on the bytes
+		 * that survive. Every SDRAM access the core makes arrives at this object,
+		 * so this is the firmware's own write path.
 		 *
-		 * A predicate that reads cells back asks whether a value is PRESENT,
+		 * A predicate that reads cells back asks whether a value is present,
 		 * which is green whenever the bytes happen to be right, whoever put them
 		 * there. A predicate over the write asks whether the firmware performed
 		 * the transaction. It separates the two byte values that can arrive
 		 * rather than counting writes, because "the cells were written" is
-		 * exactly what the display CLEAR does and exactly what must not count as
+		 * exactly what the display clear does and exactly what must not count as
 		 * a banner. */
 		void watchCells(const uint32_t _offset, const uint32_t _length)
 		{
@@ -484,26 +425,21 @@ namespace
 		return false;
 	}
 
-	// ------------------------------------------- TASK M4 CLAUSE 1, THE DMA CHECK
+	// ------------------------------------------------------------ the DMA check
 	//
-	// MILESTONE M4 CLAUSE 1, VERBATIM: "`g2TestConsole --boot --dump-dsp-dma`
-	// prints, for each of the eight positions, DDR2, DCO2 and DCO4 values that
-	// match the design section 2.3 table for that position."
-	//
-	// THE FOUR CONSTANTS BELOW ARE READ OFF DESIGN SECTION 2.3's TABLE AND ARE
-	// NOT DERIVED HERE. That table decodes the kernel's own MOVEP block:
+	// The four constants below are read off the kernel's own MOVEP block:
 	//
 	//   Channel | DSR            | DDR                          | DCO
 	//   2       | $FFFFA8 ESAI   | $001C00, $001C04 at the head | $007001, $001001 at the head
 	//   4       | $001D00        | $FFFFA0 ESAI TX0             | $007001, $001001 at the tail
 	//
-	// M4 NAMES THREE REGISTERS AND ALL THREE ARE POSITION-DEPENDENT, which is
-	// why this is a check and not a dump: DDR2 and DCO2 single out the chain
-	// HEAD, DCO4 singles out the chain TAIL, and a firmware that programmed one
-	// uniform value everywhere would satisfy a printer while failing the table.
+	// All three registers are position-dependent, which is why this is a check
+	// and not a dump: DDR2 and DCO2 single out the chain head, DCO4 singles out
+	// the chain tail, and a firmware that programmed one uniform value
+	// everywhere would satisfy a printer while failing the table.
 	//
-	// HEAD AND TAIL ARE POSITION 0 AND POSITION dspCount-1, READ OFF THE CODE
-	// AND NOT ASSUMED. chainAdapter.cpp:206 states the head: injectCodecSource
+	// Head and tail are position 0 and position dspCount-1, read off the code
+	// and not assumed. chainAdapter.cpp:206 states the head: injectCodecSource
 	// writes mailbox 0's ingress frame and "the head's DMA then places them at
 	// X:$001C04, not X:$001C00" -- the head is the position whose receive
 	// callback reads mailbox 0, which audioRxCallback makes position 0.
@@ -514,8 +450,8 @@ namespace
 	constexpr dsp56k::TWord g_dcoChain     = 0x007001u;
 	constexpr dsp56k::TWord g_dcoEndpoint  = 0x001001u;
 
-	// The two channels section 2.3 names: 2 is the ESAI RX0 receive channel and
-	// 4 is the ESAI TX0 transmit channel.
+	// Channel 2 is the ESAI RX0 receive channel and 4 is the ESAI TX0 transmit
+	// channel.
 	constexpr dsp56k::TWord g_dmaRxChannel = 2u;
 	constexpr dsp56k::TWord g_dmaTxChannel = 4u;
 
@@ -526,14 +462,14 @@ namespace
 		dsp56k::TWord dco4;
 	};
 
-	// A position's row of the section 2.3 table. `_count` rather than a literal
-	// 8, so the tail follows the DSP set's own size and cannot disagree with it.
+	// A position's row. `_count` rather than a literal 8, so the tail follows the
+	// DSP set's own size and cannot disagree with it.
 
-	// The firmware's OWN port ordering, read from the nine-entry table it builds
+	// The firmware's own port ordering, read from the nine-entry table it builds
 	// at 0x30116970 (set_hdi08_bases, 0x300391E8) rather than assumed from ours.
 	// Entry i holds the CS1 address of the port at chain position i, and A3..A10
-	// are eight ACTIVE-LOW one-cold selects, so the port number is the index of
-	// the single line pulled down. Plan section 24.6 row W3-399.
+	// are eight active-low one-cold selects, so the port number is the index of
+	// the single line pulled down.
 	unsigned chainPositionOfPort(g2::Board& _board, const unsigned _port, const unsigned _count)
 	{
 		constexpr uint32_t g_portTableBase = 0x30116970u;
@@ -583,8 +519,8 @@ namespace
 		return buf;
 	}
 
-	// Prints one line for each position and answers whether EVERY position
-	// matched. THE VERDICT IS THE WORST POSITION: `all` is a conjunction over
+	// Prints one line for each position and answers whether every position
+	// matched. The verdict is the worst position: `all` is a conjunction over
 	// the per-position results and never a separately computed summary, so a
 	// single FAIL row cannot coexist with a PASS verdict.
 	bool dumpDspDma(g2::Board& _board)
@@ -606,16 +542,14 @@ namespace
 			const dsp56k::TWord dco2 = dma.getDCO(g_dmaRxChannel);
 			const dsp56k::TWord dco4 = dma.getDCO(g_dmaTxChannel);
 
-			/* THE EXPECTATION IS INDEXED BY CHAIN POSITION AND THE LOOP WALKS
-			 * HARDWARE PORTS, AND THOSE ARE NOT THE SAME ORDER. Plan section
-			 * 24.6 row W3-399 carries the measurement: the firmware's own
-			 * nine-entry table at 0x30116970 maps chain position to port as
-			 * 3, 7, 6, 5, 4, 2, 1, 0 -- so chain position 0, the head, IS
-			 * hardware port 3, and chain position 7, the tail, IS port 0.
-			 *
-			 * COMPARING A PORT'S REGISTERS AGAINST THAT PORT'S NUMBER AS IF IT
-			 * WERE A CHAIN POSITION IS WHAT MADE THIS CHECK REPORT THREE
-			 * MISMATCHES AGAINST A CORRECT MACHINE. */
+			/* The expectation is indexed by chain position and the loop walks
+			 * hardware ports, and those are not the same order. The firmware's
+			 * own nine-entry table at 0x30116970 maps chain position to port as
+			 * 3, 7, 6, 5, 4, 2, 1, 0 -- so chain position 0, the head, is
+			 * hardware port 3, and chain position 7, the tail, is port 0.
+			 * Comparing a port's registers against that port's number as if it
+			 * were a chain position reports mismatches against a correct
+			 * machine. */
 			const unsigned chainPosition = chainPositionOfPort(_board, position, count);
 			const DspDmaExpectation expected = expectedDspDma(chainPosition, count);
 
@@ -678,9 +612,9 @@ namespace
 			return 2;
 		}
 
-		// TASK INT-8. The vector table, big-endian, 256 identical longwords. It
-		// goes in beside the image and BEFORE the watch below, so that none of
-		// it is counted as the firmware's own traffic.
+		// The vector table, big-endian, 256 identical longwords. It goes in
+		// beside the image and before the watch below, so that none of it is
+		// counted as the firmware's own traffic.
 		{
 			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
 
@@ -700,22 +634,21 @@ namespace
 
 		board.memory().attach(g2::Region::Sdram, &ram);
 
-		// Installed before the core runs, so every count below is the
-		// FIRMWARE's and none of it is the harness's own traffic.
+		// Installed before the core runs, so every count below is the firmware's
+		// and none of it is the harness's own traffic.
 		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
 
-		/* TASK INT-7. THE BOARD'S OWN CORE IS RESET, AND NO SECOND CORE IS
-		 * CREATED. The Board already pointed its core at Board::onRead and
-		 * Board::onWrite, so this is the same composition the deleted
-		 * mcf5307_create call went out of its way to reach -- reached now
-		 * through the handle BRD-28 published instead of through a copy. */
+		/* The Board's own core is reset, and no second core is created. The
+		 * Board already pointed its core at Board::onRead and Board::onWrite, so
+		 * this composition is reached through the Board's own handle rather than
+		 * through a copy. */
 		board.resetMcu(g_entrySp, g_entryPc);
 
-		/* TASK INT-8. VBR IS PLACED AFTER THE RESET AND NOT BEFORE IT, because
-		 * the reset is what defines the machine's starting state and a value
-		 * written ahead of it would depend on what the reset does NOT clear.
+		/* VBR is placed after the reset and not before it, because the reset is
+		 * what defines the machine's starting state and a value written ahead of
+		 * it would depend on what the reset does not clear.
 		 *
-		 * THE RETURN IS CHECKED. setMcuReg answers FALSE for an index the core
+		 * The return is checked. setMcuReg answers false for an index the core
 		 * refuses, and a core that refused this one would leave the table based
 		 * at zero with nothing said about it. */
 		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
@@ -724,10 +657,10 @@ namespace
 			return 2;
 		}
 
-		/* THE SCHEDULER, TASK INT-3. It is declared AFTER the Board so that it
-		 * is destroyed BEFORE it: it borrows the Board's DSP set, and it
-		 * installs chain callbacks into ESAIs the Board owns. The Executor is
-		 * declared before the Scheduler for the same reason. */
+		/* The Scheduler is declared after the Board so that it is destroyed
+		 * before it: it borrows the Board's DSP set, and it installs chain
+		 * callbacks into ESAIs the Board owns. The Executor is declared before
+		 * the Scheduler for the same reason. */
 		g2::SerialExecutor executor;
 		g2::Status         schedulerStatus{};
 
@@ -756,17 +689,15 @@ namespace
 			if(board.mcuHalted())
 				break;
 
-			/* TASK W3-395. THE BANNER IS LATCHED WHEN IT APPEARS BECAUSE IT IS A
-			 * TRANSIENT: the firmware composes it, then boots on and the PATCH
-			 * BROWSER overwrites it. Measured at the full bound, line 0 reads
-			 * "-:-       No Cat" and line 1 is blank, with the banner long gone,
-			 * which is precisely what this program used to print a terminal
-			 * sample of.
+			/* The banner is latched when it appears because it is a transient:
+			 * the firmware composes it, then boots on and the patch browser
+			 * overwrites it. Measured at the full bound, line 0 reads
+			 * "-:-       No Cat" and line 1 is blank, with the banner long gone.
 			 *
-			 * The settle counter is what makes the capture a WHOLE line: the
+			 * The settle counter is what makes the capture a whole line: the
 			 * banner is written a character at a time, so latching on the first
 			 * content byte catches a partial one. Reaching the settle does not
-			 * STOP the drive -- it freezes the banner and lets the machine run
+			 * stop the drive -- it freezes the banner and lets the machine run
 			 * on, so the halted/faulted report below describes the machine at
 			 * the bound and not the machine at the banner. */
 			if(ram.contentWrites() > 0)
@@ -784,7 +715,7 @@ namespace
 		}
 
 		/* A run that never composed a banner latched nothing. readDisplayLine is
-		 * called here ONLY in that case, so the report shows what the display
+		 * called here only in that case, so the report shows what the display
 		 * actually held rather than two empty strings. */
 		if(!bannerLatched)
 		{
@@ -801,7 +732,7 @@ namespace
 		          << " faulted=" << (faulted ? 1 : 0)
 		          << " pc=0x" << std::hex << pc << std::dec << std::endl;
 
-		// The two lines, printed UNTRIMMED and byte for byte. The escaped form
+		// The two lines, printed untrimmed and byte for byte. The escaped form
 		// is what makes a trailing space or a NUL visible to a reader; the plain
 		// form is what a person actually wants to see.
 		std::cout << "display0.line0=" << escapedLine(line0) << std::endl;
@@ -809,7 +740,7 @@ namespace
 		std::cout << line0 << std::endl;
 		std::cout << line1 << std::endl;
 
-		// WHICH SAMPLE THE TWO LINES ARE, said in the output rather than left to
+		// Which sample the two lines are, said in the output rather than left to
 		// a reader who knows this file. `banner=latched` means they are the
 		// frozen first banner; `banner=none` means they are a terminal read of a
 		// machine that never composed one.
@@ -834,29 +765,21 @@ namespace
 
 		reportSuppressedLogLines();
 
-		// A BOOT THAT PRODUCED NO BANNER IS NOT A SUCCESS, AND THIS PROGRAM MUST
-		// NOT REPORT ONE. Plan section 24.6 row W3-95 records the shape being
-		// avoided here: the milestone's own acceptance command exiting 0 while
-		// the machine did nothing.
-		//
-		// THE PREDICATE THIS REPLACES WAS VACUOUS AND ROW W3-396 MEASURED IT AS
-		// SUCH: it read `>= 0x20`, and a screenful of the 0x20 SPACES the display
-		// clear writes satisfied it, so a run whose display was blank exited 0.
-		// Both clauses below refuse that byte -- the latch is only set on a run
-		// that observed writes the clear cannot produce, and anyContent refuses
-		// 0x20 itself.
+		// A boot that produced no banner is not a success, and this program must
+		// not report one. A predicate reading `>= 0x20` is satisfied by a
+		// screenful of the 0x20 spaces the display clear writes, so both clauses
+		// below refuse that byte -- the latch is only set on a run that observed
+		// writes the clear cannot produce, and anyContent refuses 0x20 itself.
 		const bool bootOk = bannerLatched && anyContent(line0) && !halted && !faulted;
 
-		/* TASK M4 CLAUSE 1. The dump runs AFTER the drive, on the same Board the
-		 * drive turned, and it is the last thing the program does before it
-		 * answers -- the registers it reads are the ones the firmware left at
-		 * the bound.
-		 *
-		 * IT IS SKIPPED ENTIRELY WITHOUT THE FLAG, so `--boot` alone answers on
-		 * the banner predicate exactly as it did before this task. */
+		/* The dump runs after the drive, on the same Board the drive turned, and
+		 * it is the last thing the program does before it answers -- the
+		 * registers it reads are the ones the firmware left at the bound. It is
+		 * skipped entirely without the flag, so `--boot` alone answers on the
+		 * banner predicate. */
 		const bool dmaOk = _dumpDspDma ? dumpDspDma(board) : true;
 
-		/* BOTH CLAUSES, AND THE VERDICT IS THE WORSE OF THE TWO. A run whose
+		/* The verdict is the worse of the two clauses. A run whose
 		 * DMA registers matched but which never composed a banner read those
 		 * registers off a machine that did not boot, and must not exit 0. */
 		if(!bootOk || !dmaOk)
@@ -865,20 +788,17 @@ namespace
 		return 0;
 	}
 
-	/* TASK TOOL-13. THE GDB REMOTE STUB, AND IT IS OPT-IN AND ABSENT BY DEFAULT.
-	 * `--gdb <port>` places the same machine `--boot` places -- the same image at
-	 * the same entry, the same vector table, the same reset -- and then BLOCKS
-	 * until a debugger attaches instead of driving it. NOTHING ADVANCES THE
-	 * MACHINE HERE: the debugger's own `continue` and `stepi` are what run it, so
+	/* `--gdb <port>` places the same machine `--boot` places -- the same image at
+	 * the same entry, the same vector table, the same reset -- and then blocks
+	 * until a debugger attaches instead of driving it. Nothing advances the
+	 * machine here: the debugger's own `continue` and `stepi` are what run it, so
 	 * a session that never attaches leaves a machine that has executed nothing.
 	 *
-	 * IT DRIVES THE MCU AND NOT THE SCHEDULER, and that is a stated limit rather
+	 * It drives the MCU and not the Scheduler, and that is a stated limit rather
 	 * than an oversight. The stub steps `Board::runMcu` alone, so the DSP set,
-	 * the chain and the panel do not turn while a session is open; a question
-	 * about the MCU's own memory, registers and flow is what this answers.
+	 * the chain and the panel do not turn while a session is open.
 	 *
-	 * THERE IS NO DSP56300 STUB. That core has no stock GDB target, and a DSP
-	 * question still needs the older method. */
+	 * There is no DSP56300 stub: that core has no stock GDB target. */
 	int gdb(const uint16_t _port)
 	{
 		installLogFilter();
@@ -911,8 +831,8 @@ namespace
 			return 2;
 		}
 
-		// The vector table, exactly as the boot path places it and for the reason
-		// task INT-8 gives: booting CODE directly skips the code that builds it.
+		// The vector table, exactly as the boot path places it: booting CODE
+		// directly skips the code that builds it.
 		{
 			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
 
@@ -940,7 +860,7 @@ namespace
 			return 2;
 		}
 
-		/* THE STUB IS CONSTRUCTED AFTER THE STORE IS ATTACHED. Its watchpoint
+		/* The stub is constructed after the store is attached. Its watchpoint
 		 * wrapper is interposed in front of whatever the memory map holds at that
 		 * moment, so a target attached later would sit in front of the wrapper
 		 * rather than behind it and its accesses would be invisible. */
@@ -977,17 +897,16 @@ namespace
 		return 0;
 	}
 
-	/* TASK PLG-14. THE LISTING IS MACHINE-READABLE BECAUSE A CHECK READS IT.
+	/* The listing is machine-readable because a check reads it.
 	 *
 	 * `subcommands:` opens a block of one name per line, two spaces then the
-	 * name; the block ends at the first line that is not of that shape. What
-	 * this buys is the half a roster cannot state: t0_console_subcommands
-	 * compares this block against the `command == "--name"` comparisons in
-	 * main() below and requires the two sets to be EQUAL, so a subcommand
-	 * dispatched without a line here is red, and a line here whose subcommand
-	 * is not dispatched is red.
+	 * name; the block ends at the first line that is not of that shape.
+	 * t0_console_subcommands compares this block against the
+	 * `command == "--name"` comparisons in main() below and requires the two sets
+	 * to be equal, so a subcommand dispatched without a line here is red, and a
+	 * line here whose subcommand is not dispatched is red.
 	 *
-	 * A MODIFIER IS NOT A SUBCOMMAND and sits under `options:` for that reason:
+	 * A modifier is not a subcommand and sits under `options:` for that reason:
 	 * --dump-dsp-dma is read out of a later argv entry by --boot and is never
 	 * compared against argv[1]. */
 	void usage()
@@ -1006,8 +925,8 @@ namespace
 		             " a mismatch exits non-zero" << std::endl;
 	}
 
-	/* A REFUSAL NAMES THE SUBCOMMAND THAT REFUSED, AND THE USAGE TEXT IS NOT A
-	 * DIAGNOSTIC. The listing prints every name, so "the output mentions the
+	/* A refusal names the subcommand that refused, and the usage text is not a
+	 * diagnostic. The listing prints every name, so "the output mentions the
 	 * name" would be true of any refusal that printed usage and would say
 	 * nothing about which subcommand failed. Every diagnostic therefore opens
 	 * at column 0 with this prefix, which no indented listing line can. */
@@ -1016,7 +935,7 @@ namespace
 		std::cerr << "g2TestConsole: " << _subject << ": " << _reason << std::endl;
 	}
 
-	// A subcommand that ran and failed must not be silent about WHICH one it
+	// A subcommand that ran and failed must not be silent about which one it
 	// was. The exit status is passed through unchanged; only the naming is
 	// added, so no caller's meaning moves.
 	int named(const std::string& _name, const int _result)
@@ -1043,12 +962,9 @@ int main(int _argc, char** _argv)
 
 	if(command == "--boot")
 	{
-		/* AN UNRECOGNISED MODIFIER IS AN ERROR AND NOT A SHRUG. Measured before
-		 * this task: `--boot --dump-dsp-dma` ran the whole boot, printed nothing
-		 * about DMA and exited 0, because nothing past argv[1] was ever read --
-		 * the milestone's own acceptance command passing against a program that
-		 * does not implement it, which is the row W3-95 shape this file already
-		 * carries one instance of. */
+		/* An unrecognised modifier is an error and not a shrug: a `--boot` that
+		 * read nothing past argv[1] would exit 0 for an option it does not
+		 * implement. */
 		bool dumpDspDma = false;
 
 		for(int i = 2; i < _argc; ++i)
@@ -1067,10 +983,9 @@ int main(int _argc, char** _argv)
 		return named("--boot", boot(dumpDspDma));
 	}
 
-	/* TASK TOOL-13. THE PORT IS REQUIRED AND IT IS NOT GUESSED AT. A `--gdb`
-	 * with no number, or with a number outside a port, is an ERROR here rather
-	 * than a default the operator did not choose -- the same rule the modifier
-	 * loop above already applies for the same reason. */
+	/* The port is required and it is not guessed at. A `--gdb` with no number, or
+	 * with a number outside a port, is an error here rather than a default the
+	 * operator did not choose. */
 	if(command == "--gdb")
 	{
 		if(_argc != 3)
@@ -1093,19 +1008,17 @@ int main(int _argc, char** _argv)
 		return named("--gdb", gdb(uint16_t(value)));
 	}
 
-	/* TASK PLG-14. `--help` IS A HANDLED WORD AND NOT A FALL-THROUGH. Before
-	 * this task it printed the usage text only because it was UNRECOGNISED, and
-	 * it exited 2 -- a defensible exit for an unknown flag and not a --help. */
+	/* `--help` is a handled word and not a fall-through: reaching the
+	 * unrecognised-argument path below would exit 2. */
 	if(command == "--help")
 	{
 		usage();
 		return 0;
 	}
 
-	/* NOTHING UNIMPLEMENTED EXITS 0, AND THE REFUSAL SAYS WHAT IT REFUSED. A
-	 * name this binary does not dispatch -- one another task owns, or one that
-	 * is simply wrong -- lands here, and an operator reads WHICH argument was
-	 * rejected rather than that something was. */
+	/* Nothing unimplemented exits 0, and the refusal says what it refused. A
+	 * name this binary does not dispatch lands here, and an operator reads which
+	 * argument was rejected rather than that something was. */
 	diagnose("unrecognised argument", "'" + command + "'");
 	usage();
 	return 2;

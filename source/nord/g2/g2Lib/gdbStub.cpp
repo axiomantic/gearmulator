@@ -1,14 +1,6 @@
-// Task TOOL-13. A GDB remote stub on the MCF5307.
-//
-// gdbStub.h carries what this is, where each capability comes from and what it
-// deliberately does not do. This file carries the protocol.
-//
-// THE PROTOCOL IS THE DOCUMENTED ONE AND NOTHING HERE INVENTS A DIALECT. A
-// packet is `$<payload>#<two hex checksum digits>`, the checksum is the sum of
-// the payload bytes modulo 256, and each side answers `+` for a packet it read
-// and `-` for one whose checksum did not match. `m68k-elf-gdb` and `lldb` both
-// speak it today, which is the whole reason this task is a stub and not a
-// bespoke monitor.
+// A packet is `$<payload>#<two hex checksum digits>`, the checksum is the sum
+// of the payload bytes modulo 256, and each side answers `+` for a packet it
+// read and `-` for one whose checksum did not match.
 
 #include "gdbStub.h"
 
@@ -30,16 +22,16 @@ namespace g2
 		constexpr int g_regCount = 18;
 		constexpr int g_regPc    = 17;
 
-		/* THE CONTINUE BOUND IS A STOP AND NOT A FIGURE. It exists so that a
-		 * machine which never reaches a breakpoint, a watchpoint or its own halt
-		 * terminates rather than hanging the debugger, and no authority publishes
-		 * it. A `c` that leaves through this bound answers the same stop reply as
-		 * one that halted, which is what a debugger can act on. */
+		/* The continue bound is a stop and not a figure any authority publishes.
+		 * It exists so that a machine which never reaches a breakpoint, a
+		 * watchpoint or its own halt terminates rather than hanging the debugger.
+		 * A `c` that leaves through this bound answers the same stop reply as one
+		 * that halted, which is what a debugger can act on. */
 		constexpr uint64_t g_continueBound = 100000000ull;
 
-		// The size a byte access presents to Board::onRead and Board::onWrite, IN
-		// THE CORE'S UNIT: mcf5307.h states it once per callback typedef, and
-		// `size` there is a COUNT OF BYTES and never a width in bits.
+		// The size a byte access presents to Board::onRead and Board::onWrite, in
+		// the core's unit: mcf5307.h states it once per callback typedef, and
+		// `size` there is a count of bytes and never a width in bits.
 		constexpr int g_byte = 1;
 
 		// The signal a stop reply carries. SIGTRAP is what a debugger expects
@@ -56,7 +48,7 @@ namespace g2
 
 		/* Read a hexadecimal number out of `_text` starting at `_pos`, leaving
 		 * `_pos` on the first character that is not a hexadecimal digit. It
-		 * answers FALSE when there was no digit at all, so an empty field is a
+		 * answers false when there was no digit at all, so an empty field is a
 		 * malformed packet rather than a silent zero. */
 		bool parseHex(const std::string& _text, size_t& _pos, uint32_t& _value)
 		{
@@ -136,8 +128,8 @@ namespace g2
 		m_inner.write(_offset, _size, _value, _status);
 	}
 
-	/* THE ACCESS IS TESTED AGAINST EVERY WATCHPOINT AS A RANGE OVERLAP AND NOT AS
-	 * AN ADDRESS COMPARE. A four-byte store whose first byte is below the watched
+	/* The access is tested against every watchpoint as a range overlap and not as
+	 * an address compare. A four-byte store whose first byte is below the watched
 	 * address still touches it, and a debugger that missed that would answer
 	 * "nobody writes this address" about an address something writes. */
 	void GdbStub::noteAccess(const uint32_t _address, const int _sizeBits, const bool _isWrite)
@@ -168,10 +160,9 @@ namespace g2
 		}
 	}
 
-	/* INTERPOSED IN FRONT OF WHAT IS ALREADY THERE, AND ONLY THERE. A region with
+	/* Interposed in front of what is already there, and only there. A region with
 	 * no target keeps none: attaching a wrapper over nothing would turn an
-	 * unmapped region into a mapped one and change what the machine does, which
-	 * is the one thing an instrument must not do. */
+	 * unmapped region into a mapped one and change what the machine does. */
 	void GdbStub::installWatchers()
 	{
 		for(const Region region : g_regions)
@@ -205,7 +196,7 @@ namespace g2
 		int one = 1;
 		::setsockopt(m_listenFd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
 
-		/* LOOPBACK AND NEVER INADDR_ANY. This is an unauthenticated channel with
+		/* Loopback and never INADDR_ANY. This is an unauthenticated channel with
 		 * full read and write access to the emulated machine. */
 		sockaddr_in addr{};
 		addr.sin_family      = AF_INET;
@@ -331,10 +322,8 @@ namespace g2
 
 	// ------------------------------------------------------------ the commands
 
-	/* THE STOP REPLY, AND THE WATCHPOINT HALF IS WHAT PAYS FOR THIS TASK. A plain
-	 * stop is `T05`; a stop on a watched address NAMES that address, so the
-	 * question "who writes this" is answered by the packet itself rather than by
-	 * an image-wide grep and a disassembly pass. */
+	/* A plain stop is `T05`; a stop on a watched address names that address, so
+	 * the question "who writes this" is answered by the packet itself. */
 	std::string GdbStub::stopReply() const
 	{
 		std::string reply = "T";
@@ -350,7 +339,7 @@ namespace g2
 		return reply;
 	}
 
-	/* EIGHTEEN REGISTERS, BIG-ENDIAN, READ FROM THE CORE ON EVERY CALL. There is
+	/* Eighteen registers, big-endian, read from the core on every call. There is
 	 * no cached copy and there must not be one: a debugger asks `g` precisely
 	 * because the machine has moved, and a copy would answer where it used to
 	 * be. */
@@ -364,8 +353,8 @@ namespace g2
 		return reply;
 	}
 
-	/* THE PROGRAM COUNTER IS READ-ONLY THROUGH setMcuReg AND THAT IS THE CORE'S
-	 * RULE, NOT THIS FILE'S: mcf5307.h states it at index 17 and machine.nim's
+	/* The program counter is read-only through setMcuReg, and that is the core's
+	 * rule and not this file's: mcf5307.h states it at index 17 and machine.nim's
 	 * regFileSet has no branch for it. The value is offered and the core keeps
 	 * its own, so a `G` carrying a PC is accepted and changes nothing. */
 	std::string GdbStub::writeRegisters(const std::string& _hex)
@@ -392,7 +381,7 @@ namespace g2
 		return "OK";
 	}
 
-	/* `m addr,length`. EVERY BYTE GOES THROUGH Board::onRead, which is the exact
+	/* `m addr,length`. Every byte goes through Board::onRead, which is the exact
 	 * callback the core was given, so what a debugger sees is what the machine
 	 * sees and not a second reading of the same memory. */
 	std::string GdbStub::readMemory(const std::string& _arguments)
@@ -465,10 +454,10 @@ namespace g2
 		return "OK";
 	}
 
-	/* ONE INSTRUCTION AND NOT ONE CYCLE. `Board::runMcu(1)` forwards to
-	 * `mcf5307_exec(ctx, 1)`, whose loop runs WHILE `spent < maxCycles` -- so a
+	/* One instruction and not one cycle. `Board::runMcu(1)` forwards to
+	 * `mcf5307_exec(ctx, 1)`, whose loop runs while `spent < maxCycles` -- so a
 	 * budget of one executes one whole instruction of whatever cost, and a budget
-	 * of ZERO executes nothing at all. */
+	 * of zero executes nothing at all. */
 	std::string GdbStub::step()
 	{
 		m_hit = Hit{};
@@ -476,12 +465,12 @@ namespace g2
 		return stopReply();
 	}
 
-	/* THE STEP LOOP, AND THE BREAKPOINT COMPARE IS AN EQUALITY. `mcuReg(17)` is
-	 * read after each instruction and compared against each armed address with
-	 * `==`: a breakpoint stops the machine when the machine is AT it, and an
-	 * address the machine merely passes is not a stop. A `>=` here would stop at
-	 * the first instruction past any armed address, including addresses no
-	 * program counter can ever equal. */
+	/* The breakpoint compare is an equality. `mcuReg(17)` is read after each
+	 * instruction and compared against each armed address with `==`: a breakpoint
+	 * stops the machine when the machine is at it, and an address the machine
+	 * merely passes is not a stop. A `>=` here would stop at the first
+	 * instruction past any armed address, including addresses no program counter
+	 * can ever equal. */
 	std::string GdbStub::resume()
 	{
 		m_hit = Hit{};
@@ -517,7 +506,7 @@ namespace g2
 
 	/* `Z`/`z` with the type digit already read. Type 0 and type 1 are
 	 * breakpoints; 2 is a write watchpoint, 3 a read watchpoint and 4 an access
-	 * watchpoint. A type this stub does not implement is answered with the EMPTY
+	 * watchpoint. A type this stub does not implement is answered with the empty
 	 * reply, which is how the protocol says "unsupported" -- answering `OK` would
 	 * tell a debugger a breakpoint is armed that is not. */
 	std::string GdbStub::setPoint(const std::string& _arguments, const bool _insert)
@@ -571,7 +560,7 @@ namespace g2
 		if(type != '2' && type != '3' && type != '4')
 			return {};
 
-		// The `kind` field of a watchpoint is its LENGTH IN BYTES, which is what
+		// The `kind` field of a watchpoint is its length in bytes, which is what
 		// makes the range test a range test. A zero length would watch nothing,
 		// so it is refused rather than armed.
 		if(kind == 0u)
@@ -658,7 +647,7 @@ namespace g2
 			return {};
 
 		case 'q':
-			/* THE ONE CAPABILITY THIS STUB HAS. Everything else a debugger asks
+			/* The one capability this stub has. Everything else a debugger asks
 			 * about is answered with the empty reply, which is the protocol's own
 			 * "I do not implement that" -- and a debugger then falls back to the
 			 * base protocol rather than believing a capability that is absent. */

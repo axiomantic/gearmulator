@@ -1,32 +1,30 @@
-// Task TOOL-13. The GDB remote stub on the MCF5307. Tier T0: this test needs no
-// firmware artifact of any kind.
+// The GDB remote stub on the MCF5307. Tier T0: this test needs no firmware
+// artifact of any kind.
 //
-// Plan section 12 (TOOL-13). Design sections 18.3, 23.1.1.
+// It drives the stub with a test client over a loopback socket and no `gdb`
+// binary, so the check runs anywhere the suite does. It asserts the answers and
+// not the acceptance: a stub that replies `OK` to everything fails every case
+// below.
 //
-// WHAT THIS TEST IS. It drives the stub with a TEST CLIENT OVER A LOOPBACK
-// SOCKET and no `gdb` binary, so the check runs anywhere the suite does. It
-// asserts THE ANSWERS AND NOT THE ACCEPTANCE: a stub that replies `OK` to
-// everything fails every case below.
-//
-// THE CLIENT RUNS ON ITS OWN THREAD AND THE STUB RUNS ON THIS ONE, which is the
+// The client runs on its own thread and the stub runs on this one, which is the
 // arrangement that makes the Board race-free. The client thread owns the socket
-// and NOTHING ELSE; every read of the Board and every seed of a register happens
+// and nothing else; every read of the Board and every seed of a register happens
 // on the main thread, between one answered packet and the next. `ask()` below is
 // the whole protocol: it hands the request to the client thread, pumps the stub
 // until the reply has come back, and returns it.
 //
-// THE PROGRAM IS THE SAME SHAPE t0_board_mcu_handle.cpp USES, and its provenance
+// The program is the same shape t0_board_mcu_handle.cpp uses, and its provenance
 // is the same: the opcodes are hand-encoded from the MOVE format and the two
 // halting words are the ones that file already pins. Every address below is this
-// test's own configuration, which plan section 1.3 rule 1 requires because no
-// authority records a size for the SDRAM window.
+// test's own configuration, because no authority records a size for the SDRAM
+// window.
 //
-// THE NEGATIVE BREAKPOINT CASE IS WHAT MAKES THE POSITIVE ONE MEAN SOMETHING,
+// The negative breakpoint case is what makes the positive one mean something,
 // and it is run in two forms because two different defects reach it. Form A sets
-// a breakpoint at an address that is never a program counter -- an ODD address
+// a breakpoint at an address that is never a program counter -- an odd address
 // inside the code -- so a stub comparing with `>=` stops the machine where a
 // stub comparing with `==` runs it to the halt. Form B sets a breakpoint at an
-// address the machine DOES reach and then removes it, so a stub that forgets to
+// address the machine does reach and then removes it, so a stub that forgets to
 // remove stops where a correct stub does not.
 
 #include "board.h"
@@ -180,16 +178,16 @@ namespace
 	constexpr uint32_t g_watchAddr   = g_windowBase + g_watchOffset;
 	constexpr uint32_t g_scratchAddr = g_windowBase + g_scratchOffset;
 
-	/* THE PROGRAM, hand-encoded.
+	/* The program, hand-encoded.
 	 *
 	 *     +0x00  4E71  nop
 	 *     +0x02  4E71  nop
 	 *     +0x04  4E71  nop
-	 *     +0x06  2280  move.l d0,(a1)   the WATCHED write
-	 *     +0x08  4E71  nop              the REACHED breakpoint address
+	 *     +0x06  2280  move.l d0,(a1)   the watched write
+	 *     +0x08  4E71  nop              the reached breakpoint address
 	 *     +0x0A  A001  line-A, which faults and halts
 	 *
-	 * A NOP IS THE STEP TARGET AND THAT IS DELIBERATE. It costs more than one
+	 * A nop is the step target and that is deliberate. It costs more than one
 	 * cycle -- the fetch alone is priced at two in the core's own cpu.nim -- so
 	 * "one instruction" and "one cycle" are different amounts of progress, which
 	 * is exactly what the step case has to tell apart. */
@@ -197,12 +195,12 @@ namespace
 
 	constexpr uint32_t g_insBytes = 2u;
 
-	// The breakpoint the machine DOES reach: the nop after the store.
+	// The breakpoint the machine does reach: the nop after the store.
 	constexpr uint32_t g_bpReached = g_codeBase + 0x008u;
 
-	/* The breakpoint the machine does NOT reach. It is ODD and inside the code,
+	/* The breakpoint the machine does not reach. It is odd and inside the code,
 	 * so no program counter can ever equal it, and every program counter after
-	 * the first step is GREATER than it. A stub comparing with `>=` stops here;
+	 * the first step is greater than it. A stub comparing with `>=` stops here;
 	 * a stub comparing with `==` never does. */
 	constexpr uint32_t g_bpUnreached = g_codeBase + 0x001u;
 
@@ -260,8 +258,8 @@ namespace
 		return "$" + _payload + tail;
 	}
 
-	/* THE TEST CLIENT. It lives on its own thread, owns the socket and touches
-	 * NOTHING else -- no Board, no stub. The main thread hands it one request at
+	/* The test client. It lives on its own thread, owns the socket and touches
+	 * nothing else -- no Board, no stub. The main thread hands it one request at
 	 * a time and collects one reply, so the two threads share exactly the queue
 	 * below and the kernel's socket. */
 	class Client final
@@ -298,7 +296,7 @@ namespace
 		}
 
 		// Send one request, read the acknowledgement and the reply packet, and
-		// return the reply's PAYLOAD. Runs on the client thread only.
+		// return the reply's payload. Runs on the client thread only.
 		std::string exchange(const std::string& _payload)
 		{
 			const std::string out = framed(_payload);
@@ -451,7 +449,7 @@ int main()
 
 	restart(board);
 
-	/* THE STUB IS CONSTRUCTED AFTER EVERY UNIT IS ATTACHED, because it interposes
+	/* The stub is constructed after every unit is attached, because it interposes
 	 * its watchpoint wrapper on the targets the map holds at that moment. */
 	g2::GdbStub stub(board);
 	g_stub = &stub;
@@ -502,7 +500,7 @@ int main()
 	}
 
 	// ==================================================================
-	// PHASE TWO -- `s` advances the program counter by one INSTRUCTION.
+	// PHASE TWO -- `s` advances the program counter by one instruction.
 	// ==================================================================
 	{
 		const uint32_t before = board.mcuReg(g_regPc);
@@ -539,7 +537,7 @@ int main()
 		checkText(pcField, hexWord32(board.mcuReg(g_regPc)),
 		          "phase three: the PC g returns equals Board::mcuReg(17)");
 
-		/* THE SECOND `g` IS THE ONE THAT REFUSES A CACHE. The machine has moved
+		/* The second `g` is the one that refuses a cache. The machine has moved
 		 * between the two, so a stub answering from a copy taken at the first `g`
 		 * -- or at the connect -- returns the older program counter here. */
 		ask("s");
@@ -567,7 +565,7 @@ int main()
 		// than the assertion being loosened.
 		wanted[size_t(g_regSr)] = 0x00002700u;
 
-		// The program counter is READ-ONLY through this call. mcf5307.h states
+		// The program counter is read-only through this call. mcf5307.h states
 		// it at index 17 and machine.nim's regFileSet has no branch for it, so
 		// the stub sends the value and the core keeps its own.
 		const uint32_t pcBefore = board.mcuReg(g_regPc);
@@ -635,9 +633,9 @@ int main()
 	}
 
 	// ==================================================================
-	// PHASE SEVEN -- the breakpoint the machine does NOT reach.
+	// PHASE SEVEN -- the breakpoint the machine does not reach.
 	//
-	// THIS IS WHAT MAKES PHASE SIX MEAN SOMETHING. An address no program counter
+	// This is what makes phase six mean something. An address no program counter
 	// can equal must not stop the machine, and the machine must reach its own
 	// halt instead.
 	// ==================================================================
@@ -678,7 +676,7 @@ int main()
 	}
 
 	// ==================================================================
-	// PHASE NINE -- the write watchpoint reports the write and NAMES it.
+	// PHASE NINE -- the write watchpoint reports the write and names it.
 	// ==================================================================
 	{
 		restart(board);
@@ -717,7 +715,7 @@ int main()
 	{
 		restart(board);
 
-		// The instruction fetch at the code base is a READ the core makes on its
+		// The instruction fetch at the code base is a read the core makes on its
 		// own, so a read watchpoint there fires on the very first step.
 		checkText(ask("Z3," + hexAddr(g_codeBase) + ",2"), "OK",
 		          "phase eleven: Z3 is accepted");

@@ -1,34 +1,27 @@
-// Task PLG-14. Tier T0: every child this test spawns runs with NMG2_ARTIFACTS
-// UNSET, so no firmware artifact is touched and no boot is performed here.
+// Tier T0: every child this test spawns runs with NMG2_ARTIFACTS unset, so no
+// firmware artifact is touched and no boot is performed here.
 //
-// Plan section 9.2, PLG-14. Design section 20.3. Plan section 24.6 row W3-406.
+// The rule under test: `--help` names exactly the subcommands the binary
+// implements -- no name it does not implement, and no implemented subcommand it
+// does not name -- and a name that is printed but not implemented, or not
+// recognised at all, exits non-zero after printing a diagnostic that names
+// itself.
 //
-// ---------------------------------------------------------------------------
-// WHAT THIS TEST READS, AND WHY IT READS THAT
+// This test holds no list of subcommands. It reads the printed list out of the
+// binary and the dispatched list out of main.cpp, and asserts the two sets are
+// equal. Adding a dispatch without a listing line, and deleting a listing line
+// while the dispatch stays, are then both red without anything here being
+// edited.
 //
-// PLG-14's rewritten Check: names one rule and no roster:
-//
-//   `--help` names EXACTLY the subcommands the binary implements -- no name it
-//   does not implement, and no implemented subcommand it does not name -- and a
-//   name that is printed but not implemented, or not recognised at all, EXITS
-//   NON-ZERO after printing a diagnostic that NAMES ITSELF.
-//
-// A roster of six names is what W3-406 withdrew, so this test holds NO list of
-// subcommands. It reads the printed list out of the binary and the dispatched
-// list out of main.cpp, and asserts the two sets are equal. Adding a dispatch
-// without a listing line, and deleting a listing line while the dispatch stays,
-// are then both red without anything here being edited.
-//
-// Everything asserted is a process EXIT STATUS or bytes on a standard stream.
+// Everything asserted is a process exit status or bytes on a standard stream.
 // No assert() carries a predicate here: the default build is Release with
 // NDEBUG and would delete it.
 //
-// THE DIAGNOSTIC IS NOT SATISFIED BY THE USAGE TEXT. The usage listing already
+// The diagnostic is not satisfied by the usage text. The usage listing already
 // prints every subcommand name, so "the output contains the name" would be
 // vacuously true for any refusal that printed usage. The predicate is therefore
-// a LINE that begins with the program's own diagnostic prefix and carries the
+// a line that begins with the program's own diagnostic prefix and carries the
 // name -- a listing line, which is indented, can never match it.
-// ---------------------------------------------------------------------------
 
 #include <cstdio>
 #include <cstdlib>
@@ -194,13 +187,12 @@ namespace
 		return names;
 	}
 
-	// The dispatch table, read out of main.cpp. main() compares its FIRST
+	// The dispatch table, read out of main.cpp. main() compares its first
 	// argument through a variable named `command`, and every subcommand is
-	// therefore spelled `command == "<name>"` exactly once. A MODIFIER such as
+	// therefore spelled `command == "<name>"` exactly once. A modifier such as
 	// --dump-dsp-dma is compared against a later argv entry and not against
-	// `command`, so this reads subcommands and never modifiers -- which is the
-	// distinction PLG-14 draws in as many words.
-	// COMMENTS ARE NOT CODE, and this file is heavily commented. A comment that
+	// `command`, so this reads subcommands and never modifiers.
+	// Comments are not code, and this file is heavily commented. A comment that
 	// quoted the dispatch pattern while describing it would otherwise enter the
 	// dispatch set and turn this case red over prose. Both comment forms are
 	// removed before the scan.
@@ -274,7 +266,7 @@ namespace
 		return text.empty() ? "<empty>" : text;
 	}
 
-	// A diagnostic is a line that OPENS with the program's prefix and carries
+	// A diagnostic is a line that opens with the program's prefix and carries
 	// the subject. The usage listing cannot satisfy this: its lines are
 	// indented, so none of them opens with the prefix.
 	bool diagnosticNames(const std::string& _output, const std::string& _subject)
@@ -306,10 +298,8 @@ int main()
 	try
 	{
 		// Every child below inherits this. --boot with no artifacts refuses
-		// immediately, which is the branch PLG-14's Check: allows for a
-		// subcommand whose own observable this T0 case does not own: it must
-		// then EXIT NON-ZERO and NAME ITSELF. Booting the firmware here would
-		// be t1_boot's work done twice.
+		// immediately: it must then exit non-zero and name itself. Booting the
+		// firmware here would be t1_boot's work done twice.
 		unsetArtifacts();
 
 		// ---------------- --help is a handled word and exits 0
@@ -363,7 +353,7 @@ int main()
 			if(name == "--help")
 			{
 				// The one name whose own observable this case owns: --help's
-				// documented observable IS the listing, and it is compared
+				// documented observable is the listing, and it is compared
 				// whole against the run above rather than sampled.
 				check(run.exitCode == 0, "--help: a listed name that IS implemented exits 0");
 				check(run.output == help.output, "--help: prints the same listing on every run");
@@ -381,9 +371,8 @@ int main()
 
 		// ---------------- a name that is not implemented never exits 0
 		//
-		// --render and --impulse are named here because PLG-14's own
-		// REQUIRED-RED names them, and because each belongs to another block
-		// (PERF-1 and INT-2). Neither may exist here and neither may be quiet.
+		// --render and --impulse belong to other work. Neither may exist here
+		// and neither may be quiet.
 
 		for(const std::string& absent : {std::string("--render"), std::string("--impulse"), std::string("--nmg2-no-such-subcommand")})
 		{

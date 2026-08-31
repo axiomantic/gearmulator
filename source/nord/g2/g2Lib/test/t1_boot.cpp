@@ -762,7 +762,7 @@ namespace
 		 * turns. */
 		uint32_t mcuCycles      = 0;
 		uint32_t tcn2           = 0;
-		uint32_t tcn2Latched    = 0;   /* the witness: see the latch site */
+		uint32_t tcn2Latched    = 0;
 		bool     haltedAtBanner = true;
 		std::vector<std::string> busLog;
 
@@ -943,15 +943,12 @@ namespace
 			// halts the core still contributes its observation.
 			latchHandshakePorts(board, handshakeLatched);
 
-			/* TCN2 IS A SAWTOOTH AND NOT A MONOTONIC WITNESS, SO IT IS LATCHED
-			 * FOR THE SAME REASON THE HANDSHAKE IS -- plan section 24.6 row
-			 * W3-403. The firmware programs TMR = 0x7F3B, whose FRR bit is SET,
-			 * and TRR = 0x32, so the counter runs 0 to 50 and RESTARTS AT ZERO
-			 * on every reference match. A terminal read samples a value in
-			 * 0..50, and READING ZERO IS A LEGAL HEALTHY VALUE -- the same
-			 * reading the required-red mutation produces when the core never
-			 * ran, so the old assertion could not tell them apart and passed by
-			 * luck. */
+			/* TCN2 is a sawtooth and not a monotonic witness, so it is latched
+			 * for the same reason the handshake is. The firmware programs
+			 * TMR = 0x7F3B, whose FRR bit is set, and TRR = 0x32, so the counter
+			 * runs 0 to 50 and restarts at zero on every reference match. A
+			 * terminal read samples a value in 0..50, and reading zero is a
+			 * legal healthy value. */
 			if(_result.tcn2Latched == 0u)
 			{
 				mcf5307_bus_status tcnStatus = MCF5307_BUS_OK;
@@ -1028,15 +1025,12 @@ namespace
 			scheduler->runFrames(g_framesPerIteration);
 			latchHandshakePorts(board, handshakeLatched);
 
-			/* TCN2 IS A SAWTOOTH AND NOT A MONOTONIC WITNESS, SO IT IS LATCHED
-			 * FOR THE SAME REASON THE HANDSHAKE IS -- plan section 24.6 row
-			 * W3-403. The firmware programs TMR = 0x7F3B, whose FRR bit is SET,
-			 * and TRR = 0x32, so the counter runs 0 to 50 and RESTARTS AT ZERO
-			 * on every reference match. A terminal read samples a value in
-			 * 0..50, and READING ZERO IS A LEGAL HEALTHY VALUE -- the same
-			 * reading the required-red mutation produces when the core never
-			 * ran, so the old assertion could not tell them apart and passed by
-			 * luck. */
+			/* TCN2 is a sawtooth and not a monotonic witness, so it is latched
+			 * for the same reason the handshake is. The firmware programs
+			 * TMR = 0x7F3B, whose FRR bit is set, and TRR = 0x32, so the counter
+			 * runs 0 to 50 and restarts at zero on every reference match. A
+			 * terminal read samples a value in 0..50, and reading zero is a
+			 * legal healthy value. */
 			if(_result.tcn2Latched == 0u)
 			{
 				mcf5307_bus_status tcnStatus = MCF5307_BUS_OK;
