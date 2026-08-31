@@ -92,9 +92,8 @@ namespace
 // It CATCHES: a runtime entry point that does not return -- an aborting Nim
 // runtime, or an idempotence latch that recursed.
 //
-// It DOES NOT CATCH a wrong ANSWER from the core, because at the pinned commit
-// the core computes no answer: mcf5307_runtime_init returns void and is the
-// only symbol the library exports. Every behavioural assertion about the core
+// It DOES NOT CATCH a wrong ANSWER from the core. Every behavioural assertion
+// about the core
 // belongs to the cpu track's own conformance tests, in the cpu track's own
 // repository. Two honest cases are written here rather than a longer list
 // padded with assertions that no defect could turn red.
@@ -109,7 +108,7 @@ int main()
 	// pointer forces the address to be materialised and forces the linker to
 	// resolve the symbol, so this case is red -- at the link step, naming
 	// _mcf5307_runtime_init -- for a g2Lib that does not carry the core.
-	void (*volatile runtimeInit)() = &mcf5307_runtime_init;
+	int (*volatile runtimeInit)() = &mcf5307_runtime_init;
 
 	check(runtimeInit != nullptr,
 		"mcf5307_runtime_init resolved to a non-null address through g2Lib");
