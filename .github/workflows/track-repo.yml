@@ -87,29 +87,14 @@ jobs:
       # The patterns below are assembled from split string literals ON PURPOSE.
       # This step scans EVERY workflow file in the repository, including this
       # one. A pattern written as one literal would match its own definition
-      # and the step would fail on itself for ever. THE PROBE STRINGS BELOW ARE
-      # SPLIT AT DIFFERENT POINTS FROM THE PATTERNS, which is what makes them a
+      # and the step would fail on itself for ever. The probe strings below are
+      # split at different points from the patterns, which is what makes them a
       # control and not a tautology: two independent spellings of one string
       # must still meet.
       #
-      # THIS STEP IS AN ABSENCE TEST, SO IT CARRIES CONTROLS. A loop over a glob
+      # This step is an absence test, so it carries controls. A loop over a glob
       # that expanded to nothing prints nothing and exits 0, which is byte for
-      # byte what a clean tree prints. The scan that examined no file and the
-      # scan that found no violation were indistinguishable, and this step
-      # guards the clean-room payload boundary -- the place where a silent GREEN
-      # costs the most. Two controls close it:
-      #
-      #   1. the scope directory exists
-      #   2. the glob matched at least one file, counted and asserted
-      #
-      # and a third proves the instrument is alive:
-      #
-      #   3. every pattern still matches its own probe, so a pattern broken by
-      #      an edit to its split literal cannot report a clean tree it never
-      #      inspected
-      #
-      # WHAT COUNTS AS A PAYLOAD VIOLATION IS UNCHANGED. The controls fail the
-      # step for a different and clearly labelled reason: the scan did not run.
+      # byte what a clean tree prints.
       - name: no-clavia-upload
         env:
           VISIBILITY: ${{ inputs.visibility }}
@@ -124,10 +109,9 @@ jobs:
           patterns="${pa}|${pb}|${pc}|${pd}|${pe}|${pf}"
           fail=0
 
-          # CONTROL 3: THE INSTRUMENT IS ALIVE. Each probe spells the string the
-          # pattern is meant to name, split at a different point, so no whole
-          # pattern appears as contiguous text in this file and the step still
-          # cannot fail on itself.
+          # Each probe spells the string the pattern is meant to name, split at
+          # a different point, so no whole pattern appears as contiguous text in
+          # this file and the step still cannot fail on itself.
           probe_a="nm""g2-artifacts"
           probe_b="go""lden/"
           probe_c="cap""tures/"
@@ -146,8 +130,6 @@ jobs:
             fi
           done
 
-          # CONTROL 1: THE SCOPE EXISTS. A checkout that did not land, or a
-          # repository with no workflow directory, leaves nothing to scan.
           scope="under-test/.github/workflows"
           if [ ! -d "${scope}" ]; then
             echo "FAILURE no-clavia-upload: the scope ${scope} is not a directory."
@@ -179,9 +161,9 @@ jobs:
             fi
           done
 
-          # CONTROL 2: THE GLOB MATCHED SOMETHING. `scanned` counts files the
-          # glob produced, allow-listed ones included, because the question this
-          # control answers is whether the loop had any input at all.
+          # `scanned` counts files the glob produced, allow-listed ones
+          # included, because the question this control answers is whether the
+          # loop had any input at all.
           if [ "${scanned}" -eq 0 ]; then
             echo "FAILURE no-clavia-upload: the glob under ${scope} matched no file."
             echo "An empty scan and a clean scan print the same thing; this is the empty one."

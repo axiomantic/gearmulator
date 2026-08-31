@@ -44,30 +44,20 @@ jobs:
       # directory would let any new file in that directory write P memory,
       # which is the rule inverted.
       #
-      # THE memWriteP EXEMPTION IS A PREDICATE AND NO LONGER A ROSTER, AND THE
-      # PREDICATE IS THE ONE THE ROSTER'S OWN COMMENT ALREADY STATED. It named
-      # three harnesses and gave one reason for all three: they assemble
-      # synthetic programs through dsp56k::DSP::memWriteP, WHICH NOTIFIES THE
-      # COMPILER ITSELF, so the invariant's purpose holds for them. That reason
-      # is a property of test harnesses, not of those three file names, and four
-      # more harnesses acquired it between amendments -- which is what a roster
-      # does when new instances arrive: the lint went RED on this repository over
-      # code that satisfies its own stated reason.
+      # Test harnesses assemble synthetic programs through
+      # dsp56k::DSP::memWriteP, which notifies the compiler itself, so the
+      # invariant's purpose holds for them.
       #
-      # THE EXEMPTION CANNOT BECOME THE HOLE THE LINT EXISTS TO CLOSE, and the
+      # The exemption cannot become the hole the lint exists to close, and the
       # reason is that it reaches ONE pattern. `notifyProgramMemWrite` and a
       # direct `set(MemArea_P, ...)` are the two calls that write a program word
-      # WITHOUT telling the compiler, and both stay forbidden everywhere in
+      # without telling the compiler, and both stay forbidden everywhere in
       # scope, tests included. Only `memWriteP` -- the path that notifies -- is
       # exempt, and only under a `test/` directory.
       #
-      # EVERY CHECK BELOW IS AN ABSENCE TEST, SO EACH ONE CARRIES A CONTROL. A
+      # Every check below is an absence test, so each one carries a control. A
       # grep that could not see the tree returns exactly what a clean tree
-      # returns. The retired roster gave this property by accident -- a
-      # grandfathered path that stopped matching was an error, so a vanished
-      # scope could not pass -- and dropping the roster without replacing it
-      # would have traded a false RED for a silent GREEN. The three controls are
-      # named below at their own sites.
+      # returns.
       - name: pmem-funnel-lint
         run: |
           set -u
@@ -80,7 +70,7 @@ jobs:
           PAT_MEMSET='[.>]set[[:space:]]*\(.*MemArea_P'
           PAT_MEMWRITEP='memWriteP[[:space:]]*\('
 
-          # A HARNESS IS A FILE UNDER A `test/` DIRECTORY INSIDE THE SCOPE. The
+          # A harness is a file under a `test/` directory inside the scope. The
           # trailing `[^/:]*:` pins the match to the grep prefix -- `path:line:`
           # -- so a source line that merely contains the text `/test/` cannot
           # exempt itself.
@@ -88,9 +78,9 @@ jobs:
 
           status=0
 
-          # CONTROL 1: THE SCOPE AND THE FUNNEL EXIST. `grep -r` over a missing
-          # directory prints an error and yields nothing, and `|| true` below
-          # turns that into the same empty string a clean tree gives.
+          # `grep -r` over a missing directory prints an error and yields
+          # nothing, and `|| true` below turns that into the same empty string a
+          # clean tree gives.
           if [ ! -d "$SCOPE" ]; then
             echo "pmem-funnel-lint: the scope $SCOPE does not exist, so nothing was searched."
             status=1
@@ -118,11 +108,10 @@ jobs:
             status=1
           fi
 
-          # CONTROL 2: THE TWO FORBIDDEN PATTERNS STILL MATCH THE ONE FILE THAT
-          # IS ALLOWED TO CARRY THEM. The funnel is the known positive of its own
-          # lint: it is excluded from `direct` above, so if the patterns have
-          # stopped naming what the funnel does, `direct` is empty because the
-          # instrument is dead and not because the tree is clean.
+          # The funnel is the known positive of its own lint: it is excluded
+          # from `direct` above, so if the patterns have stopped naming what the
+          # funnel does, `direct` is empty because the instrument is dead and
+          # not because the tree is clean.
           for p in "$PAT_NOTIFY" "$PAT_MEMSET"; do
             if ! grep -qE "$p" "$FUNNEL_C" 2>/dev/null; then
               echo "pmem-funnel-lint: the pattern $p matches nothing in $FUNNEL_C."
@@ -146,10 +135,7 @@ jobs:
             status=1
           fi
 
-          # CONTROL 3: THE memWriteP PATTERN STILL MATCHES SOMETHING. This is
-          # what the retired roster's "a grandfathered path that no longer
-          # matches is an error too" said, stated over the population instead of
-          # over three names. The harnesses are the only callers, so a zero here
+          # The harnesses are the only callers of memWriteP, so a zero here
           # means the API was renamed and the check above proved nothing.
           if [ -z "$memwritep" ]; then
             echo "pmem-funnel-lint: $PAT_MEMWRITEP matches nothing under $SCOPE."

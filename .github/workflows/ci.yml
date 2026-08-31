@@ -88,13 +88,10 @@ jobs:
       # the listing exits 0 whether or not any test matched. So this step reads
       # what the listing PRINTS.
       #
-      # IT TESTS FOR A PRESENCE AND NOT FOR THE ABSENCE OF A FAILURE STRING, and
-      # that is the whole point of the shape. `set -e` is dropped here so the
-      # message below is reached rather than pre-empted, which means a ctest that
-      # cannot run at all -- a missing build tree, a ctest that is not on PATH --
-      # leaves `listing` EMPTY. An empty string does not contain
-      # `Total Tests: 0`, so an absence test passed the step and GitHub scored
-      # the job green over a build tree that was never inspected. A test for
+      # It tests for a presence and not for the absence of a failure string.
+      # `set -e` is dropped here so the message below is reached rather than
+      # pre-empted, which means a ctest that cannot run at all leaves `listing`
+      # empty. An empty string does not contain `Total Tests: 0`. A test for
       # `Total Tests: [1-9]` cannot be satisfied by silence.
       - name: Assert that the build registers at least one test
         shell: bash
