@@ -798,7 +798,9 @@ namespace g2
 
 	/* The block is flat and it is a composition, in this fixed order:
 	 *
-	 *   1. This object's own state -- the version word first, then the regime,
+	 * THE BLOCK IS FLAT AND IT IS A COMPOSITION OF FOUR. In this fixed order:
+	 *
+	 *   1. THIS OBJECT'S OWN STATE -- the version word first, then
 	 *      the virtual frame index, the MCU context's rational accumulator,
 	 *      cycle debt and long-dispatch counter, the same three for every DSP
 	 *      context, the sticky fault latch and its disjunction, and the
@@ -836,15 +838,31 @@ namespace g2
 	 * Scheduler left holding a detached set would have every run gate shut for
 	 * the life of the object with no diagnostic anywhere.
 	 *
-	 * What the block does not cover: CallbackTimer, because it carries no
-	 * emulated state and a state file recorded on a fast machine must load
-	 * identically on a slow one. The recorded owning thread, for the same
-	 * reason: it is a property of the process that took the snapshot and not of
-	 * the machine. And both codec queues, which expose no way to read a ring
-	 * without consuming it and no way to restore a counter, so covering them
-	 * needs new surface on codecQueues.h. The consequence: a snapshot taken in
-	 * the play regime restores a machine whose queues hold whatever the load
-	 * left in them. The boot regime is unaffected, because a boot quantum
+	 * WHAT THE BLOCK DOES NOT COVER, AND WHY. THE CODEC REGIME -- SCH-36, and
+	 * it is listed first because it is the one exclusion that is a REPAIR and
+	 * not an original limit. A snapshot is necessarily taken in the PLAY
+	 * regime, and design section 15.6 step 4 runs its boot quanta in the BOOT
+	 * regime so that neither codec queue is touched and the boot cannot stall
+	 * on a full sink. A regime that travelled through the block put step 4 in
+	 * the play regime whenever step 3 restored a snapshot -- the exact merge
+	 * 15.6 forbids -- and the sink then filled part-way through the boot. The
+	 * repair is EXCLUSION at stateSave and not a refusal at stateLoad: a field
+	 * that is never written cannot be restored by a future caller who has not
+	 * read this comment, whereas a refusal is a rule a later edit can quietly
+	 * drop. THE REGIME IS THEREFORE THE LOADING MACHINE'S OWN AND SURVIVES A
+	 * LOAD UNCHANGED, which is what makes a restore legal inside a boot.
+	 *
+	 * CallbackTimer, because it carries
+	 * no emulated state and a state file recorded on a fast machine must load
+	 * identically on a slow one -- the row states that one. The RECORDED OWNING
+	 * THREAD, for the same reason: it is a property of the process that took the
+	 * snapshot and not of the machine. And BOTH CODEC QUEUES, which is the one
+	 * omission a reader could mistake for an oversight: SCH-15's two queues
+	 * expose no way to read a ring without consuming it and no way to restore a
+	 * counter, so covering them needs new surface on codecQueues.h, which is
+	 * SCH-15's file and not this task's. THE CONSEQUENCE IS STATED: a snapshot
+	 * taken in the PLAY regime restores a machine whose queues hold whatever the
+	 * load left in them. The boot regime is unaffected, because a boot quantum
 	 * touches neither queue.
 	 *
 	 * Every field moves through memcpy. The destination is a caller-supplied
@@ -853,9 +871,17 @@ namespace g2
 	 */
 	namespace
 	{
-		/* The version of this class's own block. It is not the Board's and not
-		 * the chain's; each limb versions or guards itself. */
-		constexpr uint32_t g_schedulerStateVersion = 1u;
+		/* The version of THIS class's own block. It is not the Board's and not
+		 * the chain's; each limb versions or guards itself.
+		 *
+		 * VERSION 2 IS SCH-36's EXCLUSION OF THE CODEC REGIME. The word moved
+		 * because the LAYOUT moved: version 1 carried a regime word between the
+		 * version word and the frame index, so a version-1 image read by this
+		 * build would take that regime word as the low half of the frame index
+		 * and every field after it would be shifted. A layout change that left
+		 * the word at 1 would be accepted and misread -- silently -- which is
+		 * the one outcome the word exists to prevent. */
+		constexpr uint32_t g_schedulerStateVersion = 2u;
 
 		void put32(uint8_t*& _cursor, const uint32_t _value) noexcept
 		{
@@ -906,7 +932,6 @@ namespace g2
 		size_t ownBlockSize(const size_t _dspCount) noexcept
 		{
 			return sizeof(uint32_t)                       /* the version word   */
-				+ sizeof(uint32_t)                        /* the codec regime   */
 				+ sizeof(uint64_t)                        /* the frame index    */
 				+ sizeof(uint32_t) + sizeof(int64_t) + sizeof(uint64_t)   /* MCU */
 				+ kJobCount * (sizeof(uint32_t) + sizeof(int64_t) + sizeof(uint64_t))
@@ -931,8 +956,9 @@ namespace g2
 
 		auto* cursor = static_cast<uint8_t*>(_dst);
 
+		/* THE CODEC REGIME IS NOT WRITTEN. SCH-36, and the block comment above
+		 * carries the reason. */
 		put32(cursor, g_schedulerStateVersion);
-		put32(cursor, static_cast<uint32_t>(m_regime));
 		put64(cursor, m_frameIndex);
 
 		put32 (cursor, m_mcu.acc);
@@ -978,7 +1004,9 @@ namespace g2
 		if(get32(cursor) != g_schedulerStateVersion)
 			return Status::BadStateImage;
 
-		m_regime     = static_cast<CodecRegime>(get32(cursor));
+		/* m_regime IS UNTOUCHED HERE BECAUSE NOTHING WROTE IT. The loading
+		 * machine keeps the regime it was in, which is what lets design
+		 * section 15.6 step 3 run inside a boot. */
 		m_frameIndex = get64(cursor);
 
 		m_mcu.acc                = get32 (cursor);
