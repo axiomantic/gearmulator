@@ -170,7 +170,12 @@ namespace
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
 			mcf5307_bus_status status = MCF5307_BUS_OK;
-			out.push_back(char(g2::Board::onRead(&_board, base + col, 8, &status) & 0xffu));
+			// The size argument is a BYTE COUNT, not a bit width: Board::onRead
+			// hands it to busWidthBits, whose switch answers 1, 2 and 4 and maps
+			// everything else to the zero width the decode refuses. A byte read
+			// is 1. Passing 8 here made every cell an illegal-size access that
+			// returned zero, so the display printed as NULs whatever it held.
+			out.push_back(char(g2::Board::onRead(&_board, base + col, 1, &status) & 0xffu));
 		}
 
 		return out;
@@ -288,8 +293,12 @@ namespace
 		// the firmware actually composed something printable into display 0 and
 		// the core is still running; a faulted or halted core is an error exit
 		// whose diagnosis is the lines printed above.
+		// The firmware clears every display to 0x20 SPACES before it composes
+		// anything, so a predicate satisfied by 0x20 is satisfied by a blank
+		// screen and reports success for a boot that composed nothing. Content
+		// is a printable character the clear cannot write.
 		const bool composed = std::any_of(line0.begin(), line0.end(),
-			[](const char c) { return uint8_t(c) >= 0x20; });
+			[](const char c) { return uint8_t(c) > 0x20u && uint8_t(c) < 0x7fu; });
 
 		if(!composed || halted || faulted)
 			return 1;
