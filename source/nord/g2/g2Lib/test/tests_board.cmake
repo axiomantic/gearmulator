@@ -152,9 +152,7 @@ set_property(TARGET t0_flash PROPERTY FOLDER "G2/test")
 add_test(NAME t0_flash COMMAND t0_flash)
 set_tests_properties(t0_flash PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-3, the two-tier interrupt controller
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_interrupts$
+# ----------------- the two-tier interrupt controller
 
 add_executable(t0_interrupts t0_interrupts.cpp)
 target_link_libraries(t0_interrupts PRIVATE g2Lib)
@@ -164,16 +162,7 @@ add_test(NAME t0_interrupts COMMAND t0_interrupts)
 set_tests_properties(t0_interrupts PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- BRD-13, the panel seam for criterion (h)
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_panel_seam$
-#
-# The panel carries `tick(uint64_t frameIndex)`, `stateSize`, `stateSave` and
-# `stateLoad` now, with an empty body and a zero-byte state. The scheduler's
-# order table (design section 13.5, owned by the SCH track) lists the panel at
-# position 0, before the MCU. This test asserts the seam surface only; the
-# scheduler and executor halves of section 13.5 are asserted by their own
-# tracks' tests.
+# ----------------- the panel seam for criterion (h)
 
 add_executable(t0_panel_seam t0_panel_seam.cpp)
 target_link_libraries(t0_panel_seam PRIVATE g2Lib)
@@ -182,17 +171,7 @@ set_property(TARGET t0_panel_seam PROPERTY FOLDER "G2/test")
 add_test(NAME t0_panel_seam COMMAND t0_panel_seam)
 set_tests_properties(t0_panel_seam PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-19, the bootstrap ROM
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_bootstrap_rom$
-#
-# The test drives the bootstrap protocol against a synthetic image: a count
-# word, an address word of 0x000000, and N data words, with no CVR host
-# command. It asserts all N words land at P:$0 onward in order, asserts that
-# P:$0 held none of them before the push (which is what separates a modelled
-# bootstrap from a pre-load), and a negative case pushes a count of N with N-1
-# data words and asserts the model reports an incomplete load rather than
-# dispatching.
+# ----------------- the bootstrap ROM
 
 add_executable(t0_bootstrap_rom t0_bootstrap_rom.cpp)
 target_link_libraries(t0_bootstrap_rom PRIVATE g2Lib)
@@ -200,9 +179,7 @@ set_property(TARGET t0_bootstrap_rom PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_bootstrap_rom COMMAND t0_bootstrap_rom)
 set_tests_properties(t0_bootstrap_rom PROPERTIES LABELS "UnitTest")
-# ----------------- BRD-16, the HDI08 host-port adapter
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_adapter$
+# ----------------- the HDI08 host-port adapter
 
 add_executable(t0_hdi08_adapter t0_hdi08_adapter.cpp)
 target_link_libraries(t0_hdi08_adapter PRIVATE g2Lib)
@@ -211,15 +188,7 @@ set_property(TARGET t0_hdi08_adapter PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_adapter COMMAND t0_hdi08_adapter)
 set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-4, UART0
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_uart0$
-#
-# UART0 at MBAR+0x1C0, vector 0x42, divider 0x36, 8N1; UART1 unused reads reset
-# values. The test drives the register file directly and wires UART0 to a
-# BRD-3 controller to assert the vectored (vector 0x42, autovector 0) source,
-# and exercises the one restricted width rule of MCF5307 UM section 14.3.7
-# (all UART registers are bytes).
+# ----------------- UART0
 
 add_executable(t0_uart0 t0_uart0.cpp)
 target_link_libraries(t0_uart0 PRIVATE g2Lib)

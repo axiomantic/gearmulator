@@ -1,23 +1,14 @@
-// Task BRD-16. Tier T0: this test needs no firmware artifact of any kind.
+// Drives the eight expanded addresses through the decode and asserts the
+// selected port set for each, then exercises the two paths a firmware word can
+// arrive by -- a 32-bit store at register offset 4, and a byte-at-a-time
+// TXH/TXM/TXL sequence -- and asserts the same 24-bit word comes out either
+// way. It also drives the broadcast and asserts the word arrives at every
+// populated port.
 //
-// Plan section 13.3, BRD-16. Design sections 10.1, 10.2.
-// Logbook: AGENTS.md section 3.1.
-//
-// WHAT THIS TEST IS FOR. It drives the eight EXPANDED addresses through
-// BRD-15's decode and asserts the SELECTED PORT SET for each, then exercises
-// the two paths a firmware word can arrive by -- a 32-bit store at register
-// offset 4, and a byte-at-a-time TXH/TXM/TXL sequence -- and asserts the same
-// 24-bit word comes out of the adapter either way. It also drives the
-// broadcast and asserts the word arrives at every populated port.
-//
-// THE ADDRESSES BELOW ARE THE EXPECTED INPUT OF A DECODE, NOT A TABLE THE
-// EMULATOR CARRIES. AGENTS.md section 3.1 records them as the values
-// `set_hdi08_bases(expanded)` writes at boot; hdi08Adapter.h and hdi08Decode.h
-// hold none of them. This test reads them only to compute CS1-relative offsets
-// for the adapter, exactly as t0_cs1_decode does.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG.
+// The addresses below are the expected input of a decode, not a table the
+// emulator carries: they are the values `set_hdi08_bases(expanded)` writes at
+// boot, and hdi08Adapter.h and hdi08Decode.h hold none of them. This test
+// reads them only to compute CS1-relative offsets for the adapter.
 
 #include "hdi08Adapter.h"
 #include "hdi08Decode.h"
@@ -67,9 +58,9 @@ namespace
 		return result;
 	}
 
-	// The expanded table of AGENTS.md section 3.1, as in t0_cs1_decode. Each
-	// per-DSP address drives one select low; `ports` is the bit that is set,
-	// which is the single port that must receive a word addressed there.
+	// The expanded address table. Each per-DSP address drives one select low;
+	// `ports` is the bit that is set, which is the single port that must
+	// receive a word addressed there.
 	struct RecordedEntry
 	{
 		int index;
@@ -116,12 +107,12 @@ namespace
 
 int main()
 {
-	// The expanded machine, as AGENTS.md section 4.1 targets.
+	// The expanded machine.
 	const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 	g2::Hdi08Adapter adapter(decode);
 
 	// -----------------------------------------------------------------------
-	// Case group 0. THE EIGHT PER-DSP ADDRESSES, BY LONGWORD.
+	// Case group 0. The eight per-DSP addresses, by longword.
 	//
 	// A 32-bit store at register offset 4 pushes one 24-bit word to the single
 	// port the address selects. The word's low 24 bits must arrive there and
@@ -192,7 +183,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. THE BYTE-AT-A-TIME PATH.
+	// Case group 2. The byte-at-a-time path.
 	//
 	// The adapter must not assume the CPU issued a longword. Writing TXH, TXM
 	// and TXL one byte at a time must assemble the same word the longword
@@ -258,11 +249,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. THE ADAPTER RIDES THE BUS.
+	// Case group 4. The adapter rides the bus.
 	//
 	// The adapter presents the BusTarget the MemoryMap attaches to CS1, so a
 	// write through the map lands on the selected port just as a direct write
-	// did. This is what ties BRD-16 to BRD-1's decode.
+	// did.
 	{
 		g2::MemoryMapConfig config;
 		config.cs1 = {g2::g_cs1Base, 0x800u};

@@ -1,82 +1,36 @@
-// Task BRD-3. The two-tier interrupt controller.
+// The two-tier interrupt controller.
 //
-// Plan section 13.1, BRD-3. Design sections 5.2.2, 6.4, 17 row 7.25.
+// Facts from the MCF5307 User's Manual, section 8 "System Integration Module":
 //
-// ---------------------------------------------------------------------------
-// PROVENANCE. Plan section 13.1 requires a record of what this task took and
-// where each fact was read. This is that record.
-//
-// NO FILE OF MegabytePhreak/qemu-mcf5307 WAS OPENED FOR THIS TASK, and no
-// value below was checked against it. AGENTS.md section 4.2 forbids taking
-// expression from that repository: a corrected derivative of its priority
-// formula would still be a derivative, and this controller is written from the
-// manual alone.
-//
-// ---------------------------------------------------------------------------
-// THE MANUAL. MCF5307 ColdFire Integrated Microprocessor User's Manual,
-// Motorola, 1998. 456 pages, 27,240,768 bytes, sha256
-// 86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa. The same
-// copy task BRD-2's sim.cpp documents. Every citation below was opened and
-// read in it.
-//
-// SOURCE: MCF5307 User's Manual, section 8 "System Integration Module".
-//
-//   * The two-tier structure of the controller and the fact that every
-//     interrupt source has its own ICR: section 8.3.3 "Interrupt Controller"
-//     and section 8.3.4 "Interrupt Registers", pp. 8-5..8-8.
-//   * The internal control registers at MBAR+$04C..$057 and which module each
-//     owns: Table 8-2, p. 8-5. ICR10 and ICR11 at $056 and $057 are Reserved
-//     and generate no source; the model carries the twelve storage slots and
-//     connects only the first ten to sources.
-//   * The ICR layout: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0] at bits 1:0,
-//     pp. 8-5..8-6. AVEC=0 means the source returns a vector during the
-//     interrupt-acknowledge cycle; AVEC=1 means the SIM generates the
-//     autovector.
-//   * The AVR at MBAR+$048, AVEC[7:1], a bitmask over levels that
-//     autovectors the external pin at each level: section 8.3.4, p. 8-7.
-//   * IRQPAR at MBAR+$006 and Table 8-4: IRQ5 is level 5 (IRQPAR[2]=0) or 4
+//   * Every interrupt source has its own ICR.
+//   * The internal control registers sit at MBAR+$04C..$057, one per module
+//     (Table 8-2). ICR10 and ICR11 at $056 and $057 are Reserved and generate
+//     no source; the model carries the twelve storage slots and connects only
+//     the first ten to sources.
+//   * ICR layout: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0] at bits 1:0. AVEC=0
+//     means the source returns a vector during the interrupt-acknowledge
+//     cycle; AVEC=1 means the SIM generates the autovector.
+//   * The AVR at MBAR+$048, AVEC[7:1], is a bitmask over levels that
+//     autovectors the external pin at each level.
+//   * IRQPAR at MBAR+$006 (Table 8-4): IRQ5 is level 5 (IRQPAR[2]=0) or 4
 //     (IRQPAR[2]=1); IRQ3 is level 3 (IRQPAR[1]=0) or 6 (IRQPAR[1]=1); IRQ1 is
 //     level 1 (IRQPAR[0]=0) or 2 (IRQPAR[0]=1); IRQ7 is always level 7.
-//     Section 8.3.4.1 and Table 8-4, pp. 8-9..8-10.
-//   * THE TWO-TIER PRIORITY ORDER, Table 8-3, pp. 8-6..8-7. Tier 1 is the
-//     interrupt level, level 7 highest and level 1 lowest. Tier 2 is the
-//     within-level order the table fixes: an internal source with IP=11 ranks
-//     highest, then IP=10, then the external pin at that level, then IP=01,
-//     then IP=00. "There are 35 possible priority levels, including internal
-//     and external interrupts."
-//   * Only four external interrupt pins exist -- IRQ7, IRQ5, IRQ3 and IRQ1:
-//     section 2.3.1.
+//   * The two-tier priority order (Table 8-3). Tier 1 is the interrupt level,
+//     level 7 highest and level 1 lowest. Tier 2 is the within-level order the
+//     table fixes: an internal source with IP=11 ranks highest, then IP=10,
+//     then the external pin at that level, then IP=01, then IP=00.
+//   * Only four external interrupt pins exist -- IRQ7, IRQ5, IRQ3 and IRQ1.
 //
-// DESIGN SECTIONS, for the interface shape rather than the arbitration.
+// The one explicit tie-untie in the arbitration. The manual fixes the order of
+// every pair this controller can present except two internal sources pending
+// at the same level and the same IP[1:0] -- the pair Table 8-3's footnote
+// tells the programmer not to create. For that pair alone the controller
+// breaks the tie by the lower ICR index; the manual did not choose it. The
+// ambiguous pair cannot be created for a single external level because no two
+// external pins share a level under any IRQPAR setting.
 //
-//   * Design section 5.2.2: the board owns every pending bit and every
-//     priority decision, presents the whole current state on every change,
-//     the call is idempotent, levels 1..6 are level-sensitive and level 7 is
-//     edge-triggered (a core property, not this controller's), and the
-//     autovector argument follows the AVEC/AVR bit the firmware programmed.
-//   * Design section 6.4: the SIM on the board carries the two-tier interrupt
-//     controller.
-//   * Design row 7.25: the board owns every pending bit and presents its whole
-//     current state on each change; a level source drops when the device model
-//     clears its own condition and the board recomputes.
-//
-// THE ONE EXPLICIT TIE-UNTIE IN THE ARBITRATION. The manual fixes the order of
-// every pair this controller can present EXCEPT two internal sources that are
-// pending at the same level AND the same IP[1:0] -- the pair Table 8-3's
-// footnote tells the programmer not to create. For that pair alone the
-// controller breaks the tie by the lower ICR index, and the record says so
-// rather than implying the manual chose it. Plan BRD-3's rule that a pair the
-// manual fixes is pinned by the test is satisfied: the manual fixes every pair
-// this firmware can present, and the ambiguous pair cannot be created for a
-// single external level because no two external pins share a level under any
-// IRQPAR setting.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG. An out-of-range index is clamped to the
-// valid domain rather than read through, so no index here can leave the table
-// -- plan BRD-3's "the index domain is walked end to end" is satisfied by
-// never indexing out of range at all.
-
+// An out-of-range index is clamped to the valid domain rather than read
+// through, so no index here can leave the table.
 #include "interruptController.h"
 
 namespace g2
@@ -101,7 +55,7 @@ namespace g2
 
 		// The interrupt level IRQPAR assigns an external pin. IRQ7 is fixed at
 		// 7; IRQ5 follows IRQPAR[2], IRQ3 follows IRQPAR[1], IRQ1 follows
-		// IRQPAR[0]. MCF5307 UM Table 8-4.
+		// IRQPAR[0]. MCF5307 um table 8-4.
 		int externalLevel(const ExternalPin _pin, const uint8_t _irqpar)
 		{
 			switch(_pin)
@@ -254,9 +208,9 @@ namespace g2
 
 	void InterruptController::recomputeAndPresent()
 	{
-		// No pending source presents MCF5307_IRQ_NONE (0). Design section
-		// 5.2.2: the board presents its whole current state on every change,
-		// and the call is idempotent, so presenting unconditionally is correct.
+		// No pending source presents MCF5307_IRQ_NONE (0). The board presents
+		// its whole current state on every change and the call is idempotent,
+		// so presenting unconditionally is correct.
 		const Winner winner = arbitrate();
 		const int level = winner.valid ? winner.level : 0;
 		const uint8_t vector = winner.valid ? winner.vector : 0u;

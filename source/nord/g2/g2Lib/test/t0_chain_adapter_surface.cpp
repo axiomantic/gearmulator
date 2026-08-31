@@ -1,30 +1,18 @@
-/* t0_chain_adapter_surface.cpp -- the check of task CHN-5. Design 12.3,
- * 13.10.2.
+/* The three properties a build of g2Lib cannot test on its own -- a class with
+ * a declared surface and no definition still compiles and links the library:
  *
- * THE THREE PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
+ *  1. The four constructor arguments are forwarded and readable.
  *
- *  1. The four constructor arguments are FORWARDED and READABLE. The test
- *     constructs one adapter with each argument set to a distinct value and
- *     reads each back through its accessor.
+ *  2. The audio chain reports exactly dspCount + 1 mailboxes at every
+ *     second-bus topology: the audio bus is fixed to Line, and the second-bus
+ *     topology parameter cannot move it.
  *
- *  2. The audio chain reports EXACTLY dspCount + 1 mailboxes at every
- *     second-bus topology. The audio bus is fixed to Line (section 2.4);
- *     this asserts over a range of topology arguments that the second-bus
- *     topology parameter cannot move it. It is what makes "the audio chain
- *     is fixed to Line" testable rather than merely stated.
+ *  3. Every method on the declared public surface has a definition. Taking the
+ *     address of each one makes a method declared in chainAdapter.h but never
+ *     defined in chainAdapter.cpp a link error here.
  *
- *  3. Every method on the declared public surface has a definition. The test
- *     takes the address of each one; a method declared in chainAdapter.h but
- *     never defined in chainAdapter.cpp fails as a link error here.
- *
- * A build of g2Lib tests none of the three: a class with a declared surface
- * and no definition still compiles and links the library; the checks only
- * drive when a TU constructs, reads, and takes addresses. Section 7.7.1
- * gives the class.
- *
- * The callback factories are exercised for their signature only (taking the
- * address of a member does not call it), because the per-position wiring is
- * CHN-12's and the written-flag rule is CHN-6's.
+ * The callback factories are exercised for their signature only; taking the
+ * address of a member does not call it.
  */
 
 #include "chainAdapter.h"
@@ -46,13 +34,10 @@ namespace
 	}
 }
 
-/* ------------- Property 3: the declared public surface, all addressable.
- *
- * Each of these binds the address of one member to a variable of exactly the
- * member's type. A member that exists only as a declaration forces the linker
- * to look for its definition here; a missing definition is a link error.
- * Taking the address does not CALL any of them, so the bodies are not
- * exercised here -- that is the owning tasks' job. */
+/* Property 3: each of these binds the address of one member to a variable of
+ * exactly the member's type. A member that exists only as a declaration forces
+ * the linker to look for its definition here. Taking the address does not call
+ * any of them. */
 
 using ChainAdapter = g2::ChainAdapter;
 
@@ -103,11 +88,9 @@ void touchAllPointers()
 
 int main()
 {
-	/* ------------- Property 1: each of the four arguments forwarded.
-	 *
-	 * dspCount 8, hopFrames 3, a Line second bus and divider 5 are all
-	 * distinct values, so each accessor can only read back its own argument
-	 * if the constructor really stored it. */
+	/* Property 1. dspCount 8, hopFrames 3, a Line second bus and divider 5 are
+	 * all distinct values, so each accessor can only read back its own
+	 * argument if the constructor really stored it. */
 	const unsigned       kDspCountArg  = 8u;
 	const unsigned       kHopFramesArg = 3u;
 	const g2::ChainTopology kTopologyArg = g2::ChainTopology::Line;
@@ -127,14 +110,9 @@ int main()
 			"argument");
 	}
 
-	/* ------------- Property 2: the audio chain reports dspCount + 1
-	 * mailboxes at every second-bus topology.
-	 *
-	 * The audio bus is fixed to Line; the second-bus topology is a
-	 * parameter. Each adapter below changes only that parameter, and the
-	 * audio chain must still report exactly dspCount + 1. The second-bus
-	 * count, by contrast, follows section 12.3's rule through the same
-	 * constructor argument. */
+	/* Property 2. The audio bus is fixed to Line; the second-bus topology is a
+	 * parameter. Each adapter below changes only that parameter, and the audio
+	 * chain must still report exactly dspCount + 1. */
 	{
 		static const unsigned kN = 8u;
 

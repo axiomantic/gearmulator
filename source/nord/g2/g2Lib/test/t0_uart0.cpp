@@ -1,42 +1,31 @@
-// Task BRD-4. Tier T0: this test needs no firmware artifact of any kind.
-//
-// Plan section 13.1, BRD-4. Design sections 6.4, 14.5.
-// Logbook: AGENTS.md section 2.2.
-//
-// THE CARRY-RULES THIS TEST PINS:
+// The rules this test pins:
 //
 //   1. UART0 sits at MBAR+0x1C0 and UART1 (unused) at MBAR+0x200. MCF5307 UM
-//      Table 14-1. The manual names them UART1/UART2; AGENTS.md and this
-//      task named the 0x1C0 module UART0.
-//   2. UART0's vector is 0x42. 0x42 = 66 is in the user-defined range
-//      64..255 and is NOT in the autovector range 25..31, so UART0 is a
-//      VECTORED source and not an autovectored one. This test drives UART0's
-//      interrupt through BRD-3's arbiter and asserts the presented argument
-//      is (vector 0x42, autovector 0) when ICR4's AVEC bit is clear.
-//   3. The divider 0x36 is observed and it stands; the 54 MHz clock derived
-//      from it is refuted and must not return. This model names no clock
-//      rate, and the test asserts the observed divider value stands and that
-//      the baud registers are DATA (write-only, no frequency built on them).
+//      Table 14-1. The manual names them UART1/UART2; this model names the
+//      0x1C0 module UART0.
+//   2. UART0's vector is 0x42. 0x42 = 66 is in the user-defined range 64..255
+//      and is not in the autovector range 25..31, so UART0 is a vectored
+//      source. This test drives UART0's interrupt through the arbiter and
+//      asserts the presented argument is (vector 0x42, autovector 0) when
+//      ICR4's AVEC bit is clear.
+//   3. The divider 0x36 is observed. This model names no clock rate, and the
+//      test asserts the observed divider value stands and that the baud
+//      registers are data (write-only, no frequency built on them).
 //   4. UART0 is 8N1: UMR1 = 0x0B (8 data bits, no parity) and UMR2 = 0x07
 //      (one stop bit for a 6..8 bit character), UM Tables 14-2, 14-3, 14-5.
 //   5. UART1 is unused and reads back its reset values.
-//   6. The transmitter buffer is the source for readMidiOut in the Device
-//      (design section 14.5): a byte written to UTB is delivered, in order,
-//      to the MIDI-out callback.
+//   6. The transmitter buffer is the source for readMidiOut in the Device: a
+//      byte written to UTB is delivered, in order, to the MIDI-out callback.
 //
-// THE ONE RESTRICTED WIDTH RULE, UM SECTION 14.3.7: "All UART module
-// registers must be accessed as bytes." A 16-bit or 32-bit access to any
-// UART offset is rejected with MCF5307_BUS_SIZE_ILLEGAL and one log line, on
-// BOTH the read and the write path.
+// The one restricted width rule, UM section 14.3.7: all UART module registers
+// must be accessed as bytes. A 16-bit or 32-bit access to any UART offset is
+// rejected with MCF5307_BUS_SIZE_ILLEGAL and one log line, on both the read
+// and the write path.
 //
-// THE REGISTER FACTS ARE WRITTEN OUT AGAIN BY HAND. The offsets come from
-// MCF5307 UM Table 14-1 and the reset values from the register descriptions.
-// A test that imported uart0.h's own constants would answer that the model
-// equals itself; this test names the manual's values so the two sides move
-// independently.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG.
+// The register facts are written out again by hand -- the offsets from Table
+// 14-1 and the reset values from the register descriptions. A test that
+// imported uart0.h's own constants would answer that the model equals
+// itself.
 
 #include "uart0.h"
 #include "interruptController.h"
@@ -77,7 +66,7 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE HAND-WRITTEN FACTS FROM THE MANUAL. Offsets are MBAR-relative and
+	// The hand-written facts from the manual. Offsets are MBAR-relative and
 	// come from Table 14-1; the UART block stride is four bytes and each
 	// register is one byte.
 	constexpr uint32_t gUart0Base = 0x1C0u;
@@ -126,7 +115,7 @@ namespace
 		return rd(u, gUart0Base + gMode); // reads UMR2, leaves pointer on UMR2
 	}
 
-	// The receive interrupt recorder (the BRD-3 present callback).
+	// The receive interrupt recorder (the present callback).
 	struct PresentRecorder
 	{
 		int level = -999;
@@ -144,8 +133,8 @@ namespace
 
 	constexpr uint32_t gIcrBase = 0x04Cu;
 
-	// An ICR byte: AVEC at bit 7, level at bits 4:2 (IL[2:0]), IP at bits 1:0,
-	// from BRD-3 / UM Table 8-2.
+	// An ICR byte: AVEC at bit 7, level at bits 4:2 (IL[2:0]), IP at bits 1:0.
+	// UM Table 8-2.
 	uint8_t makeIcr(const int _level, const bool _avec)
 	{
 		uint8_t value = uint8_t((_level << 2) & 0x7cu);
@@ -173,8 +162,8 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 1. THE BASES AND THE VECTOR NUMBER, AS FACTS THE LATER BOARD
-	// TASK DEPENDS ON. Vector 0x42 = 66 is in the user-defined range 64..255,
+	// Case group 1. The bases and the vector number.
+	// Vector 0x42 = 66 is in the user-defined range 64..255,
 	// and the autovectors are 25..31, so the UART is a vectored source and
 	// not an autovectored one.
 	{
@@ -195,8 +184,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. THE OBSERVED DIVIDER STANDS AS DATA, AND THE REFUTED
-	// 54 MHz CLOCK DOES NOT EXIST IN THE MODEL. gBaudDivider is a compile-time
+	// Case group 2. The observed divider stands as data, and the refuted
+	// 54 MHz clock does not exist in the model. gBaudDivider is a compile-time
 	// pinned value and the model builds no frequency from it.
 	{
 		static_assert(g2::Uart0::gBaudDivider == 0x0036u,
@@ -219,7 +208,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE ONE RESTRICTED WIDTH RULE (UM SECTION 14.3.7): every
+	// Case group 3. The one restricted width rule (UM section 14.3.7): every
 	// UART register is a byte, and a 16-bit or 32-bit access is rejected with
 	// MCF5307_BUS_SIZE_ILLEGAL and one log line, on both paths.
 	{
@@ -245,8 +234,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. THE 8N1 MODE IS STORED AND READ BACK THROUGH THE MODE
-	// POINTER. UMR1 = 0x0B is 8 data bits, no parity; UMR2 = 0x07 is one stop
+	// Case group 4. THE 8N1 mode is stored and read back through the mode
+	// pointer. UMR1 = 0x0B is 8 data bits, no parity; UMR2 = 0x07 is one stop
 	// bit for a 6..8 bit character.
 	{
 		g2::Uart0 uart;
@@ -263,7 +252,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE TRANSMITTER BUFFER IS THE SOURCE FOR readMidiOut. A
+	// Case group 5. The transmitter buffer is the source for readMidiOut. A
 	// byte written to UTB while the transmitter is enabled is delivered, in
 	// order, to the MIDI-out callback; TxRDY clears while the holding register
 	// is loaded and re-asserts when the transmitter completes.
@@ -293,7 +282,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. THE RECEIVE PATH (MIDI IN): a byte injected while the
+	// Case group 6. The receive path (MIDI IN): a byte injected while the
 	// receiver is enabled lands in the FIFO, sets RxRDY, and is read back from
 	// the receiver buffer.
 	{
@@ -310,7 +299,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. THE VECTORED SOURCE, END TO END THROUGH BRD-3'S ARBITER.
+	// Case group 7. The vectored source, end to end through the arbiter.
 	// When UART0 asserts its interrupt and ICR4's AVEC bit is clear, the board
 	// presents (vector 0x42, autovector 0) at ICR4's programmed level. This is
 	// the property that makes UART0 a vectored source.
@@ -341,7 +330,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. UART1 IS UNUSED AND READS BACK ITS RESET VALUES. The
+	// Case group 8. Uart1 is unused and reads back its reset values. The
 	// register-file reset values are UIVR = $0F (uninitialised interrupt
 	// condition) and the general registers zero. Writes have no effect.
 	{
@@ -363,13 +352,13 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 9. THE UART0 MODULE GROUNDS ITS OWN ACCESS.
+	// Case group 9. The UART0 module grounds its own access.
 	//
 	// An access completely outside the two UART blocks is refused as
 	// UNMAPPED rather than silently answered, so that a firmware fault that
 	// addresses the wrong MBAR offset is loud rather than hidden. MBAR+0x240
 	// is just past UART1's block (0x200..0x23F) and belongs to no UART module.
-	// (An offset INSIDE a module block, including its DO NOT ACCESS gaps, is
+	// (An offset inside a module block, including its do not access gaps, is
 	// a benign reset-value read, not a fault.)
 	{
 		g2::Uart0 uart;

@@ -1,9 +1,5 @@
-// Task BRD-3. Tier T0: this test needs no firmware artifact of any kind.
-//
-// Plan section 13.1, BRD-3. Design sections 5.2.2, 6.4, 17 row 7.25.
-//
-// THE FOUR ASSERTIONS OF THE PLAN'S Check: LINE, EACH DRIVING THE BOARD'S OWN
-// ARBITER AND READING THE ARGUMENTS IT PRESENTS.
+// Four assertions, each driving the board's own arbiter and reading the
+// arguments it presents:
 //
 //   1. A higher level beats a lower one.
 //   2. IRQPAR re-maps IRQ3, and the winner moves with it.
@@ -11,16 +7,12 @@
 //   4. No pending source presents the named zero, and a source that drops
 //      returns to it.
 //
-// Plus the within-level order Table 8-3 fixes (the "winner the manual names"),
-// and the whole index-domain walk that stands in the place of the three
-// upstream overruns.
+// Plus the within-level order Table 8-3 fixes, and the whole index-domain
+// walk.
 //
-// THE ARBITRATION IS READ FROM THE MCF5307 USER'S MANUAL AND NOTHING HERE IS
-// READ FROM ANOTHER IMPLEMENTATION. No file of MegabytePhreak/qemu-mcf5307 was
-// opened for this task. interruptController.cpp holds the provenance record
-// with each manual section. This test writes the register facts out again BY
-// HAND rather than importing them: a test that imported the implementation's
-// own constants would assert that the implementation equals itself.
+// This test writes the register facts out again by hand rather than importing
+// them: a test that imported the implementation's own constants would assert
+// that the implementation equals itself.
 //
 //  * Internal ICRs at MBAR+$04C..$057: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0]
 //    at bits 1:0. UM section 8.3.4 and Table 8-2, pp. 8-5..8-6.
@@ -29,9 +21,6 @@
 //    level 1 or 2, IRQ7 always 7. UM section 8.3.4.1 and Table 8-4, pp. 8-9..8-10.
 //  * Within a level the order is internal IP=11, then IP=10, then the external
 //    pin, then IP=01, then IP=00. UM Table 8-3, pp. 8-6..8-7.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG.
 
 #include "interruptController.h"
 
@@ -114,9 +103,9 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 1. A HIGHER LEVEL BEATS A LOWER ONE, AND THE WINNER MOVES
-	// WITH THE LEVEL WHEN THE TWO LEVELS ARE EXCHANGED IN THE CONTROL
-	// REGISTERS.
+	// Case group 1. A higher level beats a lower one, and the winner moves
+	// with the level when the two levels are exchanged in the control
+	// registers.
 	//
 	// Both sources are INTERNAL, because an external pin carries a fixed
 	// level and its level cannot be exchanged. Source 0 (SWT) and source 1
@@ -149,7 +138,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. IRQPAR RE-MAPS IRQ3, AND THE WINNER MOVES WITH IT.
+	// Case group 2. IRQPAR re-maps IRQ3, and the winner moves with it.
 	//
 	// One IRQ3 assertion arbitrated twice against one competitor at level 5.
 	// With IRQ3 mapped to internal level 6 it wins; with IRQ3 mapped to level
@@ -177,8 +166,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE AUTOVECTOR ARGUMENT FOLLOWS THE BIT THE FIRMWARE
-	// PROGRAMMED.
+	// Case group 3. The autovector argument follows the bit the firmware
+	// programmed.
 	//
 	// For an internal source it follows AVEC at bit 7 of that source's own
 	// control register. For an external pin it follows the AVR bit for the
@@ -218,13 +207,13 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. NO PENDING SOURCE PRESENTS THE NAMED ZERO, AND A SOURCE
-	// THAT DROPS RETURNS TO IT.
+	// Case group 4. No pending source presents the named zero, and a source
+	// that drops returns to it.
 	//
-	// The shape of design section 5.2.2's worked case: with nothing pending the
-	// board presents MCF5307_IRQ_NONE. The one pending source is then raised
-	// and dropped (a level source dropping when the device model clears its own
-	// condition), and the board must present the named zero again. An arbiter
+	// With nothing pending the board presents MCF5307_IRQ_NONE. The one pending
+	// source is then raised and dropped (a level source dropping when the device
+	// model clears its own condition), and the board must present the named zero
+	// again. An arbiter
 	// that never deasserts passes the first half and fails the second.
 	{
 		PresentRecorder recorder;
@@ -254,8 +243,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. WITHIN A LEVEL, THE MANUAL FIXES THE ORDER, AND THE TEST
-	// PINS THE WINNER THE MANUAL NAMES.
+	// Case group 5. Within a level, the manual fixes the order, and the test
+	// pins the winner the manual names.
 	//
 	// Table 8-3: internal IP=11, then IP=10, then the external pin, then IP=01,
 	// then IP=00. This pins the two internal IP ranks against each other and
@@ -326,7 +315,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. THE WHOLE INDEX DOMAIN IS WALKED END TO END.
+	// Case group 6. The whole index domain is walked end to end.
 	//
 	// The arbiter indexes two tables: the internal control-register block and
 	// the level-indexed AVR bitmask. Here every byte offset from $04C to $057
@@ -341,13 +330,10 @@ int main()
 	// generate no source, so with them programmed and no other source pending
 	// the board presents MCF5307_IRQ_NONE.
 	//
-	// THE SANITIZER. The three upstream overruns are index-domain defects: an
-	// index leaving the control-register table or the AVR bitmask reads a
-	// neighbouring byte. This walk drives the full domain; under the sanitizer
-	// build the CI matrix already carries, any out-of-range read fails loudly
-	// instead of returning a neighbour. interruptController.cpp also never
-	// indexes out of range at all, so the walk is a superset check and the
-	// mechanism that made the upstream defects catchable.
+	// An index leaving the control-register table or the AVR bitmask reads a
+	// neighbouring byte. This walk drives the full domain, so under a
+	// sanitizer build any out-of-range read fails loudly instead of returning
+	// a neighbour.
 	{
 		PresentRecorder recorder;
 		g2::InterruptController controller = makeController(recorder);
@@ -388,15 +374,14 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. THE AVR BITMASK IS INDEXED ONLY BY THE LEVELS THE
-	// INTERFACE ADMITS.
+	// Case group 7. The AVR bitmask is indexed only by the levels the
+	// interface admits.
 	//
 	// The autovector argument for an external pin is (AVR >> winningLevel) & 1,
 	// and the winning level is always 1..7 when a source is presented. This
 	// drives every external pin at every level it can map to under every IRQPAR
 	// value and every AVR bit pattern, asserting the presented level is in 1..7
-	// and the autovector argument follows the AVR bit for that level. It is the
-	// second table plan BRD-3 names, walked end to end.
+	// and the autovector argument follows the AVR bit for that level.
 	{
 		for(uint32_t irqpar = 0; irqpar <= 0x07u; ++irqpar)
 		{

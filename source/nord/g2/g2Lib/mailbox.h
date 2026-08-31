@@ -1,9 +1,8 @@
-/* mailbox.h -- g2::Mailbox, the chain delay line. Task CHN-1.
- * Design sections 12.3 and 13.10.2.
+/* g2::Mailbox, the chain delay line.
  *
- * THE MAILBOX IS A DELAY LINE, NOT A SINGLE BUFFER. It is a ring of
- * hopFrames + 1 frames with one head index, and the whole of its behaviour is
- * the index relation of section 12.3:
+ * The mailbox is a delay line, not a single buffer: a ring of hopFrames + 1
+ * frames with one head index, and the whole of its behaviour is this index
+ * relation:
  *
  *     write()   == m_ring[m_head]
  *     read()    == m_ring[(m_head + 1) % n]          n = m_ring.size()
@@ -17,23 +16,17 @@
  * quantum q is read in quantum q + H, which is the exact hop delay the chain
  * latency D_chain is derived from.
  *
- * THE STORED FRAME IS g2::Frame, AND NOTHING ELSE. The two library frame
- * types dsp56k::Audio::TxFrame and dsp56k::Audio::RxFrame are different,
- * non-convertible types, so a mailbox that stored one of them could not
- * accept the other. The conversion at each edge is SCH-4's fromEsaiFrame and
- * toEsaiFrame overload pair; the mailbox sits between them and touches only
- * g2::Frame.
+ * The stored frame is g2::Frame and nothing else. The two library frame types
+ * dsp56k::Audio::TxFrame and dsp56k::Audio::RxFrame are different,
+ * non-convertible types, so a mailbox that stored one of them could not accept
+ * the other. The conversion at each edge is the fromEsaiFrame/toEsaiFrame
+ * overload pair; the mailbox sits between them.
  *
- * THE SURFACE IS IN TWO TIERS. Tier 1 -- read(), write() and writeSlot() --
- * is all a DSP callback may reach during the run phase. Tier 2 -- advance(),
+ * The surface is in two tiers. Tier 1 -- read(), write() and writeSlot() -- is
+ * all a DSP callback may reach during the run phase. Tier 2 -- advance(),
  * ingressFrame() and egressFrame() -- belongs to ChainAdapter and to nothing
- * else. The two codec-facing accessors are declared private with ChainAdapter
- * a friend (see design section 12.3 steps 2 and 4), so Tier 1 stays the whole
- * surface a DSP callback can name.
- *
- * writeSlot(unsigned) returns the SlotWriteView that CHN-3 declares in
- * slotWriteView.h. CHN-1's declared surface is what CHN-12's broadcast
- * wiring compiles against.
+ * else. The two codec-facing accessors are private with ChainAdapter a friend,
+ * so Tier 1 stays the whole surface a DSP callback can name.
  */
 
 #pragma once
@@ -48,14 +41,10 @@
 
 namespace g2
 {
-	/* The class ChainAdapter is declared here, and nowhere else yet, so that
-	 * Mailbox can name it as a friend. CHN-4 lays down chainAdapter.h and
-	 * CHN-5 defines the class; both live in the same namespace, so this
-	 * forward declaration binds to that definition. */
+	/* Forward-declared so that Mailbox can name ChainAdapter as a friend. */
 	class ChainAdapter;
 
 	/* A delay line of hopFrames + 1 frames between two chain positions.
-	 * Section 12.3 gives the phase rule and section 13.10.2 the class.
 	 *
 	 * Ownership   ChainAdapter owns every Mailbox by value. Nothing else
 	 *             holds a Mailbox, a pointer to one, or a reference that
@@ -80,26 +69,22 @@ namespace g2
 		const Frame& read() const noexcept;   /* run phase: consumers   */
 		Frame&       write() noexcept;        /* run phase: producers   */
 
-		/* The FOURTH accessor. Section 12.3 said "three accessors, and no
-		 * others", which was true of a Line and false of a Broadcast.
-		 * Returns a view that commits `slot` only, and nothing else. On a
-		 * Line or a Ring the adapter never hands one out. */
+		/* Returns a view that commits `slot` only, and nothing else. On a Line
+		 * or a Ring the adapter never hands one out. */
 		SlotWriteView writeSlot(unsigned slot) noexcept;
 
 		/* ------------- Tier 2: the adapter's own surface, reachable by
 		 * nothing else. */
 		void advance() noexcept;              /* the swap point            */
 
-		/* The structural query the CHN-1 check is keyed to: the ring depth is
-		 * exactly hopFrames + 1. Not part of either phase surface, and
-		 * reachable by a DSP callback without consequence -- it reads no
-		 * audio data. */
+		/* The ring depth, exactly hopFrames + 1. Not part of either phase
+		 * surface, and reachable by a DSP callback without consequence -- it
+		 * reads no audio data. */
 		unsigned depth() const noexcept;
 
 	private:
-		/* The two PRIVILEGED codec-facing accessors. They exist because
-		 * section 12.3 steps 2 and 4 deliberately break the run-phase
-		 * invariant, in the defined way that section states, and neither is
+		/* The two privileged codec-facing accessors. The ingress and egress
+		 * steps deliberately break the run-phase invariant, and neither is
 		 * expressible through read() or write():
 		 *   - step 2 writes the READ frame, and read() is const;
 		 *   - step 4 reads the WRITE frame, and write() is reserved to the
@@ -110,9 +95,6 @@ namespace g2
 		Frame&       ingressFrame() noexcept;       /* step 2: write read()   */
 		const Frame& egressFrame() const noexcept;  /* step 4: read write()   */
 
-		/* THE INDEX RELATION -- the whole behaviour of the type. The
-		 * implementation is in mailbox.cpp and is stated as the three
-		 * expressions above. */
 		std::vector<Frame> m_ring;   /* size hopFrames + 1, allocated once  */
 		unsigned           m_head = 0;
 	};

@@ -1,24 +1,18 @@
-// Task BRD-16. The HDI08 host-port adapter over `mc68k::Hdi08`.
+// The HDI08 host-port adapter over `mc68k::Hdi08`.
 //
-// Plan section 13.3, BRD-16. Design sections 10.1, 10.2.
-// Logbook: AGENTS.md section 3.1.
-//
-// THE WORD COMPLETES WHEN TXL IS WRITTEN, AND THIS FILE DOES NOT ASSUME THE
-// CPU ISSUED A LONGWORD. `mc68k::Hdi08` assembles the word from TXH, TXM and
-// TXL and fires its writeTx callback only when TXL lands (hdi08.cpp:221-245).
-// So a byte-at-a-time firmware path and a 32-bit store at register offset +4
-// both reach the same word, and this file routes byte writes to the selected
+// The word completes when TXL is written: `mc68k::Hdi08` assembles it from
+// TXH, TXM and TXL and fires its writeTx callback only when TXL lands. So a
+// byte-at-a-time firmware path and a 32-bit store at register offset +4 both
+// reach the same word, and this file routes byte writes to the selected
 // port(s) without caring which path produced them.
 //
-// THE ONE 68K LONGWORD STORE. A 32-bit store at register offset 4 makes four
-// byte cycles at offsets 4, 5, 6 and 7, of which offset 4 is unused. The
-// bus-facing width of a ColdFire access is 8, 16 or 32, and this file simply
-// decomposes 16- and 32-bit writes into big-endian byte cycles and hands each
-// byte to the selected port's `write8`. Decomposing here and not in the
-// MemoryMap is what lets a byte-at-a-time firmware path and a longword store
-// share one code path and produce one word.
-//
-// THIS FILE CARRIES NO ADDRESS AND NO BASE TABLE. See hdi08Adapter.h.
+// A 32-bit store at register offset 4 makes four byte cycles at offsets 4, 5,
+// 6 and 7, of which offset 4 is unused. The bus-facing width of a ColdFire
+// access is 8, 16 or 32, and this file decomposes 16- and 32-bit writes into
+// big-endian byte cycles and hands each byte to the selected port's `write8`.
+// Decomposing here and not in the MemoryMap is what lets a byte-at-a-time
+// firmware path and a longword store share one code path and produce one
+// word.
 
 #include "hdi08Adapter.h"
 

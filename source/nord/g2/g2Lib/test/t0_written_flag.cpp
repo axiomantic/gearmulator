@@ -1,35 +1,28 @@
-/* t0_written_flag.cpp -- the check of task CHN-6. Design 12.3.
+/* The rule a target build cannot see.
  *
- * THE RULE THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
- *
- *   The transmit wrappers' written flag is NOT "the callback fired". The
+ *   The transmit wrappers' written flag is not "the callback fired". The
  *   scheduler drives a transmit callback for every position on every quantum
  *   once its transmitters are enabled, so a flag set by arrival alone would be
- *   set on every quantum, underrunFrames (CHN-8) could never rise, and the
- *   assertion against it would be a green mirage.
+ *   set on every quantum, underrunFrames could never rise, and the assertion
+ *   against it would be a green mirage.
  *
- *   The flag's source is the emulated ESAI's OWN M_TUE bit. The wrapper for
- *   position k sets the flag when the callback fires AND M_TUE is clear in
+ *   The flag's source is the emulated ESAI's own M_TUE bit. The wrapper for
+ *   position k sets the flag when the callback fires and M_TUE is clear in
  *   Esai::readStatusRegister() at that instant, and leaves it clear otherwise.
- *   M_TUE rises in writeSlotToFrame (esai.cpp:380-384) before the frame is
- *   delivered at esai.cpp:95 and is not cleared until the interrupt path
- *   (esai.cpp:108-112) runs after, so at the instant the callback runs the bit
- *   states exactly whether the frame it carries is stale. That is why the
- *   wrapper captures its position's Esai&.
+ *   M_TUE rises in writeSlotToFrame before the frame is delivered and is not
+ *   cleared until the interrupt path runs after, so at the instant the
+ *   callback runs the bit states exactly whether the frame it carries is
+ *   stale. That is why the wrapper captures its position's Esai&.
  *
- * THE TEST DRIVES THE FLAG'S REAL CONDITION, NOT A STAND-IN. Each case
- * constructs a real dsp56k::Esai, drives its status register directly through
- * writestatusRegister() to put M_TUE set or clear, then fires the position's
- * transmit wrapper and reads the flag back through ChainAdapter::audioWritten /
- * secondWritten. Section 12.3 states why the bit and not the callback's arrival
- * is the condition, and this pair is what proves the rule can discriminate.
+ * Each case constructs a real dsp56k::Esai, drives its status register
+ * directly through writestatusRegister() to put M_TUE set or clear, then fires
+ * the position's transmit wrapper and reads the flag back through
+ * ChainAdapter::audioWritten / secondWritten, which is what proves the rule
+ * can discriminate.
  *
- * THE FLAGS ARE PER POSITION AND PER BUS, so the test asserts the separation
- * directly: firing position 0's AUDIO wrapper with M_TUE clear sets audio[0]
+ * The flags are per position and per bus, so the test asserts the separation
+ * directly: firing position 0's audio wrapper with M_TUE clear sets audio[0]
  * and leaves audio[1], second[0] and second[1] clear.
- *
- * Section 7.7.1 gives the surface; the counters that feed on these flags are
- * CHN-8's, so this row reads the flags themselves.
  */
 
 #include "chainAdapter.h"
@@ -57,9 +50,8 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* One chain position's two real Esai objects (the audio bus on MemArea_X
-	 * and the second bus / ESAI_1 on MemArea_Y). Mirrors the fixture the
-	 * dspJob-order test uses to stand up a dsp56k::Esai. */
+	/* One chain position's two real Esai objects: the audio bus on MemArea_X
+	 * and the second bus / ESAI_1 on MemArea_Y. */
 	struct PositionEsai
 	{
 		dsp56k::Memory         memory;
@@ -158,8 +150,8 @@ int main()
 
 	/* ------------- Case 4: the second wrapper, same rule, own flag.
 	 *
-	 * Firing position 0's SECOND wrapper responds to the second Esai's M_TUE
-	 * and owns m_secondWritten, and it must NOT touch the audio storage. To
+	 * Firing position 0's second wrapper responds to the second Esai's M_TUE
+	 * and owns m_secondWritten, and it must not touch the audio storage. To
 	 * show the audio flag is genuinely untouched (rather than merely false by
 	 * default), it is first driven to a known true state with an audio flush,
 	 * then the second flush must leave it true. */
@@ -167,7 +159,7 @@ int main()
 		auto secondTx0 = adapter.secondTxCallback(0u);
 		auto audioTx0  = adapter.audioTxCallback(0u);
 
-		/* Drive the audio flag to a known TRUE first, so the per-bus
+		/* Drive the audio flag to a known true first, so the per-bus
 		 * separation has something to be preserved against. */
 		pos[0].audioEsai.writestatusRegister(0u);
 		audioTx0(frameIndex, frame);

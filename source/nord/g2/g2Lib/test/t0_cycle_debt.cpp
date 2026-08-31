@@ -1,12 +1,5 @@
-/* t0_cycle_debt.cpp -- the check of task SCH-12.
- * Design section 13.4.6, acceptance text in section 18.2.
- *
- * THE INVARIANT, THE TWO DRIFT CASES, AND THE FLOOR. This is the T0 check for
- * the cycle-debt rule as a FUNCTION TEMPLATE. It does not run a real DSP or an
- * MCU: plan section 13.4.6's block is not tied to either, and the acceptance
- * criterion (the "one block used twice" property) is discharged at the two
- * call sites SCH-11 and SCH-30, which are later tasks. What THIS row owns is
- * the rule itself, against a SYNTHETIC context and a SYNTHETIC role-filler:
+/* The cycle-debt rule as a function template, checked against a synthetic
+ * context and a synthetic role-filler. It runs no real DSP or MCU:
  *
  *   - Rule 2: 0 <= debt < maxDispatchCost at every quantum boundary.
  *   - Rule 3: the debt never goes negative at a boundary (no credit banking),
@@ -15,10 +8,10 @@
  *   - The never-idle drift case: every dispatch unit shorter than one
  *     allocation, the floor never fires, and the accumulated cycles spent
  *     differ from the accumulated ideal allocation by exactly the current
- *     positional debt -- so the difference is BOUNDED and never grows with the
+ *     positional debt -- so the difference is bounded and never grows with the
  *     frame count. Over 10 million frames that is zero drift.
  *   - The forced-idle drift case: the role-filler stops early on some quanta,
- *     the floor discards the unused cycles, the context runs SLOW and never
+ *     the floor discards the unused cycles, the context runs slow and never
  *     fast, and the total loss is bounded by one full allocation for each
  *     idle quantum.
  *   - The want <= 0 (long-dispatch) branch, so the block is driven as it is
@@ -26,20 +19,17 @@
  *     whole allocation, increments longDispatchQuanta, never invokes the
  *     role-filler, and returns zero cycles spent.
  *
- * THE BOUND COMES FROM THIS FIXTURE, NOT FROM A HEADER. maxDispatchCost is
- * measurement register row 1 and has NO value until spike criterion SPK-5
- * reports; section 1.3 rule 1 forbids inventing one, and dsp56300's shipped
- * default leaves maxInstructionsPerBlock at 0 -- UNCAPPED. This fixture
- * defines its own finite cap and scripts its role-filler's overshoot strictly
- * inside it. Nothing here reads maxInstructionsPerBlock and nothing here
- * claims the shipped build holds rule 2.
+ * The bound comes from this fixture, not from a header: maxDispatchCost is
+ * unmeasured, and dsp56300's shipped default leaves maxInstructionsPerBlock at
+ * 0, uncapped. This fixture defines its own finite cap and scripts its
+ * role-filler's overshoot strictly inside it. Nothing here reads
+ * maxInstructionsPerBlock and nothing here claims the shipped build holds rule
+ * 2.
  *
- * NO WALL CLOCK IS READ, ANYWHERE. The debt must never be charged for a
+ * No wall clock is read anywhere. The debt must never be charged for a
  * synchronous just-in-time compile, and a compile duration is host time that
- * cannot become emulated cycles (section 13.5 premise 6). spent below comes
- * only from the role-filler's return and never from the host clock; the
- * fixture carries no time source and asserts none of its quantities are host
- * times.
+ * cannot become emulated cycles. spent below comes only from the role-filler's
+ * return.
  */
 
 #include "cycleDebt.h"
@@ -74,13 +64,12 @@ namespace
 		}
 	}
 
-	/* The rational, straight from the one definition site. §13.4.1. */
+	/* The rational, straight from the one definition site. */
 	constexpr uint32_t kNum = G2_DSP_CYCLES_PER_FRAME_NUM;
 	constexpr uint32_t kDen = G2_DSP_CYCLES_PER_FRAME_DEN;
 
-	/* THE FIXTURE'S OWN FINITE CAP. Not a header value: measurement register
-	 * row 1. The role-filler below scripts its overshoot strictly inside
-	 * [1, kMaxDispatchCost). */
+	/* The fixture's own finite cap, not a header value. The role-filler below
+	 * scripts its overshoot strictly inside [1, kMaxDispatchCost). */
 	constexpr int64_t kMaxDispatchCost = 40;
 
 	/* A context exposing exactly the four members the template needs: rate,
@@ -102,7 +91,7 @@ namespace
 		return c;
 	}
 
-	/* The IDEAL allocation, maintained on a SEPARATE accumulator so the
+	/* The ideal allocation, maintained on a separate accumulator so the
 	 * template's own internal alloc() on the context is never double-advanced
 	 * by this fixture. Same rational, same start (0), so the sequence is
 	 * identical to the one the template consumes. */
@@ -208,7 +197,7 @@ namespace
 			"never-idle: the debt stayed strictly positive, so the floor at "
 			"zero never fired");
 
-		/* ZERO DRIFT. The accumulated spent minus the accumulated ideal
+		/* Zero drift. The accumulated spent minus the accumulated ideal
 		 * allocation equals exactly the current positional debt, which rule 2
 		 * bounds below kMaxDispatchCost. Over 10 million frames the difference
 		 * does not grow: it is a bounded constant, so the long-run rate is
@@ -269,21 +258,21 @@ namespace
 		checkEqual(static_cast<int64_t>(violations), 0,
 			"forced-idle: 0 <= debt < maxDispatchCost held on every boundary");
 
-		/* RULE 3 -- THE FLOOR REALLY FIRED, and the debt never went negative
+		/* Rule 3 -- the floor really fired, and the debt never went negative
 		 * at a boundary (no credit banking). */
 		check(run.idleFrames > 0,
 			"forced-idle: at least one idle quantum actually fired");
 		check(ctx.debt >= 0,
 			"forced-idle: the debt never survived a boundary negative");
 
-		/* NEVER FAST. The running difference totalSpent - totalIdeal never
+		/* Never fast. The running difference totalSpent - totalIdeal never
 		 * exceeded one dispatch unit; rule 3's floor discards unused cycles
-		 * and can only push the context SLOW, never let it run ahead. */
+		 * and can only push the context slow, never let it run ahead. */
 		check(runningDiffMax <= kMaxDispatchCost,
 			"forced-idle: the context never ran more than one dispatch unit "
 			"ahead of the ideal clock");
 
-		/* SLOW, AND BOUNDED BY ONE ALLOCATION PER IDLE QUANTUM. The cycles
+		/* Slow, and bounded by one allocation per idle quantum. The cycles
 		 * lost to the floor are totalIdeal - totalSpent + debt (the current
 		 * debt is the only positive positional offset). Each idle quantum
 		 * loses at most one full allocation. maxAllocation is the largest

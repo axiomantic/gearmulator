@@ -22,32 +22,31 @@ list(APPEND G2LIB_SOURCES
 	flash.cpp
 )
 
-# ----------------- BRD-3, the two-tier interrupt controller
+# ----------------- the two-tier interrupt controller
 list(APPEND G2LIB_SOURCES
 	interruptController.h
 	interruptController.cpp
 )
 
-# ----------------- BRD-19, the bootstrap ROM
+# ----------------- the bootstrap ROM
 list(APPEND G2LIB_SOURCES
 	hdi08Bootstrap.h
 	hdi08Bootstrap.cpp
 )
 
-# ----------------- BRD-16, the HDI08 host-port adapter
+# ----------------- the HDI08 host-port adapter
 list(APPEND G2LIB_SOURCES
 	hdi08Adapter.h
 	hdi08Adapter.cpp
 )
 
-# ----------------- BRD-4, UART0
+# ----------------- UART0
 #
 # UART0 is the MCF5307 DUART module at MBAR+0x1C0 with vector 0x42 and the
 # observed divider 0x36, 8N1. UART1 (MBAR+0x200) is unused and reads back its
 # reset values; the same model owns both blocks. The transmitter buffer is the
-# source for readMidiOut in the Device subclass (design section 14.5). The 54
-# MHz clock once derived from the divider is refuted and must not return, so
-# this model stores the divider as data and names no clock rate.
+# source for readMidiOut in the Device subclass. This model stores the divider
+# as data and names no clock rate.
 
 list(APPEND G2LIB_SOURCES
 	uart0.h

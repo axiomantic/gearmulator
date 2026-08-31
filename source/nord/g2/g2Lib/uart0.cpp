@@ -1,75 +1,45 @@
-// Task BRD-4. UART0, the MCF5307 DUART module on the board side.
+// UART0, the MCF5307 DUART module on the board side.
 //
-// Plan section 13.1, BRD-4. Design sections 6.4, 14.5.
-// Logbook: AGENTS.md section 2.2.
-//
-// ---------------------------------------------------------------------------
-// PROVENANCE. Plan section 13.1 requires a record of what this task took and
-// where each fact was read. This is that record.
-//
-// NO FILE OF MegabytePhreak/qemu-mcf5307 WAS OPENED FOR THIS TASK, and no
-// value below was checked against it. AGENTS.md section 4.2 forbids taking
-// expression from that repository; this module is written from the manual
-// alone.
-//
-// THE MANUAL. MCF5307 ColdFire Integrated Microprocessor User's Manual,
-// Motorola, 1998. 456 pages, 27,240,768 bytes, sha256
-// 86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa. The same
-// copy task BRD-2's sim.cpp documents and BRD-3's interruptController.cpp
-// cites. Every citation below was opened and read in it.
-//
-// SOURCE: MCF5307 User's Manual, section 14 "UART Module".
+// Facts from the MCF5307 User's Manual, section 14 "UART Module":
 //
 //   * The MCF5307 carries two UART modules, each an MC68681-compatible DUART
-//     with only channel A implemented: section 14.1.3.
-//   * The register address map -- UART0 at MBAR+$1C0, UART1 at MBAR+$200,
-//     the four-byte stride and the read/write naming of each address: Table
-//     14-1, "UART Module Programming Model", p. 14-17.
-//   * The single bus-width rule for the whole UART block: section 14.3.7,
-//     "Bus Operation": "All UART module registers must be accessed as
-//     bytes."
-//   * UMR1: section 14.4.1.1. B/C[1:0] (bits 1:0) is the bits-per-character
-//     encoding of Table 14-3; PM[1:0] (bits 4:3) is the parity-mode encoding
-//     of Table 14-2. The mode-register pointer (reset to UMR1, advanced to
-//     UMR2 after an access to UMR1) is described in the same subsection.
-//   * UMR2: section 14.4.1.2. SB[3:0] is the stop-bit-length encoding of
-//     Table 14-5; for a 6..8 bit character, SB=0111 selects one stop bit.
-//   * USR: section 14.4.1.3. Bit 3 TxEMP, bit 2 TxRDY, bit 1 FFULL, bit 0
-//     RxRDY, and the error bits RB, FE, PE, OE.
-//   * UCSR: section 14.4.1.4. RCS[3:0] / TCS[3:0]; $DD selects the system
-//     bus clock for both.
-//   * UCR: section 14.4.1.5. MISC[2:0] (bits 6:4), TC[1:0] (bits 3:2),
-//     RC[1:0] (bits 1:0), and Tables 14-8, 14-9, 14-10. The reset-receiver,
-//     reset-transmitter, reset-mode-pointer and reset-error-status commands
-//     are the ones this model honours.
-//   * URB/UTB: sections 14.4.1.6 and 14.4.1.7. The transmitter buffer is
-//     write-only and the receiver buffer read-only, at the same +0x0C
-//     address.
-//   * UIPCR/UACR: sections 14.4.1.8 and 14.4.1.9. UIPCR is read-only at
-//     +0x10; on the G2 its bit 0 reads low (the Engine strap, AGENTS.md
-//     section 4.1), which is why this model resets it to $0E and not the
-//     manual's all-high value.
-//   * UISR/UIMR: sections 14.4.1.10 and 14.4.1.11. The UART interrupt output
-//     is asserted when a UISR flag is set and its UIMR mask bit is set.
-//   * UBG1/UBG2: sections 14.4.1.12 and 14.4.1.13. Both are WRITE ONLY and
-//     cannot be read by the CPU. Their concatenation is the baud-rate
-//     preload; the minimum value is $0002.
-//   * UIVR: section 14.4.1.14. Reset $0F, an uninitialised interrupt
-//     condition. The observed G2 value is 0x42 (AGENTS.md section 2.2).
-//   * UIP and UOP: sections 14.4.1.15 and 14.4.1.16. CTS state and the
-//     address-triggered output commands.
+//     with only channel A implemented.
+//   * The register address map: UART0 at MBAR+$1C0, UART1 at MBAR+$200, a
+//     four-byte stride, and a different register for read and for write at
+//     most addresses (Table 14-1).
+//   * One bus-width rule for the whole UART block: all UART module registers
+//     must be accessed as bytes.
+//   * UMR1: B/C[1:0] (bits 1:0) is the bits-per-character encoding; PM[1:0]
+//     (bits 4:3) is the parity-mode encoding. The mode-register pointer resets
+//     to UMR1 and advances to UMR2 after an access to UMR1.
+//   * UMR2: SB[3:0] is the stop-bit-length encoding; for a 6..8 bit character,
+//     SB=0111 selects one stop bit.
+//   * USR: bit 3 TxEMP, bit 2 TxRDY, bit 1 FFULL, bit 0 RxRDY, and the error
+//     bits RB, FE, PE, OE.
+//   * UCSR: RCS[3:0] / TCS[3:0]; $DD selects the system bus clock for both.
+//   * UCR: MISC[2:0] (bits 6:4), TC[1:0] (bits 3:2), RC[1:0] (bits 1:0). The
+//     reset-receiver, reset-transmitter, reset-mode-pointer and
+//     reset-error-status commands are the ones this model honours.
+//   * URB/UTB: the transmitter buffer is write-only and the receiver buffer
+//     read-only, at the same +0x0C address.
+//   * UIPCR is read-only at +0x10; on the G2 its bit 0 reads low (the Engine
+//     strap), which is why this model resets it to $0E and not the manual's
+//     all-high value.
+//   * UISR/UIMR: the UART interrupt output is asserted when a UISR flag is set
+//     and its UIMR mask bit is set.
+//   * UBG1/UBG2 are write only and cannot be read by the CPU. Their
+//     concatenation is the baud-rate preload; the minimum value is $0002.
+//   * UIVR: reset $0F, an uninitialised interrupt condition. The observed G2
+//     value is 0x42.
+//   * UIP and UOP: CTS state and the address-triggered output commands.
 //
-// SOURCE: the SIM interrupt-assignment table, Table 8-2, p. 8-5: ICR4 belongs
-// to the UART at MBAR+$1C0. BRD-3's controller calls that internal source
-// index 4. The manual names the module UART1 (one-indexed); this task and
-// AGENTS.md name it UART0. The index is 4 either way.
+// The SIM interrupt-assignment table (Table 8-2) gives ICR4 to the UART at
+// MBAR+$1C0, which the controller calls internal source index 4. The manual
+// names that module UART1 (one-indexed); this model names it UART0. The index
+// is 4 either way.
 //
-// AGENTS.md CARRY-RULES (section 2.2): UART0 at MBAR+0x1C0, vector 0x42,
-// divider 0x36, 8N1; UART1 unused reads reset values; the 54 MHz clock
-// derived from the divider is REFUTED and must not return.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG.
+// UART0 carries vector 0x42, divider 0x36, 8N1; UART1 is unused and reads back
+// its reset values.
 
 #include "uart0.h"
 
@@ -147,8 +117,7 @@ namespace g2
 		case kMode:
 		{
 			// The mode-register pointer: reset to UMR1; an access to UMR1
-			// advances it to UMR2; an access to UMR2 leaves it there. UM
-			// section 14.4.1.1.
+			// advances it to UMR2; an access to UMR2 leaves it there.
 			uint8_t value = m_modeUmr1 ? m_umr1 : m_umr2;
 			m_modeUmr1 = false;
 			return value;
@@ -168,8 +137,8 @@ namespace g2
 		}
 		case kStrapOrAux:
 			// UIPCR. Read-only. On this machine bit 0 reads low (the Engine
-			// strap, AGENTS.md section 4.1), so the reset value is $0E and
-			// not the manual's all-high figure.
+			// strap), so the reset value is $0E and not the manual's all-high
+			// figure.
 			return 0x0Eu;
 		case kIntStatusOrMask:
 		{
@@ -182,8 +151,8 @@ namespace g2
 		}
 		case kBaudMsb:
 		case kBaudLsb:
-			// UBG1/UBG2 are WRITE ONLY and cannot be read by the CPU. UM
-			// section 14.4.1.13. A read returns zero.
+			// UBG1/UBG2 are write only and cannot be read by the CPU. A read
+			// returns zero.
 			return 0x00u;
 		case kIntVector:
 			return m_uivr;
@@ -192,7 +161,7 @@ namespace g2
 			// model, so it reads 1.
 			return 0x01u;
 		default:
-			return 0x00u; // DO NOT ACCESS and untouched gaps
+			return 0x00u; // Do not access and untouched gaps
 		}
 	}
 
@@ -217,7 +186,7 @@ namespace g2
 		case kCommand:
 		{
 			// UCR is a command register: one write performs the commands in
-			// its three fields. UM section 14.4.1.5 and Tables 14-8..14-10.
+			// its three fields.
 			const uint8_t misc = (_value >> 4) & 0x07u;
 			const uint8_t tc   = (_value >> 2) & 0x03u;
 			const uint8_t rc   =  _value        & 0x03u;
@@ -250,8 +219,8 @@ namespace g2
 		case kBuffer:
 		{
 			// The transmitter buffer. A character loaded while the
-			// transmitter is disabled is NOT transmitted (UM section
-			// 14.4.1.3, TxRDY). This model delivers the byte to the MIDI-out
+			// transmitter is disabled is not transmitted. This model
+			// delivers the byte to the MIDI-out
 			// consumer only when the transmitter is enabled. The byte is
 			// emitted at once because the emulated transmitter has no bit
 			// timing; the ShiftDuration belongs to the scheduler.
@@ -271,8 +240,8 @@ namespace g2
 			return;
 		case kBaudMsb:
 			// UBG1: the upper byte of the baud-rate-generator preload. This
-			// is where the observed divider 0x36 is stored (AGENTS.md section
-			// 2.2). It is DATA ONLY: nothing here turns it into a frequency.
+			// is where the observed divider 0x36 is stored. It is data only:
+			// nothing here turns it into a frequency.
 			m_ubg1 = _value;
 			return;
 		case kBaudLsb:
@@ -370,8 +339,8 @@ namespace g2
 			m_rxFifoHead = (m_rxFifoHead + 1) % kRxFifoDepth;
 			++m_rxFifoCount;
 		}
-		// A FIFO already full: the new character is lost (overrun), which the
-		// T0 model does not track beyond leaving OE at zero.
+		// A FIFO already full: the new character is lost (overrun), which this
+		// model does not track beyond leaving OE at zero.
 		recomputeInterrupt();
 	}
 

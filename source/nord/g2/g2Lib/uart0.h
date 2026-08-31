@@ -1,12 +1,8 @@
-// Task BRD-4. UART0, the MCF5307 DUART module on the board side.
+// UART0, the MCF5307 DUART module on the board side.
 //
-// Plan section 13.1, BRD-4. Design sections 6.4, 14.5.
-// Logbook: AGENTS.md section 2.2 (UART0, vector 0x42, divider 0x36, 8N1).
-//
-// WHAT THIS FILE IS. The MCF5307 carries two UART modules, and each one is a
-// Motorola MC68681-compatible DUART with only channel A implemented (MCF5307
-// UM section 14.1.3). UART0 sits at MBAR+0x1C0 and UART1 at MBAR+0x200.
-// This model is the board side of AGENTS.md section 2.2's carry-rules:
+// The MCF5307 carries two UART modules, and each one is a Motorola
+// MC68681-compatible DUART with only channel A implemented (MCF5307 UM section
+// 14.1.3). UART0 sits at MBAR+0x1C0 and UART1 at MBAR+0x200.
 //
 //   * UART0 base MBAR+0x1C0, vector 0x42, divider 0x36, 8N1.
 //   * Vector 0x42 is 66, which lands in the user-defined range 64..255, so
@@ -14,29 +10,18 @@
 //     are vectors 25 to 31, and 66 is nowhere near them.
 //   * UART1 is unused on the G2 and reads back its reset values.
 //   * The transmitter buffer is the source for readMidiOut in the Device
-//     subclass (design section 14.5): a byte the firmware writes to UTB
-//     leaves the machine on the MIDI-out callback.
-//   * THE DIVIDER 0x36 IS OBSERVED AND IT STANDS, AND THE 54 MHz CLOCK
-//     ONCE DERIVED FROM IT IS REFUTED AND MUST NOT RETURN. The divider is a
-//     baud-rate-generator preload value and nothing more. This file names no
-//     clock-rate quantity and derives no clock from the divider, because the
-//     MCF5307 has two clock domains that can never be equal and no rate is
-//     established. AGENTS.md section 2.2 and the correction log own that
-//     record.
+//     subclass: a byte the firmware writes to UTB leaves the machine on the
+//     MIDI-out callback.
+//   * The divider 0x36 is a baud-rate-generator preload value and nothing
+//     more. This file names no clock-rate quantity and derives no clock from
+//     it, because the MCF5307 has two clock domains that can never be equal
+//     and no rate is established.
 //
-// CLEAN-ROOM. The register map and every access rule below are read from the
-// MCF5307 User's Manual, section 14. The same manual copy BRD-2's sim.cpp
-// documents (sha256 86cbcc8c ...) was opened and each citation was verified
-// against it. No file of MegabytePhreak/qemu-mcf5307 was opened for this
-// task.
+// UM section 14.3.7 states one rule for the whole UART block: all UART module
+// registers must be accessed as bytes. A 16-bit or 32-bit access to any UART
+// offset is rejected with MCF5307_BUS_SIZE_ILLEGAL and one log line.
 //
-// SECTION 14.3.7 "BUS OPERATION" STATES ONE RULE FOR THE WHOLE UART BLOCK:
-// "All UART module registers must be accessed as bytes." This model enforces
-// it as the one restricted class the module carries: a 16-bit or 32-bit
-// access to any UART offset is rejected with MCF5307_BUS_SIZE_ILLEGAL and one
-// log line. Every other width is the byte access the module exists for.
-//
-// REGISTER MAP, MCF5307 UM Table 14-1. Offsets are relative to each UART
+// REGISTER MAP, MCF5307 um table 14-1. Offsets are relative to each UART
 // base (0x1C0 / 0x200). The modules are MC68681-compatible, so each register
 // is one byte and the stride between them is four:
 //
@@ -53,23 +38,17 @@
 //     +0x38  -- read / UOP1 write            output port bit-set
 //     +0x3C  -- read / UOP0 write            output port bit-reset
 //
-// EVERYTHING BETWEEN THOSE ROWS IS "DO NOT ACCESS" -- factory-test space
+// Everything between those rows is "do not access" -- factory-test space
 // whose reads produce undesired effects. This model returns the benign reset
-// value for the reads and accepts nothing that the manual marks DO NOT
-// ACCESS.
+// value for the reads.
 //
-// INTERRUPTS. UART0's interrupt is an INTERNAL source of the SIM's two-tier
-// controller (BRD-3): the manual's Table 8-2 assigns ICR4 to the UART at
-// MBAR+0x1C0. The modelled vector is 0x42. Uart0 owns the UART side of the
-// assert: when a maskable interrupt condition becomes active (the interrupt
-// status register AND-ed with the interrupt mask is non-zero) it asserts
-// internal source index 4 on the connected controller, and it deasserts when
-// the condition clears. The autovector/vector selection that follows ICR4's
-// AVEC bit is the arbiter's business (BRD-3); this model supplies the vector
-// 0x42 that design section 6.4 and AGENTS.md record.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG.
+// UART0's interrupt is an internal source of the SIM's two-tier controller:
+// UM Table 8-2 assigns ICR4 to the UART at MBAR+0x1C0. When a maskable
+// interrupt condition becomes active (the interrupt status register AND-ed
+// with the interrupt mask is non-zero) this model asserts internal source
+// index 4 on the connected controller, and deasserts when the condition
+// clears. The autovector/vector selection that follows ICR4's AVEC bit is the
+// arbiter's business; this model supplies the vector 0x42.
 
 #pragma once
 
@@ -85,15 +64,13 @@ namespace g2
 	class Uart0 final : public BusTarget
 	{
 	public:
-		// -------------------------------------------------------------------
-		// THE CARRY-RULES OF AGENTS.md SECTION 2.2, AS CONSTANTS A LATER TASK
-		// CAN RELY ON. Offsets are MBAR-relative; the decode produces them.
+		// Offsets are MBAR-relative; the decode produces them.
 		//
-		// UART0 at MBAR+0x1C0, UART1 (unused) at MBAR+0x200. MCF5307 UM
-		// Table 14-1. The manual names them UART1 and UART2 (one-indexed);
-		// AGENTS.md and this task name the 0x1C0 module UART0 and the unused
-		// 0x200 module UART1. The internal interrupt source is index 4 either
-		// way (UM Table 8-2, ICR4).
+		// UART0 at MBAR+0x1C0, UART1 (unused) at MBAR+0x200. MCF5307 um
+		// table 14-1. The manual names them UART1 and UART2 (one-indexed);
+		// this model names the 0x1C0 module UART0 and the unused 0x200 module
+		// UART1. The internal interrupt source is index 4 either way
+		// (UM Table 8-2, ICR4).
 		static constexpr uint32_t gUart0Base = 0x1C0u;
 		static constexpr uint32_t gUart1Base = 0x200u;
 		static constexpr uint32_t gUartModuleSize = 0x40u;
@@ -104,10 +81,9 @@ namespace g2
 		static constexpr uint8_t gUart0Vector = 0x42u;
 		static constexpr int gUart0InterruptIndex = 4;   // ICR4, UM Table 8-2
 
-		// The observed baud-rate-generator divider, 0x36. It is DATA: it is
-		// stored as the firmware programmed it and it is NOT a clock rate.
-		// Nothing here derives a frequency from it. The 54 MHz figure once
-		// built on it is refuted and does not exist in this model.
+		// The observed baud-rate-generator divider, 0x36. It is data: stored as
+		// the firmware programmed it, and not a clock rate. Nothing here
+		// derives a frequency from it.
 		static constexpr uint16_t gBaudDivider = 0x0036u;
 
 		// The 8N1 mode the firmware programs: 8 data bits, no parity, one
@@ -118,15 +94,12 @@ namespace g2
 		static constexpr uint8_t gUmr28n1 = 0x07u;
 
 		// The MIDI-out callback -- the emulated UART0 transmitter buffer is
-		// the source for readMidiOut in the Device subclass (design section
-		// 14.5). A byte the firmware writes to UTB at +0x0C is delivered
-		// here, in order.
+		// the source for readMidiOut in the Device subclass. A byte the
+		// firmware writes to UTB at +0x0C is delivered here, in order.
 		using MidiOutFn = void (*)(void* _user, uint8_t _byte);
 
-		// Uart0(_interrupts): the interrupt controller to assert on, or
-		// NULLPTR for a standalone model that records its own interrupt
-		// condition. Wiring the controller in is the later board task; this
-		// class merely accepts it so the vectored-0x42 path is testable now.
+		// _interrupts is the interrupt controller to assert on, or nullptr for
+		// a standalone model that records its own interrupt condition.
 		Uart0(InterruptController* _interrupts = nullptr);
 
 		// The single restricted width rule of UM section 14.3.7: every UART
@@ -200,7 +173,7 @@ namespace g2
 		// The register file. Reset values follow Table 14-1 and the register
 		// descriptions: UIVR resets to $0F (uninitialized interrupt condition,
 		// UM 14.4.1.14) and UIPCR resets with CTS high at $0E (bit 0 low on
-		// the G2 strap, AGENTS.md section 4.1).
+		// the G2 strap).
 		uint8_t m_umr1 = 0x00u;
 		uint8_t m_umr2 = 0x00u;
 		bool m_modeUmr1 = true;   // the mode-register pointer, reset to UMR1

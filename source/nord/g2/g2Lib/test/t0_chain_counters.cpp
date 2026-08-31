@@ -1,31 +1,24 @@
-/* t0_chain_counters.cpp -- the check of task CHN-8. Design 12.3, 13.10.2.
+/* The two properties a target build cannot see:
  *
- * THE TWO PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
+ *   1. underrunFrames and secondBusUnderrunFrames are separate storage. Two
+ *      counters and not one, because the two buses advance at different rates
+ *      (with a divider above 1 the second bus transmits on one quantum in D),
+ *      so a single shared counter could not be attributed to a bus. Asserted
+ *      by driving one of the pair above zero at a single position and
+ *      asserting the other stays zero there; a shared counter would report
+ *      them equal at that position and fail.
  *
- *   1. underrunFrames and secondBusUnderrunFrames are SEPARATE storage.
- *      Section 13.10.2 keeps two counters and not one because the two buses
- *      advance at different rates (with a divider above 1 the second bus
- *      transmits on one quantum in D), so a single shared counter could not
- *      be attributed to a bus. Asserted by driving one of the pair above
- *      zero at a single position and asserting the other stays zero there.
- *      A shared counter would report them equal at that position and fail.
+ *   2. One unwanted callback raises phaseErrorFrames(position) by exactly one
+ *      even when both conditions hold at once. A transmit callback the
+ *      scheduler did not ask for is one event. The double condition is
+ *      reachable on the second bus: the position has already delivered on that
+ *      bus in this quantum, and this is a non-window quantum
+ *      (frameIndex % secondBusFrameDivider != 0). A counter written as two
+ *      independent tests of the two conditions would raise it by two.
  *
- *   2. ONE unwanted callback raises phaseErrorFrames(position) by exactly
- *      ONE even when both conditions hold at once. A transmit callback the
- *      scheduler did not ask for is one event, so the counter takes one
- *      increment whether one condition or both are true. The double
- *      condition is reachable on the second bus: the position has already
- *      delivered on that bus in this quantum AND this is a non-window
- *      quantum (frameIndex % secondBusFrameDivider != 0). A counter written
- *      as two independent tests of the two conditions would raise it by two
- *      and pass every other row in this plan.
- *
- * The underrun pair is driven through the CHN-6 written flags (real
- * emulated-ESAI M_TUE condition) and consumed by the CHN-7 advanceAll
- * cadence; the phase-error count is driven by firing the CHN-6 transmit
- * wrappers a second time. CHN-11 case 4 drives the SAME double condition
- * through the second bus inside the Scheduler; this row drives the wrapper
- * directly so the counter's own rule is pinned before the Scheduler exists.
+ * The underrun pair is driven through the written flags (real emulated-ESAI
+ * M_TUE condition) and consumed by the advanceAll cadence; the phase-error
+ * count is driven by firing the transmit wrappers a second time.
  */
 
 #include "chainAdapter.h"
@@ -53,9 +46,8 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* One chain position's two real Esai objects, mirroring the fixture the
-	 * CHN-5/CHN-6/CHN-7 tests use, so the CHN-6 written-flag condition
-	 * (M_TUE clear) is real here too. */
+	/* One chain position's two real Esai objects, so the written-flag
+	 * condition (M_TUE clear) is real here too. */
 	struct PositionEsai
 	{
 		dsp56k::Memory         memory;
@@ -88,9 +80,9 @@ int main()
 
 	/* ------------- Property 1a: audio above zero, second stays zero.
 	 *
-	 * Position 0 delivers on the SECOND bus only (its second flag is set,
-	 * its audio flag is clear). A window advanceAll then counts the CLEAR
-	 * audio flag into underrunFrames[0] and does NOT count the SET second
+	 * Position 0 delivers on the second bus only (its second flag is set,
+	 * its audio flag is clear). A window advanceAll then counts the clear
+	 * audio flag into underrunFrames[0] and does not count the set second
 	 * flag into secondBusUnderrunFrames[0]. At position 0 the first is above
 	 * zero and the second stays zero: the two cannot be one counter. */
 	{
@@ -118,7 +110,7 @@ int main()
 	/* ------------- Property 1b: second above zero, audio stays zero.
 	 *
 	 * The reverse direction at the same position, on a fresh adapter:
-	 * position 0 delivers on the AUDIO bus only, so a window advanceAll
+	 * position 0 delivers on the audio bus only, so a window advanceAll
 	 * counts into secondBusUnderrunFrames[0] and not underrunFrames[0]. */
 	{
 		PositionEsai pos[2];
@@ -144,13 +136,13 @@ int main()
 	}
 
 	/* ------------- Property 2: the double condition raises phaseErrorFrames
-	 * by exactly ONE, not two.
+	 * by exactly one, not two.
 	 *
 	 * On the second bus, an unwanted callback is one where the position has
-	 * ALREADY delivered on that bus in this quantum AND this is a non-window
+	 * Already delivered on that bus in this quantum and this is a non-window
 	 * quantum. Drive it by firing position 0's second wrapper once in a
 	 * window (frameIndex 0: first delivery, sets the flag, no error), then a
-	 * SECOND time in a non-window (frameIndex 1: the flag is still set from
+	 * Second time in a non-window (frameIndex 1: the flag is still set from
 	 * the first delivery, so "already delivered" holds, AND 1 % 2 != 0, so
 	 * "outside the window" holds). Both conditions true at once yield ONE
 	 * increment. A counter written as two independent tests would raise by
@@ -177,7 +169,7 @@ int main()
 			"'already delivered' can be detected)");
 
 		/* Second delivery, on a NON-window (frameIndex 1): already delivered
-		 * this quantum AND outside the window. EXACTLY one increment. */
+		 * this quantum and outside the window. exactly one increment. */
 		frameIndex = 1u;
 		secondTx0(frameIndex, frame);
 		check(adapter.phaseErrorFrames(0u) == 1u,
@@ -187,9 +179,9 @@ int main()
 			"2: position 1's phase error stays zero (per-position)");
 	}
 
-	/* ------------- Supplementary: the audio-bus duplicate, the CHN-11 case 2
-	 * half reachable without a Scheduler. A second audio delivery in one
-	 * quantum raises phaseErrorFrames(position) by exactly one. */
+	/* Supplementary: the audio-bus duplicate, reachable without a Scheduler. A
+	 * second audio delivery in one quantum raises phaseErrorFrames(position)
+	 * by exactly one. */
 	{
 		PositionEsai pos[2];
 		g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, kDivider);

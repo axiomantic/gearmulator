@@ -245,19 +245,7 @@ set_property(TARGET t0_backend_rule PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_backend_rule COMMAND t0_backend_rule)
 
-# ---------------- SCH-12 - t0_cycle_debt
-#
-# An ordinary executable. SCH-12 declares g2::runQuantum as a function
-# template in g2Lib/cycleDebt.h, and this check drives the rule itself -- the
-# invariant 0 <= debt < maxDispatchCost, the floor at zero, the never-idle
-# zero-drift case and the forced-idle slow-and-bounded case, plus the want <= 0
-# branch -- against a SYNTHETIC context and SYNTHETIC role-filler. The bound
-# comes from the test's own fixture (maxDispatchCost is measurement register
-# row 1 and has no committed value), the context exposes exactly the four
-# members the template needs, and the role-filler models spent as emulated
-# cycles only, never a wall clock. The "one block used twice" acceptance
-# criterion is discharged at the two call sites SCH-11 and SCH-30, which this
-# task does not write.
+# ---------------- t0_cycle_debt
 
 add_executable(t0_cycle_debt ${CMAKE_CURRENT_SOURCE_DIR}/t0_cycle_debt.cpp)
 target_link_libraries(t0_cycle_debt PRIVATE g2Lib)
@@ -265,17 +253,7 @@ set_property(TARGET t0_cycle_debt PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_cycle_debt COMMAND t0_cycle_debt)
 
-# ---------------- SCH-13 - t0_long_dispatch
-#
-# An ordinary executable. SCH-13 drives rule 4 of design section 13.4.6: a
-# SYNTHETIC context whose single dispatch unit costs more than one frame's
-# allocation drives the want <= 0 branch of the g2::runQuantum template
-# (SCH-12). Each branch quantum raises longDispatchQuanta by EXACTLY one, pays
-# the debt down by one whole allocation, and never invokes the role-filler;
-# once the spike is paid down the running branch resumes and the debt returns
-# inside the fixture's own rule 2 bound. No case reads a clock, and the bound
-# comes from this fixture, never from maxInstructionsPerBlock (which the
-# shipped configuration leaves uncapped).
+# ---------------- t0_long_dispatch
 
 add_executable(t0_long_dispatch
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_long_dispatch.cpp)
@@ -284,14 +262,7 @@ set_property(TARGET t0_long_dispatch PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_long_dispatch COMMAND t0_long_dispatch)
 
-# ---------------- SCH-11 - t0_dsp_job_order
-#
-# An ordinary executable. The whole check is the ORDER inside dspJob, and it
-# is asserted through the fixture's ordered callback log on the audio and
-# second Esai. The signature half is held by a static_assert against the
-# Executor's JobFn inside the translation unit. The debt-consumed quantum
-# never reaches a DSP, so the context carries a NULL dsp on purpose and no
-# JIT backend is required -- which is why this check can run in any build.
+# ---------------- t0_dsp_job_order
 
 add_executable(t0_dsp_job_order
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_job_order.cpp)

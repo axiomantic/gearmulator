@@ -1,24 +1,22 @@
-/* t0_mailbox_surface.cpp -- the check of task CHN-1. Design 12.3, 13.10.2.
+/* The three properties a target build cannot see:
  *
- * THE THREE PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
- *
- *  1. The ring holds EXACTLY hopFrames + 1 frames, asserted for hopFrames = 1
+ *  1. The ring holds exactly hopFrames + 1 frames, asserted for hopFrames = 1
  *     and hopFrames = 2 against the object's OWN REPORTED depth (the depth()
  *     accessor), and cross-checked against the constructor's allocation byte
  *     count divided by sizeof(Frame).
  *
- *  2. The WHOLE ALLOCATION HAPPENS ONCE, IN THE CONSTRUCTOR, asserted against
+ *  2. The whole allocation happens once, in the constructor, asserted against
  *     an allocation counter: the constructor performs exactly one allocation,
  *     and 1,000 advance() calls after it perform zero.
  *
- *  3. writeSlot(unsigned) is DECLARED RETURNING SlotWriteView, asserted with a
+ *  3. writeSlot(unsigned) is declared returning slotWriteView, asserted with a
  *     static_assert on decltype (which also pins the rest of the Tier 1
  *     surface: read() returns const Frame&, write() returns Frame&, and both
  *     with advance() are noexcept as section 12.3 declares).
  *
- * THE ALLOCATION COUNTER IS A GLOBAL operator new/delete PAIR, armed only
- * around the specific constructor call and around the advance loop. Nothing
- * is allocated or printed inside an armed window, so a window's count is the
+ * The allocation counter is a global operator new/delete pair, armed only
+ * around the specific constructor call and around the advance loop. Nothing is
+ * allocated or printed inside an armed window, so a window's count is the
  * mailbox's own allocation count and nothing else.
  */
 
@@ -127,10 +125,8 @@ void operator delete[](void* p, std::size_t) noexcept
 	std::free(p);
 }
 
-/* THE COMPILE-TIME SURFACE. decltype of a call in an unevaluated context
- * does not call the function, so these pin the declared signatures and can
- * fail only at compile time -- exactly the property a target build cannot
- * see. */
+/* decltype of a call in an unevaluated context does not call the function, so
+ * these pin the declared signatures and can fail only at compile time. */
 static_assert(std::is_same_v<decltype(std::declval<const g2::Mailbox&>().read()),
 	g2::Frame const&>,
 	"read() returns const Frame&; a consuming DSP must not modify the "
@@ -159,7 +155,7 @@ bool driveCase(const unsigned hopFrames, const char* const what)
 {
 	bool ok = true;
 
-	/* ---------------- property 1 and 2: the constructor window. */
+	/* Properties 1 and 2: the constructor window. */
 	armAlloc();
 	{
 		g2::Mailbox mailbox(hopFrames);
@@ -171,11 +167,10 @@ bool driveCase(const unsigned hopFrames, const char* const what)
 			ok = false;
 		}
 
-		/* The whole ring is ONE allocation of exactly (hopFrames + 1) frames.
-		 * This is the second reading of "the object's own reported depth":
+		/* The whole ring is one allocation of exactly (hopFrames + 1) frames:
 		 * the bytes the object asked for in its constructor divided by the
-		 * size of a frame must equal the depth, and it must be a whole
-		 * number of frames. */
+		 * size of a frame must equal the depth, and it must be a whole number
+		 * of frames. */
 		if(g_alloc.calls != 1u)
 		{
 			printf("FAIL %s: the constructor made %llu allocations, not 1\n",
@@ -193,21 +188,16 @@ bool driveCase(const unsigned hopFrames, const char* const what)
 			ok = false;
 		}
 
-		/* The mailbox is DESTROYED before the counter is disarmed, so the
-		 * vector's deallocation is also observed and subtracted from
-		 * nothing -- but the deallocation is not an allocation, and what
-		 * matters below is that the run does not grow the ring. */
+		/* The mailbox is destroyed before the counter is disarmed, so the
+		 * vector's deallocation is also observed; a deallocation is not an
+		 * allocation. */
 	}
 	disarmAlloc();
 
-	/* ---------------- property 2, the run window: 1,000 advances allocate
-	 * nothing.
-	 *
-	 * The mailbox is constructed OUTSIDE the armed window, so the counter
-	 * observes only the 1,000 advance() calls and any allocation they might
-	 * make. A body that grew the ring on advance() would trip this as a
-	 * call count above zero; the whole-allocation-once rule of the header is
-	 * what makes the counter stay at zero. */
+	/* Property 2, the run window. The mailbox is constructed outside the armed
+	 * window, so the counter observes only the advance() calls and any
+	 * allocation they might make. A body that grew the ring on advance() would
+	 * trip this as a call count above zero. */
 	{
 		g2::Mailbox mailbox(hopFrames);
 		armAlloc();
@@ -227,7 +217,6 @@ bool driveCase(const unsigned hopFrames, const char* const what)
 
 int main()
 {
-	/* The plan asserts the depth for hopFrames = 1 and hopFrames = 2. */
 	bool ok = driveCase(1u, "hopFrames = 1");
 	ok = driveCase(2u, "hopFrames = 2") && ok;
 

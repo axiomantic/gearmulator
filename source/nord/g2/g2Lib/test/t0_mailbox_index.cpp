@@ -1,7 +1,5 @@
-/* t0_mailbox_index.cpp -- the check of task CHN-2. Design 13.10.2, 18.2.
- *
- * THE INDEX RELATION, AND NOTHING ELSE, IS WHAT MAKES D_chain DERIVABLE. Its
- * whole behaviour is the three expressions of section 13.10.2:
+/* The index relation, and nothing else, is what makes D_chain derivable. The
+ * mailbox's whole behaviour is these three expressions:
  *
  *     write()    ==  m_ring[m_head]
  *     read()     ==  m_ring[(m_head + 1) % n]
@@ -9,27 +7,19 @@
  *     advance(): 1. m_ring[(m_head + 1) % n] = m_ring[m_head];   FIRST
  *                2. m_head = (m_head + 1) % n
  *
- * This test asserts the observable contract of that relation, which is what
- * the reported plugin latency is derived from: the frame written in quantum
- * q is returned by read() in quantum q + H, for H = 1 and for H = 2, over
- * at least 16 quanta each. Section 13.10.2 traces this relation for exactly
- * those two values of H, and the section 18.2 "Mailbox index relation" row
- * names this test.
+ * The reported plugin latency is derived from that relation: the frame
+ * written in quantum q is returned by read() in quantum q + H.
  *
- * THE UNDERRUN RULE IS THE COPY-FIRST ORDER, ASSERTED AS AN OBSERVABLE. When
- * a producer writes nothing in a quantum, advance() still copies the head
- * cell into the next cell before it steps, so the last transmitted frame
- * keeps circulating: read() repeats the previous frame. This test writes one
- * frame and then produces nothing, and asserts that every read() from q = H
- * onward equals that same frame -- and that successive reads are identical,
- * which is the "repeat" half of the rule that no single frame equality can
+ * The underrun rule is the copy-first order, asserted as an observable. When a
+ * producer writes nothing in a quantum, advance() still copies the head cell
+ * into the next cell before it steps, so the last transmitted frame keeps
+ * circulating and read() repeats the previous frame. Successive reads being
+ * identical is the "repeat" half of the rule that no single frame equality can
  * express.
  *
- * THE MAILBOX IS BUILT FROM THE THREE EXPRESSIONS AND NOTHING ELSE. The test
- * touches only the public Tier-1 surface -- write() to fill, read() to
- * observe, advance() to step -- and never reaches into the ring, so a
- * reimplementation that produced the same index relation from other private
- * state passes, and one that produced any other relation fails.
+ * The test touches only the public Tier-1 surface and never reaches into the
+ * ring, so a reimplementation that produced the same index relation from other
+ * private state passes.
  */
 
 #include "mailbox.h"
@@ -74,12 +64,11 @@ namespace
 		}
 	}
 
-	/* ---- Case 1: the delay relation. The frame written in quantum q is
-	 * returned by read() in quantum q + H, for H = 1 and H = 2, over N
-	 * quanta each (N >= 16). */
+	/* Case 1: the delay relation. The frame written in quantum q is returned
+	 * by read() in quantum q + H. */
 	void driveDelayCase(const unsigned H, const char* const what)
 	{
-		const unsigned N = 32u;   /* >= 16, over the plan's minimum          */
+		const unsigned N = 32u;
 		g2::Mailbox mb(H);
 
 		for(unsigned q = 0u; q < N; ++q)
@@ -100,14 +89,11 @@ namespace
 			mb.advance();
 		}
 
-		/* The in-loop checks above observe read() for every q from H to
-		 * N - 1, which is at least 16 distinct quanta per H. The newest
-		 * write (q = N - 1) has not yet propagated past the final advance,
-		 * so it is correctly not observed: the delay line is a delay, and
-		 * the newest frame is the one still in flight. */
+		/* The newest write (q = N - 1) has not yet propagated past the final
+		 * advance, so it is correctly not observed. */
 	}
 
-	/* ---- Case 2: the underrun rule. A producer that writes nothing lets
+	/* Case 2: the underrun rule. A producer that writes nothing lets
 	 * advance() copy the previous frame forward, so read() repeats the
 	 * previous frame. Write one frame, then produce nothing for the rest of
 	 * the run, and assert every read() from q = H onward is that frame and
@@ -159,8 +145,6 @@ namespace
 
 int main()
 {
-	/* The plan asserts the relation for H = 1 and H = 2, both over at least
-	 * 16 quanta. */
 	driveDelayCase(1u, "delay H=1");
 	driveDelayCase(2u, "delay H=2");
 	driveUnderrunCase(1u, "underrun H=1");

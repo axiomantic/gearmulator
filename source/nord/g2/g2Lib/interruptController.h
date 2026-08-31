@@ -1,22 +1,13 @@
-// Task BRD-3. The two-tier interrupt controller.
+// The two-tier interrupt controller: the MCF5307 SIM's centralized interrupt
+// controller, on the board side of the mcf5307_set_irq contract. The board
+// owns every pending bit and every priority decision; this class is that
+// decision. It arbitrates among the internal module sources and the four
+// external interrupt pins, computes the single highest-priority winner, and
+// presents the whole current state on every change through the present
+// callback. The call is idempotent, so the board may invoke it unconditionally
+// after every recomputation.
 //
-// Plan section 13.1, BRD-3. Design sections 5.2.2, 6.4, 17 row 7.25.
-//
-// WHAT THIS FILE IS. The MCF5307 SIM's centralized interrupt controller, on
-// the board side of the mcf5307_set_irq contract. The board owns every pending
-// bit and every priority decision; this class is that decision. It arbitrates
-// among the internal module sources and the four external interrupt pins,
-// computes the single highest-priority winner, and presents the whole current
-// state on every change through the present callback, exactly as design
-// section 5.2.2 specifies. The call is idempotent, so the board may invoke it
-// unconditionally after every recomputation.
-//
-// CLEAN-ROOM. The two-tier arbitration is written from the MCF5307 User's
-// Manual and nothing is harvested. No file of MegabytePhreak/qemu-mcf5307 was
-// opened for this task. Every fact below carries its manual section; the full
-// provenance record is at the head of interruptController.cpp.
-//
-// THE FACTS THIS CLASS MODELS, AND WHERE EACH IS READ:
+// The facts this class models:
 //
 //   * The internal interrupt control registers at MBAR+$04C..$057, one per
 //     internal module source, each an 8-bit register whose bit 7 is AVEC and
@@ -34,9 +25,6 @@
 //   * The two-tier priority order within a level, from Table 8-3: an internal
 //     source with IP=11 ranks highest, then IP=10, then the external pin at
 //     that level, then IP=01, then IP=00. pp. 8-6..8-7.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG.
 
 #pragma once
 
@@ -73,8 +61,7 @@ namespace g2
 
 		// The sources the internal control-register block covers. The block
 		// carries twelve register slots, of which the last two ($056, $057)
-		// are reserved on the MCF5307 and generate no source. Design section
-		// 5.2.2 and plan BRD-3 state the arbiter's source set.
+		// are reserved on the MCF5307 and generate no source.
 		static constexpr int gInternalSourceCount = 10;
 
 		// InterruptController(_user, _present): _present is called with the
@@ -96,9 +83,8 @@ namespace g2
 		void setInternalPending(int _index, bool _asserted);
 		void setExternalPending(ExternalPin _pin, bool _asserted);
 
-		// Pass-through vector numbers. These stand in for the UIVR, SWIVR and
-		// DIVR vector registers design section 5.2.2 names; the firmware
-		// values arrive from SPK-13 and are supplied by the board. They only
+		// Pass-through vector numbers, standing in for the UIVR, SWIVR and DIVR
+		// vector registers; the board supplies the firmware values. They only
 		// matter when the winning source is not autovectored.
 		void setInternalVector(int _index, uint8_t _vector);
 		void setExternalVector(ExternalPin _pin, uint8_t _vector);

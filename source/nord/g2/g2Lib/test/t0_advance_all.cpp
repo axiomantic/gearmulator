@@ -1,27 +1,24 @@
-/* t0_advance_all.cpp -- the check of task CHN-7. Design 13.10.2, 12.3.
- *
- * THE FOUR-STEP ORDER THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
+/* The four-step order, which a target build cannot see:
  *
  *   advanceAll closes the underrun accounting for the quantum that just
  *   ended, in this order, with 2 x dspCount written flags (one per position
  *   per bus):
- *     1. EVERY quantum: for each position, if its AUDIO-bus flag is clear,
+ *     1. every quantum: for each position, if its AUDIO-bus flag is clear,
  *        increment that position's underrunFrames.
- *     2. ONLY when frameIndex % secondBusFrameDivider == 0: for each
+ *     2. only when frameIndex % secondBusFrameDivider == 0: for each
  *        position, if its SECOND-bus flag is clear, increment that
  *        position's secondBusUnderrunFrames.
- *     3. Clear the audio-bus flags ALWAYS; clear the second-bus flags ONLY
+ *     3. Clear the audio-bus flags always; clear the second-bus flags only
  *        on the same quanta as step 2.
  *     4. advance() the selected mailboxes: the audio bus every quantum, the
  *        second bus only on the window quanta.
- *   The ORDER matters, because the flags describe the quantum that ENDED,
+ *   The order matters, because the flags describe the quantum that ended,
  *   not the one about to start.
  *
- * A build of g2Lib tests none of this: a target compiles and links whether
- * or not advanceAll counts or clears anything, and before CHN-7 the three
- * counters returned zero from a surface task. These cases drive advanceAll
- * against real flags (set through the CHN-6 transmit wrappers and their
- * emulated-ESAI M_TUE condition) and assert the counters, the clearing, and
+ * A build of g2Lib tests none of this: a target compiles and links whether or
+ * not advanceAll counts or clears anything. These cases drive advanceAll
+ * against real flags, set through the transmit wrappers and their
+ * emulated-ESAI M_TUE condition, and assert the counters, the clearing, and
  * the mailbox-advance cadence.
  *
  * The flags are per-position and per-bus, so a divider of 2 makes the two
@@ -54,10 +51,9 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* One chain position's two real Esai objects, plus the DSP and memory
-	 * an Esai needs to stand up. Mirrors the fixture of the CHN-5/CHN-6
-	 * tests, so the CHN-6 written-flag condition (M_TUE clear) is the real
-	 * one here too. */
+	/* One chain position's two real Esai objects, plus the DSP and memory an
+	 * Esai needs to stand up, so the written-flag condition (M_TUE clear) is
+	 * the real one here too. */
 	struct PositionEsai
 	{
 		dsp56k::Memory         memory;
@@ -76,11 +72,11 @@ namespace
 	};
 }
 
-/* The second-bus mailbox advance gate (step 4) is observed through the CHN-5
- * wiring on a Ring: position 1's second transmit writes mailbox 0, and
+/* The second-bus mailbox advance gate (step 4) is observed through the Ring
+ * wiring: position 1's second transmit writes mailbox 0, and
  * position 0's second receive reads mailbox 0. A value written into the
- * mailbox's write frame must NOT reach position 0's receive on a non-window
- * advanceAll (where the second-bus mailboxes do not advance), and MUST reach
+ * mailbox's write frame must not reach position 0's receive on a non-window
+ * advanceAll (where the second-bus mailboxes do not advance), and must reach
  * it on the next window advanceAll. */
 static void secondBusMailboxAdvanceGate()
 {
@@ -108,14 +104,14 @@ static void secondBusMailboxAdvanceGate()
 	pos[1].secondEsai.writestatusRegister(0u);
 	tx1(frameIndex, tx);
 
-	/* Before any advance, position 0's receive must NOT see the value: it
+	/* Before any advance, position 0's receive must not see the value: it
 	 * reads the mailbox's read() frame, which is H = 1 frame behind. */
 	rx0(frameIndex, rx);
 	check(rx[1][0] == 0u,
 		"position 0 does not yet see position 1's second-bus value before "
 		"any advance");
 
-	/* A NON-WINDOW advanceAll (frameIndex 1, 1 % 2 != 0) must NOT advance the
+	/* A non-window advanceAll (frameIndex 1, 1 % 2 != 0) must not advance the
 	 * second-bus mailboxes, so the value still must not reach position 0. */
 	adapter.advanceAll(1u);
 	rx0(frameIndex, rx);
@@ -123,7 +119,7 @@ static void secondBusMailboxAdvanceGate()
 		"a non-window advanceAll leaves the second-bus mailbox unadvanced - "
 		"position 0 still does not see the value");
 
-	/* The next WINDOW advanceAll (frameIndex 2, 2 % 2 == 0) advances the
+	/* The next window advanceAll (frameIndex 2, 2 % 2 == 0) advances the
 	 * second-bus mailboxes, and the value must now reach position 0. */
 	adapter.advanceAll(2u);
 	rx0(frameIndex, rx);
@@ -152,7 +148,7 @@ int main()
 	/* ------------- Case 1: the first advanceAll, a window, nothing fired.
 	 *
 	 * Every flag is clear (no transmit wrapper has run), so every position
-	 * underruns on BOTH buses, and the window examines the second bus too:
+	 * underruns on both buses, and the window examines the second bus too:
 	 * underrunFrames == [1, 1], secondBusUnderrunFrames == [1, 1]. This is
 	 * the baseline the later cases are relative to. */
 	adapter.advanceAll(0u);
@@ -187,11 +183,11 @@ int main()
 
 	/* ------------- Case 2: a NON-window advanceAll (frameIndex 1).
 	 *
-	 * Step 1 counts audio underruns from clear audio flags EVERY quantum:
+	 * Step 1 counts audio underruns from clear audio flags every quantum:
 	 * position 0 delivered (flag set, not counted) so only position 1's audio
-	 * underrun rises to 2. Step 2 does NOT examine the second bus on a
+	 * underrun rises to 2. Step 2 does not examine the second bus on a
 	 * non-window, so secondBusUnderrunFrames is unchanged. Step 3 clears the
-	 * audio flags ALWAYS, but retains the second-bus flags on a non-window. */
+	 * audio flags always, but retains the second-bus flags on a non-window. */
 	adapter.advanceAll(1u);
 	check(adapter.underrunFrames(0u) == 1u,
 		"non-window 1: audio underrun 0 stays 1 (position 0 delivered)");
@@ -208,11 +204,11 @@ int main()
 		"non-window 1 RETAINS second-bus flag 0 (cleared only on window)");
 	check(!adapter.secondWritten(1u), "non-window 1 second-bus flag 1 stays clear");
 
-	/* ------------- Case 3: the next WINDOW advanceAll (frameIndex 2).
+	/* ------------- Case 3: the next window advanceAll (frameIndex 2).
 	 *
 	 * Both audio flags are clear (case 2 cleared them), so both audio
 	 * underruns rise again to [2, 3]. The second bus is now examined: second
-	 * flag 0 is STILL set (case 2 retained it) so it is not counted, while
+	 * flag 0 is still set (case 2 retained it) so it is not counted, while
 	 * second flag 1 is clear so secondBusUnderrunFrames[1] rises to 2. Step 3
 	 * clears both flag sets here, because this is a window. */
 	adapter.advanceAll(2u);

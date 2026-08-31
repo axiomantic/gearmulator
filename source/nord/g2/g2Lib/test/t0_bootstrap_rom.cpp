@@ -1,26 +1,15 @@
-// Task BRD-19. Tier T0: this test needs no firmware artifact of any kind.
+// The protocol as the firmware drives it: the OS pushes a count word, an
+// address word of 0x000000, and N data words through the HDI08, with no CVR
+// host command. The model is the factory mask-ROM bootstrap loader that turns
+// that stream into the words that land in P memory.
 //
-// Plan section 13.6, BRD-19. Design section 10.6 and 24.
-// Logbook: AGENTS.md section 3.1.
+// Every word below is authored here; nothing is read from a firmware artifact.
+// The P memory is a plain array, because the bootstrap writes through a
+// pointer.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG.
-//
-// THE PROTOCOL, AS THE FIRMWARE DRIVES IT. Design section 10.6: the OS pushes
-// a COUNT word, an ADDRESS word of 0x000000, and N DATA words through the
-// HDI08, with NO CVR host command. The model is the factory mask-ROM bootstrap
-// loader that turns that stream into the words that land in P memory.
-//
-// THE TEST DRIVES THE PROTOCOL AGAINST A SYNTHETIC IMAGE. Every word below is
-// authored here; nothing is read from a firmware artifact. The P memory is a
-// plain array, because the bootstrap writes through a pointer and the DSP set
-// does not exist on the board track yet.
-//
-// WHAT DISTINGUISHES A MODELLED BOOTSTRAP FROM A PRE-LOAD. Before any word is
-// fed, the model has written nothing: P:$0 holds the sentinel, not the data.
-// The words land because the model moves them, and that is the assertion that
-// makes pre-loading undetectable only if the test never checks the before
-// state. This test checks it, in case group 1.
+// What distinguishes a modelled bootstrap from a pre-load: before any word is
+// fed, the model has written nothing, so P:$0 holds the sentinel rather than
+// the data. Case group 1 checks that before state.
 
 #include "hdi08Bootstrap.h"
 
@@ -68,7 +57,7 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 0. A FRESH MACHINE HAS WRITTEN NOTHING.
+	// Case group 0. A fresh machine has written nothing.
 	//
 	// The state machine starts waiting for the count, reports no data
 	// received, and is not complete. This is the "before the push" that the
@@ -90,7 +79,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE THREE-HEADER, THEN BODY, THEN COMPLETE PATH.
+	// Case group 1. The three-header, then body, then complete path.
 	//
 	// The full protocol: count N, address 0x000000, then N synthetic data
 	// words with no CVR host command. Every data word lands at P:address+i in
@@ -140,7 +129,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. AN ADDRESS OTHER THAN ZERO LANDS WHERE THE ADDRESS SAYS.
+	// Case group 2. An address other than zero lands where the address says.
 	//
 	// The firmware pushes 0x000000, but the model must not special-case it:
 	// whatever address the host chooses is where the body lands.
@@ -166,7 +155,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE NEGATIVE CASE: A STREAM THAT STOPS SHORT.
+	// Case group 3. The negative case: a stream that stops short.
 	//
 	// A count word of N followed by only N - 1 data words. The model must
 	// report an incomplete load, not dispatch: isComplete() is false, and the
@@ -197,7 +186,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. A COUNT OF ZERO COMPLETES AT THE FIRST WORD.
+	// Case group 4. A count of zero completes at the first word.
 	//
 	// The count is the only bound the protocol carries. A count of zero
 	// promises an empty body, so the machine completes as soon as the address
@@ -218,7 +207,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE WORDS ARE 24-BIT AND THE HIGH BYTE IS DISCARDED.
+	// Case group 5. The words are 24-bit and the high byte is discarded.
 	//
 	// A received word is only meaningful in its low 24 bits. The count and the
 	// stored data both honor the mask, so a stray high byte cannot pollute
@@ -240,7 +229,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. A STORE PAST THE SUPPLIED BUFFER IS REFUSED, NOT WRITTEN.
+	// Case group 6. A store past the supplied buffer is refused, not written.
 	//
 	// Objects beyond the caller's buffer are not written and the refusal is
 	// counted, so a caller that sized its image too small sees the loss
@@ -273,7 +262,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. WORDS AFTER A COMPLETE LOAD ARE DISCARDED.
+	// Case group 7. Words after a complete load are discarded.
 	//
 	// The bootstrap knows exactly N words and reads none after them. A word
 	// fed past the complete body changes nothing and writes nothing.

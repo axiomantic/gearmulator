@@ -41,16 +41,14 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h)
 
-# SCH-12. cycleDebt.h declares the g2::runQuantum function template -- design
-# section 13.4.6's budget/want/debt block, the one shared block applied once
-# for a DSP context (SCH-11) and once for the MCU (SCH-30). It has no compiled
-# part; it is listed so that the file the sched track owns appears in the
-# target, exactly as SCH-4's frame.h and SCH-6's dspContext.h do.
+# cycleDebt.h declares the g2::runQuantum function template, the one shared
+# budget/want/debt block applied once for a DSP context and once for the MCU.
+# It has no compiled part; it is listed so the file appears in the target.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/cycleDebt.h)
 
-# SCH-11. dspJob.cpp is the DSP job body: receive, the cycle-debt block
-# (which INSTANTIATES SCH-12's g2::runQuantum template, not re-implements
-# it), transmit. Design sections 13.10.3 and 13.4.6.
+# dspJob.cpp is the DSP job body: receive, the cycle-debt block (which
+# instantiates the g2::runQuantum template rather than re-implementing it),
+# transmit.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/dspJob.cpp)

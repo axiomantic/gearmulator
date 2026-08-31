@@ -1,17 +1,14 @@
-/* t0_long_dispatch.cpp -- the check of task SCH-13.
- * Design section 13.4.6 rule 4, acceptance text in section 18.2.
- *
- * THE LONG-DISPATCH COUNTER, DRIVEN AS THE BRANCH IS WRITTEN. Rule 4 of
- * section 13.4.6 fires exactly when one dispatch unit of the emulated
+/* The long-dispatch counter, driven as the branch is written. Rule 4 fires
+ * exactly when one dispatch unit of the emulated
  * instruction stream costs more than one frame's allocation. When it fires,
  * the quantum's want == budget - debt is <= 0, so the want <= 0 branch runs
- * no emulated cycle, pays the carried debt down by ONE WHOLE ALLOCATION, and
- * increments `longDispatchQuanta` by EXACTLY ONE. The branch repeats for every
+ * no emulated cycle, pays the carried debt down by one whole allocation, and
+ * increments `longDispatchQuanta` by exactly one. The branch repeats for every
  * consecutive quantum the carried debt still overruns, and once the debt has
  * been paid below the next allocation the running branch resumes and the debt
  * is back inside its rule 2 bound.
  *
- * THE SPIKE. A single long dispatch unit -- one call that overruns its request
+ * THE spike. A single long dispatch unit -- one call that overruns its request
  * by several full allocations -- is exactly the "the previous quantum already
  * overran this quantum's whole budget" of rule 4. It leaves a debt equal to
  * the overshoot, and every quantum whose want is still <= 0 after it takes the
@@ -19,31 +16,26 @@
  * small amount strictly below kMaxDispatchCost, which is precisely the shape
  * that lets the debt return inside the bound once the spike is exhausted.
  *
- * THIS ROW TAKES THE BOUND FROM ITS OWN FIXTURE, NOT FROM A HEADER.
- * maxDispatchCost is measurement register row 1 and has NO value until spike
- * criterion SPK-5 reports (section 1.3 rule 1 forbids inventing one), and
- * dsp56300's shipped default configuration leaves maxInstructionsPerBlock at
- * 0 -- UNCAPPED. Every task that names the bound names its source; this one
- * names a finite kMaxDispatchCost it defines below and asserts the recovered
- * debt against it. Neither DspContext nor McuContext is involved: the check is
- * the template g2::runQuantum (SCH-12) driven through a SYNTHETIC context and
- * a SYNTHETIC role-filler.
+ * The bound comes from this fixture, not from a header: maxDispatchCost is
+ * unmeasured, and dsp56300's shipped default configuration leaves
+ * maxInstructionsPerBlock at 0, uncapped. This row names a finite
+ * kMaxDispatchCost it defines below and asserts the recovered debt against it.
+ * Neither DspContext nor McuContext is involved: the check drives the
+ * g2::runQuantum template through a synthetic context and role-filler.
  *
- * THE COUNT IS DOUBLE-CHECKED AGAINST AN INDEPENDENT BRANCH MODEL. The exact
+ * The count is double-checked against an independent branch model. The exact
  * number of long-dispatch quanta a spike produces is asserted once against a
  * hard-coded expectation (one full allocation is about 1562/1563, so a 1580
- * overshoot exhausts in ONE quantum, 4000 in TWO, 5000 in THREE) and once
+ * overshoot exhausts in one quantum, 4000 in two, 5000 in three) and once
  * against BranchModel, a pure re-derivation of rule 4's count and debt
  * bookkeeping that never calls g2::runQuantum. A regression that changed the
  * template's branch would then be caught by two independent witnesses rather
  * than passing because the code and an expectation copied from it drifted
  * together.
  *
- * NO CASE IN THIS ROW READS A CLOCK. longDispatchQuanta detects one dispatch
- * unit longer than one frame's allocation, which says nothing about host
- * wall-clock time; CallbackTimer is what measures that. spent here comes only
- * from the role-filler's return and never from the host clock, and this file
- * includes <cstdint> and <cstdio> and nothing that reads a time source.
+ * No case here reads a clock. longDispatchQuanta detects one dispatch unit
+ * longer than one frame's allocation, which says nothing about host wall-clock
+ * time; CallbackTimer is what measures that.
  */
 
 #include "cycleDebt.h"
@@ -78,23 +70,21 @@ namespace
 		}
 	}
 
-	/* The rational, straight from the one definition site. Section 13.4.1. */
+	/* The rational, straight from the one definition site. */
 	constexpr uint32_t kNum = G2_DSP_CYCLES_PER_FRAME_NUM;
 	constexpr uint32_t kDen = G2_DSP_CYCLES_PER_FRAME_DEN;
 
-	/* THE FIXTURE'S OWN FINITE CAP. Not a header value: measurement register
-	 * row 1. A role-filler call overruns its request strictly inside
-	 * [1, kMaxDispatchCost), and a recovered debt must be inside the same
-	 * [0, kMaxDispatchCost). The SPIKE overshoot is deliberately many
-	 * allocations -- the long-dispatch condition -- and while it is being paid
-	 * down the debt sits ABOVE this cap, which is the expectable behaviour the
-	 * plan states as "the debt returns inside its rule 2 bound afterwards". */
+	/* The fixture's own finite cap, not a header value. A role-filler call
+	 * overruns its request strictly inside [1, kMaxDispatchCost), and a
+	 * recovered debt must be inside the same [0, kMaxDispatchCost). The spike
+	 * overshoot is deliberately many allocations -- the long-dispatch
+	 * condition -- and while it is being paid down the debt sits above this
+	 * cap, returning inside the rule 2 bound afterwards. */
 	constexpr int64_t kMaxDispatchCost = 40;
 
 	/* A context exposing exactly the four members the template needs: rate,
-	 * acc, debt, longDispatchQuanta. Same shape as the synthetic context in
-	 * t0_cycle_debt (SCH-12); DspContext and McuContext carry these in the
-	 * same shapes, and this is the synthetic stand-in. */
+	 * acc, debt, longDispatchQuanta. DspContext and McuContext carry these in
+	 * the same shapes; this is the synthetic stand-in. */
 	struct LongCtx
 	{
 		Rational rate;
@@ -111,7 +101,7 @@ namespace
 		return c;
 	}
 
-	/* The IDEAL allocation, maintained on a SEPARATE accumulator so the
+	/* The ideal allocation, maintained on a separate accumulator so the
 	 * template's own internal alloc() on the context is never double-advanced
 	 * by this fixture. Same rational, same start (0), so the sequence is
 	 * identical to the one the template consumes. */
@@ -121,7 +111,7 @@ namespace
 		return alloc(r, acc);
 	}
 
-	/* The SPIKED role-filler. Call 0 is the single long dispatch unit: it
+	/* The spiked role-filler. Call 0 is the single long dispatch unit: it
 	 * overruns the request by `spikeOvershoot`, which is several allocations.
 	 * Every later call overruns by a small positive amount strictly below
 	 * kMaxDispatchCost, so once the debt has been paid down the context
@@ -145,11 +135,11 @@ namespace
 		}
 	};
 
-	/* The PURE, independent model of rule 4's count and bookkeeping. It is
+	/* The pure, independent model of rule 4's count and bookkeeping. It is
 	 * derived from the spike overshoot and the frame-allocation sequence
-	 * WITHOUT calling g2::runQuantum, so a regression in the template's branch
+	 * Without calling g2::runQuantum, so a regression in the template's branch
 	 * is caught by a witness that cannot inherit the bug. `budgets` walks the
-	 * SAME allocation sequence (same rational, same starting accumulator) and
+	 * Same allocation sequence (same rational, same starting accumulator) and
 	 * skips the spike frame's own budget: the spike frame runs (its want is
 	 * its budget), and only the carried debt that follows gates the subsequent
 	 * quanta, so the model consumes budgets[1..]. */
@@ -178,7 +168,7 @@ namespace
 	};
 
 	/* One spike at frame 0, then enough running frames for the debt to return
-	 * inside its bound. The assertions hold over the WHOLE window. */
+	 * inside its bound. The assertions hold over the whole window. */
 	constexpr uint64_t kFrames = 1 + 48;
 
 	int runSpikeScenario(const int64_t spikeOvershoot,
@@ -217,8 +207,8 @@ namespace
 
 			if(lqDelta == 1)
 			{
-				/* The want <= 0 branch: EXACTLY one quantum-count, and the debt
-				 * is paid down by EXACTLY one whole allocation. */
+				/* The want <= 0 branch: exactly one quantum-count, and the debt
+				 * is paid down by exactly one whole allocation. */
 				++longFrames;
 				checkEqual(static_cast<int64_t>(debtDelta), -budget,
 					"each long-dispatch quantum pays the debt down by exactly "
@@ -238,8 +228,8 @@ namespace
 					ranAfterSpike = true;
 			}
 
-			/* Rule 2's bound, WHERE THE PLAN STATES IT -- AFTERWARDS. During
-			 * the spike's pay-down the debt sits above the bound by
+			/* Rule 2's bound holds afterwards, not during. Through the spike's
+			 * pay-down the debt sits above the bound by
 			 * construction; once the context has resumed running (a running
 			 * quantum after the counter first moved) every boundary is inside
 			 * [0, kMaxDispatchCost). */
@@ -299,10 +289,10 @@ int main()
 	printf("t0_long_dispatch: the rule 4 counter (task SCH-13)\n");
 
 	/* One whole allocation is about 1562/1563 at 150 MHz / 96 kHz. A spike of
-	 * 1580 exceeds ONE allocation, so it exhausts in exactly ONE long-dispatch
-	 * quantum; 4000 exceeds TWO in a row, so exactly TWO; 5000 exceeds THREE
-	 * in a row, so exactly THREE. Each count is asserted against BOTH the
-	 * hard-coded value here AND the independent BranchModel. */
+	 * 1580 exceeds one allocation, so it exhausts in exactly one long-dispatch
+	 * quantum; 4000 exceeds two in a row, so exactly two; 5000 exceeds three
+	 * in a row, so exactly three. Each count is asserted against both the
+	 * hard-coded value here and the independent BranchModel. */
 	const int r1 = runSpikeScenario(1580, 1, "single-quantum spike");
 	const int r2 = runSpikeScenario(4000, 2, "two-quantum spike");
 	const int r3 = runSpikeScenario(5000, 3, "three-quantum spike");

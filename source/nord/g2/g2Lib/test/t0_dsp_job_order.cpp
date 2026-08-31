@@ -1,7 +1,5 @@
-/* t0_dsp_job_order.cpp -- the check of task SCH-11. Design 13.10.3, 13.4.6.
- *
- * THE CHECK IS THE ORDER, AND THE ORDER IS STATED AS A LIST BECAUSE THE
- * SAMPLE OFFSET OF DESIGN SECTION 12.3 DEPENDS ON IT AND ON NO OTHER:
+/* The check is the order, stated as a list because the sample offset depends
+ * on it and on no other:
  *
  *   1.  receiveDspFrame(audioEsai), and receiveDspFrame(secondEsai) only
  *       when frameIndex % secondBusFrameDivider == 0;
@@ -9,28 +7,24 @@
  *   3.  transmitDspFrame(audioEsai), and the second bus on the same
  *       condition.
  *
- * STEPS 1 AND 3 RUN EVEN WHEN STEP 2 RUNS NOTHING. The test drives a quantum
+ * Steps 1 and 3 run even when step 2 runs nothing. The test drives a quantum
  * where the carried debt consumes the whole allocation, so runQuantum takes
  * its want <= 0 branch, executes no emulated cycle and returns 0 -- and one
  * receive and one transmit still happen. That is the property this whole row
  * exists to hold: the scheduler owns the cadence, so a long-dispatch quantum
  * still transmits.
  *
- * WHAT THE FIXTURE IS. dsp56k::Esai needs an IPeripherals and both
- * control-register writes reach through it to the DSP, so the fixture builds
- * a real Memory, two PeripheralsNop and a real DSP -- exactly the shape
- * t0_esai_frame builds. Two Esai objects sit on that one DSP: audioEsai on
- * MemArea_X (the audio bus) and secondEsai on MemArea_Y (ESAI_1). NO
- * EsaiClock IS CONSTRUCTED ANYWHERE IN THIS CHECK, for the reason the whole
- * scheduler exists. The transmit and receive callbacks are the fixture's own
- * and record into a single ordered log, so the check observes the ORDER, not
- * just the counts.
+ * dsp56k::Esai needs an IPeripherals and both control-register writes reach
+ * through it to the DSP, so the fixture builds a real Memory, two
+ * PeripheralsNop and a real DSP. Two Esai objects sit on that one DSP:
+ * audioEsai on MemArea_X (the audio bus) and secondEsai on MemArea_Y (ESAI_1).
+ * No EsaiClock is constructed anywhere in this check. The transmit and receive
+ * callbacks are the fixture's own and record into a single ordered log, so the
+ * check observes the order, not just the counts.
  *
- * THE DEBT-CONSUMED QUANTUM NEVER REACHES THE DSP. runQuantum's want <= 0
- * branch calls no role-filler, so c->dsp is never dereferenced and the
- * context below carries a NULL dsp on purpose: a fixture that needed a live
- * JIT DSP to prove the order would be asserting the order against pieces the
- * row does not own.
+ * The debt-consumed quantum never reaches the DSP: runQuantum's want <= 0
+ * branch calls no role-filler, so c->dsp is never dereferenced and the context
+ * below carries a null dsp on purpose.
  */
 
 #include "dspContext.h"
@@ -53,17 +47,15 @@
 
 namespace g2
 {
-	/* SCH-11's Files: line names dspJob.cpp and this test and no header, so
-	 * the declaration is forward-declared here. It is PINNED against the
-	 * Executor's JobFn below, so a signature drift is a compile error and not
-	 * a silent mismatch. */
+	/* No header declares dspJob, so it is forward-declared here. It is pinned
+	 * against the Executor's JobFn below, so a signature drift is a compile
+	 * error and not a silent mismatch. */
 	void dspJob(JobContext*) noexcept;
 }
 
-/* THE TYPE IS PINNED, AND THAT IS A CHECK IN ITSELF. dspJob must satisfy the
- * Executor's JobFn exactly -- void(JobContext*) noexcept -- or it could not
- * fill one of the eight jobs the Scheduler builds. A signature drift is a
- * compile error at this line. */
+/* dspJob must satisfy the Executor's JobFn exactly -- void(JobContext*)
+ * noexcept -- or it could not fill one of the eight jobs the Scheduler builds.
+ * A signature drift is a compile error at this line. */
 static_assert(std::is_same_v<g2::Executor::JobFn, decltype(&g2::dspJob)>,
 	"g2::dspJob must satisfy the Executor's JobFn.");
 
@@ -163,7 +155,7 @@ namespace
 				});
 		}
 
-		/* Resets the observation baseline WITHOUT disturbing the ESI. The
+		/* Resets the observation baseline without disturbing the ESI. The
 		 * enable calls below can complete a whole short frame and fire a
 		 * callback before the case under test has run one quantum; clearing
 		 * after enabling makes the baseline "the enable happened" and nothing
@@ -200,7 +192,7 @@ int main()
 {
 	/* A DspContext whose carried debt consumes the whole allocation, so the
 	 * budget/want/debt block takes its want <= 0 branch and runs nothing. The
-	 * dsp member is NULL BY DESIGN: that branch never dereferences it. */
+	 * dsp member is null by design: that branch never dereferences it. */
 	auto makeContext = [](Fixture& f, const uint64_t frameIndex,
 		const unsigned divider, const int64_t debt) -> g2::DspContext
 	{
@@ -278,7 +270,7 @@ int main()
 	/* ---------------- the window is the SCHEDULER'S OWN, at the boundary.
 	 *
 	 * frameIndex exactly on the divider is a window; one frame later is not.
-	 * Both must agree ON THE SAME CONDITION for receive and for transmit --
+	 * Both must agree on the same condition for receive and for transmit --
 	 * ChainAdapter::advanceAll and dspJob gate on the identical expression. */
 	{
 		Fixture f;

@@ -1,40 +1,15 @@
-// Task BRD-21. The board surface. Tier T0: this test needs no firmware
-// artifact of any kind.
+// The board surface test.
 //
-// Plan section 13.4, BRD-21. Design sections 6.4, 13.10 and 26.
+// Concreteness is checked two ways. board.h carries five static_asserts that
+// make "concrete, not copyable, not movable" a compile-time property; this
+// test also checks the same properties through the type traits at run time, so
+// the test is not green merely because the header happened to be empty.
 //
-// WHAT THIS TEST IS. Task BRD-21 is the keystone `The Board class` of the
-// board track, and its Check is a SURFACE test: it asserts the shape the
-// Scheduler will consume, and the one behavioural fact BRD-21 owns (the
-// construction log line). The deep behaviour of the Board -- the real bus
-// routing, the real 96:1 USB tick, the Nim state blocks -- belongs to the
-// later board-track integration, and this test does not reach for any of it.
-//
-// THE CONCRETENESS IS CHECKED TWO WAYS, because the plan says the assertions
-// "name their mechanism". board.h carries five static_asserts that make
-// "concrete, not copyable, not movable" a COMPILE-TIME property, so the file
-// would not compile if the class lost one of those properties; this test
-// ALSO checks the same properties through the type traits at run time, so the
-// test is not green merely because the header happened to be empty. Board is
-// declared final, which is what makes "nothing derives from it" a property at
-// all.
-//
-// THE CONSTRUCTION LOG LINE. The Board logs one line at construction naming
-// G2_MCU_CORE_CLOCK_HZ, the value 45,000,000, and criterion (j). This test
-// captures standard output across a Board construction and asserts the line
-// is emitted EXACTLY once, and that it names all four things. Measurement
-// register row 7 (plan section 4.1) owns the values: G2_MCU_CORE_CLOCK_HZ is
-// the 45,000,000 placeholder until SPK-9 reports, and no golden reference or
-// capture may be recorded until then -- the line exists so that a reader of
-// the whole point of the machine can see the placeholder standing.
-//
-// RUNMCU IS EXERCISED WITH A ZERO BUDGET ON PURPOSE. The pinned core commit
-// exports mcf5307_exec but is at the start of the cpu track, so executing an
-// unreset MCU context could drive unspecified early-core behaviour. A zero
-// cycle budget means no instruction is executed and the core returns
-// immediately, which proves runMcu compiles, links and returns its uint32_t
-// cycles-without aborting the process, without depending on the core's early
-// behaviour. The budgeted execution of a real program is later integration.
+// runMcu is exercised with a zero budget on purpose. Executing an unreset MCU
+// context could drive unspecified early-core behaviour; a zero cycle budget
+// executes no instruction and returns immediately, which proves runMcu
+// compiles, links and returns its uint32_t without depending on the core's
+// early behaviour.
 
 #include "board.h"
 
@@ -150,8 +125,8 @@ int main()
 
 		g2::Board board;
 
-		// runMcu: exercised with a zero budget so no instruction executes
-		// (see the file header). It returns the cycles spent as a uint32_t.
+		// runMcu: exercised with a zero budget so no instruction executes. It
+		// returns the cycles spent as a uint32_t.
 		volatile uint32_t spent = board.runMcu(0u);
 		check(spent == 0u,
 		      "runMcu(0) returns the zero cycle budget immediately");
@@ -160,8 +135,7 @@ int main()
 		check(board.faulted() == false,
 		      "faulted() returns false for a fresh board that has not run");
 
-		// tickSofIfDue: callable on any frame index. The real 96:1 USB tick
-		// is BRD-22's; here we only prove the method is on the surface.
+		// tickSofIfDue: callable on any frame index.
 		board.tickSofIfDue(0u);
 		board.tickSofIfDue(96u);
 		check(true, "tickSofIfDue is callable with a frame index");

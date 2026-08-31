@@ -1,34 +1,11 @@
-// Task BRD-13. Tier T0: the panel seam for criterion (h).
+// The panel seam: the four members exist, are `noexcept`, and behave as an
+// empty body with a zero-byte state, without disturbing the panel's BusTarget
+// display buffer.
 //
-// Plan section 13.4, BRD-13. Design sections 8.4, 13.5, 23.1.1.
-//
-// THIS TEST PROVES THE SEAM IS PRESENT AND IS AN EMPTY BODY WITH A ZERO-BYTE
-// STATE -- no more and no less. Design section 23.1.1's seam row requires the
-// panel to carry `tick(uint64_t frameIndex)`, `stateSize`, `stateSave` and
-// `stateLoad` today, and section 13.5 requires the MVP panel to compute
-// nothing. A "yes" from spike criterion (h) later fills the body and grows the
-// state; the point of the seam is that that happens as a change of body and
-// not as a change of two interfaces.
-//
-// WHAT THIS TEST DOES NOT DO, AND WHY. It does not assert the scheduler's order
-// table, the context-index bounds of `cycleDebt` / `longDispatchQuanta` /
-// `contextFaulted` / `contextFault`, or that the `Executor` job array holds
-// eight contexts. Those are scheduler and executor tasks owned by the SCH and
-// DSP tracks (sections 13.5, 13.10.3); the panely-side half of each sentence is
-// stated in panel.h and the scheduler-side half is asserted by those tasks'
-// own tests. This test asserts the surface BRD-13 owns: the four members exist,
-// are `noexcept`, and behave as an empty body with a zero-byte state, without
-// disturbing the panel's BusTarget display buffer.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG (see the correction log, 2026-08-06).
-//
-// ONE ADDRESS HERE HAS A RECORDED SOURCE AND THE OTHER DOES NOT, exactly as in
-// t0_panel.cpp: AGENTS.md section 2.2 records the CS5 latch at 0x15000000, and
-// the panel display buffer sits on CS4, whose base and size no authority
-// records. This fixture therefore supplies both, and no shipped header carries
-// a number. This test uses only the panel seam and the display buffer, so the
-// CS5 latch plays no part here.
+// The CS5 latch sits at 0x15000000; the panel display buffer sits on CS4,
+// whose base and size no authority records. This fixture supplies both, and no
+// shipped header carries a number. This test uses only the panel seam and the
+// display buffer, so the CS5 latch plays no part here.
 
 #include "latches.h"
 #include "memoryMap.h"
@@ -132,11 +109,7 @@ int main()
 	static_assert(std::is_same_v<decltype(std::declval<g2::Panel&>().stateLoad(nullptr)), void>,
 		"Panel::stateLoad returns void: a zero-byte state cannot fail to restore.");
 
-	// -----------------------------------------------------------------------
-	// Case group 1. THE SEAM IS PRESENT AND IT IS A ZERO-BYTE STATE.
-	//
-	// Section 23.1.1's seam row: "a zero-byte state". stateSize is the number
-	// the snapshot block must be today.
+	// Case group 1. The seam is present and it is a zero-byte state.
 	{
 		Board board;
 		checkEqual(board.panel().stateSize(), size_t(0),
@@ -146,13 +119,10 @@ int main()
 			"a zero-byte state has a size that a stateSize caller can read");
 	}
 
-	// -----------------------------------------------------------------------
-	// Case group 2. `tick` IS AN EMPTY BODY THAT LEAVES EVERYTHING ALONE.
-	//
-	// The MVP panel computes nothing. Advancing it across a spread of frame
-	// indices -- including the first quantum and the largest uint64_t -- must
-	// not disturb the zero-byte state, and it must not disturb the display
-	// buffer the panel serves as a BusTarget.
+	// Case group 2. `tick` is an empty body. Advancing across a spread of
+	// frame indices -- including the first quantum and the largest uint64_t --
+	// must not disturb the zero-byte state or the display buffer the panel
+	// serves as a BusTarget.
 	{
 		Board board;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -176,13 +146,9 @@ int main()
 			"the panel still answers as a BusTarget after a tick");
 	}
 
-	// -----------------------------------------------------------------------
-	// Case group 3. `stateSave` WRITES NOTHING, PROVEN AGAINST SENTINELS.
-	//
-	// A save of a zero-byte block writes zero bytes. Filling the destination
-	// with a sentinel and saving into it proves the body writes nothing, which
-	// is the strongest form of "writes nothing" available: a body that wrote
-	// even one byte would move a sentinel.
+	// Case group 3. A save of a zero-byte block writes zero bytes. Filling the
+	// destination with a sentinel and saving into it proves the body writes
+	// nothing: a body that wrote even one byte would move a sentinel.
 	{
 		Board board;
 		std::uint8_t sink[64];
@@ -199,18 +165,15 @@ int main()
 			"stateSave of a zero-byte state writes nothing, proven against a sentinel-filled destination");
 
 		// A zero-byte save has no pointer to touch: a null destination is a
-		// legal call, and this is what keeps the scheduler's snapshot path
-		// able to skip the panel's block without special-casing it.
+		// legal call, which lets the scheduler's snapshot path skip the
+		// panel's block without special-casing it.
 		board.panel().stateSave(nullptr);
 		check(true, "stateSave accepts a null destination, because zero bytes are written");
 	}
 
-	// -----------------------------------------------------------------------
-	// Case group 4. `stateLoad` READS NOTHING AND CHANGES NOTHING.
-	//
-	// A load of a zero-byte block reads zero bytes and restores no member.
-	// Loading from a scrubbed source over a panel that already holds display
-	// contents must leave the display exactly as it was.
+	// Case group 4. A load of a zero-byte block reads zero bytes and restores
+	// no member. Loading from a scrubbed source over a panel that already
+	// holds display contents must leave the display exactly as it was.
 	{
 		Board board;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -233,13 +196,10 @@ int main()
 			"stateLoad accepts a null source, because zero bytes are read");
 	}
 
-	// -----------------------------------------------------------------------
-	// Case group 5. A SAVE/LOAD ROUND TRIP IS A NO-OP, NOT A CORRUPTION.
-	//
-	// The scheduler's state path will call save on one object and load into
-	// another (or the same one). With a zero-byte state the round trip must be
-	// an exact no-op: the destination panel's display keeps whatever it held,
-	// and stateSize stays zero.
+	// Case group 5. The scheduler's state path calls save on one object and
+	// loads into another (or the same one). With a zero-byte state the round
+	// trip must be an exact no-op: the destination panel's display keeps
+	// whatever it held, and stateSize stays zero.
 	{
 		Board board;
 		mcf5307_bus_status status = MCF5307_BUS_OK;

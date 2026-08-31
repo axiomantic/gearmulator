@@ -1,11 +1,7 @@
-/* mailbox.cpp -- g2::Mailbox, Task CHN-1. Design sections 12.3 and 13.10.2.
- *
- * THE WHOLE ALLOCATION HAPPENS HERE, ONCE, IN THE CONSTRUCTOR. m_ring is a
- * std::vector sized hopFrames + 1, which is a single allocation. advance(),
- * read(), write() and writeSlot() allocate nothing, which is what makes the
- * ring a real-time-safe swap point rather than a growing structure. The
- * CHN-1 check drives the constructor and then 1,000 advance() calls against
- * an allocation counter and asserts the counter does not move.
+/* The whole allocation happens once, in the constructor: m_ring is a
+ * std::vector sized hopFrames + 1. advance(), read(), write() and writeSlot()
+ * allocate nothing, which is what makes the ring a real-time-safe swap point
+ * rather than a growing structure.
  */
 
 #include "mailbox.h"
@@ -36,7 +32,7 @@ namespace g2
 	{
 		const unsigned n = depth();
 
-		/* THE ORDER IS LOAD-BEARING: the copy comes FIRST, against the
+		/* The order is load-bearing: the copy comes first, against the
 		 * pre-step head, and the step comes second. After the step, write()
 		 * is the cell that just received the copy -- the underrun rule, so a
 		 * position that does not write leaves its last transmitted frame in
@@ -57,9 +53,8 @@ namespace g2
 	}
 
 	/* The two friend-only codec-facing accessors. ingressFrame() writes the
-	 * READ frame (section 12.3 step 2); egressFrame() reads the WRITE frame
-	 * (section 12.3 step 4). Both are reachable by ChainAdapter and by
-	 * nothing else. */
+	 * read frame; egressFrame() reads the write frame. Both are reachable by
+	 * ChainAdapter and by nothing else. */
 	Frame& Mailbox::ingressFrame() noexcept
 	{
 		return m_ring[(m_head + 1u) % depth()];

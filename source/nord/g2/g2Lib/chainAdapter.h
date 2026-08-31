@@ -1,70 +1,42 @@
-/* chainAdapter.h -- the chain adapter's header. Tasks CHN-4 and CHN-5.
- * Design sections 12.3 and 13.10.2.
- *
- * THIS HEADER LAYS DOWN THE DECLARATION, AND CHN-5 DEFINES THE CLASS.
- * The two chain tasks split the one file: CHN-4 owns `ChainTopology` and the
- * inline `mailboxCount` constant expression that section 12.3 derives the
- * mailbox array sizes from, and CHN-5 defines the ChainAdapter class and its
- * whole public surface in chainAdapter.cpp. The class declaration lives here
- * because a C++ class definition must appear in the header; CHN-5 adds its
- * member declarations to this same class and writes the member definitions
- * into the .cpp.
- *
- * THE MAILBOX COUNT IS COMPUTED FROM THE TOPOLOGY, NEVER WRITTEN DOWN. The
- * audio bus is fixed to Line and therefore always has dspCount + 1 mailboxes
- * (section 2.4 proves the line from the DMA slot counts); the second bus
- * takes its topology as a parameter, provisionally Ring, and its count is a
- * constant expression in the topology alone. Sizing the arrays from the
- * parameter -- rather than fixing the second bus to a ring -- is the whole
- * point of this task, because fixing it would put a value the spike has not
- * measured into the structure (section 23.1).
+/* The mailbox count is computed from the topology, never written down. The
+ * audio bus is fixed to Line and therefore always has dspCount + 1 mailboxes;
+ * the second bus takes its topology as a parameter, provisionally Ring, and
+ * its count is a constant expression in the topology alone. Sizing the arrays
+ * from the parameter -- rather than fixing the second bus to a ring -- keeps
+ * an unmeasured value out of the structure.
  */
 
 #pragma once
 
-/* CHN-5 needs the Mailbox type (whose delay line the adapter owns) and the
- * dsp56300 callback types the four callback factories return.
- *
- * Mailbox is pulled in by mailbox.h, which also brings g2::Frame and
- * g2::SlotWriteView; frame.h pulls in "dsp56kEmu/audio.h", which declares
- * dsp56k::Audio's ReadRxCallback and WriteTxCallback aliases that the two
- * alias types below bind to. */
+/* mailbox.h also brings g2::Frame and g2::SlotWriteView; frame.h pulls in
+ * "dsp56kEmu/audio.h", which declares dsp56k::Audio's ReadRxCallback and
+ * WriteTxCallback aliases that the two alias types below bind to. */
 #include "mailbox.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
-/* CHN-6: the transmit wrappers inspect the emulated ESAI's M_TUE bit through
- * Esai::readStatusRegister(). The adapter stores only borrowed pointers to the
- * per-position ESAs (the DSP set owns them, section 13.10.2), so a forward
- * declaration is enough here; chainAdapter.cpp includes the full
- * dsp56kEmu/esai.h when it dereferences them. */
+/* The adapter stores only borrowed pointers to the per-position ESAIs (the
+ * DSP set owns them), so a forward declaration is enough here;
+ * chainAdapter.cpp includes the full dsp56kEmu/esai.h to dereference them. */
 namespace dsp56k { class Esai; }
 
 namespace g2
 {
-	/* The two alias types the four callback factories return, bound to the
-	 * real dsp56300 signatures at audio.h:116-117:
+	/* The two alias types the four callback factories return:
 	 *
 	 *     EsaiReadRxCallback  = std::function<void(uint64_t&, RxFrame&)>
 	 *     EsaiWriteTxCallback = std::function<void(uint64_t&, const TxFrame&)>
 	 *
-	 * They are declared BEFORE the class, not after it as the design section
-	 * 13.10.2 listing shows: the class's member declarations name them, and a
-	 * type must be declared before it is named in a member signature. The
-	 * design's prose ordering is illustrative, not compilable, and this
-	 * header carries the compilable order.
-	 *
 	 * The first argument is the mutable frame-index reference the library
-	 * hands every callback. Section 13.10.2's frame-index rule makes every
-	 * callback this adapter installs treat that reference as READ-ONLY and
-	 * never write it: the scheduler's own virtual frame index is the only
-	 * authoritative one. */
+	 * hands every callback. Every callback this adapter installs treats that
+	 * reference as read-only and never writes it: the scheduler's own virtual
+	 * frame index is the only authoritative one. */
 	using EsaiReadRxCallback  = dsp56k::Audio::ReadRxCallback;
 	using EsaiWriteTxCallback = dsp56k::Audio::WriteTxCallback;
 
-	/* The three bus topologies of section 12.3. */
+	/* The three bus topologies. */
 	enum class ChainTopology
 	{
 		Line,      /* open both ends:  N + 1 mailboxes             */
@@ -73,7 +45,7 @@ namespace g2
 	};
 
 	/* The chain adapter that owns every Mailbox and drives the four phases
-	 * of section 12.3 once per virtual frame.
+	 * once per virtual frame.
 	 *
 	 * Ownership   Scheduler owns exactly one ChainAdapter.
 	 * Lifetime    Constructed before the DSP set, destroyed after it. The
@@ -81,37 +53,26 @@ namespace g2
 	 *             outlive it; the Scheduler's destruction order guarantees
 	 *             that.
 	 * Threading   Scheduler thread only. No lock, no atomic, by
-	 *             construction.
-	 *
-	 * CHN-4 declares this header with the constructor line and the inline
-	 * mailboxCount below. CHN-5 defines the whole public surface -- the four
-	 * phase methods, the per-position ESAI callbacks, the three counters and
-	 * the state trio -- in chainAdapter.cpp and adds their declarations here.
-	 * The behavioural depth each later chain task adds is stated on the
-	 * individual member, so that this task lays the surface down without
-	 * pre-empting the task the plan names as the owner of a behaviour. */
+	 *             construction. */
 	class ChainAdapter
 	{
 	public:
 		/* dspCount is the number of DSP positions; hopFrames is the hop
-		 * delay H of section 4 row 9; secondBusTopology and
-		 * secondBusFrameDivider are the second bus's topology and its frame
-		 * divider (4 today, from AGENTS.md section 2.2's recorded 24 kHz
-		 * control rate). Defined in chainAdapter.cpp (CHN-5). */
+		 * delay H; secondBusTopology and secondBusFrameDivider are the second
+		 * bus's topology and its frame divider, 4 today for a 24 kHz control
+		 * rate. */
 		ChainAdapter(unsigned dspCount, unsigned hopFrames,
 		             ChainTopology secondBusTopology,
 		             unsigned secondBusFrameDivider);
 
-		/* The mailbox count for a topology, derived from it. Section 12.3
-		 * gives the rule and the reason for each of the three values:
-		 * Line -> N + 1, Ring -> N, Broadcast -> 1.
+		/* The mailbox count for a topology: Line -> N + 1, Ring -> N,
+		 * Broadcast -> 1.
 		 *
-		 * DEFINED INLINE, not merely declared: a constexpr function must be
+		 * Defined inline, not merely declared: a constexpr function must be
 		 * defined before any use of it in a constant expression, and the
-		 * mailbox arrays are sized by exactly such a use (section 13.10.2).
-		 * A declaration alone would compile and link a target while failing
-		 * every constant-expression use, which is the exact failure the
-		 * CHN-4 Check catches with static_assert. */
+		 * mailbox arrays are sized by exactly such a use. A declaration alone
+		 * would compile and link while failing every constant-expression
+		 * use. */
 		static constexpr unsigned mailboxCount(ChainTopology t,
 		                                       unsigned dspCount) noexcept
 		{
@@ -120,20 +81,9 @@ namespace g2
 			     :                            1u;   /* Broadcast */
 		}
 
-		/* ------------- CHN-5 accessors.
-		 *
-		 * The four are the constructor arguments, stored and readable back.
-		 * The CHN-5 Check constructs one adapter with each argument set to a
-		 * distinct value and reads each back through these four, which is
-		 * what makes "the constructor forwards its arguments" testable
-		 * rather than stated.
-		 *
-		 * audioMailboxCount and secondBusMailboxCount report the two buses'
-		 * mailbox counts, derived from the stored arguments. audioMailboxCount
-		 * is mailboxes(Line, dspCount) = dspCount + 1 at EVERY second-bus
-		 * topology, which is the property the CHN-5 Check asserts across a
-		 * range of topology arguments: the audio chain is fixed to Line and
-		 * the second-bus topology parameter must not be able to move it. */
+		/* audioMailboxCount is mailboxCount(Line, dspCount) = dspCount + 1 at
+		 * every second-bus topology: the audio chain is fixed to Line and the
+		 * second-bus topology parameter must not be able to move it. */
 		unsigned       dspCount() const noexcept;
 		unsigned       hopFrames() const noexcept;
 		ChainTopology  secondBusTopology() const noexcept;
@@ -141,20 +91,12 @@ namespace g2
 		unsigned       audioMailboxCount() const noexcept;
 		unsigned       secondBusMailboxCount() const noexcept;
 
-		/* ------------- The four phases of section 12.3, in this order, once
-		 * for each virtual frame.
+		/* The four phases, in this order, once for each virtual frame.
 		 *
-		 * advanceAll is the swap point and ALSO closes the underrun
-		 * accounting for the quantum that just ended. The full four-step
-		 * order with the 2 x dspCount written flags is task CHN-7's (it adds
-		 * the count-then-clear-then-advance sequence to this body); CHN-5
-		 * lays down the swap itself -- audio mailboxes advance every quantum,
-		 * second-bus mailboxes only when frameIndex % secondBusFrameDivider
-		 * == 0 -- which is the cadence that does not move after CHN-7 lands.
-		 *
-		 * CHN-9 owns the four-phase procedure end to end, driven through a
-		 * Scheduler; the codec edges below are where the run phase is entered
-		 * and left from. */
+		 * advanceAll is the swap point and also closes the underrun accounting
+		 * for the quantum that just ended. Audio mailboxes advance every
+		 * quantum; second-bus mailboxes only when
+		 * frameIndex % secondBusFrameDivider == 0. */
 		void advanceAll(uint64_t frameIndex) noexcept;   /* 1 swap    */
 		void injectCodecSource(const Frame&)   noexcept; /* 2 ingress */
 		/*        3 run phase happens in the Scheduler, through the callbacks */
@@ -165,81 +107,53 @@ namespace g2
 		 * Each returns a callable that borrows this ChainAdapter and is
 		 * installed on one DSP's ESAI at construction of the DSP set.
 		 * Position is 0..dspCount-1. The mailbox each one reaches follows
-		 * section 12.3's wiring table: on a Line a receive reads mailbox k
+		 * the wiring table: on a Line a receive reads mailbox k
 		 * and a transmit writes mailbox k + 1; on a Ring the transmit writes
 		 * (k + 1) mod N; on a Broadcast every position reads and writes the
 		 * one mailbox (a transmit commits slot k only, through
 		 * Mailbox::writeSlot, which is what keeps eight producers from
-		 * overwriting one another).
-		 *
-		 * CHN-6 owns the written-flag rule that these transmit wrappers
-		 * gain (the wrappers capture and inspect the emulated ESAI's M_TUE
-		 * bit); CHN-5 lays down the wiring the wrappers carry. CHN-12 tests
-		 * the wiring table for all three topologies. */
+		 * overwriting one another). */
 		EsaiReadRxCallback  audioRxCallback (unsigned position);
 		EsaiWriteTxCallback audioTxCallback (unsigned position);
 		EsaiReadRxCallback  secondRxCallback(unsigned position);
 		EsaiWriteTxCallback secondTxCallback(unsigned position);
 
-		/* ------------- CHN-6, the written-flag mechanism.
+		/* The written-flag mechanism.
 		 *
-		 * Each transmit wrapper sets its position's WRITTEN flag: true
-		 * exactly when the callback fires AND the emulated ESAI's M_TUE
-		 * transmit-underrun bit is clear in Esai::readStatusRegister() at
-		 * that instant (section 12.3). M_TUE rises in writeSlotToFrame
-		 * (esai.cpp:380-384) before the frame is delivered and is not
-		 * cleared until the interrupt path (esai.cpp:108-112) runs after,
-		 * so at the instant the callback runs the bit states whether the
-		 * frame it carries is stale. This is the better measurement of
-		 * section 12.3 and the assertion behind the CHN-6 Check.
+		 * Each transmit wrapper sets its position's written flag: true exactly
+		 * when the callback fires and the emulated ESAI's M_TUE
+		 * transmit-underrun bit is clear in Esai::readStatusRegister() at that
+		 * instant. M_TUE rises in writeSlotToFrame before the frame is
+		 * delivered and is not cleared until the interrupt path runs after, so
+		 * at the instant the callback runs the bit states whether the frame it
+		 * carries is stale.
 		 *
-		 * attachEsai records the borrowed per-position Esai pointers a
-		 * position's transmit wrappers inspect. The DSP set calls it for
-		 * every position at construction, BEFORE it produces the four
-		 * callbacks - the position's wrappers need the Esai from the first
-		 * fire. It is CHN-6's seam so the rule is testable before CHN-7's
-		 * advanceAll consumes the flags.
+		 * The DSP set calls attachEsai for every position at construction,
+		 * before it produces the four callbacks - the position's wrappers need
+		 * the Esai from the first fire.
 		 *
-		 * audioWritten/secondWritten read one position's flag back; they are
-		 * the test and diagnostic surface of the M_TUE rule. Nothing can SET
-		 * a flag outside ChainAdapter - a flag changes only when its own
-		 * transmit wrapper fires. */
+		 * Nothing can set a flag outside ChainAdapter: a flag changes only
+		 * when its own transmit wrapper fires. */
 		void attachEsai(unsigned position, dsp56k::Esai& audio, dsp56k::Esai& second);
 		bool audioWritten (unsigned position) const noexcept;
 		bool secondWritten(unsigned position) const noexcept;
 
-		/* ------------- The three counters.
-		 *
-		 * underrunFrames counts, per position, quanta in which the audio
-		 * bus's transmit wrapper was not satisfied; secondBusUnderrunFrames
-		 * counts the same for the second bus on its window quanta only;
-		 * phaseErrorFrames counts transmit callbacks the scheduler did not
-		 * ask for. CHN-5 declares and implements them so the surface links;
-		 * the counting storage and the advanceAll cadence that feeds them
-		 * are tasks CHN-7 and CHN-8 (a counter that cannot be driven above
-		 * zero is a green mirage, so this task returns zero and lets the
-		 * owning task replace the body). */
+		/* underrunFrames counts, per position, quanta in which the audio bus's
+		 * transmit wrapper was not satisfied; secondBusUnderrunFrames counts
+		 * the same for the second bus on its window quanta only;
+		 * phaseErrorFrames counts transmit callbacks the scheduler did not ask
+		 * for. */
 		uint64_t underrunFrames(unsigned position) const noexcept;
 		uint64_t secondBusUnderrunFrames(unsigned position) const noexcept;
 		uint64_t phaseErrorFrames(unsigned position) const noexcept;
 
-		/* ------------- The state trio.
+		/* stateSize/stateSave/stateLoad serialise the adapter's
+		 * determinism-relevant state into the Scheduler snapshot.
 		 *
-		 * stateSize/stateSave/stateLoad serialise the adapter's
-		 * determinism-relevant state into the Scheduler snapshot. CHN-14 owns
-		 * the save-and-load round trip (mailbox contents and counters);
-		 * CHN-5 declares and defines the trio so the surface links.
-		 *
-		 * stateLoad RETURN-TYPE DEVIATION, STATED RATHER THAN HIDDEN. The
-		 * design declares `Status stateLoad(const void*)`, but g2::Status is
-		 * owned by task SCH-18 (Files: g2Lib/status.h), which is not in this
-		 * task's Depends: line. CHN-5 must not define g2::Status -- that
-		 * would be implementing SCH-18's owned file -- so stateLoad returns
-		 * void here, exactly as task BRD-21 declares Board::stateLoad for the
-		 * same reason (see board.h). When SCH-18 has created status.h, the
-		 * chain adapter's stateLoad is reconciled to return g2::Status, the
-		 * shape the design's POST-correction declaration wants and that
-		 * CHN-14 asserts. */
+		 * stateLoad deliberately returns void rather than g2::Status: that
+		 * type does not exist yet, and Board::stateLoad deviates the same way
+		 * (see board.h). Both are reconciled to g2::Status once status.h
+		 * exists. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
 		void   stateLoad(const void* src) noexcept;
@@ -257,47 +171,34 @@ namespace g2
 		ChainTopology  m_secondBusTopology   = ChainTopology::Ring;
 		unsigned       m_secondBusFrameDivider = 1;
 
-		/* ------------- CHN-6 private state: the written flags and the
-		 * Esai pointers the transmit wrappers inspect.
-		 *
-		 * m_audioWritten and m_secondWritten hold ONE flag for each position
-		 * and EACH bus, so 2 x dspCount flags and never dspCount (section
-		 * 13.10.2). A position's audio transmit wrapper sets m_audioWritten
-		 * and its second transmit wrapper sets m_secondWritten, which is
-		 * what lets CHN-7 count the two buses on different cadences.
+		/* m_audioWritten and m_secondWritten hold one flag for each position
+		 * and each bus, so 2 x dspCount flags and never dspCount. That is what
+		 * lets the two buses be counted on different cadences.
 		 *
 		 * m_audioEsai / m_secondEsai are the borrowed per-position Esai
-		 * pointers (owned by the DSP set), populated by attachEsai before
-		 * the four factories are produced. */
+		 * pointers (owned by the DSP set), populated by attachEsai before the
+		 * four factories are produced. */
 		std::vector<dsp56k::Esai*> m_audioEsai;
 		std::vector<dsp56k::Esai*> m_secondEsai;
 		std::vector<uint8_t>       m_audioWritten;
 		std::vector<uint8_t>       m_secondWritten;
 
-		/* ------------- CHN-7 private state: the two underrun counters.
-		 *
-		 * One uint64_t for each position for each bus. advanceAll step 1
+		/* One uint64_t for each position for each bus. advanceAll step 1
 		 * increments m_underrun[position] on EVERY quantum when the
 		 * position's audio-bus written flag is clear; step 2 increments
 		 * m_secondUnderrun[position] ONLY on the second-bus window quanta
 		 * (frameIndex % secondBusFrameDivider == 0). The two are separate
 		 * storage, because the two buses advance at different rates, and
 		 * both are sized to dspCount at construction so advanceAll indexes
-		 * them without resizing. The third counter, phaseErrorFrames, counts
-		 * in the transmit wrappers rather than in advanceAll and is task
-		 * CHN-8's. */
+		 * them without resizing. */
 		std::vector<uint64_t> m_underrun;
 		std::vector<uint64_t> m_secondUnderrun;
 
-		/* ------------- CHN-8 private state: the phase-error counter.
-		 *
-		 * ONE uint64_t for each position, shared across the two buses
-		 * (section 13.10.2 counts "a transmit callback the scheduler did not
-		 * ask for, on either bus"). The transmit wrappers increment it, never
-		 * advanceAll: it counts the out-of-band execTX() callbacks
-		 * (esai.cpp:209) and a duplicate delivery, which are events that
-		 * happen in the wrappers. Sized to dspCount at construction so a
-		 * wrapper indexes it without resizing. */
+		/* One uint64_t for each position, shared across the two buses. The
+		 * transmit wrappers increment it, never advanceAll: it counts the
+		 * out-of-band execTX() callbacks and a duplicate delivery, which are
+		 * events that happen in the wrappers. Sized to dspCount at
+		 * construction so a wrapper indexes it without resizing. */
 		std::vector<uint64_t> m_phaseError;
 	};
 }

@@ -1,20 +1,13 @@
-// Task BRD-19. The bootstrap ROM.
+// The bootstrap ROM. It only moves words the host supplies; it is the OS that
+// decides what the words are.
 //
-// Plan section 13.6, BRD-19. Design section 10.6 and 24.
-// Logbook: AGENTS.md section 3.1.
-//
-// THIS FILE CARRIES NO KERNEL IMAGE AND NO DSP IMAGE. The bootstrap only
-// moves words the host supplies; it is the OS that decides what the words
-// are. The BRD-19 test authors every word it feeds, so no Clavia byte is
-// read or written anywhere on this path.
-//
-// THE MOTION. A received word is one of three headers or one of the data
-// words of the body, decided by where the state machine is. The count is read
-// first, then the address, then the body. Each body word is stored at
-// P[address + i] for i = 0, 1, ..., and a body word whose target lies at or
-// past the supplied capacity is REFUSED: it is not stored, and refusedStores()
-// counts it, because silently writing past the end of a caller's buffer is
-// the one failure a model like this must never be able to hide.
+// A received word is one of three headers or one of the data words of the
+// body, decided by where the state machine is. The count is read first, then
+// the address, then the body. Each body word is stored at P[address + i] for
+// i = 0, 1, ..., and a body word whose target lies at or past the supplied
+// capacity is refused: it is not stored, and refusedStores() counts it,
+// because silently writing past the end of a caller's buffer is the one
+// failure a model like this must never be able to hide.
 
 #include "hdi08Bootstrap.h"
 
@@ -56,11 +49,9 @@ namespace g2
 			// pushes 0x000000 here, but the model does not special-case it:
 			// whatever address the host chooses is where the body lands.
 			//
-			// A count of ZERO promises an empty body, so the load is complete
-			// the moment the address is known: there are no data words to
-			// wait for. The zero-count case is exercised because the count is
-			// the protocol's only bound, and the firmware could legitimately
-			// load an empty body at a non-zero address.
+			// A count of zero promises an empty body, so the load is complete
+			// the moment the address is known: there are no data words to wait
+			// for.
 			m_address = word;
 			m_status = Status::Receiving;
 			if(m_receivedDataWords == m_count && m_refusedStores == 0)
@@ -85,13 +76,11 @@ namespace g2
 				}
 				++m_receivedDataWords;
 
-				// COMPLETION REQUIRES THAT EVERY PROMISED WORD LANDED. A store
+				// Completion requires that every promised word landed. A store
 				// the bounds check refused means part of the image did not
 				// reach P memory, so a corrupt image must not dispatch: the
 				// machine stays Receiving and reports incomplete through
-				// isComplete() being false. This is the same rule the
-				// short-stream negative case drives, reached by a different
-				// route.
+				// isComplete() being false.
 				if(m_receivedDataWords == m_count && m_refusedStores == 0)
 					m_status = Status::Complete;
 			}
@@ -102,9 +91,7 @@ namespace g2
 
 		case Status::Complete:
 			// A word after a completed load has no legal destination in the
-			// protocol. It is discarded. An earlier draft threw it away in
-			// silence, which reads as a branch nothing can reach; this comment
-			// is that branch made visible.
+			// protocol. It is discarded.
 			break;
 		}
 

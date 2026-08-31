@@ -1,25 +1,8 @@
-/* chainAdapter.cpp -- the chain adapter's implementation. Task CHN-5.
- * Design sections 12.3 and 13.10.2.
- *
- * CHN-5 defines the whole public surface the CHN-4 header declares, and its
- * Check is exactly the properties a surface-task can own: the four
- * constructor arguments are stored and readable back; the audio chain
- * reports precisely dspCount + 1 mailboxes at every second-bus topology; and
- * every method on the declared surface has a definition, so taking its
- * address links. Each deeper behaviour is owned by a later chain task, and
- * this file says, on the member that owns it, which task that is:
- *
- *   advanceAll's count-then-clear-then-advance accounting ... CHN-7
- *   the transmit wrappers' written-flag rule ................. CHN-6
- *   the three counters' real storage and cadence ............. CHN-7, CHN-8
- *   the save-and-load round trip ............................. CHN-14
- *   the head/tail slot mappings and the Scheduler-driven four phase ... CHN-9
- *
- * Chains that assemble this surface take
+/* Chains that assemble this surface take
  *   m_audio  = mailboxCount(ChainTopology::Line, dspCount)         mailboxes
  *   m_second = mailboxCount(secondBusTopology,     dspCount)      mailboxes
- * each a delay line of hopFrames + 1 frames, and the count follows section
- * 12.3's rule: it is computed from the topology and never written down.
+ * each a delay line of hopFrames + 1 frames, computed from the topology and
+ * never written down.
  */
 
 #include "chainAdapter.h"
@@ -42,18 +25,14 @@ namespace g2
 			Second
 		};
 
-		/* One ESAI receive/transmit frame of the chain carries eight slots
-		 * (section 12.3). The head/tail special cases -- two slots in at the
-		 * head, two out at the tail -- are task CHN-9's; the uniform 8-slot
-		 * form is the one this surface task lays down. Frame::kSlots is the
-		 * constant so the two cannot drift apart. */
+		/* One ESAI receive/transmit frame of the chain carries eight slots.
+		 * Frame::kSlots is the constant so the two cannot drift apart. */
 		constexpr unsigned kChainSlots = Frame::kSlots;
 
 		/* The receive/transmit register index each bus uses. The audio chain
 		 * receives on M_RX0 (reg 0) and transmits on M_TX0 (reg 0); the
 		 * second bus receives on M_RX0_1 (reg 0) and transmits on M_TX2_1
-		 * (reg 2). frame.h carries the full table; these two are the two the
-		 * adapter needs here. */
+		 * (reg 2). frame.h carries the full table. */
 		constexpr unsigned kAudioReg   = 0u;
 		constexpr unsigned kSecondReg  = 2u;
 	}
@@ -68,20 +47,19 @@ namespace g2
 		, m_hopFrames(hopFrames)
 		, m_secondBusTopology(secondBusTopology)
 		, m_secondBusFrameDivider(secondBusFrameDivider)
-		/* CHN-6: one borrowed Esai pointer and one cleared written flag for
-		 * each position on each bus. Sized to dspCount now, so a position's
-		 * wrapper can index them from the first fire without resizing. */
+		/* One borrowed Esai pointer and one cleared written flag for each
+		 * position on each bus. Sized to dspCount now, so a position's wrapper
+		 * can index them from the first fire without resizing. */
 		, m_audioEsai(dspCount, nullptr)
 		, m_secondEsai(dspCount, nullptr)
 		, m_audioWritten(dspCount, 0u)
 		, m_secondWritten(dspCount, 0u)
-		/* CHN-7: one counter per position per bus, so advanceAll can index
-		 * them from the first fire without resizing. */
+		/* One counter per position per bus, so advanceAll can index them from
+		 * the first fire without resizing. */
 		, m_underrun(dspCount, 0u)
 		, m_secondUnderrun(dspCount, 0u)
-		/* CHN-8: one phase-error counter per position, shared across the
-		 * two buses, so a wrapper can index it from the first fire without
-		 * resizing. */
+		/* One phase-error counter per position, shared across the two buses, so
+		 * a wrapper can index it from the first fire without resizing. */
 		, m_phaseError(dspCount, 0u)
 	{
 		assert(hopFrames >= 1u
@@ -121,7 +99,7 @@ namespace g2
 		return static_cast<unsigned>(m_second.size());
 	}
 
-	/* ------------- CHN-6: the written flags and their Esai source. ---------- */
+	/* ------------- the written flags and their Esai source. ---------------- */
 
 	void ChainAdapter::attachEsai(const unsigned position,
 	                              dsp56k::Esai& audio,
@@ -145,20 +123,19 @@ namespace g2
 
 	/* ------------- the swap point. -------------------------------------------- */
 
-	/* CHN-7: advanceAll closes the underrun accounting for the quantum that
-	 * just ended, in the FOUR-STEP ORDER of section 13.10.2, then swaps the
-	 * selected mailboxes. There are 2 x dspCount written flags - one per
-	 * position per bus - and the ORDER is load-bearing because the flags
-	 * describe the quantum that ENDED, not the one about to start:
+	/* advanceAll closes the underrun accounting for the quantum that just
+	 * ended, then swaps the selected mailboxes. There are 2 x dspCount written
+	 * flags - one per position per bus - and the order is load-bearing because
+	 * the flags describe the quantum that ended, not the one about to start:
 	 *
-	 *   1. EVERY quantum: for each position, if its audio-bus flag is clear,
+	 *   1. Every quantum: for each position, if its audio-bus flag is clear,
 	 *      increment that position's underrunFrames.
-	 *   2. ONLY when frameIndex % secondBusFrameDivider == 0: for each
+	 *   2. Only when frameIndex % secondBusFrameDivider == 0: for each
 	 *      position, if its second-bus flag is clear, increment that
 	 *      position's secondBusUnderrunFrames. The second bus is not
 	 *      expected to transmit outside its advance window, so examining its
 	 *      flag there would count a non-event.
-	 *   3. Clear the audio flags ALWAYS; clear the second-bus flags ONLY on
+	 *   3. Clear the audio flags always; clear the second-bus flags only on
 	 *      the same quanta as step 2, for the same reason.
 	 *   4. advance() the selected mailboxes: the audio bus every quantum,
 	 *      the second bus only on the window quanta. */
@@ -201,9 +178,9 @@ namespace g2
 
 	void ChainAdapter::injectCodecSource(const Frame& src) noexcept
 	{
-		/* Section 12.3 step 2: write the codec stereo pair into slots 0 and 1
-		 * of mailbox 0's READ frame, through ingressFrame() and not through
-		 * read(), which is const. The head's DMA then places them at
+		/* Write the codec stereo pair into slots 0 and 1 of mailbox 0's read
+		 * frame, through ingressFrame() and not through read(), which is
+		 * const. The head's DMA then places them at
 		 * X:$001C04, not X:$001C00. Guarded so a degenerate 0-position
 		 * adapter (a test fixture, not a machine) stays defined. */
 		if(m_audio.empty())
@@ -216,8 +193,8 @@ namespace g2
 
 	void ChainAdapter::extractCodecSink(Frame& out) noexcept
 	{
-		/* Section 12.3 step 4: read slots 0 and 1 of the LAST audio mailbox's
-		 * WRITE frame, through egressFrame() and not through write(), which
+		/* Read slots 0 and 1 of the last audio mailbox's write frame, through
+		 * egressFrame() and not through write(), which
 		 * only the producing DSP's transmit callback may call. The tail is
 		 * the last mailbox of the Line: mailbox N, whose write frame holds
 		 * the tail DSP's most recent transmit. The two codec edges carry no
@@ -241,9 +218,7 @@ namespace g2
 		return [this, position](uint64_t&, dsp56k::Audio::RxFrame& out) noexcept {
 			/* Line: the receive callback of position k reads mailbox k's
 			 * read() frame. The library frame is filled through the chain's
-			 * single Rx conversion point, toEsaiFrame. CHN-9 owns the exact
-			 * slot count a position expects (2 at the head, 8 elsewhere);
-			 * this surface lays down the mailbox wiring. */
+			 * single Rx conversion point, toEsaiFrame. */
 			if(this->m_audio.empty())
 			{
 				out.clear();
@@ -257,17 +232,14 @@ namespace g2
 	EsaiWriteTxCallback ChainAdapter::audioTxCallback(const unsigned position)
 	{
 		return [this, position](uint64_t&, const dsp56k::Audio::TxFrame& in) noexcept {
-			/* CHN-8 PHASE-ERROR RULE (section 12.3, 13.10.2), the audio-bus
-			 * half. phaseErrorFrames counts a transmit callback the scheduler
-			 * did NOT ask for, on either bus. On the audio bus that condition
-			 * is one thing: the position has ALREADY delivered on this bus in
-			 * this quantum. "Already delivered" is exactly the position's
-			 * audio written flag being set at this instant - advanceAll clears
-			 * the audio flags every quantum, so a set audio flag at callback
-			 * time can only mean a previous audio transmit in this same
-			 * quantum. The check runs BEFORE this callback updates the flag,
-			 * so the lone, scheduler-driven delivery - the one callback the
-			 * scheduler asks for - is not counted, while a second one is. */
+			/* The phase-error rule, audio-bus half. phaseErrorFrames counts a
+			 * transmit callback the scheduler did not ask for. On the audio
+			 * bus that condition is one thing: the position has already
+			 * delivered on this bus in this quantum, which is exactly its
+			 * audio written flag being set at this instant - advanceAll
+			 * clears the audio flags every quantum. The check runs before
+			 * this callback updates the flag, so the lone scheduler-driven
+			 * delivery is not counted, while a second one is. */
 			if(position < this->m_phaseError.size()
 				&& position < this->m_audioWritten.size()
 				&& this->m_audioWritten[position] != 0u)
@@ -275,19 +247,17 @@ namespace g2
 				++this->m_phaseError[position];
 			}
 
-			/* CHN-6 WRITTEN-FLAG RULE (section 12.3). The flag is NOT "the
-			 * callback fired" - the scheduler drives a transmit callback for
-			 * every position on every quantum, so an arrival flag could never
-			 * be clear and underrunFrames could never rise (a green mirage).
-			 * The source is the emulated ESAI's own M_TUE bit, read at this
-			 * instant: M_TUE rises in writeSlotToFrame (esai.cpp:380-384)
-			 * before the frame is delivered and is not cleared until the
-			 * interrupt path (esai.cpp:108-112) runs after, so the bit states
+			/* The written-flag rule. The flag is not "the callback fired" -
+			 * the scheduler drives a transmit callback for every position on
+			 * every quantum, so an arrival flag could never be clear and
+			 * underrunFrames could never rise. The source is the emulated
+			 * ESAI's own M_TUE bit, read at this instant: M_TUE rises in
+			 * writeSlotToFrame before the frame is delivered and is not
+			 * cleared until the interrupt path runs after, so the bit states
 			 * whether the frame this callback carries is stale. Set the flag
 			 * true exactly when M_TUE is clear; actively clear it otherwise,
 			 * so a stale callback overwrites a good flag rather than leaving
-			 * it set. The wrapper reaches its position's Esai through
-			 * m_audioEsai, which attachEsai filled at construction. */
+			 * it set. */
 			if(position < this->m_audioWritten.size())
 			{
 				const dsp56k::Esai* esai =
@@ -299,8 +269,7 @@ namespace g2
 
 			/* Line: the transmit callback of position k writes mailbox k + 1's
 			 * write() frame. The tail position N - 1 therefore writes mailbox
-			 * N, which is the mailbox the egress phase reads. (CHN-9 owns the
-			 * head/tail slot forms.) */
+			 * N, which is the mailbox the egress phase reads. */
 			if(this->m_audio.empty() || position + 1u >= this->m_audio.size())
 				return;
 
@@ -313,8 +282,7 @@ namespace g2
 		return [this, position](uint64_t&, dsp56k::Audio::RxFrame& out) noexcept {
 			/* The second bus's topology is a parameter. On a Line or a Ring
 			 * the receive callback of position k reads mailbox k; on a
-			 * Broadcast every position reads the one shared mailbox. The
-			 * wiring table is section 12.3's and CHN-12 tests all three. */
+			 * Broadcast every position reads the one shared mailbox. */
 			const unsigned n = static_cast<unsigned>(this->m_second.size());
 			if(n == 0u)
 			{
@@ -332,18 +300,17 @@ namespace g2
 	EsaiWriteTxCallback ChainAdapter::secondTxCallback(const unsigned position)
 	{
 		return [this, position](uint64_t& frameIndex, const dsp56k::Audio::TxFrame& in) noexcept {
-			/* CHN-8 PHASE-ERROR RULE, the second-bus half (sections 12.3,
-			 * 13.10.2). Increment AT MOST ONCE per callback - it is ONE
-			 * unwanted callback, so one increment even when both conditions
-			 * hold at once - when either of the two conditions is met:
-			 *   (a) the position has ALREADY delivered on this bus in this
+			/* The phase-error rule, second-bus half. Increment at most once
+			 * per callback - it is one unwanted callback, so one increment
+			 * even when both conditions hold at once - when either is met:
+			 *   (a) the position has already delivered on this bus in this
 			 *       quantum (its second written flag is set at this instant;
 			 *       advanceAll clears the second flags only on the window
-			 *       quanta, which is exactly the cadence that makes a set
-			 *       flag mean "delivered this quantum" on this bus), or
-			 *   (b) on the second bus only, this is outside the advance
-			 *       window: frameIndex % secondBusFrameDivider != 0.
-			 * The check runs BEFORE this callback updates the flag, so the
+			 *       quanta, which is the cadence that makes a set flag mean
+			 *       "delivered this quantum" on this bus), or
+			 *   (b) this is outside the advance window:
+			 *       frameIndex % secondBusFrameDivider != 0.
+			 * The check runs before this callback updates the flag, so the
 			 * lone scheduler-driven window delivery is not counted. */
 			if(position < this->m_phaseError.size())
 			{
@@ -356,11 +323,11 @@ namespace g2
 					++this->m_phaseError[position];
 			}
 
-			/* CHN-6 WRITTEN-FLAG RULE, the second-bus half. Same condition as
-			 * the audio wrapper - M_TUE clear in readStatusRegister() at this
-			 * instant sets the position's SECOND-bus flag, otherwise clears
+			/* The written-flag rule, second-bus half. Same condition as the
+			 * audio wrapper - M_TUE clear in readStatusRegister() at this
+			 * instant sets the position's second-bus flag, otherwise clears
 			 * it - but it writes m_secondWritten, the per-bus storage that
-			 * lets CHN-7 count the two buses on different cadences. */
+			 * lets the two buses be counted on different cadences. */
 			if(position < this->m_secondWritten.size())
 			{
 				const dsp56k::Esai* esai =
@@ -376,9 +343,9 @@ namespace g2
 			 *   Line     : position k writes mailbox k + 1.
 			 *   Ring     : position k writes mailbox (k + 1) mod N.
 			 *   Broadcast: every position writes the one mailbox, committing
-			 *               slot (position) ONLY through Mailbox::writeSlot,
+			 *               slot (position) only through Mailbox::writeSlot,
 			 *               which is what prevents eight producers from
-			 *               overwriting one another (sections 12.3, 13.10.2). */
+			 *               overwriting one another. */
 			const unsigned n = static_cast<unsigned>(this->m_second.size());
 			if(n == 0u)
 				return;
@@ -401,13 +368,10 @@ namespace g2
 
 	/* ------------- the three counters. ----------------------------------------- */
 
-	/* CHN-7 gives underrunFrames and secondBusUnderrunFrames their real
-	 * storage, fed by advanceAll's step 1 and step 2 (the two are separate
-	 * vectors, because the two buses advance at different rates, which is
-	 * exactly the separation CHN-8 asserts). CHN-8 gives phaseErrorFrames
-	 * its real storage: one counter per position, incremented in the transmit
-	 * wrappers (never in advanceAll) when a callback the scheduler did not
-	 * ask for fires. */
+	/* underrunFrames and secondBusUnderrunFrames are fed by advanceAll's steps
+	 * 1 and 2, from separate vectors because the two buses advance at different
+	 * rates. phaseErrorFrames is incremented in the transmit wrappers, never in
+	 * advanceAll. */
 	uint64_t ChainAdapter::underrunFrames(const unsigned position) const noexcept
 	{
 		return position < m_underrun.size() ? m_underrun[position] : 0u;
@@ -425,10 +389,6 @@ namespace g2
 
 	/* ------------- the state trio. --------------------------------------------- */
 
-	/* CHN-5 defines the trio so the surface links; CHN-14 owns the real
-	 * save-and-load round trip (mailbox contents and counters) and the return
-	 * type of stateLoad, which design section 13.10.2 declares as g2::Status
-	 * but which SCH-18 has not created yet (see the header comment). */
 	size_t ChainAdapter::stateSize() const noexcept { return 0u; }
 	void   ChainAdapter::stateSave(void*) const noexcept {}
 	void   ChainAdapter::stateLoad(const void*) noexcept {}

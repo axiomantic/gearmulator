@@ -6,24 +6,20 @@
 #
 # Created empty by task BRD-0.
 
-# ----------------- CHN-3, SlotWriteView
+# ----------------- SlotWriteView
 #
-# Header-only on purpose: CHN-3's Files: line names slotWriteView.h and no
-# translation unit. Listed here for the IDE source group, like anomalyLog.h.
+# Header-only. Listed here for the IDE source group, like anomalyLog.h.
 
 list(APPEND G2LIB_SOURCES slotWriteView.h)
 
 
-# ----------------- CHN-1, the mailbox delay line
+# ----------------- the mailbox delay line
 #
 # The whole allocation of the ring happens once, in the constructor, so the
 # compiled part is a single translation unit.
 list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
 
-# ----------------- CHN-4/CHN-5, ChainTopology + the ChainAdapter class
+# ----------------- ChainTopology + the ChainAdapter class
 #
-# CHN-4 lays down chainAdapter.h; CHN-5 defines the class in chainAdapter.cpp
-# and is the first task to give the chain track a real translation unit, so it
-# is here that the header is joined by the .cpp. Both stay in the same source
-# group so the IDE shows them together.
+# Both stay in the same source group so the IDE shows them together.
 list(APPEND G2LIB_SOURCES chainAdapter.h chainAdapter.cpp)

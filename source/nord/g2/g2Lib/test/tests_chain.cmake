@@ -6,9 +6,7 @@
 #
 # Created empty by task BRD-0.
 
-# ----------------- CHN-3, SlotWriteView
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_slot_write_view$
+# ----------------- SlotWriteView
 
 add_executable(t0_slot_write_view t0_slot_write_view.cpp)
 target_link_libraries(t0_slot_write_view PRIVATE g2Lib)
@@ -18,9 +16,7 @@ add_test(NAME t0_slot_write_view COMMAND t0_slot_write_view)
 set_tests_properties(t0_slot_write_view PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-1, the mailbox surface
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_mailbox_surface$
+# ----------------- the mailbox surface
 
 add_executable(t0_mailbox_surface t0_mailbox_surface.cpp)
 target_link_libraries(t0_mailbox_surface PRIVATE g2Lib)
@@ -30,9 +26,7 @@ add_test(NAME t0_mailbox_surface COMMAND t0_mailbox_surface)
 set_tests_properties(t0_mailbox_surface PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-2, the mailbox index test
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_mailbox_index$
+# ----------------- the mailbox index test
 
 add_executable(t0_mailbox_index t0_mailbox_index.cpp)
 target_link_libraries(t0_mailbox_index PRIVATE g2Lib)
@@ -41,15 +35,7 @@ set_property(TARGET t0_mailbox_index PROPERTY FOLDER "G2/test")
 add_test(NAME t0_mailbox_index COMMAND t0_mailbox_index)
 set_tests_properties(t0_mailbox_index PROPERTIES LABELS "UnitTest")
 
-# ----------------- CHN-4, ChainTopology and mailboxCount
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_mailbox_count$
-#
-# The registered test asserts mailboxCount in a CONSTANT EXPRESSION: the
-# mailbox arrays are sized from exactly such a use, so a declaration-only
-# function compiles and links a target and fails only at the constant-
-# expression use (plan section 7.7.1). A static_assert is the only check
-# that can catch it.
+# ----------------- ChainTopology and mailboxCount
 
 add_executable(t0_mailbox_count t0_mailbox_count.cpp)
 target_link_libraries(t0_mailbox_count PRIVATE g2Lib)
@@ -59,15 +45,7 @@ add_test(NAME t0_mailbox_count COMMAND t0_mailbox_count)
 set_tests_properties(t0_mailbox_count PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-5, the ChainAdapter surface
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_chain_adapter_surface$
-#
-# Constructs one adapter with each of the four constructor arguments set to a
-# distinct value and asserts each is forwarded and readable; asserts the audio
-# chain reports exactly dspCount + 1 mailboxes at every second-bus topology;
-# and takes the address of every method on the declared public surface, so a
-# missing one is a link error.
+# ----------------- the ChainAdapter surface
 
 add_executable(t0_chain_adapter_surface t0_chain_adapter_surface.cpp)
 target_link_libraries(t0_chain_adapter_surface PRIVATE g2Lib)
@@ -77,17 +55,7 @@ add_test(NAME t0_chain_adapter_surface COMMAND t0_chain_adapter_surface)
 set_tests_properties(t0_chain_adapter_surface PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-6, the written-flag rule
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_written_flag$
-#
-# The transmit wrappers' written flag is driven by the emulated ESAI's own
-# M_TUE transmit-underrun bit, clear in Esai::readStatusRegister() at the
-# instant the callback fires, and NOT by the callback's arrival (section 12.3).
-# The test constructs real dsp56k::Esai objects, drives M_TUE set/clear, fires
-# each position's transmit wrapper and reads the flag back through
-# ChainAdapter::audioWritten / secondWritten, asserting the per-position and
-# per-bus separation directly.
+# ----------------- the written-flag rule
 
 add_executable(t0_written_flag t0_written_flag.cpp)
 target_link_libraries(t0_written_flag PRIVATE g2Lib)
@@ -97,17 +65,7 @@ add_test(NAME t0_written_flag COMMAND t0_written_flag)
 set_tests_properties(t0_written_flag PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-7, advanceAll and the four ordered steps
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_advance_all$
-#
-# advanceAll closes the underrun accounting for the quantum that just ended:
-# (1) every quantum, count audio-bus underruns from clear audio flags; (2)
-# only when frameIndex % secondBusFrameDivider == 0, count second-bus
-# underruns; (3) clear the audio flags always and the second-bus flags only
-# on the window quanta; (4) advance() the selected mailboxes. The test drives
-# the real CHN-6 flags through a divider of 2 and asserts the counters, the
-# per-bus clear cadence, and the second-bus mailbox-advance gate.
+# ----------------- advanceAll and the four ordered steps
 
 add_executable(t0_advance_all t0_advance_all.cpp)
 target_link_libraries(t0_advance_all PRIVATE g2Lib)
@@ -117,15 +75,7 @@ add_test(NAME t0_advance_all COMMAND t0_advance_all)
 set_tests_properties(t0_advance_all PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-8, the three counters
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_chain_counters$
-#
-# Asserts the two properties this row owns: (1) underrunFrames and
-# secondBusUnderrunFrames are separate storage, driven one above zero at a
-# single position while the other stays zero there; (2) one unwanted callback
-# raises phaseErrorFrames(position) by exactly ONE even when both conditions
-# (already delivered this quantum AND non-window) hold at once.
+# ----------------- the three counters
 
 add_executable(t0_chain_counters t0_chain_counters.cpp)
 target_link_libraries(t0_chain_counters PRIVATE g2Lib)
