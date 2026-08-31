@@ -388,10 +388,11 @@ namespace g2
 		FlashWindow  m_flashCs2;
 		MbarRouter   m_mbar;
 
-		/* Declared after m_usb, whose handle it forwards to: the reference is
-		 * bound at construction and the handle it names is assigned in the
-		 * constructor body, so declaration order here records that dependency
-		 * rather than creating one. */
+		/* Declared BEFORE m_usb, so it is constructed while that handle is
+		 * still null. It binds a reference to the handle rather than copying
+		 * it, which is what makes the order harmless: the assignment in the
+		 * constructor body is what every later read sees. Storing the handle
+		 * by value here would capture the null instead. */
 		Isp1181Window m_usbCs3;
 
 		/* The ISP1181 USB device this Board owns. Design sections 5.2 and 9.4
