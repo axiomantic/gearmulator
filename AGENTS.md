@@ -187,6 +187,17 @@ of the alternative.
 
 Never write these in a comment:
 
+- **A plan-task ID or a design-document pointer.** `PLG-nn`, `BRD-nn`, `SCH-nn`,
+  `CHN-nn`, `CPU-nn`, `INT-nn`, `PROTO-nn`, `DSP-nn`, `USB-nn`, `PERF-nn`,
+  `W3-nnnn`, `M-x`, "§24.6 row ...", "task ...", "plan section ...", "design
+  section 13.10 rule 3", "step 2 of ...". They point into a ledger that lives in
+  another repository, and they renumber. **State the FACT; drop the citation.**
+  This is where the noise concentrates in this fork: the spellings above are
+  common in `source/nord/g2/`, so expect to cut them in bulk.
+- **A roster or a status list.** "the stub bodies below are not finished —
+  `getChannelCountIn` has landed". A roster rots by construction: every task
+  that lands makes it wrong until someone edits it. A stub's own body says it
+  is a stub.
 - **A count** — cases, tests, scenarios, targets, symbols, files, or lines. The
   next change makes it wrong, and nothing catches it.
 - **A present-tense claim about what the tests cover**, or about what a wrong
@@ -229,6 +240,25 @@ layout is also computed in `g2Lib/frame.cpp`" earns its place and stays, provide
 it asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
 "does not name": those are the falsifiable forms, and that difference is the
 whole of the rule.
+
+**A measured fact earns its place only while it stays measured.** A comment
+about a FORMAT or about the hardware — a register address, a chip-select map, a
+byte offset in firmware, a field width, an endianness — is safe, because the
+thing it describes cannot change under it. A comment about OUR OWN
+implementation choice rots the moment the implementation changes, and it keeps
+a comment's authority while it does. **When you change behaviour, the comment
+above it is part of the change.**
+
+**A mixed block is split, not judged whole.** One block often holds a
+restatement of the code AND a real why — a hazard, an ordering that is
+load-bearing, a deliberate duplication. Edit inside the block: cut the
+restatement and the task IDs, keep the why. Do not delete a whole block because
+part of it is noise, and do not keep a whole block because part of it is real.
+
+**Prove a prose pass changed no code, mechanically.** For C++, compare the
+preprocessed output of the file before and after, or the compiled object. At
+minimum, show a diff in which every changed line is a comment line. Do not
+assert "comments only" by eye.
 
 **A date does not rescue a stale claim.** Within a day of churn a date
 discriminates nothing.
