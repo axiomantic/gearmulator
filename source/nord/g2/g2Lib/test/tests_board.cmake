@@ -862,3 +862,42 @@ set_tests_properties(t0_gdb_script PROPERTIES LABELS "UnitTest")
 
 target_sources(t0_sof_tick PRIVATE ../transportHub.cpp)
 target_sources(t0_board_interrupts PRIVATE ../transportHub.cpp)
+
+# ----------------- PLG-13, CallbackTimer
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_callback_timer$
+#
+# TIER T0 AND UNGATED: no firmware artifact, no booted machine, no scheduler.
+# The test constructs the timer alone and drives its own begin/end pairs.
+#
+# WHAT THE TEST HOLDS. Design section 18.10: the surface (every method and
+# Report member pinned through fully qualified member-pointer types), the
+# plain ring of the last N, the running count/mean/max since construction or
+# reset, reset() taking effect AT THE NEXT END() and only then, and the
+# seqlock under a concurrent end() and report() -- every returned Report
+# internally consistent, a retry never surfacing. The class must declare NO
+# state surface (it is not part of the Scheduler snapshot): the SFINAE probe
+# turns any later stateSave/stateLoad into a compile failure here.
+#
+# THE TEST READS NO HOST CLOCK. The duration magnitudes are whatever the
+# host gives; the cases assert exact counts and order-only properties any
+# monotonic clock satisfies. It carries no std::chrono include, so the
+# SCH-26 lint's search, which sweeps the emulation sources, stays green on
+# this file; the one sanctioned reader of a host clock remains
+# ../perf/CallbackTimer.cpp, the single named entry on the lint's exclusion
+# list.
+#
+# IT COMPILES ../perf/CallbackTimer.cpp DIRECTLY and links g2Lib.
+# CallbackTimer.cpp is not yet on sources_perf.cmake -- the source-list edit
+# belongs to the perf track's own file -- so the direct compile is what puts
+# the object into this test's link, the same arrangement the plugin-track
+# registrations use for the g2JucePlugin sources.
+
+add_executable(t0_callback_timer
+	t0_callback_timer.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../perf/CallbackTimer.cpp)
+target_link_libraries(t0_callback_timer PRIVATE g2Lib)
+set_property(TARGET t0_callback_timer PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_callback_timer COMMAND t0_callback_timer)
+set_tests_properties(t0_callback_timer PROPERTIES LABELS "UnitTest")
