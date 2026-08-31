@@ -382,28 +382,20 @@ namespace g2
 
 	namespace
 	{
-		/* THE TWO SIZES TransportHub CANNOT DERIVE FOR ITSELF, supplied here
+		/* The two sizes TransportHub cannot derive for itself, supplied here
 		 * because the Board is what constructs the hub.
 		 *
-		 * g_transportMaxFrameBytes IS DERIVED AND NOT MEASURED. Design section
-		 * 15.3's wire framing is [1-byte type][2-byte length][payload], so the
-		 * ceiling is 1 + 2 + 65,535. transportHub.h states that it is
-		 * deliberately the loosest bound the design can give and that PROTO-10
-		 * lowers it once the largest real patch message has been measured.
-		 * That measurement has not been taken here and the loose bound stands.
+		 * g_transportMaxFrameBytes is derived and not measured. The wire
+		 * framing is [1-byte type][2-byte length][payload], so the ceiling is
+		 * 1 + 2 + 65,535. It is deliberately the loosest bound available.
 		 *
-		 * g_transportQueueDepth IS CHOSEN. An ordinary tunable, not a gated
-		 * constant, exactly as transportHub.h records.
-		 *
-		 * IT WAS 16 AND THAT WAS TOO SMALL FOR A REAL PATCH. A `.pch2` load is
-		 * ORIGINATED WHOLE: g2::pch2Load validates the container and then hands
-		 * the hub one frame per object with no quantum boundary in between, so
-		 * the whole patch must fit the queue at once or the load is refused and
-		 * NOTHING is delivered. Every one of the 73 files in the artifact
-		 * corpus carries EXACTLY 18 objects -- measured over the corpus, not
-		 * recalled -- so a depth of 16 refused every real patch with
-		 * PCH2-SEND-REFUSED. t1_patch_running is what fails when this number is
-		 * below the object count of the largest patch. */
+		 * g_transportQueueDepth is chosen, an ordinary tunable. A `.pch2` load
+		 * is originated whole: g2::pch2Load validates the container and then
+		 * hands the hub one frame per object with no quantum boundary in
+		 * between, so the whole patch must fit the queue at once or the load is
+		 * refused and nothing is delivered. A patch in the artifact corpus
+		 * carries 18 objects, so a depth of 16 refuses every real patch with
+		 * PCH2-SEND-REFUSED. */
 		constexpr size_t g_transportMaxFrameBytes = 1u + 2u + 65535u;
 		constexpr size_t g_transportQueueDepth    = 32u;
 	}
@@ -453,61 +445,41 @@ namespace g2
 		/* The Board's own ISP1181, created here so its lifetime is exactly the
 		 * Board's and destroyed in the reverse order below.
 		 *
-		 * BOTH CALLBACKS ARE THIS BOARD'S OWN. The comment that stood here
-		 * said both were null because the Board had nowhere to route either.
-		 * Neither half of that is true any more. A packet the device hands to
-		 * tx reaches every attachment through the hub above, and the device's
+		 * Both callbacks are this Board's own. A packet the device hands to tx
+		 * reaches every attachment through the hub above, and the device's
 		 * service request reaches the machine's one interrupt controller.
 		 *
-		 * THE AUTHORITY THAT WAS MISSING IS THE FIRMWARE, AND IT HAS NOW BEEN
-		 * READ. The sentence that stood here -- that routing the IRQ needed a
-		 * level and a vector "that no authority in this project records for
-		 * CS3" -- is superseded, not merely softened. Both G2 images install
-		 * the USB handler at level 3, autovectored, vector 27 at VBR+0x6C, by
-		 * two independent encodings that agree; both leave IRQPAR unwritten;
-		 * and both enable the device's own interrupts unconditionally during
-		 * USB bring-up (DcInterruptEnable = 0x00001F07, then Mode bit 3). So
-		 * the wired callback is a path the firmware WILL exercise, and the
-		 * null that stood here was a functional gap rather than a no-op.
-		 * onUsbIrq carries the derivation and the READ-versus-INFERRED split.
+		 * Both G2 images install the USB handler at level 3, autovectored,
+		 * vector 27 at VBR+0x6C, by two independent encodings that agree; both
+		 * leave IRQPAR unwritten; and both enable the device's own interrupts
+		 * unconditionally during USB bring-up (DcInterruptEnable = 0x00001F07,
+		 * then Mode bit 3). So the wired callback is a path the firmware will
+		 * exercise.
 		 *
-		 * WHAT THE TX CALLBACK CAN AND CANNOT DO IN THIS TREE, MEASURED RATHER
-		 * THAN ASSUMED. `src/isp1181/isp1181.nim` STORES the callback at
-		 * construction and CALLS IT FROM NOWHERE: no line of that model
-		 * invokes `m.tx`. So the wire is installed and correct and the device
-		 * cannot yet drive it. Installing it anyway is what makes the
-		 * direction exist at all, and t0_board_transport drives the pointer
-		 * directly for exactly that reason.
+		 * `src/isp1181/isp1181.nim` stores the tx callback at construction and
+		 * calls it from nowhere: no line of that model invokes `m.tx`. So the
+		 * wire is installed and correct and the device cannot yet drive it.
 		 *
-		 * THE SAME IS MEASURED FOR THE IRQ CALLBACK AND IT COMES OUT ONE STEP
-		 * FURTHER ALONG. `src/isp1181/isp1181.nim` DOES call the stored irq
-		 * callback, from `updateIrq`, whenever the masked interrupt register
-		 * changes state. What no implemented command does is SET a bit of that
-		 * register: `raiseInterrupt` is the only writer and its own head block
-		 * records that nothing calls it, because that model has no
-		 * event-to-bit assignment yet. So the wire installed here is correct
-		 * and complete on this side, and the device cannot yet drive it.
-		 * t0_board_interrupts case group 5 drives the pointer directly for the
-		 * same reason t0_board_transport does. */
+		 * That model does call the stored irq callback, from `updateIrq`,
+		 * whenever the masked interrupt register changes state. What no
+		 * implemented command does is set a bit of that register:
+		 * `raiseInterrupt` is the only writer and nothing calls it, because
+		 * that model has no event-to-bit assignment yet. */
 		m_usb = isp1181_create(this, &Board::onUsbIrq, &Board::onUsbTx);
 
-		/* THE HANDLE IS MOVED OFF THE STUB, DELIBERATELY AND HERE. `mcf5307`'s
-		 * header states it plainly: the Stub is the create-time default, it is
-		 * a device that is present in the CS3 window and inert -- every read
-		 * answers 0x00, every packet is discarded, neither callback is ever
-		 * called -- and "select it deliberately; nothing selects it for you".
-		 * A Board that left the default in place would call isp1181_rx once
-		 * per drained frame into a device that throws every one away, which is
-		 * the state t0_board_transport's case 3 records as unobservable.
+		/* The handle is moved off the Stub deliberately and here. The Stub is
+		 * the create-time default: present in the CS3 window and inert -- every
+		 * read answers 0x00, every packet is discarded, neither callback is
+		 * ever called. A Board that left the default in place would call
+		 * isp1181_rx once per drained frame into a device that throws every one
+		 * away.
 		 *
-		 * THE RETURN IS CHECKED AND NOT DISCARDED. The call is refused for a
-		 * nil handle and for a backend value neither macro names, and a
-		 * refusal MOVES NOTHING -- so an unchecked call would leave a Stub in
-		 * place and look identical to a successful one. That is the silent
-		 * failure this project refuses to build. The failure is reported on
-		 * the same stream the clock line below uses and the Board continues:
-		 * a Board without a usable USB device is still a Board that boots, and
-		 * t0_usb_ingress_byte is what fails when the wire is dead. */
+		 * The return is checked and not discarded. The call is refused for a
+		 * nil handle and for a backend value neither macro names, and a refusal
+		 * moves nothing, so an unchecked call would leave a Stub in place and
+		 * look identical to a successful one. The failure is reported and the
+		 * Board continues: a Board without a usable USB device is still a Board
+		 * that boots. */
 		if(m_usb != nullptr &&
 		   isp1181_set_backend(m_usb, MCF5307_ISP1181_BACKEND_FULL_MODEL) != 1)
 		{
@@ -529,9 +501,8 @@ namespace g2
 
 	void Board::pumpTransport() noexcept
 	{
-		/* ONE DRAIN, AT THE BOUNDARY. transportHub.h makes the count of drains
-		 * the quantum count -- "drainToDevice runs exactly once for each
-		 * quantum" -- so a second drain in one quantum would advance the hub's
+		/* One drain, at the boundary. drainToDevice runs exactly once for each
+		 * quantum, so a second drain in one quantum would advance the hub's
 		 * frame index past the machine's and stamp two frames that crossed
 		 * together with different indices. */
 		const size_t drained = m_transport.drainToDevice(m_drained.data(), m_drained.size());
@@ -543,11 +514,10 @@ namespace g2
 		{
 			const ProtocolFrame& frame = m_drained[i].frame;
 
-			/* THE BYTES ARE HANDED OVER UNCHANGED AND NOTHING HERE READS ONE.
-			 * Design section 15.3: "the emulator does not implement the
-			 * protocol by hand, the firmware implements it; the emulator only
-			 * carries the bytes." A Board that inspected a frame here would be
-			 * a second implementation of the protocol. */
+			/* The bytes are handed over unchanged and nothing here reads one:
+			 * the firmware implements the protocol, the emulator only carries
+			 * the bytes. A Board that inspected a frame here would be a second
+			 * implementation of the protocol. */
 			isp1181_rx(m_usb, m_usbProtocolEndpoint, frame.data, frame.size);
 		}
 	}
@@ -560,12 +530,11 @@ namespace g2
 		if(board == nullptr)
 			return;
 
-		/* STRAIGHT TO THE HUB, WHICH DELIVERS TO EVERY ATTACHMENT IN
-		 * ATTACHMENT ORDER. The buffer is the DEVICE'S and is borrowed for the
-		 * duration of this call; TransportHub::fromDevice hands each endpoint
-		 * the same borrow, and design section 13.10.6 gives that argument the
-		 * shortest of the three lifetimes, so an endpoint that keeps it copies
-		 * it. Nothing is copied here. */
+		/* Straight to the hub, which delivers to every attachment in attachment
+		 * order. The buffer is the device's and is borrowed for the duration of
+		 * this call; TransportHub::fromDevice hands each endpoint the same
+		 * borrow, so an endpoint that keeps it copies it. Nothing is copied
+		 * here. */
 		board->m_transport.fromDevice(ProtocolFrame{ data, len });
 	}
 
@@ -576,25 +545,23 @@ namespace g2
 		if(board == nullptr)
 			return;
 
-		/* THE PIN IS NAMED AND THE LEVEL IS NOT. IRQ3 is what the firmware
+		/* The pin is named and the level is not. IRQ3 is what the firmware
 		 * operates: BOOT:0x31FE writes its USB handler to VBR+108 -- vector
 		 * 27, which is the ColdFire autovector formula 24+level at level 3 --
 		 * sets AVR to 0x08 and clears IMR bit 3, and CODE reaches the same
 		 * three effects through install_autovector(3, 0x30053C38) at that
-		 * helper's ONLY call site in the image. Neither image ever writes
+		 * helper's only call site in the image. Neither image ever writes
 		 * IRQPAR, so IRQ3 keeps its reset level.
 		 *
-		 * READ VERSUS INFERRED, AND THE DIFFERENCE IS NOT SMOOTHED OVER. The
-		 * LEVEL is read out of the firmware. That the PIN is IRQ3 is INFERRED
-		 * from it: only IRQ3 can present at level 3, and no image names a pin.
-		 * The schematic cannot settle it -- U24 carries exactly one extracted
-		 * pin and the string IRQ occurs nowhere in it.
+		 * The level is read out of the firmware. That the pin is IRQ3 is
+		 * inferred from it: only IRQ3 can present at level 3, and no image
+		 * names a pin. The schematic cannot settle it -- U24 carries exactly
+		 * one extracted pin and the string IRQ occurs nowhere in it.
 		 *
-		 * THE CONTROLLER DERIVES EVERYTHING ELSE. externalLevel applies UM
+		 * The controller derives everything else. externalLevel applies UM
 		 * Table 8-4 to IRQPAR and the autovector bit comes from AVR, both of
 		 * which the firmware programs through the MBAR window at run time. A
-		 * level written down here would be a constant standing where a
-		 * derivation belongs, and it would stay 3 after a firmware that moved
+		 * level written down here would stay 3 after a firmware that moved
 		 * IRQPAR[1] had made it 6. */
 		board->m_interrupts.setExternalPending(ExternalPin::Irq3, asserted != 0);
 	}
@@ -680,18 +647,14 @@ namespace g2
 		 * the USB device model rather than of the scheduler, so it is tested
 		 * here. Design section 9.4.
 		 *
-		 * THE TRANSPORT IS PUMPED FIRST, AND THIS METHOD IS WHERE IT HAPPENS
-		 * BECAUSE OF WHERE THE SCHEDULER ALREADY CALLS IT. scheduler.cpp calls
-		 * this on EVERY frame, unconditionally, immediately before runMcu --
-		 * design section 13.5's fixed point -- so it is already the
-		 * per-quantum boundary a hub drain must sit on, and hooking it here
-		 * adds no call to the Scheduler and edits no file the sched track
-		 * owns. THE SOF TEST BELOW MUST NOT GATE IT: a drain that ran once
-		 * every 96 quanta would make the hub's frame index count SOF frames
-		 * rather than quanta, which is the one property transportHub.h states
-		 * about it.
+		 * The transport is pumped first, and this method is where it happens
+		 * because scheduler.cpp calls this on every frame, unconditionally,
+		 * immediately before runMcu: it is already the per-quantum boundary a
+		 * hub drain must sit on. The SOF test below must not gate it -- a drain
+		 * that ran once every 96 quanta would make the hub's frame index count
+		 * SOF frames rather than quanta.
 		 *
-		 * THE ORDER IS DELIBERATE. The frames cross into the device BEFORE the
+		 * The order is deliberate. The frames cross into the device before the
 		 * MCU runs the quantum that may read them, so a frame that entered at
 		 * quantum N is visible to the firmware in quantum N and not in N+1. */
 		pumpTransport();

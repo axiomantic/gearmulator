@@ -1,42 +1,38 @@
-/* t0_usb_ingress_byte.cpp -- the end-to-end check that a PATCH BYTE reaches
+/* t0_usb_ingress_byte.cpp -- the end-to-end check that a patch byte reaches
  * the device register file the firmware reads.
  * Tier T0: no artifact, no firmware image, no file outside this repository.
  *
- * THE SENTENCE THIS FILE EXISTS TO HOLD: a byte of a `.pch2` object that a
- * plugin originates is READABLE, as that byte and not as the benign 0x00, at
+ * The property this file exists to hold: a byte of a `.pch2` object that a
+ * plugin originates is readable, as that byte and not as the benign 0x00, at
  * the CS3 data port -- through Board::onRead, which is the exact function
  * pointer handed to mcf5307_create and therefore the exact path the MCU core
  * takes when the firmware executes a load from the ISP1181.
  *
- * WHAT t0_board_transport COULD NOT SEE, AND WHY. Its case 3 records that the
- * Board's `isp1181_rx` call had an UNOBSERVABLE effect: `isp1181_create`
- * answers a handle whose backend is the Stub, and the Stub discards every
- * packet and answers 0x00 at every offset. This file is the check of the one
- * call that changes that -- the Board selecting MCF5307_ISP1181_BACKEND_FULL_MODEL
- * on the handle it just created. Remove that call and case 2 below reads 0x00.
+ * It is the check of the Board selecting MCF5307_ISP1181_BACKEND_FULL_MODEL on
+ * the handle it just created. Remove that call and the handle keeps the Stub
+ * backend, which discards every packet and answers 0x00 at every offset, and
+ * case 2 below reads 0x00.
  *
- * THE INSTRUMENT, AND ITS TWO CONTROLS. The instrument is the part's own peek
- * command (0xD2) issued at the CS3 command port and read back at the CS3 data
- * port, with the peek target selected by the endpoint-configuration command
- * (0x20 + the endpoint's CONFIGURATION SLOT, which is not its number).
- * A non-zero reading means nothing on its own, so it is
- * never reported without a reading that IS zero, taken on THE SAME HANDLE
- * through THE SAME two bus calls:
+ * The instrument is the part's own peek command (0xD2) issued at the CS3
+ * command port and read back at the CS3 data port, with the peek target
+ * selected by the endpoint-configuration command (0x20 + the endpoint's
+ * configuration slot, which is not its number). A non-zero reading means
+ * nothing on its own, so it is never reported without a reading that is zero,
+ * taken on the same handle through the same two bus calls:
  *
- *   control A (temporal)  the same board, the same endpoint, peeked BEFORE
+ *   control A (temporal)  the same board, the same endpoint, peeked before
  *                         any frame has crossed -- reads 0x00.
  *   control B (negative)  a board configured to deliver on endpoint 9, which
  *                         the device model refuses; every other step is
  *                         identical -- reads 0x00.
  *
- * Control B is what makes case 2 a measurement of DELIVERY rather than of the
+ * Control B is what makes case 2 a measurement of delivery rather than of the
  * peek command answering something. Both controls run the identical code path
  * as the query; nothing here succeeds through a path the query does not take.
  *
- * NOTHING IN THIS FILE IS AN assert() AND NOTHING CATCHES AN EXCEPTION, for
- * the reason t0_board_transport states: NDEBUG must change no case.
+ * Nothing in this file is an assert() and nothing catches an exception: NDEBUG
+ * must change no case.
  */
-
 #include "../board.h"
 #include "../memoryMap.h"
 #include "../internalClient.h"
@@ -82,7 +78,7 @@ namespace
 
 	constexpr int g_byte = 1;
 
-	/* THE ENDPOINT UNDER TEST IS THE SHIPPED DEFAULT AND NOT A LITERAL HERE.
+	/* The endpoint under test is the shipped default and not a literal here.
 	 * This file measures the ingress path of the endpoint the protocol runs
 	 * over, and `board.h` is where that is recorded; a literal would go stale
 	 * silently the next time the default moves. */
@@ -99,12 +95,12 @@ namespace
 		return config;
 	}
 
-	/* THE CONFIGURATION SLOT ORDER, WHICH IS NOT THE ENDPOINT NUMBER. ISP1362
+	/* The configuration slot order, which is not the endpoint number. ISP1362
 	 * Rev. 06 section 15.1.1 orders the sixteen `0x20`..`0x2F` slots control
 	 * OUT, control IN, then endpoints 1 to 14, so endpoint 0 is slot 0,
 	 * endpoint 1 is slot 2, endpoint 2 is slot 3 and endpoint 3 is slot 4. The
 	 * peek answers about the buffer the last configuration command selected,
-	 * and that operand is one of THESE. Passing an endpoint number straight
+	 * and that operand is one of these. Passing an endpoint number straight
 	 * through selects a buffer one place low for every endpoint above 0; the
 	 * read still succeeds and answers the model's benign 0x00, so the wrong
 	 * answer arrives looking exactly like an empty buffer. */
@@ -117,7 +113,7 @@ namespace
 		return g_bufferSlotOfEndpoint[_endpoint];
 	}
 
-	/* THE INSTRUMENT. Two writes and one read, all three through the same
+	/* The instrument. Two writes and one read, all three through the same
 	 * public bus callbacks the core drives. It reads the head byte of the OUT
 	 * buffer the given endpoint delivers into, and answers the model's benign
 	 * 0x00 when that buffer holds nothing. */
@@ -190,7 +186,7 @@ namespace
 	}
 
 	/* Load one single-object container into a board's hub through the same
-	 * pch2Load a plugin calls, then cross ONE quantum boundary so the Board's
+	 * pch2Load a plugin calls, then cross one quantum boundary so the Board's
 	 * own pump drains it into the device. Answers the object's first byte,
 	 * which is what the peek must then read back. */
 	uint8_t deliverOneObject(g2::Board& _board, const uint8_t _type,
@@ -217,7 +213,7 @@ namespace
 int main()
 {
 	/* ------------------------------------------------------------- case 1.
-	 * CONTROL A, TEMPORAL. The instrument reads 0x00 on a board across which
+	 * Control A, temporal. The instrument reads 0x00 on a board across which
 	 * no frame has crossed. Without this, a non-zero reading in case 2 could
 	 * be the peek command answering rather than a packet arriving. */
 	{
@@ -228,8 +224,8 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 2.
-	 * THE MEASUREMENT. A patch object crosses the quantum boundary and its
-	 * FIRST BYTE -- the object's type byte, the first byte of the frame the
+	 * The measurement. A patch object crosses the quantum boundary and its
+	 * first byte -- the object's type byte, the first byte of the frame the
 	 * Board hands isp1181_rx -- is what the CS3 data port answers.
 	 *
 	 * The expected value is taken from the container this process built, not
@@ -248,7 +244,7 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 3.
-	 * THE SAME MEASUREMENT WITH A DIFFERENT BYTE. A device that answered one
+	 * The same measurement with a different byte. A device that answered one
 	 * fixed non-zero value would pass case 2 and fail here. */
 	{
 		g2::Board board(makeConfig(g_protocolEndpoint));
@@ -260,12 +256,12 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 4.
-	 * CONTROL B, NEGATIVE. Endpoint 9 is one the device model refuses -- its
+	 * Control B, negative. Endpoint 9 is one the device model refuses -- its
 	 * endpoint table names 0 to 3 -- so the delivery is dropped inside the
 	 * model. Everything else is identical: the same container, the same pump,
 	 * the same two bus writes and the same bus read on a handle of the same
 	 * kind. The reading is 0x00, which is what makes case 2's reading a
-	 * measurement of DELIVERY.
+	 * measurement of delivery.
 	 *
 	 * The peek still selects the protocol endpoint, because the peek target is
 	 * set by the configuration command and 9 names no buffer to peek at. */

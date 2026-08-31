@@ -1,63 +1,39 @@
-/* t0_pch2_load.cpp -- the T0 check of task PROTO-11.
- * Design sections 15.7 and 15.3. Tier T0: no artifact, no firmware, and no
- * Clavia byte -- every file it reads is authored by this project.
+/* t0_pch2_load.cpp -- the `.pch2` load path without firmware.
+ * Tier T0: no artifact, no firmware, and no Clavia byte -- every file it reads
+ * is authored by this project.
  *
- * THE SENTENCE THIS ROW EXISTS TO HOLD: "The plugin parses the file, then
- * drives the same protocol messages that an editor would drive. It does not
- * have a second, private load path." The case makes that mechanical. It gives
- * the load path a `.pch2` container and then reads what the TRANSPORT HUB
- * DRAINED -- not what the parser returned, and not what a spy recorded inside
- * it. A load path that parsed correctly and originated nothing is green on a
- * return-value test and red here.
+ * The property this file exists to hold: the plugin parses the file, then
+ * drives the same protocol messages that an editor would drive, and has no
+ * second, private load path. It gives the load path a `.pch2` container and
+ * then reads what the transport hub drained -- not what the parser returned,
+ * and not what a spy recorded inside it. A load path that parsed correctly and
+ * originated nothing is green on a return-value test and red here.
  *
- * WHAT THE ORACLE IS AND WHY IT IS NOT THIS PROGRAM'S OWN OUTPUT.
  * `fixtures/protocol/synth_editor_sequence.txt` is written by a walker
- * implemented in Python from design sections 15.7 and 15.3 alone. It is a
- * different implementation of the same two sections, in a different language,
- * and it read no C++. A fixture the C++ parser had produced would agree with
- * the C++ parser by construction and would assert nothing.
+ * implemented in Python from the specification alone. It is a different
+ * implementation of the same specification, in a different language, and it
+ * read no C++. A fixture the C++ parser had produced would agree with the C++
+ * parser by construction and would assert nothing.
  *
- * WHAT A GREEN RUN PROVES AND WHAT IT DOES NOT. Design section 15.7 states the
- * bound and this header repeats it because the reader of a green check is the
- * reader most likely to over-read it. It proves the load path handles every
- * case THIS SPECIFICATION NAMES. IT PROVES NOTHING ABOUT REAL-WORLD PATCH
- * VARIETY, because nobody wrote the synthesized corpus from real patches. A
- * construct a real Clavia patch uses and section 15.7 does not describe passes
- * here and would fail against the G2 Demo corpus, which is private and is the
- * T1 half's subject. That gap is known, stated and accepted.
+ * A green run proves the load path handles every case the specification names.
+ * It proves nothing about real-world patch variety, because nobody wrote the
+ * synthesized corpus from real patches. A construct a real Clavia patch uses
+ * and the specification does not describe passes here and would fail against
+ * the G2 Demo corpus, which is private.
  *
- * THE COMPARISON IS ONE STRING AGAINST ONE STRING, and that is deliberate. A
+ * The comparison is one string against one string, and that is deliberate. A
  * per-row loop that compared only the rows it found would be green on a load
  * path that dropped a file, dropped an object, or invented one. The observed
- * transcript is built in the fixture's own format and the WHOLE of it is
- * compared, so a missing row, an extra row and a wrong row are all one
- * failure mode with one cause.
+ * transcript is built in the fixture's own format and the whole of it is
+ * compared, so a missing row, an extra row and a wrong row are all one failure
+ * mode with one cause.
  *
- * WHAT THIS CHECK CATCHES, AND WHAT IT LETS THROUGH. Each row below names a
- * mutation of the load path and the observable that goes red for it. Every
- * one of the first three was PLANTED IN THE SOURCE AND OBSERVED RED before
- * this file was left green; the fourth is stated and was not planted.
- *
- *   the validate pass and the send pass are collapsed, so a malformed file
- *       originates the objects ahead of the fault
- *           -> the REFUSED files grow FRAME rows. Observed red.
- *   the CRC comparison is computed and then not acted on
- *           -> bad_crc.pch2 loads and its object appears. Observed red.
- *   a frame is originated one byte short of its declared payload
- *           -> the frame-size case fires on every object. Observed red.
- *   an object type outside the specified set is forwarded rather than refused
- *           -> bad_unknown_type.pch2 grows a FRAME row. Stated, not planted.
- *
- * THE ESCAPE, NAMED RATHER THAN DENIED. A payload row carries a CRC-16 and
- * not the payload, so two DIFFERENT payloads of the SAME length that collide
- * in CRC-16 would pass. That is a real gap and no row here pretends otherwise;
- * what it costs is bounded by the same reasoning the fixture's own header
- * states. The load path never constructs a payload -- it forwards the file's
- * bytes -- so the mutation that would exploit the gap is a load path that
- * substituted one whole payload for a colliding one, which no plausible
- * implementation fault produces.
+ * The escape, named rather than denied. A payload row carries a CRC-16 and not
+ * the payload, so two different payloads of the same length that collide in
+ * CRC-16 would pass. The load path never constructs a payload -- it forwards
+ * the file's bytes -- so the mutation that would exploit the gap is a load path
+ * that substituted one whole payload for a colliding one.
  */
-
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
 #include "../crc16.h"
@@ -93,17 +69,15 @@ namespace
 		}
 	}
 
-	/* THE HUB'S DERIVED CEILING, read from transportHub.h's own statement of
-	 * it rather than written down a second time: design section 15.3's wire
-	 * framing is [1-byte type][2-byte length][payload], so one frame cannot
-	 * exceed 1 + 2 + 65,535 bytes. The corpus drives a 65,469-byte payload,
-	 * so a smaller ceiling here would turn a correct load into SendRefused
-	 * and the check would report a parser fault that is really a test fault. */
+	/* The hub's derived ceiling: the wire framing is [1-byte type][2-byte
+	 * length][payload], so one frame cannot exceed 1 + 2 + 65,535 bytes. The
+	 * corpus drives a 65,469-byte payload, so a smaller ceiling here would turn
+	 * a correct load into SendRefused and the check would report a parser fault
+	 * that is really a test fault. */
 	constexpr std::size_t kMaxFrameBytes = 1u + 2u + 0xFFFFu;
 
 	/* Above the largest object count in the corpus, so the depth never binds.
-	 * `object_types.pch2` carries the most, one for each type section 15.7
-	 * and design section 18's protocol row name between them. */
+	 * `object_types.pch2` carries the most, one for each named type. */
 	constexpr std::size_t kQueueDepth = 32;
 
 	std::vector<uint8_t> readFile(const std::string& _path)

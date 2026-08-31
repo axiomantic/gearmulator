@@ -31,8 +31,4 @@ artifacts/boot/t1_boot_cfi_id_fix.log
 artifacts/boot/t1_boot_cs2trace.log
 artifacts/boot/t1_boot_g2x.log
 artifacts/boot/t1_boot_settle.log
-# Every build tree, not a roster of the ones we happened to create. `build-baseline/`
-# was a single-entry roster and `build-proto11/` was the second case, which would have
-# committed 8,586 files on one `git add -A`. An exception list amended once per case is
-# a missing predicate.
 build-*/

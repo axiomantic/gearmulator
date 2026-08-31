@@ -1,59 +1,53 @@
-// `--impulse` DOES NOT ENTER THE PLAY PHASE UNTIL THE AUDIO PATH IS ARMED.
+// `--impulse` does not enter the play phase until the audio path is armed.
 //
 // Tier T1 and gated: the child boots the real firmware out of NMG2_ARTIFACTS,
-// so this test skips with the section 18.5 skip line when the artifacts are
-// absent. It resolves through ArtifactResolver and never through getenv.
+// so this test skips when the artifacts are absent. It resolves through
+// ArtifactResolver and never through getenv.
 //
 // ---------------------------------------------------------------------------
-// WHAT THIS TEST HOLDS, AND WHY THE PREDICATE IT HOLDS IS NOT THE OBVIOUS ONE
+// A boot drive that leaves the moment every DSP position reports
+// `programLanded` is asserting about program loading and says nothing about
+// audio. The two are separated by more than a factor of five in this firmware:
+// programLanded goes true at boot iteration 44,515, and the ESAI receive DMA
+// request is not armed on any position until 231,296. At the moment of the
+// boot-time DMA configuration the rx-arming code is not even resident --
+// P:$000250-$000270 disassembles as all zeros -- because it arrives in a
+// later-loaded DSP program. Leaving on programLanded hands `beginPlayPhase()`
+// a machine whose receive path is still dead, and the command's
+// `OUTCOME=STOPPED` then states that transport does not yet exist rather than
+// anything about routing.
 //
-// `--impulse` used to leave its boot drive the moment every DSP position
-// reported `programLanded`. That predicate is about PROGRAM LOADING and says
-// nothing about audio, and the two are separated by more than a factor of five
-// in this firmware: programLanded goes true at boot iteration 44,515, and the
-// ESAI RECEIVE DMA request is not armed on any position until 231,296. At the
-// moment of the boot-time DMA configuration the rx-arming code is not even
-// resident -- P:$000250-$000270 disassembles as all zeros -- because it arrives
-// in a later-loaded DSP program.
-//
-// So the old exit handed `beginPlayPhase()` a machine whose receive path was
-// still dead, and the command's `OUTCOME=STOPPED` was a statement about
-// TRANSPORT NOT YET EXISTING rather than about routing. The emulator was right
-// and the instrument stopped too early.
-//
-// THE PREDICATE THIS TEST HOLDS IS THEREFORE AN OBSERVATION OF THE AUDIO PATH:
-// Dma::hasTrigger(EsaiReceiveData) true on EVERY position. That is the DMA
+// The predicate held here is an observation of the audio path:
+// Dma::hasTrigger(EsaiReceiveData) true on every position. That is the DMA
 // request registration itself, not a proxy for it.
 //
-// WHAT WOULD MAKE THIS PREDICATE WRONG, stated here because a predicate whose
+// What would make this predicate wrong, stated here because a predicate whose
 // failure mode is unstated is a predicate nobody can re-check:
 //
-//   1. hasTrigger is STICKY only because finishTransfer clears DE without
+//   1. hasTrigger is sticky only because finishTransfer clears DE without
 //      calling removeTriggerTarget. If dsp56300 ever unregisters on completion,
 //      the predicate becomes a race: it would go false between transfers and
 //      the drive could run to its bound on a healthy machine.
-//   2. setDCR UNREGISTERS the trigger target on any reconfiguration. A kernel
+//   2. setDCR unregisters the trigger target on any reconfiguration. A kernel
 //      that arms the channel and then rewrites DCR would show a window in which
 //      hasTrigger is false. The predicate reads it every iteration, so it
 //      latches the first true and does not depend on the value persisting --
 //      but a run that observed only such a window would be arming that has
 //      since been withdrawn.
-//   3. hasTrigger reports REGISTRATION, not TRAFFIC. A channel registered
+//   3. hasTrigger reports registration, not traffic. A channel registered
 //      against a source that never asserts would satisfy it forever. That is
 //      why the DDR2 assertion below is separate: it reads the destination
 //      pointer the DMA actually advanced.
 //
 // Point 1 is what makes this a bounded drive rather than a spin. The predicate
-// is checked against `g_iterations` exactly as the old one was, and a run that
-// reaches the bound without arming reports DID-NOT-RUN and exits 2 -- it does
-// NOT report STOPPED, because a machine whose receive path never came up did
-// not measure the chain at all.
+// is checked against `g_iterations`, and a run that reaches the bound without
+// arming reports DID-NOT-RUN and exits 2 -- it does not report STOPPED, because
+// a machine whose receive path never came up did not measure the chain at all.
 //
-// Everything asserted here is a process EXIT STATUS or bytes on a standard
+// Everything asserted here is a process exit status or bytes on a standard
 // stream. No assert() carries a predicate: the default build is Release with
 // NDEBUG and would delete it.
 // ---------------------------------------------------------------------------
-
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -172,7 +166,7 @@ namespace
 		return lines;
 	}
 
-	// The outcome is a WHOLE LINE and not a substring anywhere in the output.
+	// The outcome is a whole line and not a substring anywhere in the output.
 	// A substring search would be satisfied by the usage text or by a longer
 	// line that merely contains this one.
 	bool carriesLine(const std::vector<std::string>& _lines, const std::string& _line)
@@ -201,7 +195,7 @@ namespace
 	}
 
 	// The `DDR2=[low,high]` token of one ESAI line, split into its two ends.
-	// The receive channel's DESTINATION pointer advances on each transfer, so
+	// The receive channel's destination pointer advances on each transfer, so
 	// `low != high` is the DMA having moved and not merely having registered.
 	bool ddr2Moved(const std::string& _line)
 	{
@@ -217,10 +211,10 @@ namespace
 		return !low.empty() && !high.empty() && low != high;
 	}
 
-	// ONE ENTRY PER DSP POSITION. The population is `rx-probe: esai port N`
-	// lines, of which the command prints exactly one per position -- so the
-	// count below is a count of POSITIONS and not of lines that happen to
-	// mention a port.
+	// One entry per DSP position. The population is `rx-probe: esai port N`
+	// lines, of which the command prints exactly one per position, so the count
+	// below is a count of positions and not of lines that happen to mention a
+	// port.
 	struct EsaiLine
 	{
 		std::string rxRequestArmed;
@@ -261,17 +255,16 @@ namespace
 
 		check(run.ran, "--impulse --rx-probe: the child ran to completion and its exit status is readable");
 
-		// THE CAPTURE'S OWN KNOWN POSITIVE. Every assertion below is a claim
+		// The capture's own known positive. Every assertion below is a claim
 		// about a line in this capture, and all of them would be red together
-		// on an empty capture without saying why. This line the command has
-		// printed since INT-2 proves the pipe carried the child's output and
-		// that the line splitter works.
+		// on an empty capture without saying why. This line proves the pipe
+		// carried the child's output and that the line splitter works.
 		check(carriesLine(lines, "impulse: dspCount=8 hopFrames=1 lookaheadFrames=1 D_chain=7 D_codec=0"),
 			"the capture is real: the command's first figure line is found whole");
 
 		// ---------------- the predicate the command reports for itself
 		//
-		// The command names WHY it left the boot drive, and the successful
+		// The command names why it left the boot drive, and the successful
 		// answer is one fixed line. A drive that reached its bound prints a
 		// different word and a smaller count, so this cannot be satisfied by a
 		// run that gave up.
@@ -283,7 +276,7 @@ namespace
 		//
 		// The line above is the command's own claim about its own predicate. It
 		// is worth exactly nothing on its own: a predicate that printed
-		// `rx-armed` unconditionally would satisfy it. THIS is the independent
+		// `rx-armed` unconditionally would satisfy it. This is the independent
 		// reading -- the probe's own accumulation of Dma::hasTrigger over the
 		// play phase, which is a different structure sampled at a different
 		// time.
@@ -303,13 +296,12 @@ namespace
 			if(e.de2everSet     == "1") ++de2Set;
 		}
 
-		// THE KNOWN POSITIVE FOR THIS PARSER, AND IT IS NOT DECORATION. The
-		// TRANSMIT channel was already armed under the old predicate, so a
-		// parser that could never extract a 1 -- a wrong key, a wrong
-		// delimiter, an off-by-one substr -- is red HERE while the receive
-		// claim below would be red for a reason that has nothing to do with
-		// the machine. The two are read by the same function from the same
-		// lines, which is the whole point.
+		// The known positive for this parser. The transmit channel is armed
+		// well before the receive channel, so a parser that could never extract
+		// a 1 -- a wrong key, a wrong delimiter, an off-by-one substr -- is red
+		// here while the receive claim below would be red for a reason that has
+		// nothing to do with the machine. The two are read by the same function
+		// from the same lines.
 		check(txArmed == 8,
 			"KNOWN POSITIVE: the parser reads txRequestArmed=1 on all eight positions, so it can extract a 1 "
 			"from these lines; got " + std::to_string(txArmed) + "/8");
@@ -322,25 +314,19 @@ namespace
 			"the receive channel's DE bit was observed set on all eight positions; got "
 			+ std::to_string(de2Set) + "/8");
 
-		// ---------------- the channel MOVED, and did not merely register
+		// ---------------- the channel moved, and did not merely register
 		//
-		// hasTrigger reports REGISTRATION and not TRAFFIC, so a channel
+		// hasTrigger reports registration and not traffic, so a channel
 		// registered against a source that never asserts would satisfy every
-		// assertion above. The receive channel's DESTINATION pointer is the
+		// assertion above. The receive channel's destination pointer is the
 		// traffic: DDR2 advances once per transferred word, so `min != max`
-		// over the walk is transfers having happened. Under the old predicate
-		// the probe reported DDR2=[$001C00,$001C00] on seven positions and
-		// [$001C04,$001C04] on the head -- an interval of zero width, on every
-		// one of them.
+		// over the walk is transfers having happened.
 		//
-		// THE BUFFER CONTENTS ARE NOT ASSERTED, DELIBERATELY. The probe also
+		// The buffer contents are not asserted, deliberately. The probe also
 		// reports which positions had a non-zero word land in the receive
-		// buffer, and that count is NOT stable: five runs of the same binary on
-		// the same artifacts gave 2, 4, 4, 1 and 1 of eight, with different
-		// positions and different values each time. DDR2's interval was
-		// identical in all five. A gate built on the varying figure would be a
-		// flake; the varying figure is a finding about the emulator's
-		// determinism and belongs in a report, not in a check.
+		// buffer, and that count is not stable across runs of the same binary
+		// on the same artifacts, while DDR2's interval is. A gate built on the
+		// varying figure would be a flake.
 		unsigned rxChannelsMoved = 0;
 		for(const EsaiLine& e : esai)
 			if(e.ddr2Moved)
@@ -351,45 +337,43 @@ namespace
 			"channel carried transfers and not just a registration; got "
 			+ std::to_string(rxChannelsMoved) + "/8");
 
-		// The command's exit status is NOT asserted to be 0. An unpatched Nord
+		// The command's exit status is not asserted to be 0. An unpatched Nord
 		// Modular is silent by design, so STOPPED (exit 1) is the answer this
 		// desk reaches and this test makes no audio claim. What it refuses is
-		// DID-NOT-RUN, which is what the command now returns when the drive
-		// reaches its bound without arming -- and which the old predicate could
-		// never produce because it never looked.
+		// DID-NOT-RUN, which the command returns when the drive reaches its
+		// bound without arming.
 		check(run.exitCode != 2,
 			"--impulse did not report DID-NOT-RUN: the receive path came up within the drive bound; exit status was "
 			+ std::to_string(run.exitCode));
 
-		// ---------------- the ARRIVAL instrument's own known positive
+		// ---------------- the arrival instrument's own known positive
 		//
-		// EVERY `arrival=-1` IN THIS PROJECT USED TO BE UNFALSIFIABLE, and the
-		// self-test beside it did not fix that. `observerSelfTest` drives the
-		// detector's two predicates over two frames the console built on its
-		// own stack; it reads 1 with the tail's transmit callback deleted, with
-		// the mailbox swap frozen and with `Scheduler::pull` copying nothing.
-		// So a broken arrival path and a chain that carried nothing printed the
-		// same figure and no line told them apart.
+		// `observerSelfTest` drives the detector's two predicates over two
+		// frames the console built on its own stack; it reads 1 with the tail's
+		// transmit callback deleted, with the mailbox swap frozen and with
+		// `Scheduler::pull` copying nothing. Without the control below, a
+		// broken arrival path and a chain that carried nothing print the same
+		// figure and no line tells them apart.
 		//
 		// The sink control is the known positive for that path: a sentinel
 		// placed in the TAIL position's ESAI transmit register file and in the
 		// transmit-DMA source buffer that refills it, read back out of the
 		// codec sink through the same `pull` and the same comparator the walk
-		// uses. THE WHOLE LINE IS ASSERTED and every figure on it is load
+		// uses. The whole line is asserted and every figure on it is load
 		// bearing:
 		//
 		//   tailPosition=7   the chain adapter's position N-1, whose transmit
 		//                    callback writes the mailbox the egress reads
-		//   tailPort=0       the HARDWARE port that position resolves to,
-		//                    through the firmware's own table. It is NOT 7, and
-		//                    a control that assumed it was drove chain position
-		//                    1 and reported a dead path on a healthy machine
+		//   tailPort=0       the hardware port that position resolves to,
+		//                    through the firmware's own table. It is not 7, and
+		//                    a control that assumes it is drives chain position
+		//                    1 and reports a dead path on a healthy machine
 		//   controlQuanta=1  the tail writes mailbox N in the same quantum the
 		//                    egress phase reads it, so the sentinel is due on
 		//                    the first control quantum and not later
 		//   sinkControlArrival=0        it arrived on that quantum
 		//   sinkControlExact=1          it arrived unchanged
-		//   sinkControlValue=2846033/2846033   BOTH codec slots carry
+		//   sinkControlValue=2846033/2846033   both codec slots carry
 		//                    $2B6D51, so neither slot of extractCodecSink is
 		//                    passing a value the other one supplied
 		check(carriesLine(lines,
@@ -398,10 +382,10 @@ namespace
 			"the arrival instrument has a known positive: a sentinel placed at the tail position's transmit "
 			"source came back out of the codec sink unchanged, on the first control quantum, in both slots");
 
-		// AND THE CONSEQUENCE, READ OFF THE EXIT STATUS. 3 is INSTRUMENT-BLIND,
-		// which is what the command now returns when the arrival path cannot
-		// report a frame it was HANDED. Refusing it is what turns this run's
-		// `arrival=-1` from a silence of unknown cause into a measurement.
+		// The consequence, read off the exit status. 3 is INSTRUMENT-BLIND,
+		// which the command returns when the arrival path cannot report a frame
+		// it was handed. Refusing it is what turns this run's `arrival=-1` from
+		// a silence of unknown cause into a measurement.
 		check(run.exitCode != 3,
 			"--impulse did not report INSTRUMENT-BLIND: the arrival path is proven, so its `arrival=-1` is a "
 			"measured absence; exit status was " + std::to_string(run.exitCode));

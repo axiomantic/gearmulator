@@ -262,13 +262,10 @@ int main()
 		check(std::string(name(classify(goodButBroken))) == "INSTRUMENT-BLIND",
 			"a failed observer self-test is INSTRUMENT-BLIND even when the record claims an exact arrival");
 
-		// THE ARRIVAL INSTRUMENT'S OWN KNOWN POSITIVE, WHICH IS NOT THE
-		// COMPARATOR SELF-TEST ABOVE. observerSelfTest drives the two
-		// predicates over two frames the PROGRAM built and never over a frame
-		// the SINK delivered, so it holds whatever the arrival path does. The
-		// three records below are `stopped` with only the control's own two
-		// fields moved, and each names a different way the arrival path can be
-		// dead while every other field still reads healthy.
+		// The arrival instrument's own known positive, which is not the
+		// comparator self-test above. observerSelfTest drives the two
+		// predicates over two frames the program built and never over a frame
+		// the sink delivered, so it holds whatever the arrival path does.
 		ImpulseObservation deadSink = stopped;
 		deadSink.sinkControlArrival = -1;
 		deadSink.sinkControlExact   = false;

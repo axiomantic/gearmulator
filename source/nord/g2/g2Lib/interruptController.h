@@ -16,10 +16,10 @@
 //     and the ICR programming model on pp. 8-5..8-6.
 //   * The shared Autovector Control Register AVR at MBAR+$04B, a bitmask over
 //     levels 1..7 that autovectors the external pin at each level. MCF5307 UM
-//     section 8.3.4, p. 8-7 for the bit layout, and Table B-1 for the ADDRESS:
+//     section 8.3.4, p. 8-7 for the bit layout, and Table B-1 for the address:
 //     `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER $00 R/W`. Table 8-1's
 //     $048 row is four byte columns whose first three are Reserved, so $048 is
-//     the LONGWORD GROUP BASE and $04B is the register byte. Table B-1 gives
+//     the longword group base and $04B is the register byte. Table B-1 gives
 //     $048, $049 and $04A no row at all, so this class answers none of them --
 //     and both G2 firmware images write the byte at $1000004B.
 //   * IRQPAR at MBAR+$006, which re-maps the external pins: IRQ5 to level 5 or

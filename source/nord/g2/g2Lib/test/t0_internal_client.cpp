@@ -1,76 +1,20 @@
-/* t0_internal_client.cpp -- the check of task PROTO-3.
- * Design section 15.1, and the boundary declaration of section 13.10.6.
+/* t0_internal_client.cpp -- the internal protocol client.
  * Tier T0: no artifact, no firmware, no file outside this repository.
  *
- * THE SENTENCE THIS ROW EXISTS TO HOLD: "The internal client is a PEER of the
- * usbip endpoint, not a path through it." The reason design section 15.1 gives
- * is concrete -- to restore a DAW project the plugin must ORIGINATE protocol
- * messages and no editor is attached at that moment, so a design that routed
- * the plugin's own messages through the USB stack would make project restore
- * depend on a component the first milestone does not have.
- *
- * CASE 1 IS THAT SENTENCE MADE MECHANICAL. The hub in that case carries ONE
- * attachment -- this client -- and nothing else exists to route through. A
+ * The property this file exists to hold: the internal client is a peer of the
+ * usbip endpoint, not a path through it. The hub in case 1 carries one
+ * attachment -- this client -- and nothing else exists to route through, so a
  * client that reached its device through another endpoint could not deliver a
- * single byte there, so the case is red for exactly the structure the sentence
- * forbids and green for the structure it requires. The compile-time half is
- * case 2: InternalClient derives from g2::TransportEndpoint DIRECTLY, which is
- * what makes it a sibling of the socket and usbip attachments rather than a
- * layer over one of them, and it is constructible from a hub reference alone,
- * so no other attachment can be a constructor argument.
+ * single byte there. The compile-time half is case 2: InternalClient derives
+ * from g2::TransportEndpoint directly, and is constructible from a hub
+ * reference alone, so no other attachment can be a constructor argument.
  *
- * WHAT ELSE THIS ROW OWNS, AND WHY EACH CASE CANNOT BE REPLACED BY A BUILD:
- *
- *  3. THE INBOX COPIES. Section 13.10.6 gives onFrameFromDevice's argument the
- *     shortest of the three borrow lifetimes -- valid only until the callback
- *     returns -- so an endpoint that keeps it copies it. The case overwrites
- *     the delivered buffer AFTER the callback has returned and before the
- *     frame is consumed. An implementation that stored the pointer is green on
- *     a delivery test and red here.
- *
- *  4. FIFO. Frames leave the inbox in the order the device delivered them.
- *
- *  5. AN INBOX THAT IS FULL DROPS AND COUNTS, and drops the NEW frame rather
- *     than a queued one. The callback runs on the scheduler thread inside a
- *     quantum boundary, so it can neither block nor grow; the only honest
- *     remaining behaviour is a refusal that is counted where a caller can read
- *     it.
- *
- *  6. A FRAME LARGER THAN THE CLIENT'S OWN maxFrameBytes IS DROPPED AND
- *     COUNTED. It cannot be copied into a slot that cannot hold it, and
- *     truncating it silently would hand a malformed message to the plugin.
- *
- *  7. THE HUB'S TWO REFUSALS REACH THE CALLER. send() reports the bool the hub
- *     returned; a client that swallowed it would tell the plugin that a patch
- *     message it never delivered was sent.
- *
- *  8. THE RECEIVE BORROW LIFETIME. What receive() hands out stays readable
- *     until the NEXT receive() on the same client, INCLUDING across further
- *     device deliveries -- which is the case a naive ring overwrites. The
- *     price is visible in the same case: the borrowed slot is not available to
- *     the producer, so a delivery that needs it is dropped rather than
- *     overwriting a frame the plugin is still reading.
- *
- *  9. THE DESTRUCTOR DETACHES. g2::TransportHub::kMaxEndpoints attachments
- *     exist and section 15.1 fixes all three, so a client that leaked its
- *     position would silently cost the socket or the usbip attachment its own.
- *     The case observes that through the hub: after a client has died, all
- *     kMaxEndpoints positions still take an attachment that receives.
- *
- * 10. NOTHING ALLOCATES AFTER CONSTRUCTION. Design section 13.10 rule 1, in
- *     the shape t0_transport_hub.cpp and t0_mailbox_surface.cpp already use:
- *     an ARMED global operator new/delete pair across a window that drives
- *     send, onFrameFromDevice at and past both refusal boundaries, receive and
- *     the drain. Every object used inside the window carries fixed arrays and
- *     no container, so a non-zero count inside the window is the client's.
- *
- * NOTHING IN THIS FILE IS AN assert() AND NOTHING CATCHES AN EXCEPTION. The
+ * Nothing in this file is an assert() and nothing catches an exception. The
  * default build type of this repository is Release and Release defines NDEBUG,
  * which deletes every assert(); every run-time verdict here reports through
  * this file's own failure counter, and every compile-time verdict is a
  * static_assert, which fires in every build type.
  */
-
 #include "../internalClient.h"
 
 #include <cstddef>
@@ -224,7 +168,7 @@ int main()
 	constexpr size_t kFrameBytes = 8;
 	constexpr size_t kQueueDepth = 2;
 
-	/* ---------------- case 1: A PEER, NOT A PATH.
+	/* ---------------- case 1: a peer, not a path.
 	 *
 	 * One hub, one attachment, no editor, no USB stack, nothing to route
 	 * through. The client originates a frame and it reaches the device. */

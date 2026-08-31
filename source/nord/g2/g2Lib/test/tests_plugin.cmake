@@ -61,28 +61,18 @@ if(EXISTS "${g2_parentOfG2Lib}/g2TestConsole/CMakeLists.txt")
 
 	# ----------------- `--impulse` waits for the audio path, not for the loader
 	#
-	# Check: ctest --test-dir build --no-tests=error -R ^t1_rx_armed$
+	# Gated: the child boots the real firmware, so the test resolves
+	# NMG2_ARTIFACTS through ArtifactResolver and skips when it is absent.
 	#
-	# TIER T1 AND GATED. The child boots the real firmware, so the test resolves
-	# NMG2_ARTIFACTS through ArtifactResolver and reports the section 18.5 skip
-	# line when it is absent. It links g2Lib for the resolver and the gated
-	# fixture and for nothing else.
-	#
-	# NO PLAN BLOCK OWNS THIS REGISTRATION YET, exactly as t0_impulse_outcome
-	# above records for itself. The behaviour it holds -- that the boot drive
-	# leaves on an observation of the ESAI receive DMA and not on programLanded
-	# -- has no other mechanism, and the gap between the two predicates is a
-	# factor of five in this firmware. The owning block is OWED.
-	#
-	# THE GATE VARIABLES ARE COMPUTED HERE rather than borrowed from
-	# tests_int.cmake, which CMakeLists.txt includes AFTER this file, so the
-	# variables do not exist yet at this point. The skip code is READ OUT OF
+	# The gate variables are computed here rather than borrowed from
+	# tests_int.cmake, which CMakeLists.txt includes after this file, so the
+	# variables do not exist yet at this point. The skip code is read out of
 	# gatedFixture.h by the same regex tests_int.cmake and tests_board.cmake
-	# use, so the three spellings cannot drift; NMG2_ARTIFACTS is a cache
-	# variable, so whichever include site sets it first wins.
+	# use, so the spellings cannot drift; NMG2_ARTIFACTS is a cache variable, so
+	# whichever include site sets it first wins.
 	#
-	# TIMEOUT 600 because the drive is now roughly five times longer: the
-	# receive path does not arm until boot iteration 231,296.
+	# TIMEOUT 600 because the receive path does not arm until boot iteration
+	# 231,296.
 
 	add_executable(t1_rx_armed t1_rx_armed.cpp)
 	target_link_libraries(t1_rx_armed PRIVATE g2Lib)

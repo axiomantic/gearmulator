@@ -883,15 +883,14 @@ namespace
 
 	constexpr unsigned g_impulseOverrunQuanta = 1024u;
 
-	/* THE SENTINEL THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE PLACES AT THE TAIL
-	 * POSITION'S TRANSMIT SOURCE, and it is deliberately NEITHER of the two
-	 * impulse words: a control that reused them could not be told apart from
-	 * the measurement it qualifies.
+	/* The sentinel the arrival instrument's known positive places at the tail
+	 * position's transmit source. It is deliberately neither of the two impulse
+	 * words: a control that reused them could not be told apart from the
+	 * measurement it qualifies.
 	 *
-	 * BIT 23 IS CLEAR, so `fromEsaiFrame`'s sign extension is the identity on
-	 * it and the expected slot value is the written word itself. That is a
-	 * property of the number and the expectation is derived from it here rather
-	 * than typed twice. */
+	 * Bit 23 is clear, so `fromEsaiFrame`'s sign extension is the identity on
+	 * it and the expected slot value is the written word itself. The
+	 * expectation is derived from that here rather than typed twice. */
 	constexpr uint32_t g_sinkControlWord     = 0x2B6D51u;
 	constexpr int32_t  g_sinkControlExpected = int32_t(g_sinkControlWord);
 
@@ -975,37 +974,37 @@ namespace
 		return g2console::exitStatus(g2console::ImpulseOutcome::DidNotRun);
 	}
 
-	/* ------------------------------------------ THE RECEIVE-BUFFER PROBE
+	/* ------------------------------------------ the receive-buffer probe
 	 *
-	 * `--impulse --rx-probe`. IT ANSWERS ONE QUESTION AND NOT THE ONE --impulse
-	 * ANSWERS: does the injected pattern reach the HEAD DSP's ESAI RECEIVE
-	 * PATH -- the words the receive DMA deposits in that DSP's X memory --
-	 * during the play phase?
+	 * `--impulse --rx-probe` answers one question, and not the one `--impulse`
+	 * answers: does the injected pattern reach the head DSP's ESAI receive path
+	 * -- the words the receive DMA deposits in that DSP's X memory -- during the
+	 * play phase?
 	 *
-	 * WHY IT EXISTS. --impulse reports arrival at the CODEC SINK. A silent sink
-	 * has two causes that its three counters cannot separate: (a) the DSP
-	 * receives the pattern and, unpatched, has no routing that would re-transmit
-	 * it, and (b) the pattern never reaches the DSP's receive buffer at all.
-	 * Both predict framesPulled == walkQuanta, underrun == 0 and arrival == -1.
-	 * This probe reads the receive side directly, which is the observable the
-	 * two hypotheses disagree about.
+	 * `--impulse` reports arrival at the codec sink. A silent sink has two
+	 * causes that its three counters cannot separate: (a) the DSP receives the
+	 * pattern and, unpatched, has no routing that would re-transmit it, and (b)
+	 * the pattern never reaches the DSP's receive buffer at all. Both predict
+	 * framesPulled == walkQuanta, underrun == 0 and arrival == -1. This probe
+	 * reads the receive side directly, which is the observable the two
+	 * hypotheses disagree about.
 	 *
-	 * NO ADDRESS HERE IS ASSUMED. The four DMA pointer registers of the two
-	 * audio channels are LATCHED at their first non-zero value during boot and
-	 * PRINTED, so the reader sees which address is the receive DESTINATION and
-	 * which is the transmit SOURCE rather than being told. The census window
+	 * No address here is assumed. The four DMA pointer registers of the two
+	 * audio channels are latched at their first non-zero value during boot and
+	 * printed, so the reader sees which address is the receive destination and
+	 * which is the transmit source rather than being told. The census window
 	 * below is wide enough to hold either and the wide scan does not use an
 	 * address at all.
 	 *
-	 * A ZERO PROVES NOTHING WITHOUT A KNOWN POSITIVE, so the probe plants a
-	 * word this program owns at a known X address, runs the SAME scanner over
+	 * A zero proves nothing without a known positive, so the probe plants a
+	 * word this program owns at a known X address, runs the same scanner over
 	 * it, prints the address the scanner returned, removes the plant and scans
-	 * again. Both the positive and the negative are printed as VALUES. */
+	 * again. Both the positive and the negative are printed as values. */
 	constexpr dsp56k::TWord g_rxProbeMask24 = 0x00FFFFFFu;
 
 	// The census window: wide enough to hold the $001C00 receive area and the
 	// $001D00 transmit area together, with margin on both sides. It is a
-	// REPORTING window and not a claim -- the wide scan below covers all of
+	// reporting window and not a claim -- the wide scan below covers all of
 	// internal X and needs no window at all.
 	constexpr dsp56k::TWord g_rxProbeWindowLow  = 0x001000u;
 	constexpr dsp56k::TWord g_rxProbeWindowHigh = 0x002100u;
@@ -1032,7 +1031,7 @@ namespace
 		unsigned      nonZero  = 0;
 	};
 
-	// ONE SCANNER, USED BY THE MEASUREMENT AND BY ITS KNOWN POSITIVE ALIKE. A
+	// One scanner, used by the measurement and by its known positive alike. A
 	// known positive run through a different code path proves nothing about the
 	// path that reported the absence.
 	RxScanResult rxScan(const dsp56k::DSP& _dsp, const dsp56k::TWord _low,
@@ -1066,7 +1065,7 @@ namespace
 	}
 
 	// The four audio-channel DMA pointers of one position, each latched at its
-	// first non-zero value. THE LATCH IS THE POINT: DSR and DDR both MOVE as
+	// first non-zero value. The latch is the point: DSR and DDR both move as
 	// transfers run, so a terminal read reports wherever the traversal reached
 	// and not the address the kernel programmed.
 	struct RxProbeDma
@@ -1076,21 +1075,21 @@ namespace
 		dsp56k::TWord dsr4 = 0;   // transmit channel source     (expect X memory)
 		dsp56k::TWord ddr4 = 0;   // transmit channel destination(expect an ESAI register)
 
-		/* The two control registers OR-accumulated over the BOOT drive, so a
+		/* The two control registers OR-accumulated over the boot drive, so a
 		 * channel that was armed and later completed is told apart from one
 		 * that was never armed at all. The play-phase accumulator is separate. */
 		dsp56k::TWord dcr2Boot = 0;
 		dsp56k::TWord dcr4Boot = 0;
 	};
 
-	/* HOW MANY POSITIONS HAVE THE ESAI RECEIVE DMA REQUEST REGISTERED.
+	/* How many positions have the ESAI receive DMA request registered.
 	 *
 	 * This is the audio path's own arming, read from the DMA controller that
 	 * carries it, and it is the property `--impulse` waits for before it hands
-	 * the machine to `beginPlayPhase()`. It is NOT a proxy: nothing here reads
+	 * the machine to `beginPlayPhase()`. It is not a proxy: nothing here reads
 	 * a program-load flag, a memory word or a cycle count.
 	 *
-	 * IT IS STICKY, AND ONLY FOR A REASON THAT COULD CHANGE. `finishTransfer`
+	 * It is sticky, and only for a reason that could change. `finishTransfer`
 	 * clears DE without calling `removeTriggerTarget`, so a channel that armed
 	 * once stays registered for the rest of the run. Two things would make this
 	 * predicate wrong:
@@ -1098,13 +1097,13 @@ namespace
 	 *   - dsp56300 unregistering the target on completion. The predicate would
 	 *     then go false between transfers and a healthy machine could run to
 	 *     the bound.
-	 *   - `setDCR` unregisters on ANY reconfiguration, so a kernel that armed
+	 *   - `setDCR` unregisters on any reconfiguration, so a kernel that armed
 	 *     the channel and then rewrote DCR would show a window of false. The
 	 *     drive polls every iteration and leaves on the first all-armed
-	 *     reading, so it cannot MISS such a window -- but what it saw would be
+	 *     reading, so it cannot miss such a window -- but what it saw would be
 	 *     an arming that has since been withdrawn.
 	 *
-	 * AND IT REPORTS REGISTRATION, NOT TRAFFIC. A channel registered against a
+	 * And it reports registration, not traffic. A channel registered against a
 	 * source that never asserts satisfies this forever. `--rx-probe` reads the
 	 * destination buffers for that reason, and it is a separate instrument. */
 	unsigned countRxArmed(g2::Board& _board, const unsigned _dspCount)
@@ -1215,29 +1214,26 @@ namespace
 
 		const unsigned dspCount = board.dspSet().dspCount();
 
-		/* THE DRIVE LEAVES ON A PROPERTY OF THE AUDIO PATH, AND NOT ON PROGRAM
-		 * LOADING.
+		/* The drive leaves on a property of the audio path, and not on program
+		 * loading.
 		 *
-		 * It used to leave the moment every position reported `programLanded`.
-		 * That is a fact about the KERNEL DOWNLOAD and it says nothing about
-		 * audio: in this firmware `programLanded` goes true at boot iteration
-		 * 44,515 and the ESAI receive DMA request is not armed on any position
-		 * until 231,296 -- more than five times later. At the moment of the
-		 * boot-time DMA configuration the rx-arming code is not even resident;
+		 * Leaving the moment every position reports `programLanded` is a fact
+		 * about the kernel download and says nothing about audio: in this
+		 * firmware `programLanded` goes true at boot iteration 44,515 and the
+		 * ESAI receive DMA request is not armed on any position until 231,296 --
+		 * more than five times later. At the moment of the boot-time DMA
+		 * configuration the rx-arming code is not even resident;
 		 * P:$000250-$000270 disassembles as all zeros, because it arrives in a
-		 * later-loaded DSP program.
+		 * later-loaded DSP program. That exit hands `beginPlayPhase()` a machine
+		 * whose receive path is still dead, and the STOPPED verdict it produces
+		 * is a statement about transport not yet existing rather than about
+		 * routing.
 		 *
-		 * So the old exit handed `beginPlayPhase()` a machine whose receive
-		 * path was still dead, and the STOPPED verdict it produced was a
-		 * statement about transport not yet existing rather than about routing.
-		 *
-		 * THE PREDICATE IS NOW `countRxArmed == dspCount`, BOUNDED BY
-		 * g_iterations exactly as the old one was. A drive that reaches the
-		 * bound without arming reports DID-NOT-RUN and not STOPPED: a machine
-		 * whose receive path never came up did not measure the chain at all,
-		 * and reporting that as a silent chain is the confusion `impulseOutcome`
-		 * exists to refuse. `landed` is unchanged and still reported -- it is
-		 * the precondition for polling, not the exit. */
+		 * The predicate is `countRxArmed == dspCount`, bounded by g_iterations.
+		 * A drive that reaches the bound without arming reports DID-NOT-RUN and
+		 * not STOPPED: a machine whose receive path never came up did not
+		 * measure the chain at all. `landed` is still reported -- it is the
+		 * precondition for polling, not the exit. */
 		uint32_t iteration    = 0;
 		uint32_t settle       = 0;
 		bool     booted       = false;
@@ -1254,9 +1250,9 @@ namespace
 		{
 			scheduler->runFrames(g_framesPerIteration);
 
-			/* CALLED ON EVERY ITERATION AND NOT ONLY UNTIL THE LATCH FILLS: the
+			/* Called on every iteration and not only until the latch fills: the
 			 * pointer latch is idempotent once full, and the two control
-			 * registers are OR-accumulated across the WHOLE boot drive. */
+			 * registers are OR-accumulated across the whole boot drive. */
 			if(_rxProbe)
 				rxDmaComplete = latchRxProbeDma(board, rxDma) || rxDmaComplete;
 
@@ -1292,7 +1288,7 @@ namespace
 			}
 		}
 
-		/* THE REPORTED COUNT IS READ AFTER THE DRIVE AND NOT CARRIED OUT OF IT,
+		/* The reported count is read after the drive and not carried out of it,
 		 * so a run that never reached the poll -- one that halted, or one whose
 		 * programs never landed -- still reports a measured number rather than
 		 * the initial zero. The registration is sticky within a run, so the
@@ -1337,7 +1333,7 @@ namespace
 
 		/* ---------------------------------- the receive-buffer probe's state.
 		 *
-		 * THE HEAD IS FOUND AND NOT TYPED. chainPositionOfPort reads the
+		 * The head is found and not typed. chainPositionOfPort reads the
 		 * firmware's own position-to-port table, so the port this probe reads
 		 * is the machine's head and not this program's guess at it. */
 		const dsp56k::TWord rxWantLeft  = dsp56k::TWord(g_impulseLeft)  & g_rxProbeMask24;
@@ -1359,10 +1355,10 @@ namespace
 			}
 		}
 
-		/* THE KNOWN POSITIVE AND ITS NEGATIVE, RUN BEFORE THE WALK ON THE SAME
-		 * SCANNER THE WALK USES. Each plant is written, scanned for, removed,
+		/* The known positive and its negative, run before the walk on the same
+		 * scanner the walk uses. Each plant is written, scanned for, removed,
 		 * and scanned for again, and every one of the four answers is printed
-		 * as a VALUE. A scanner that cannot see a word this program put there
+		 * as a value. A scanner that cannot see a word this program put there
 		 * cannot report an absence of one the machine did not. */
 		RxScanResult kpWidePlanted, kpWideRemoved, kpWindowPlanted, kpWindowRemoved;
 
@@ -1402,17 +1398,17 @@ namespace
 		unsigned rxMaxNonZero   = 0;
 		int      rxMaxNonZeroAt = -1;
 
-		// The receive DMA's destination pointer as it MOVES during the walk. A
+		// The receive DMA's destination pointer as it moves during the walk. A
 		// pointer that moves is a receive channel that transferred.
 		dsp56k::TWord rxDdr2First = 0;
 		dsp56k::TWord rxDdr2Min   = 0xFFFFFFu;
 		dsp56k::TWord rxDdr2Max   = 0;
 
-		/* THE DELIVERY-LEVEL KNOWN POSITIVE, AND IT IS NOT A PLANTED ONE.
+		/* The delivery-level known positive, and it is not a planted one.
 		 *
-		 * Each position's receive buffer is the eight X words at the address
-		 * ITS OWN latched DDR2 names, and its transmit buffer the eight at its
-		 * latched DSR4. If ANY position's receive buffer ever holds a non-zero
+		 * Each position's receive buffer is the eight X words at the address its
+		 * own latched DDR2 names, and its transmit buffer the eight at its
+		 * latched DSR4. If any position's receive buffer ever holds a non-zero
 		 * word, the ESAI-to-DMA-to-X-memory path demonstrably delivers audio on
 		 * this machine, and the head's own answer is then an absence measured
 		 * against a working mechanism rather than against an untested one. The
@@ -1424,16 +1420,16 @@ namespace
 		std::vector<dsp56k::TWord> rxBufFirstVal(_rxProbe ? dspCount : 0u, 0u);
 		std::vector<unsigned>      rxBufMaxNz(_rxProbe ? dspCount : 0u, 0u);
 
-		/* WHETHER THE RECEIVE SIDE EVER REQUESTED A TRANSFER AT ALL, which is
+		/* Whether the receive side ever requested a transfer at all, which is
 		 * the question a buffer of zeros cannot answer on its own. The ESAI
 		 * status register is OR-accumulated over the walk, so a bit that was
-		 * set at ANY quantum is set here even if it was cleared before the next
+		 * set at any quantum is set here even if it was cleared before the next
 		 * sample; M_RDF is the receive DMA's own request line and M_TDE is the
-		 * transmit one, so the two directions are read off ONE instrument and
+		 * transmit one, so the two directions are read off one instrument and
 		 * the transmit column is the receive column's control. The two DMA
 		 * pointers are tracked the same way, min and max over the walk. */
 		std::vector<dsp56k::TWord> esaiSrOr(_rxProbe ? dspCount : 0u, 0u);
-		/* THE CHANNEL-ENABLE BIT IS WHAT `DmaChannel::execTransfer` GATES ON,
+		/* The channel-enable bit is what `DmaChannel::execTransfer` gates on,
 		 * so a channel whose De was clear at every sample transferred nothing
 		 * however loudly its peripheral requested. OR-accumulated for the same
 		 * reason the status register is: a bit set at any quantum is set here.
@@ -1441,10 +1437,10 @@ namespace
 		std::vector<dsp56k::TWord> dcr2Or(_rxProbe ? dspCount : 0u, 0u);
 		std::vector<dsp56k::TWord> dcr4Or(_rxProbe ? dspCount : 0u, 0u);
 
-		/* THE EMULATOR'S OWN RECORD OF "A CHANNEL IS ARMED FOR THIS PERIPHERAL
-		 * REQUEST". DmaChannel::arm registers the channel as a request target
+		/* The emulator's own record of "a channel is armed for this peripheral
+		 * request". DmaChannel::arm registers the channel as a request target
 		 * only when its DE bit is set, so this is the same question the DE bit
-		 * answers, asked of a DIFFERENT structure -- and Dma::hasTrigger holds
+		 * answers, asked of a different structure -- and Dma::hasTrigger holds
 		 * across a quantum rather than being sampled at its boundary, which is
 		 * the exact weakness of the DE sample. The transmit source is the
 		 * receive source's control, on the same call. */
@@ -1461,7 +1457,7 @@ namespace
 		std::vector<unsigned>      txBufMaxNz(_rxProbe ? dspCount : 0u, 0u);
 
 		// Walks the eight words at `_base` and records the first non-zero and
-		// the largest non-zero count. ONE body for both directions, so a
+		// the largest non-zero count. One body for both directions, so a
 		// positive on one side and an absence on the other are the same
 		// instrument's two answers.
 		const auto censusBuffer = [&](const dsp56k::DSP& _dsp, const dsp56k::TWord _base,
@@ -1515,7 +1511,7 @@ namespace
 				if(ddr2 > rxDdr2Max)
 					rxDdr2Max = ddr2;
 
-				// The census window, at EVERY position and EVERY quantum. A
+				// The census window, at every position and every quantum. A
 				// pattern that stopped one DSP short of the head would show
 				// here and nowhere else.
 				for(unsigned port = 0; port < dspCount; ++port)
@@ -1598,28 +1594,28 @@ namespace
 			}
 		}
 
-		/* ----------------------------- THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE
+		/* ----------------------------- the arrival instrument's known positive
 		 *
-		 * WHAT THE SELF-TEST BELOW DOES NOT PROVE. It drives the detector's two
-		 * predicates over `impulseFrame` and `silence`, two frames THIS PROGRAM
+		 * What the self-test below does not prove. It drives the detector's two
+		 * predicates over `impulseFrame` and `silence`, two frames this program
 		 * built on its own stack. Not one byte of the arrival path is on its
 		 * evidence: it reads 1 with the tail's transmit callback deleted, with
 		 * `fromEsaiFrame` returning zeros, with the mailbox swap frozen, with
 		 * `extractCodecSink` reading the wrong mailbox and with `Scheduler::pull`
-		 * copying nothing. So `arrival=-1` beside `observerSelfTest=1` still had
-		 * two readings -- a chain that carried nothing, and an arrival path that
-		 * could not have reported anything -- and told them apart nowhere.
+		 * copying nothing. So `arrival=-1` beside `observerSelfTest=1` has two
+		 * readings -- a chain that carried nothing, and an arrival path that
+		 * could not have reported anything -- and tells them apart nowhere.
 		 *
-		 * WHAT THIS CONTROL DOES. It places a sentinel at the TAIL position's
-		 * TRANSMIT SOURCE -- its ESAI transmit register file AND the DSP-memory
-		 * window the transmit DMA refills that register from -- and then reads
-		 * that sentinel back OUT OF THE SINK, through the same `pull` and the
+		 * The control places a sentinel at the tail position's transmit source
+		 * -- its ESAI transmit register file and the DSP-memory window the
+		 * transmit DMA refills that register from -- and then reads that
+		 * sentinel back out of the sink, through the same `pull` and the
 		 * same comparator the walk above used. The sentinel goes in at the
 		 * earliest point that still traverses the whole arrival path rather
 		 * than at the reporting line: everything downstream of the transmit
 		 * buffer is the machine's own code and none of it is bypassed.
 		 *
-		 * THE LINKS IT TRAVERSES, and they are the links the walk's `arrival`
+		 * The links it traverses, and they are the links the walk's `arrival`
 		 * depends on:
 		 *
 		 *   the tail DSP's X memory -> the transmit DMA -> m_tx, and
@@ -1634,20 +1630,20 @@ namespace
 		 *   CodecSink::push / Scheduler::pull
 		 *   the walk's own two predicates
 		 *
-		 * THE LINKS IT DOES NOT TRAVERSE, stated so no reader credits it with
+		 * The links it does not traverse, stated so no reader credits it with
 		 * them: no DSP core executes any part of it -- the sentinel is placed
 		 * in the transmit buffer rather than computed into it -- and positions
 		 * 0..N-2, every receive callback, the mailbox hop chain and
-		 * `injectCodecSource` are all UPSTREAM of the tail and are not on its
-		 * path. It is a control for the ARRIVAL instrument and not for the
+		 * `injectCodecSource` are all upstream of the tail and are not on its
+		 * path. It is a control for the arrival instrument and not for the
 		 * chain: it says the sink can report a frame the tail transmitted, and
 		 * says nothing about whether anything reaches the tail.
 		 *
-		 * IT RUNS AFTER THE WALK, ON THE SAME MACHINE, so it cannot move the
+		 * It runs after the walk, on the same machine, so it cannot move the
 		 * measurement it qualifies: `arrival` and `framesPulled` are already
 		 * latched above.
 		 *
-		 * EVERY ENABLED TRANSMITTER IS WRITTEN, not just register 0. Esai's
+		 * Every enabled transmitter is written, not just register 0. Esai's
 		 * underrun latch fires when the written mask does not cover the enabled
 		 * mask, and a control that latched an underrun would be measuring the
 		 * underrun path rather than the arrival path. */
@@ -1660,16 +1656,15 @@ namespace
 		unsigned sinkControlPort = 0;
 		bool     sinkControlPortFound = false;
 
-		/* THE TAIL IS FOUND AND NOT TYPED, for the reason the head is: the
-		 * chain adapter's POSITION and the hardware PORT are not the same
+		/* The tail is found and not typed, for the reason the head is: the
+		 * chain adapter's position and the hardware port are not the same
 		 * number. dspSet.cpp's attachChainCallbacks binds
 		 * audioTxCallback(position) to peripherals(portOfPosition[position]),
 		 * and portOfPosition comes from the firmware's own nine-entry table.
 		 * On this machine position 7 is port 0, so a control that wrote
 		 * peripherals(7) would be driving chain position 1 -- six hops
 		 * upstream of the mailbox extractCodecSink reads -- and would report a
-		 * dead arrival path while the path was healthy. That run was taken and
-		 * is the reason this reads the table. */
+		 * dead arrival path while the path was healthy. */
 		for(unsigned port = 0; port < dspCount; ++port)
 		{
 			if(chainPositionOfPort(board, port, dspCount) != dspCount - 1u)
@@ -1696,19 +1691,19 @@ namespace
 						tailEsai.writeTX(reg, g_sinkControlWord);
 				}
 
-				/* AND THE BUFFER THE TRANSMIT DMA REFILLS THAT REGISTER FROM,
-				 * because the register alone reaches ONE slot and the codec
-				 * sink reads TWO. Esai::writeSlotToFrame copies the register
+				/* And the buffer the transmit DMA refills that register from,
+				 * because the register alone reaches one slot and the codec
+				 * sink reads two. Esai::writeSlotToFrame copies the register
 				 * file into the slot and then triggers the transmit DMA, which
 				 * is serviced synchronously and overwrites the register before
 				 * the next slot is assembled -- so a register-only injection
 				 * arrives in slot 0 and slot 1 carries whatever the DSP's
 				 * transmit buffer held. Planting the buffer as well makes the
-				 * sentinel the value EVERY slot of the frame is sourced from,
+				 * sentinel the value every slot of the frame is sourced from,
 				 * and it puts the transmit DMA on the control's path rather
 				 * than around it.
 				 *
-				 * THE WINDOW IS READ OFF THE DMA, NOT TYPED. DSR4 is the
+				 * The window is read off the DMA, not typed. DSR4 is the
 				 * channel's live source address and the ESAI's own transmit
 				 * word count gives the frame's length; two frames' worth from
 				 * the frame-aligned base covers the half-buffer the DMA is
@@ -1772,11 +1767,11 @@ namespace
 		          << " programsLanded=" << (landed ? 1 : 0)
 		          << " halted=" << (halted ? 1 : 0)
 		          << " faulted=" << (faulted ? 1 : 0) << std::endl;
-		/* WHY THE DRIVE STOPPED, IN ONE WORD, BESIDE THE COUNT THAT DECIDED IT.
+		/* Why the drive stopped, in one word, beside the count that decided it.
 		 * `rx-armed` and `bound` are the two answers the predicate itself can
 		 * give; `halted` is the machine leaving under the caller. A reader who
 		 * sees `bound` is looking at a run whose receive path never came up,
-		 * which is a DIFFERENT fact from a chain that carried nothing. */
+		 * which is a different fact from a chain that carried nothing. */
 		std::cout << "impulse: bootExit="
 		          << (rxArmed ? "rx-armed" : (halted ? "halted" : "bound"))
 		          << " rxArmedPorts=" << rxArmedPorts << "/" << dspCount << std::endl;
@@ -1786,9 +1781,9 @@ namespace
 		          << " observerSelfTest=" << (observerSelfTest ? 1 : 0)
 		          << " arrival=" << arrival
 		          << " arrivalExact=" << (arrivalExact ? 1 : 0) << std::endl;
-		/* THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE, ON ITS OWN LINE, BESIDE THE
-		 * MEASUREMENT IT QUALIFIES. A reader who sees sinkControlArrival>=0 and
-		 * sinkControlExact=1 is looking at an `arrival=-1` that MEANS the chain
+		/* The arrival instrument's known positive, on its own line, beside the
+		 * measurement it qualifies. A reader who sees sinkControlArrival>=0 and
+		 * sinkControlExact=1 is looking at an `arrival=-1` that means the chain
 		 * carried nothing; a reader who sees sinkControlArrival=-1 is looking at
 		 * an arrival path that could not report a frame it was handed, and the
 		 * walk's -1 says nothing at all. */
@@ -1839,9 +1834,9 @@ namespace
 
 		std::cout << "impulse: countersZero=" << (countersZero ? 1 : 0) << std::endl;
 
-		/* ------------------------------------- THE RECEIVE-BUFFER PROBE'S REPORT.
+		/* ------------------------------------- the receive-buffer probe's report
 		 *
-		 * EVERY LINE PRINTS THE COMPUTED VALUE BESIDE ITS NAME. No sentence
+		 * Every line prints the computed value beside its name. No sentence
 		 * here is a conclusion the program decided in advance: the reader is
 		 * handed the addresses, the counts and the two known-positive answers,
 		 * and the narration is checkable against them. */
@@ -1908,9 +1903,9 @@ namespace
 			          << " wideAddr=" << dmaHex(rxWideAddr)
 			          << " wideWhich=" << rxWideWhich << std::endl;
 
-			/* THE DELIVERY-LEVEL POSITIVE OR ITS ABSENCE, PER POSITION AND AS
-			 * VALUES. `rxBufFirstQ` is the quantum at which that position's
-			 * receive buffer first held ANY non-zero word; -1 means it never
+			/* The delivery-level positive or its absence, per position and as
+			 * values. `rxBufFirstQ` is the quantum at which that position's
+			 * receive buffer first held any non-zero word; -1 means it never
 			 * did. The transmit half is the same figure for the other
 			 * direction. A reader compares the two columns rather than being
 			 * told what they mean. */
@@ -1930,7 +1925,7 @@ namespace
 				          << " maxNonZero=" << txBufMaxNz[port] << "/8" << std::endl;
 			}
 
-			/* THE REQUEST LINES AND THE POINTERS, RECEIVE BESIDE TRANSMIT. The
+			/* The request lines and the pointers, receive beside transmit. The
 			 * transmit column is the receive column's control: the two are the
 			 * same register and the same accumulator, so a transmit answer that
 			 * moves while the receive answer does not is a difference in the
@@ -1981,13 +1976,12 @@ namespace
 		 * classifier's fields now, so a reader is told WHICH answer this was
 		 * rather than handed the conjunction's false and left to reconstruct it.
 		 *
-		 * `rxArmed` IS A CONDITION OF HAVING REACHED THE PLAY PHASE AT ALL, and
+		 * `rxArmed` is a condition of having reached the play phase at all, and
 		 * that is where it belongs rather than in a sixth outcome arm. A drive
 		 * that reached its bound with the receive path still dead did not
-		 * measure the chain, so it is DID-NOT-RUN (status 2) and NOT STOPPED
-		 * (status 1). Reporting it as STOPPED would be exactly the confusion
-		 * this classifier was built to refuse: an absence of measurement wearing
-		 * the word for a measured absence. */
+		 * measure the chain, so it is DID-NOT-RUN (status 2) and not STOPPED
+		 * (status 1). Reporting it as STOPPED would be an absence of measurement
+		 * wearing the word for a measured absence. */
 		g2console::ImpulseObservation observation;
 		observation.reachedPlayPhase = booted && landed && rxArmed && !halted && !faulted
 			&& primedPulled == size_t(config.lookaheadFrames);
@@ -2283,8 +2277,8 @@ int main(int _argc, char** _argv)
 	 * shrug, for the reason `--boot`'s modifier loop states. */
 	if(command == "--impulse")
 	{
-		/* THE MODIFIER LOOP IS `--boot`'s, FOR THE SAME REASON: an option this
-		 * subcommand does not know is an error and not a shrug. */
+		/* The modifier loop is `--boot`'s: an option this subcommand does not
+		 * know is an error and not a shrug. */
 		bool rxProbe = false;
 
 		for(int i = 2; i < _argc; ++i)

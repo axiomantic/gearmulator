@@ -1,35 +1,28 @@
 /* t0_board_transport.cpp -- the check of the Board-to-TransportHub wiring.
- * Design sections 15.1, 15.3, 15.7, 13.10.6 and 9.4.
  * Tier T0: no artifact, no firmware, no file outside this repository.
  *
- * THE SENTENCE THIS FILE EXISTS TO HOLD: a protocol frame a plugin originates
- * crosses the quantum boundary INTO THE BOARD'S USB DEVICE, and a frame the
- * device emits crosses back OUT to the attachments -- with the internal client
- * as a PEER of the usbip endpoint and not a path through it. Before this file
- * the hub existed and the Board existed and NOTHING JOINED THEM: the Board
- * held no hub, no caller drained one, and `isp1181_create` was handed a null
- * tx callback.
+ * The property this file exists to hold: a protocol frame a plugin originates
+ * crosses the quantum boundary into the Board's USB device, and a frame the
+ * device emits crosses back out to the attachments -- with the internal client
+ * as a peer of the usbip endpoint and not a path through it.
  *
- * EVERY CASE IS PROBED FROM OUTSIDE THE THING UNDER TEST. None of them reads a
+ * Every case is probed from outside the thing under test. None of them reads a
  * word the Board prints about itself. Case 2 drives the exact function pointer
- * that `isp1181_create` receives and observes the result at the CLIENT. Case 3
- * observes the drain through the HUB'S OWN back-pressure, which only a real
+ * that `isp1181_create` receives and observes the result at the client. Case 3
+ * observes the drain through the hub's own back-pressure, which only a real
  * drain can relieve. Case 4 drains a second, unpumped Board from this file and
- * compares bytes. The one thing this file CANNOT observe is stated where it
- * arises, in case 3's note, rather than asserted around.
+ * compares bytes.
  *
- * WHY CASE 3 CALLS tickSofIfDue TWICE FOR ONE RELEASE, AND WHY THAT IS THE
- * HUB'S RULE RATHER THAN A FUDGE. transportHub.h: the slots a drain hands out
- * stay BORROWED by the caller until the START of the FOLLOWING drain. So the
- * first quantum boundary drains and lends, and the second releases. A test
- * that pumped once and expected a free queue would be asserting against a
- * lifetime the hub deliberately does not have.
+ * Case 3 calls tickSofIfDue twice for one release because the slots a drain
+ * hands out stay borrowed by the caller until the start of the following
+ * drain. The first quantum boundary drains and lends, and the second releases.
+ * A test that pumped once and expected a free queue would be asserting against
+ * a lifetime the hub deliberately does not have.
  *
- * NOTHING IN THIS FILE IS AN assert() AND NOTHING CATCHES AN EXCEPTION. Every
+ * Nothing in this file is an assert() and nothing catches an exception. Every
  * run-time verdict reports through this file's own failure counter, so NDEBUG
  * changes no case; every compile-time verdict is a static_assert.
  */
-
 #include "../board.h"
 #include "../internalClient.h"
 #include "../transportHub.h"
@@ -69,7 +62,7 @@ namespace
 		}
 	}
 
-	/* Byte content, compared WHOLE. A frame that arrived truncated, one that
+	/* Byte content, compared whole. A frame that arrived truncated, one that
 	 * arrived with a stale pointer and one that arrived out of order are three
 	 * different failures rather than one length mismatch. */
 	bool sameBytes(const uint8_t* const observed, const size_t observedSize,
@@ -110,7 +103,7 @@ namespace
 	 * specification: an ASCII header ended by NUL, a 2-byte binary header,
 	 * objects of [type][2-byte big-endian length][payload], and a 2-byte
 	 * stored CRC-16/XMODEM over the binary header and every object. It is
-	 * BUILT HERE and read from no file, which is what keeps this case T0. */
+	 * built here and read from no file, which is what keeps this case T0. */
 	std::vector<uint8_t> buildContainer(const std::vector<uint8_t>& _objects)
 	{
 		std::vector<uint8_t> file;
@@ -169,10 +162,10 @@ void operator delete(void* p, size_t) noexcept { std::free(p); }
 int main()
 {
 	/* ------------------------------------------------------------- case 1.
-	 * THE COMPILE-TIME HALF. The Board OWNS a hub -- `transport()` answers a
+	 * The compile-time half. The Board owns a hub -- `transport()` answers a
 	 * g2::TransportHub& and not a pointer, so there is no state in which the
-	 * Board has none -- and the hub still reserves exactly the three
-	 * attachments design section 15.1 fixes. */
+	 * Board has none -- and the hub still reserves exactly three
+	 * attachments. */
 	static_assert(std::is_same_v<decltype(std::declval<g2::Board&>().transport()),
 	                             g2::TransportHub&>,
 	              "Board::transport must answer the Board's own hub by reference");
@@ -182,13 +175,12 @@ int main()
 	g2::Board board;
 
 	/* ------------------------------------------------------------- case 2.
-	 * EGRESS. `Board::onUsbTx` is the exact function pointer the Board hands
-	 * to isp1181_create, and this case DRIVES THAT POINTER -- the shape
-	 * board.h already records for onRead and onWrite, and for the measured
-	 * reason it records there: a check that drove a private forwarding helper
-	 * instead stayed green when the installed callback was reverted to a stub.
+	 * Egress. `Board::onUsbTx` is the exact function pointer the Board hands
+	 * to isp1181_create, and this case drives that pointer: a check that drove
+	 * a private forwarding helper instead stays green when the installed
+	 * callback is reverted to a stub.
 	 *
-	 * The verdict is read at the CLIENT and not at the Board. */
+	 * The verdict is read at the client and not at the Board. */
 	{
 		g2::InternalClient client(board.transport(), 512, 4);
 
@@ -205,40 +197,21 @@ int main()
 		checkEqual(client.droppedFrames(), 0u,
 			"the device's frame was not dropped");
 
-		/* THE CLIENT IS THE ONLY ATTACHMENT IN THIS WINDOW. Nothing else is
+		/* The client is the only attachment in this window. Nothing else is
 		 * attached to route through, so a client that reached the device
-		 * through another endpoint could not have received a byte here. That
-		 * is the PEER sentence made mechanical, at the Board this time rather
-		 * than at a bare hub. */
+		 * through another endpoint could not have received a byte here. */
 	}
 
 	/* ------------------------------------------------------------- case 3.
-	 * INGRESS, OBSERVED THROUGH THE HUB'S BACK-PRESSURE. The queue is filled
-	 * to its depth, which is what makes the next send refuse; then the Board
-	 * is driven across quantum boundaries and the send is offered again. Only
-	 * a drain that really ran can relieve that refusal, and the relief is read
+	 * Ingress, observed through the hub's back-pressure. The queue is filled
+	 * to its depth, which is what makes the next send refuse; then the Board is
+	 * driven across quantum boundaries and the send is offered again. Only a
+	 * drain that really ran can relieve that refusal, and the relief is read
 	 * from the hub and not from anything the Board says.
 	 *
-	 * WHAT THIS CASE DOES NOT CLAIM, AND WHERE THE CLAIM IT DECLINED NOW
-	 * LIVES. It does not claim the bytes reached the ISP1181's endpoint
-	 * buffer: this case reads the HUB, and the hub is relieved by a drain
-	 * whatever the device then does with the frame.
-	 *
-	 * THE PARAGRAPH THAT STOOD HERE IS STRUCK RATHER THAN DELETED, because it
-	 * was correct on the day it was written and a reader who finds no trace of
-	 * it will re-derive it. It read:
-	 *
-	 *     "`isp1181_create` returns a handle whose backend is `Stub`, the C
-	 *      surface exports no way to select the full model, and `isp1181_rx`
-	 *      on a Stub handle discards its argument. So the call is made and its
-	 *      effect is UNOBSERVABLE from here."
-	 *
-	 * TWO OF ITS THREE SENTENCES ARE NOW FALSE. `mcf5307` publishes
-	 * `isp1181_set_backend`, and the Board calls it with FULL_MODEL
-	 * immediately after `isp1181_create`, so the handle is no longer a Stub
-	 * and `isp1181_rx` keeps what it is handed. The device-side effect is
-	 * observable, and t0_usb_ingress_byte is where it is observed -- at the
-	 * CS3 data port, with the peek this file has no business issuing. */
+	 * It does not claim the bytes reached the ISP1181's endpoint buffer: this
+	 * case reads the hub, and the hub is relieved by a drain whatever the
+	 * device then does with the frame. */
 	{
 		g2::InternalClient client(board.transport(), 512, 4);
 
@@ -260,7 +233,7 @@ int main()
 		check(!client.send(g2::ProtocolFrame{ payload, sizeof(payload) }),
 			"a full queue refuses, which is the precondition this case measures against");
 
-		/* THE FIRST BOUNDARY DRAINS AND LENDS; THE SECOND RELEASES. */
+		/* The first boundary drains and lends; the second releases. */
 		board.tickSofIfDue(0);
 		check(!client.send(g2::ProtocolFrame{ payload, sizeof(payload) }),
 			"one drain lends the slots out and does NOT free them");
@@ -271,10 +244,10 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 4.
-	 * WHAT THE BOARD HANDS THE DEVICE IS WHAT THE PLUGIN ORIGINATED, VERBATIM
-	 * AND IN ORDER. A SECOND Board is used and it is never pumped, so this
-	 * file performs the drain itself and reads the bytes -- an independent
-	 * probe of the same hub the Board's own pump reads. */
+	 * What the Board hands the device is what the plugin originated, verbatim
+	 * and in order. A second Board is used and it is never pumped, so this file
+	 * performs the drain itself and reads the bytes -- an independent probe of
+	 * the same hub the Board's own pump reads. */
 	{
 		g2::Board second;
 		g2::InternalClient client(second.transport(), 512, 8);
@@ -307,9 +280,9 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 5.
-	 * A WHOLE CONTAINER REACHES THE DRAIN. The file is built in this process,
+	 * A whole container reaches the drain. The file is built in this process,
 	 * loaded through the same pch2Load a plugin calls, and every object is
-	 * compared BYTE FOR BYTE against the file at the offset it came from --
+	 * compared byte for byte against the file at the offset it came from --
 	 * header included, because the frame is the object verbatim. */
 	{
 		std::vector<uint8_t> objects;
@@ -354,10 +327,9 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 6.
-	 * THE PUMP ALLOCATES NOTHING. Design section 13.10 rule 1. The drain
-	 * target is the Board's own storage, sized once with the hub, so a pump
-	 * that built a vector for each quantum is red here and green everywhere
-	 * else. */
+	 * The pump allocates nothing. The drain target is the Board's own storage,
+	 * sized once with the hub, so a pump that built a vector for each quantum
+	 * is red here and green everywhere else. */
 	{
 		g2::InternalClient client(board.transport(), 512, 4);
 
@@ -379,17 +351,15 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 7.
-	 * THE DRAIN RUNS EXACTLY ONCE FOR EACH QUANTUM BOUNDARY, COUNTED.
-	 * transportHub.h: the hub's frame index is its own quantum ordinal, the
-	 * first drain stamps 0, and "the count of drains IS the quantum count". So
-	 * the stamp on a frame drained after N boundaries have passed IS the
-	 * number of drains those boundaries performed, and this file reads it.
+	 * The drain runs exactly once for each quantum boundary, counted. The
+	 * hub's frame index is its own quantum ordinal and the first drain stamps
+	 * 0, so the stamp on a frame drained after N boundaries have passed is the
+	 * number of drains those boundaries performed.
 	 *
-	 * NEITHER CASE 3 NOR CASE 4 CAN SEE A DOUBLE DRAIN. Case 3 only asks
-	 * whether the queue was freed, which two drains free just as well as one;
-	 * a pump that drained twice would make the hub's ordinal run at twice the
-	 * machine's rate, and every frame that crossed together would be stamped
-	 * apart. This case is the only one that fails for that. */
+	 * Case 3 only asks whether the queue was freed, which two drains free just
+	 * as well as one; a pump that drained twice would make the hub's ordinal
+	 * run at twice the machine's rate, and every frame that crossed together
+	 * would be stamped apart. */
 	{
 		g2::Board counted;
 		g2::InternalClient client(counted.transport(), 512, 4);
@@ -405,7 +375,7 @@ int main()
 		check(client.send(g2::ProtocolFrame{ payload, sizeof(payload) }),
 			"a frame is originated after the counted boundaries have passed");
 
-		/* THIS DRAIN IS THE (boundaries + 1)-th, so it stamps `boundaries`. */
+		/* This drain is the (boundaries + 1)-th, so it stamps `boundaries`. */
 		g2::StampedFrame drained[4]{};
 		const size_t n = counted.transport().drainToDevice(drained, 4);
 

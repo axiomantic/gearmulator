@@ -1,24 +1,16 @@
-/* g2PatchLoad.cpp -- the `.pch2` load path. Task PROTO-11.
+/* g2PatchLoad.cpp -- the `.pch2` load path.
  *
- * THE PROVENANCE RECORD FOR THIS CONTAINER IS AT THE HEAD OF g2PatchLoad.h,
- * and it is the part of this task the licence makes matter. In one line: the
- * container is a clean-room derivation from observed bytes and from design
- * sections 15.7 and 15.3; no line of `msg/g2ools` is copied, transliterated or
- * paraphrased here, because no file of it was read.
- *
- * TWO PASSES, AND THE SECOND ONE IS THE ONLY ONE THAT SENDS. A single pass
+ * Two passes, and the second one is the only one that sends. A single pass
  * that validated an object and originated it in the same step would leave the
  * device holding the objects before the one that turned out to be malformed --
- * half a patch, which is a patch nobody asked for and which no later refusal
- * can take back. The passes walk the same rule, so the second cannot reach an
- * object the first rejected.
+ * half a patch, which no later refusal can take back. The passes walk the same
+ * rule, so the second cannot reach an object the first rejected.
  *
- * NOTHING HERE READS A PAYLOAD. An object is carried whole, header and all,
- * and its bytes are never interpreted. Design section 15.3: "the emulator does
- * not implement the protocol by hand, the firmware implements it; the emulator
- * only carries the bytes."
+ * Nothing here reads a payload. An object is carried whole, header and all,
+ * and its bytes are never interpreted: the firmware implements the protocol,
+ * the emulator only carries the bytes.
  *
- * NOTHING HERE ALLOCATES. Each frame BORROWS from the caller's file buffer for
+ * Nothing here allocates. Each frame borrows from the caller's file buffer for
  * the duration of one send, which is exactly the lifetime g2::ProtocolFrame
  * declares for a buffer going into the hub -- valid until the call returns,
  * with the hub copying what it keeps.
@@ -34,53 +26,22 @@ namespace g2
 {
 	namespace
 	{
-		/* THE OBJECT TYPES THIS PROJECT'S OWN SPECIFICATION NAMES, sorted.
-		 * Design section 15.7 names 0x21, 0x4D and 0x65 in its text and design
-		 * section 18's protocol row names the bit-packed set; this is their
-		 * union, and it is the same union `nmg2_tools/synth_pch2.py` states
-		 * from the same two sections.
+		/* The object types this project's own specification names, sorted. A
+		 * type outside the list is refused rather than carried: the type codes of
+		 * the real format were left unnamed, and a load path that forwarded any
+		 * byte it did not recognise would quietly turn that open question into
+		 * traffic on the wire.
 		 *
-		 * A TYPE OUTSIDE IT IS REFUSED RATHER THAN CARRIED, and the reason is
-		 * not tidiness. The type codes of the real format were DELIBERATELY
-		 * left unnamed by the clean-room derivation, because naming them would
-		 * have required the reference implementation that was not read. A load
-		 * path that forwarded any byte it did not recognise would quietly turn
-		 * that open question into traffic on the wire. */
-		/* THE THREE CODES ADDED AFTER THE CLEAN-ROOM PASS NAMED THEM, and the
-		 * paragraph above is amended rather than left standing: the open
-		 * question it protected against is closed for these three and only for
-		 * these three. `nmg2-cleanroom-pch2/FINDINGS.txt`, section "THE THREE
-		 * UNNAMED TYPE CODES", is the record, and its own provenance statement
-		 * is narrower than "clean": every name it gives is FORCED BY A
-		 * MEASUREMENT PRINTED BESIDE IT, and where a name was reachable only
-		 * by recognition it is not given.
+		 *   0x6F  the patch's optional free-text note, read as literal text.
+		 *   0x5A  the per-area module label table. Its declared item count equals
+		 *         0x4A's module count, in both instances.
+		 *   0x5B  a 7-character label table: a 3-byte header, then a 3-byte key
+		 *         and a 7-byte label, at bit offset 2. What the table labels is
+		 *         not derived.
 		 *
-		 *   0x6F  the patch's optional free-text note. Read out of the file as
-		 *         literal text -- 72 of 73 payloads empty, the one non-empty
-		 *         payload is an 89-byte three-line credit block.
-		 *   0x5A  the per-area module label table. Its declared item count
-		 *         equals 0x4A's module count in 73/73 files, in BOTH
-		 *         instances, and three rival readings are refuted by that same
-		 *         equality.
-		 *   0x5B  a 7-character label table. Named AS FAR AS THE BYTES GO: the
-		 *         record rule is measured (3-byte header, then 3-byte key and
-		 *         7-byte label, at bit offset 2, well-formed rate 1.000 against
-		 *         0.400 or below at all 39 other candidates) and what the table
-		 *         labels is NOT derived. The FINDINGS record stops there
-		 *         deliberately and so does this list.
-		 *
-		 * NAMING A CODE IS ENOUGH TO CARRY IT AND IS NOT ENOUGH TO READ ONE.
-		 * This module interprets no payload of any type, so what it needs from
-		 * a derivation is that the code is a real object type of the format --
-		 * which a per-file multiplicity holding in 73/73 files establishes on
-		 * its own. Every one of the three appears in every real patch, and a
-		 * loader that refused them refused all 73.
-		 *
-		 * WHAT THIS COSTS, STATED. The refusal was a guard against turning an
-		 * open question into traffic on the wire, and widening it spends that
-		 * guard for three codes. It buys the only thing that makes the load
-		 * path reachable at all: with the eight codes below alone, the
-		 * computed loadable count over the 73-file corpus is 0. */
+		 * Naming a code is enough to carry it and is not enough to read one. This
+		 * module interprets no payload of any type, so what it needs is that the
+		 * code is a real object type of the format. */
 		constexpr uint8_t g_objectTypes[] =
 			{ 0x21, 0x4A, 0x4D, 0x52, 0x5A, 0x5B, 0x60, 0x62, 0x65, 0x69, 0x6F };
 
@@ -140,7 +101,7 @@ namespace g2
 		if(_size < binaryHeader + 4)
 			return Pch2LoadResult::ShortFile;
 
-		/* THE CHECKSUM IS VERIFIED BEFORE ANYTHING IS WALKED. The structure of
+		/* The checksum is verified before anything is walked. The structure of
 		 * an unverified file means nothing: a length field that a flipped bit
 		 * moved is indistinguishable from one that was written that way, and
 		 * reporting it as a structural fault would name the wrong defect. */
@@ -150,7 +111,7 @@ namespace g2
 		const std::size_t bodyStart = binaryHeader + 2;
 		const std::size_t bodyEnd   = _size - 2;
 
-		/* PASS 1. Validate every object. Nothing is originated here. */
+		/* Pass 1. Validate every object. Nothing is originated here. */
 		std::size_t offset = bodyStart;
 
 		while(bodyEnd - offset >= 3)
@@ -161,8 +122,8 @@ namespace g2
 			if(!isKnownObjectType(type))
 				return Pch2LoadResult::UnknownObjectType;
 
-			/* TWO DIFFERENT FAULTS, AND THE DISCRIMINATOR IS THE WHOLE FILE
-			 * RATHER THAN THE REMAINING BODY. A declared length no file of
+			/* Two different faults, and the discriminator is the whole file
+			 * rather than the remaining body. A declared length no file of
 			 * this size could ever hold is a length field that is wrong --
 			 * PCH2-LENGTH-PAST-END. A length that a file of this size could
 			 * hold, on an object that runs off the end of this one, is a file
@@ -178,17 +139,16 @@ namespace g2
 			offset += 3 + length;
 		}
 
-		/* WHAT REMAINS AFTER THE LAST OBJECT IS NOT AN OBJECT AND IS NOT AN
-		 * ERROR. Design section 15.7's second file-against-wire difference
-		 * puts two extra bytes, 0x2D 0x00, after the 0x21 chunk in a USB dump,
-		 * and an object header is three bytes, so those two can never be one.
-		 * They are carried by neither pass: this module originates objects.
-		 * A remainder of ONE byte is a different matter -- no rule of the
-		 * format puts a single byte there, so the file stopped early. */
+		/* What remains after the last object is not an object and is not an
+		 * error. A USB dump puts two extra bytes, 0x2D 0x00, after the 0x21
+		 * chunk, and an object header is three bytes, so those two can never be
+		 * one. They are carried by neither pass: this module originates
+		 * objects. A remainder of one byte is a different matter -- no rule of
+		 * the format puts a single byte there, so the file stopped early. */
 		if(bodyEnd - offset == 1)
 			return Pch2LoadResult::TruncatedObject;
 
-		/* PASS 2. Originate one frame for each object, in file order. */
+		/* Pass 2. Originate one frame for each object, in file order. */
 		offset = bodyStart;
 
 		while(bodyEnd - offset >= 3)

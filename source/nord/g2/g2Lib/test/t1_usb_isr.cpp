@@ -1,75 +1,72 @@
-// THE END-TO-END CHECK: does a delivered packet reach the firmware's USB
+// The end-to-end check: does a delivered packet reach the firmware's USB
 // interrupt service routine, and does that routine issue the command that takes
 // the interrupt bit back?
 //
 // Tier T1: it boots the Clavia firmware and reads one file out of the artifact
-// corpus, so it SKIPS with a reason when NMG2_ARTIFACTS names no directory.
+// corpus, so it skips with a reason when NMG2_ARTIFACTS names no directory.
 //
-// WHAT THIS FILE ANSWERS AND t1_patch_running DOES NOT. t1_patch_running proves
-// a byte of a real `.pch2` sits in the device register file of a machine that
-// has really booted, and it reports whether the buffer is still holding it
-// afterwards. It says nothing about HOW it left, because it observes neither
-// the interrupt line nor the command port. This file observes both.
+// t1_patch_running proves a byte of a real `.pch2` sits in the device register
+// file of a machine that has really booted, and reports whether the buffer is
+// still holding it afterwards. It says nothing about how it left, because it
+// observes neither the interrupt line nor the command port. This file observes
+// both.
 //
-//   1. THE COMMAND STREAM. Every byte the firmware writes to the CS3 COMMAND
+//   1. The command stream. Every byte the firmware writes to the CS3 command
 //      port, in order. The port split is the device model's own: the chip's A0
 //      is wired to CPU A4, so bit 4 of the CS3-relative offset is the
 //      command/data select and a write with that bit set is a command byte.
-//      The recorder is a BusTarget that WRAPS the Board's own CS3 target and
+//      The recorder is a BusTarget that wraps the Board's own CS3 target and
 //      forwards every cycle to it unchanged, so it is on the firmware's own
 //      path and is not a second door.
 //
-//   2. THE INTERRUPT LINE. `Board::onUsbIrq` calls
+//   2. The interrupt line. `Board::onUsbIrq` calls
 //      `InterruptController::setExternalPending(ExternalPin::Irq3, ...)`, and
-//      the controller DERIVES the level and the autovector bit from IRQPAR and
+//      the controller derives the level and the autovector bit from IRQPAR and
 //      AVR, which the firmware programs through the MBAR window. So the level
 //      and the autovector bit are read back off the controller and are not
 //      written here.
 //
-//   3. THE SERVICE ROUTINE. A counter on 16-bit SDRAM reads at 0x30053C38,
+//   3. The service routine. A counter on 16-bit SDRAM reads at 0x30053C38,
 //      which is the address the CODE image installs with
-//      install_autovector(3, ...). The instrument is t1_patch_running's,
-//      unchanged and for its reasons: the MCF5307 core fetches every
-//      instruction word through the bus read callback as a 16-bit access at
-//      the instruction's own address, so a counter on 16-bit reads at one SDRAM
+//      install_autovector(3, ...). The MCF5307 core fetches every instruction
+//      word through the bus read callback as a 16-bit access at the
+//      instruction's own address, so a counter on 16-bit reads at one SDRAM
 //      offset is an instruction-fetch counter for that address.
 //
-// THE INSTRUMENT'S CONTROLS, BOTH FROM THE SAME POPULATION, because a zero from
+// The instrument's controls, both from the same population, because a zero from
 // a counter that never fires is not a measurement.
 //
-//   known positive   the address the MACHINE ITSELF is sitting at when the
+//   known positive   the address the machine itself is sitting at when the
 //                    window opens, read off Board::mcuReg(17) at that instant.
 //                    It is not chosen by this file.
-//   known negative   an address inside the vector TABLE. Vectors are read as
+//   known negative   an address inside the vector table. Vectors are read as
 //                    32-bit longwords and never fetched as instruction words,
 //                    so the same counter must read 0 there.
 //
-// THE TWO RUNS DELIVER TO DIFFERENT ENDPOINTS, and the endpoint is a Board
+// The two runs deliver to different endpoints, and the endpoint is a Board
 // configuration value rather than anything this file reaches past the Board to
-// set. Run A uses the shipped default, ENDPOINT 3, and hands over a REAL
+// set. Run A uses the shipped default, endpoint 3, and hands over a real
 // `.pch2`. Run B moves `BoardConfig::usbProtocolEndpoint` to 0 and hands over
-// the small in-process container, because the model gives endpoint 0 a
-// SINGLE 64-byte OUT buffer and the corpus's largest framed object is 2492
-// bytes: a real patch frame would be REFUSED at that endpoint and would raise
-// no bit at all, so a zero from it would measure the buffer and not the wire.
+// the small in-process container, because the model gives endpoint 0 a single
+// 64-byte OUT buffer and the corpus's largest framed object is 2492 bytes: a
+// real patch frame would be refused at that endpoint and would raise no bit at
+// all, so a zero from it would measure the buffer and not the wire.
 //
-// WHY ENDPOINT 3 AND NOT ENDPOINT 2, AND THE DISCRIMINATOR IS THIS FILE'S OWN
-// COMMAND RECORDER. `BoardConfig::usbProtocolEndpoint` was 2, chosen from the
-// buffer table -- endpoint 2 is the lowest non-control endpoint the model gives
-// a 64-byte double buffer -- and that table is a FIRMWARE CONFIGURATION and not
-// a property of the part, so it never discriminated anything. What does
-// discriminate is what the firmware DOES with a packet, and this file records
-// it: on endpoint 3 the boot-time stream is followed by read-interrupt-register,
-// endpoint-3 status, READ endpoint 3's buffer, CLEAR endpoint 3's buffer -- the
-// authority's OUT sequence, a DRAIN. On endpoint 2 the firmware issues nothing
+// The discriminator between endpoint 3 and endpoint 2 is this file's own
+// command recorder. The buffer table -- endpoint 2 is the lowest non-control
+// endpoint the model gives a 64-byte double buffer -- is a firmware
+// configuration and not a property of the part, so it discriminates nothing.
+// What does discriminate is what the firmware does with a packet: on endpoint 3
+// the boot-time stream is followed by read-interrupt-register, endpoint-3
+// status, READ endpoint 3's buffer, CLEAR endpoint 3's buffer -- the
+// authority's OUT sequence, a drain. On endpoint 2 the firmware issues nothing
 // at all. Row 6 below reads back the DcEndpointConfiguration bytes the firmware
 // itself wrote and reports EPDIR per slot, which is the same answer from the
 // configuration side.
 //
-// EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). A release build deletes
+// Every verdict is an observable and not an assert(). A release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
 // not have. Nothing below calls assert() and nothing catches an exception.
-
 #include "gatedFixture.h"
 
 #include "../board.h"
@@ -130,9 +127,9 @@ namespace
 
 	// ---------------------------------------------- the ESAI underrun log filter
 	//
-	// INT-1's filter, with INT-1's limit: the underruns are REAL and expected in
-	// the boot regime, because nothing drains the ESAIs until the codec queues
-	// arrive. This hides the REPETITION and nothing else.
+	// The underruns are real and expected in the boot regime, because nothing
+	// drains the ESAIs until the codec queues arrive. This hides the repetition
+	// and nothing else.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
 	constexpr uint64_t g_underrunLinesKept = 4;
@@ -156,11 +153,7 @@ namespace
 		Logging::setLogFunc(&filterLog);
 	}
 
-	// ------------------------------------------------- INT-1's machine placement
-	//
-	// COPIED RATHER THAN SHARED, for plan section 1.3 rule 1 -- the reason
-	// t1_egress, t1_kernel_load and t1_patch_running each carry their own: a
-	// harness's configuration lives at its own site.
+	// ---------------------------------------------------- the machine placement
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
@@ -204,14 +197,14 @@ namespace
 
 	constexpr int g_byteWidth = 1;
 
-	// The opcodes this file NAMES. Every one of them is already numbered by
+	// The opcodes this file names. Every one of them is already numbered by
 	// `src/isp1181/commands.nim`; nothing here invents an opcode, and the 111
 	// bytes that file leaves `ccUnspecified` stay unspecified.
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
 
-	// SIXTEEN AND NOT FIVE. `0x20`..`0x2F` is the whole family ISP1362 Rev. 06
-	// section 15.1.1 states, and the recorder below files what the FIRMWARE
+	// Sixteen and not five. `0x20`..`0x2F` is the whole family ISP1362 Rev. 06
+	// section 15.1.1 states, and the recorder below files what the firmware
 	// wrote. The device model carries a buffer for only the first five of them
 	// and refuses the rest, but a refusal is the model's answer and not
 	// evidence about the firmware, so the recorder keeps every slot.
@@ -219,7 +212,7 @@ namespace
 	constexpr uint8_t g_writeIntEnable     = 0xC2u;
 	constexpr uint8_t g_readIntRegister    = 0xC0u;
 
-	// THE STATUS FAMILY, WHICH IS THE WHOLE QUESTION. `0x50` is control OUT
+	// The status family, which is the whole question. `0x50` is control OUT
 	// status, `0x51` is control IN status and `0x52`..`0x54` are endpoints 1
 	// to 3. A read of one of these is the route the interrupt bit leaves the
 	// interrupt register by, per ISP1362 Rev. 06 p.53, and it is what the
@@ -235,11 +228,11 @@ namespace
 	// buffer-read family's is 0x12, so endpoint 3 is 0x14; the buffer-clear
 	// family's is 0x72, so endpoint 3 is 0x74.
 	//
-	// THE PAIR IS THE AUTHORITY'S *OUT* SEQUENCE AND THAT IS THE FINDING. A
-	// read followed by a clear takes a packet the HOST sent out of the device.
-	// The IN sequence -- buffer write then validate -- would be the firmware
-	// REPLYING, and it is what an endpoint the firmware had configured for
-	// transmission would show instead.
+	// The pair is the authority's OUT sequence. A read followed by a clear takes
+	// a packet the host sent out of the device. The IN sequence -- buffer write
+	// then validate -- would be the firmware replying, and it is what an
+	// endpoint the firmware had configured for transmission would show
+	// instead.
 	constexpr uint8_t g_statusEndpoint3    = 0x54u;
 	constexpr uint8_t g_readEndpoint3Out   = 0x14u;
 	constexpr uint8_t g_clearEndpoint3Out  = 0x74u;
@@ -248,11 +241,11 @@ namespace
 	// says which way a single endpoint buffer faces. 1 is IN, device to host.
 	constexpr uint8_t g_epdirBit = 0x40u;
 
-	// THE CONFIGURATION SLOT ORDER, WHICH IS NOT THE ENDPOINT NUMBER. ISP1362
+	// The configuration slot order, which is not the endpoint number. ISP1362
 	// Rev. 06 section 15.1.1 orders the sixteen slots control OUT, control IN,
 	// then endpoints 1 to 14, so endpoint 0 is slot 0, endpoint 1 is slot 2,
 	// endpoint 2 is slot 3 and endpoint 3 is slot 4. The peek command's target
-	// is one of THESE, not an endpoint number, and reading it as an endpoint
+	// is one of these, not an endpoint number, and reading it as an endpoint
 	// number silently peeks the neighbouring buffer for every endpoint above 0.
 	constexpr int g_bufferSlotOfEndpoint[4] = {0, 2, 3, 4};
 
@@ -280,31 +273,28 @@ namespace
 
 	// ------------------------------------------------------------ the probe set
 	//
-	// THE SERVICE ROUTINE. CODE reaches install_autovector(3, 0x30053C38) at
-	// that helper's ONLY call site in the image, so 0x30053C38 is the address
-	// the firmware itself installs as the level-3 handler. board.cpp's
-	// onUsbIrq comment is the authority and this file states no address of its
-	// own beyond copying it.
+	// The service routine. CODE reaches install_autovector(3, 0x30053C38) at
+	// that helper's only call site in the image, so 0x30053C38 is the address
+	// the firmware itself installs as the level-3 handler.
 	constexpr uint32_t g_probeIsr = 0x30053C38u;
 
-	// THE HANDLER THIS HARNESS ITSELF WRITES INTO EVERY VECTOR. If the firmware
+	// The handler this harness itself writes into every vector. If the firmware
 	// never installs its own, an exception taken through the table lands here
 	// instead, so a count at this address separates "no exception was taken"
 	// from "an exception was taken and it did not go to the firmware's USB
-	// handler". It is probed with the SAME 16-bit counter as g_probeIsr, so the
+	// handler". It is probed with the same 16-bit counter as g_probeIsr, so the
 	// two readings are from one population.
 	constexpr uint32_t g_probeBlanket = g_vectorHandler;
 
-	// THE LEVEL-3 AUTOVECTOR ENTRY. The ColdFire autovector formula is 24 +
+	// The level-3 autovector entry. The ColdFire autovector formula is 24 +
 	// level, so level 3 is vector 27 and its table entry is VBR + 27*4. The
-	// core reads a vector as a 32-bit LONGWORD, which is exactly the access the
+	// core reads a vector as a 32-bit longword, which is exactly the access the
 	// 16-bit counter above cannot see, so this is a separate counter on 32-bit
-	// reads. board.cpp's onUsbIrq comment is the authority for the vector
-	// number and this file restates the arithmetic rather than the number.
+	// reads.
 	constexpr uint32_t g_usbVectorNumber = 27u;
 	constexpr uint32_t g_usbVectorEntry  = g_vectorTableBase + g_usbVectorNumber * 4u;
 
-	// THE KNOWN NEGATIVE. An address inside the vector TABLE this file writes.
+	// The known negative. An address inside the vector table this file writes.
 	// Vectors are read as 32-bit longwords, never fetched as instruction words,
 	// so the 16-bit counter must read 0 there. It is offset 4 rather than 0 so
 	// that it is not the reset vector either.
@@ -312,17 +302,17 @@ namespace
 
 	// How many quanta the machine runs after the packet is handed over.
 	//
-	// IT IS BOUNDED AND THAT IS DELIBERATE. If the firmware enters the handler
+	// It is bounded and that is deliberate. If the firmware enters the handler
 	// and never issues the status read, the line never deasserts and the
 	// handler re-enters for as long as the machine is allowed to run. A bound
-	// turns that from a hang into a MEASUREMENT: the probe count comes back
+	// turns that from a hang into a measurement: the probe count comes back
 	// enormous and the status opcode is absent from the stream.
 	constexpr uint32_t g_observeQuanta = 20000u;
 
 	// ------------------------------------------------------- the AVR and IRQPAR
 	//
 	// MBAR-relative, from interruptController.h's own register map. They are
-	// read back rather than written, so this file asserts what the FIRMWARE
+	// read back rather than written, so this file asserts what the firmware
 	// programmed and never programs anything itself.
 	constexpr uint32_t g_avrOffset    = 0x04Bu;
 	constexpr uint32_t g_irqparOffset = 0x006u;
@@ -352,11 +342,11 @@ namespace
 
 		const Probe& probe(const size_t _index) const { return m_probes[_index]; }
 
-		// THE VECTOR COUNTER, AND IT IS A SEPARATE COUNTER BECAUSE IT COUNTS A
-		// SEPARATE ACCESS. A vector is fetched as a 32-bit LONGWORD, which the
-		// 16-bit instruction-fetch counter above cannot see -- that is exactly
-		// what makes the vector table this file's known negative for THAT
-		// counter. Both counts are taken over the same span so that "the entry
+		// The vector counter is separate because it counts a separate access. A
+		// vector is fetched as a 32-bit longword, which the 16-bit
+		// instruction-fetch counter above cannot see -- that is exactly what
+		// makes the vector table this file's known negative for that counter.
+		// Both counts are taken over the same span so that "the entry
 		// for level 3 was never read" has a control from its own population:
 		// the number of longword reads anywhere in the table.
 		void watchVectorTable(const uint32_t _base, const uint32_t _entries,
@@ -371,7 +361,7 @@ namespace
 		uint64_t vectorReadsWatched()  const { return m_vectorReadsWatched; }
 
 		// The longword the store currently holds at an absolute address. It is
-		// how this file asks whether the FIRMWARE installed its own handler
+		// how this file asks whether the firmware installed its own handler
 		// over the blanket one this harness wrote.
 		uint32_t peekLong(const uint32_t _absolute) const
 		{
@@ -407,7 +397,7 @@ namespace
 				return 0u;
 			}
 
-			// THE COUNT IS TAKEN ON 16-BIT READS AND ON NOTHING ELSE, because
+			// The count is taken on 16-bit reads and on nothing else, because
 			// that is the width the core fetches an instruction word at.
 			if(_size == 16)
 			{
@@ -420,7 +410,7 @@ namespace
 				}
 			}
 
-			// THE VECTOR FETCH. A 32-bit read inside the table span is the core
+			// The vector fetch. A 32-bit read inside the table span is the core
 			// taking an exception through it.
 			if(_size == 32 && m_vectorLength != 0 &&
 			   _offset >= m_vectorBase && _offset < m_vectorBase + m_vectorLength)
@@ -465,7 +455,7 @@ namespace
 				const int shift = int(8u * (count - 1u - i));
 				const uint8_t byte = uint8_t((_value >> shift) & 0xffu);
 
-				// A CONTENT WRITE IS ONE THAT IS NOT THE DISPLAY CLEAR, which
+				// A content write is one that is not the display clear, which
 				// writes 0x20 and only 0x20.
 				if(m_watchLength != 0 && index >= m_watchBase && index < m_watchBase + m_watchLength
 					&& byte != 0x20u && byte != 0x00u)
@@ -508,15 +498,15 @@ namespace
 
 	// -------------------------------------------------- the command-port recorder
 	//
-	// IT WRAPS THE BOARD'S OWN CS3 TARGET AND FORWARDS EVERY CYCLE UNCHANGED.
+	// It wraps the Board's own CS3 target and forwards every cycle unchanged.
 	// The Board attaches its Isp1181Window in its constructor; this object is
 	// attached over it afterwards and holds the one it displaced, so the device
 	// still answers every read and keeps every write. A recorder that answered
-	// cycles ITSELF would be a second device model and would measure nothing
+	// cycles itself would be a second device model and would measure nothing
 	// about the first.
 	//
-	// IT RECORDS THE COMMAND PORT AND NOT THE DATA PORT. A command byte is a
-	// WRITE with the command-select bit set; a data-port write is an operand of
+	// It records the command port and not the data port. A command byte is a
+	// write with the command-select bit set; a data-port write is an operand of
 	// the command already pending and is not itself a command. Recording both
 	// would put operand bytes in the opcode stream, and an operand that happens
 	// to equal 0x50 would then answer this file's whole question wrongly.
@@ -545,7 +535,7 @@ namespace
 				++m_counts[opcode];
 				++m_total;
 
-				// THE FLAT SEQUENCE, so that a SLICE of it can be compared
+				// The flat sequence, so that a slice of it can be compared
 				// against an exact expected list. It is capped, and a stream
 				// that overruns the cap leaves `m_sequenceDropped` non-zero --
 				// which is itself the finding, because the only thing that
@@ -556,8 +546,8 @@ namespace
 				else
 					++m_sequenceDropped;
 
-				// RUN-LENGTH, so a handler that re-enters a million times is
-				// still reportable IN ORDER without a million lines. The ORDER
+				// Run-length, so a handler that re-enters a million times is
+				// still reportable in order without a million lines. The order
 				// is preserved exactly; only the repetition is folded.
 				if(!m_runs.empty() && m_runs.back().first == opcode)
 					++m_runs.back().second;
@@ -566,9 +556,10 @@ namespace
 				else
 					++m_runsDropped;
 
-				// THE ENDPOINT-CONFIGURATION SLOT THE NEXT DATA BYTE BELONGS TO.
-				// `0x20`..`0x2F` are one write each of DcEndpointConfiguration,
-				// and the byte that follows on the DATA port is the register
+				// The endpoint-configuration slot the next data byte belongs
+				// to. `0x20`..`0x2F` are one write each of
+				// DcEndpointConfiguration, and the byte that follows on the
+				// data port is the register
 				// value. Any other opcode ends the pairing, so a data byte that
 				// belongs to some other command can never be filed as a
 				// configuration.
@@ -595,7 +586,7 @@ namespace
 		}
 
 		// The peek instrument below drives the command port itself, and its two
-		// writes are THIS FILE'S and not the firmware's. Recording them would
+		// writes are this file's and not the firmware's. Recording them would
 		// put bytes in the stream that no firmware issued.
 		void setRecording(const bool _on) { m_recording = _on; }
 
@@ -621,7 +612,7 @@ namespace
 
 		uint64_t sequenceDropped() const { return m_sequenceDropped; }
 
-		// The DcEndpointConfiguration byte the FIRMWARE wrote to one slot, and
+		// The DcEndpointConfiguration byte the firmware wrote to one slot, and
 		// whether it wrote one at all. An absent slot is not a zero: zero is a
 		// legal register value and would read as "configured OUT".
 		bool    configSeen(const int _slot) const { return _slot >= 0 && _slot < g_configSlots && m_configSeen[_slot]; }
@@ -664,10 +655,10 @@ namespace
 	// Board::onWrite/onRead so it reaches the recorder as well as the device --
 	// which is why the recorder is switched off around it.
 	//
-	// IT TAKES AN ENDPOINT AND SELECTS A SLOT, and the translation is the whole
+	// It takes an endpoint and selects a slot, and the translation is the whole
 	// correctness of the instrument. The peek command answers about the buffer
 	// the last endpoint-configuration command selected, and that command's
-	// operand is a CONFIGURATION SLOT. Passing the endpoint number straight
+	// operand is a configuration slot. Passing the endpoint number straight
 	// through selects a buffer one place low for every endpoint above 0 and the
 	// read still succeeds, so the wrong answer arrives looking exactly like the
 	// right one: endpoint 2 answered about endpoint 1's buffer, which is always
@@ -721,10 +712,9 @@ namespace
 		return config;
 	}
 
-	// The small in-process container t0_usb_ingress_byte builds, for its
-	// reason: a one-object `.pch2` whose single object is small enough for the
-	// 64-byte single buffer the model gives endpoint 0. It carries no Clavia
-	// byte -- every byte of it is this process's own.
+	// A one-object `.pch2` whose single object is small enough for the 64-byte
+	// single buffer the model gives endpoint 0. It carries no Clavia byte --
+	// every byte of it is this process's own.
 	constexpr uint8_t g_probeObjectType   = 0x4Au;
 	constexpr size_t  g_probeObjectLength = 15u;
 
@@ -797,7 +787,7 @@ namespace
 		uint8_t  irqVectorAtMax      = 0;
 		uint64_t irqQuantaPresented  = 0;
 
-		// What the FIRMWARE programmed into the controller, read back.
+		// What the firmware programmed into the controller, read back.
 		uint8_t  avr    = 0;
 		uint8_t  irqpar = 0;
 
@@ -813,7 +803,7 @@ namespace
 		std::vector<std::pair<uint8_t, uint64_t>> commandRuns;
 		uint64_t commandRunsDropped = 0;
 
-		// The DcEndpointConfiguration bytes the FIRMWARE wrote, per slot, and
+		// The DcEndpointConfiguration bytes the firmware wrote, per slot, and
 		// whether it wrote each one at all.
 		uint8_t  configByte[g_configSlots] = {};
 		bool     configSeen[g_configSlots] = {};
@@ -871,7 +861,7 @@ namespace
 
 		board.memory().attach(g2::Region::Sdram, &ram);
 
-		// THE RECORDER GOES ON OVER THE BOARD'S OWN TARGET AND KEEPS IT. A
+		// The recorder goes on over the Board's own target and keeps it. A
 		// recorder attached with a null inner would silence the device, and
 		// every reading below would then be a reading of the recorder.
 		g2::BusTarget* const boardCs3 = board.memory().target(g2::Region::Cs3);
@@ -958,16 +948,15 @@ namespace
 		{
 			// ------------------------------------------------ the window opens
 			//
-			// IT OPENS BEFORE THE HAND-OVER AND BEFORE THE FIRST QUANTUM AFTER
-			// IT, and that placement is the whole difference between a
-			// measurement and a zero. An earlier form of this file reset the
-			// counters AFTER the pump quantum -- and the pump quantum is
-			// exactly the quantum in which the firmware services the packet, so
-			// every count of that service was thrown away and the file reported
-			// a handler that "was not entered" while the command stream showed
-			// it plainly. The counters now cover the hand-over itself.
+			// It opens before the hand-over and before the first quantum after
+			// it, and that placement is the whole difference between a
+			// measurement and a zero. Resetting the counters after the pump
+			// quantum throws away every count of the firmware's service, because
+			// the pump quantum is exactly the quantum in which that service
+			// happens: the file then reports a handler that "was not entered"
+			// while the command stream shows it plainly.
 			//
-			// THE KNOWN POSITIVE IS READ OFF THE MACHINE HERE, not chosen above:
+			// The known positive is read off the machine here, not chosen above:
 			// it is the address the core is sitting at at this instant, so it is
 			// an address the machine itself demonstrably reaches.
 			_r.windowPc = board.mcuReg(g_regPc);
@@ -981,16 +970,16 @@ namespace
 			_r.loadResult   = g2::pch2Load(_object.data(), _object.size(), client);
 			_r.loadReturned = true;
 
-			// THE ARRIVAL READING, TAKEN BEFORE THE CORE CAN RUN. The pump and
+			// The arrival reading, taken before the core can run. The pump and
 			// the service both happen inside the first quantum, so a peek taken
 			// after that quantum cannot tell "the packet arrived and the
 			// firmware drained it" from "the packet never arrived": both read
 			// 0x00. Board::pumpTransport is public and is the same call
 			// tickSofIfDue makes, so calling it here delivers the frame to the
-			// device with NO MCU cycle in between. This reading is therefore
+			// device with no MCU cycle in between. This reading is therefore
 			// the arrival, and the reading after the quantum is the drain.
 			//
-			// THE EXTRA PUMP IS NOT A SECOND DELIVERY. It drains the hub; the
+			// The extra pump is not a second delivery. It drains the hub; the
 			// pump inside the quantum then finds it empty and delivers nothing.
 			board.pumpTransport();
 
@@ -998,9 +987,9 @@ namespace
 
 			for(uint32_t i = 0; i < g_observeQuanta; ++i)
 			{
-				// THE FIRST QUANTUM IS THE PUMP QUANTUM: Board::pumpTransport
+				// The first quantum is the pump quantum: Board::pumpTransport
 				// drains what pch2Load put in the hub and hands each frame to
-				// the device with isp1181_rx at the CONFIGURED endpoint.
+				// the device with isp1181_rx at the configured endpoint.
 				scheduler->runFrames(1);
 
 				const int level = board.interrupts().presentedLevel();
@@ -1265,7 +1254,7 @@ int main()
 		check(control0.hitsKnownNegative == 0,
 			"ep0-small KNOWN NEGATIVE: the vector-table address is still never fetched");
 
-		// The command-port recorder's own known positive: the firmware DOES
+		// The command-port recorder's own known positive: the firmware does
 		// drive the command port. A stream of zero bytes would make every
 		// absence below a statement about the recorder.
 		check(real.commandBytesBoot > 0,
@@ -1279,18 +1268,18 @@ int main()
 		check(!real.halted, "ep3-patch: the core is not halted when the window closes");
 		check(!real.faulted, "ep3-patch: the board reports no fault when the window closes");
 
-		// ------------------------------------------------------------- THE ROWS
+		// ----------------------------------------------------------- the rows
 
-		// 1. The packet is in the device, AND THEN IT IS NOT, and the pair is
+		// 1. The packet is in the device, and then it is not, and the pair is
 		//    what makes the second reading a drain.
 		//
-		//    A SINGLE READING AFTER THE PUMP QUANTUM CANNOT ANSWER THIS. The
+		//    A single reading after the pump quantum cannot answer this. The
 		//    delivery and the firmware's service both happen inside that one
 		//    quantum, so "the packet arrived and the firmware took it" and "the
 		//    packet never arrived" both leave the buffer empty and both read
 		//    0x00. The first reading is taken after Board::pumpTransport and
-		//    before any MCU cycle, so it is the ARRIVAL; the second is taken
-		//    after the quantum, so the move between them is the DRAIN.
+		//    before any MCU cycle, so it is the arrival; the second is taken
+		//    after the quantum, so the move between them is the drain.
 		check(real.peekAfterPump != 0x00u,
 			std::string("ep3-patch: a byte of the real `.pch2` is at the CS3 data port once the"
 			            " transport has pumped and BEFORE the core has run; read ") +
@@ -1304,31 +1293,31 @@ int main()
 			            " ENDPOINT 0 once the transport has pumped; read ") +
 			hex8(control0.peekAfterPump));
 
-		// THE CONTROL FOR THE DRAIN, AND IT IS AN ENDPOINT THE FIRMWARE DOES
-		// NOT SERVICE. On endpoint 0 the firmware reads the interrupt register
-		// and the status and issues no buffer command, so the packet is STILL
-		// THERE after the same number of quanta. A reading that fell to 0x00 in
-		// both runs would be the instrument, not the firmware.
+		// The control for the drain is an endpoint the firmware does not
+		// service. On endpoint 0 the firmware reads the interrupt register and
+		// the status and issues no buffer command, so the packet is still there
+		// after the same number of quanta. A reading that fell to 0x00 in both
+		// runs would be the instrument, not the firmware.
 		check(control0.peekAfterWindow == control0.peekAfterPump,
 			std::string("ep0-small: the packet is still in the endpoint 0 buffer after ") +
 			std::to_string(g_observeQuanta) + " quanta -- the firmware never drained it, so the"
 			" ep3-patch fall to 0x00 is a drain and not the instrument; read " +
 			hex8(control0.peekAfterWindow) + " against " + hex8(control0.peekAfterPump));
 
-		// 2. The line asserts, AND THE EVIDENCE IS THE TAKEN EXCEPTION AND NOT
-		//    THE SAMPLED LEVEL.
+		// 2. The line asserts, and the evidence is the taken exception and not
+		//    the sampled level.
 		//
-		//    presentedLevel() IS SAMPLED AT QUANTUM BOUNDARIES AND THAT IS NOT
-		//    FINE ENOUGH. The whole transaction -- the device raising the bit,
+		//    presentedLevel() is sampled at quantum boundaries and that is not
+		//    fine enough. The whole transaction -- the device raising the bit,
 		//    the controller presenting level 3, the core taking the exception
-		//    and the handler clearing the bit -- completes INSIDE one quantum,
+		//    and the handler clearing the bit -- completes inside one quantum,
 		//    so a sample taken at the boundary sees the machine's ordinary
 		//    level-1 traffic and never the level-3 presentation. That is a
 		//    property of the sampling and not of the machine, and it is why the
-		//    sampled figures below are REPORTED and only this is asserted.
+		//    sampled figures below are reported and only this is asserted.
 		//
-		//    THE LEVEL-3 AUTOVECTOR ENTRY IS READ AS A LONGWORD EXACTLY WHEN
-		//    THE CORE TAKES THE EXCEPTION, and the ColdFire autovector formula
+		//    The level-3 autovector entry is read as a longword exactly when
+		//    the core takes the exception, and the ColdFire autovector formula
 		//    24+level puts level 3 at vector 27. Its control comes from the
 		//    same population and the same counter: the longword reads anywhere
 		//    else in the same table, which the machine makes in the thousands.
@@ -1344,13 +1333,13 @@ int main()
 			            " harness wrote -- the level-3 entry holds ") +
 			hex32(control0.usbVectorContent) + " and not " + hex32(g_vectorHandler));
 
-		// 3. The handler is entered, and it is entered ONCE.
+		// 3. The handler is entered, and it is entered once.
 		//
-		//    ONCE IS THE LOAD-BEARING NUMBER AND NOT A DETAIL. If the bit never
-		//    left the interrupt register the line would never deassert, the
-		//    handler would re-enter for every quantum the machine is given, and
-		//    this count would be in the thousands rather than 1. `> 0` would be
-		//    green in BOTH worlds and would say nothing about the route.
+		//    Once is the load-bearing number. If the bit never left the
+		//    interrupt register the line would never deassert, the handler would
+		//    re-enter for every quantum the machine is given, and this count
+		//    would be in the thousands rather than 1. `> 0` would be green in
+		//    both worlds and would say nothing about the route.
 		check(control0.hitsIsr == 1,
 			std::string("ep0-small: the service routine at ") + hex32(g_probeIsr) +
 			" is entered EXACTLY ONCE across " + std::to_string(g_observeQuanta) +
@@ -1365,11 +1354,11 @@ int main()
 			std::string("ep3-patch: the same routine is entered exactly once on the endpoint the"
 			            " machine actually uses; counted ") + std::to_string(real.hitsIsr));
 
-		// 4. THE ANSWER. The clearing route, and the opcode tracks the ENDPOINT.
+		// 4. The clearing route, and the opcode tracks the endpoint.
 		//
-		//    THE TWO RUNS ARE EACH OTHER'S CONTROL. A model whose status family
+		//    The two runs are each other's control. A model whose status family
 		//    were mis-decoded, or a firmware that issued one fixed opcode, would
-		//    put the SAME byte in both streams. 0x50 is control OUT status and
+		//    put the same byte in both streams. 0x50 is control OUT status and
 		//    0x54 is endpoint 3's, and each appears in the run that delivered to
 		//    that endpoint.
 		check(control0.statusOpcodesSeen == std::vector<uint8_t>{ g_statusFirst },
@@ -1381,7 +1370,7 @@ int main()
 			" -- endpoint 3's status, the route the model takes bit 12 back by -- and no other opcode"
 			" of the family; saw " + describeOpcodes(real.statusOpcodesSeen));
 
-		// 5. THE ORDER. A status read that arrived before the interrupt-register
+		// 5. The order. A status read that arrived before the interrupt-register
 		//    read would not be a service of that interrupt.
 		check(real.commandsAfterBoot == std::vector<uint8_t>{
 				g_readIntRegister, g_statusEndpoint3, g_readEndpoint3Out, g_clearEndpoint3Out },
@@ -1396,23 +1385,22 @@ int main()
 			            " then control OUT status, and no reply follows; saw ") +
 			describeOpcodes(control0.commandsAfterBoot));
 
-		// 6. THE SAME ANSWER FROM THE CONFIGURATION SIDE, and it is what makes
-		//    the endpoint choice a MEASUREMENT rather than a reading of a
+		// 6. The same answer from the configuration side, and it is what makes
+		//    the endpoint choice a measurement rather than a reading of a
 		//    buffer table.
 		//
 		//    `fifoShape` in `src/isp1181/isp1181.nim` labels endpoint 2's buffer
-		//    64 bytes double-buffered and endpoint 3's 64 bytes single, and that
-		//    file's own head block says both numbers are FIRMWARE CONFIGURATION
-		//    -- ISP1362 Rev. 06 pp.51-53 put the size in FFOSZ[3:0] and the
-		//    scheme in DBLBUF, both inside DcEndpointConfiguration. Nothing
-		//    reads the firmware's writes back into that table, so the table is
-		//    an inherited assertion and cannot discriminate an endpoint.
+		//    64 bytes double-buffered and endpoint 3's 64 bytes single, and both
+		//    numbers are firmware configuration -- ISP1362 Rev. 06 pp.51-53 put
+		//    the size in FFOSZ[3:0] and the scheme in DBLBUF, both inside
+		//    DcEndpointConfiguration. Nothing reads the firmware's writes back
+		//    into that table, so the table cannot discriminate an endpoint.
 		//
-		//    The bytes the FIRMWARE writes to `0x20`+slot can. EPDIR, bit 6 of
+		//    The bytes the firmware writes to `0x20`+slot can. EPDIR, bit 6 of
 		//    the same register, says which way a single endpoint buffer faces,
 		//    and it is the one field that decides whether a host packet has
 		//    anywhere to land. This row asserts nothing about DBLBUF or FFOSZ:
-		//    it asserts that the firmware CONFIGURED the endpoint this Board
+		//    it asserts that the firmware configured the endpoint this Board
 		//    delivers to, and that it configured it OUT.
 		{
 			const int slot = bufferSlotOfEndpoint(real.endpoint);

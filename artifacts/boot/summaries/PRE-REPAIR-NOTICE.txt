@@ -11,8 +11,7 @@ WHAT IS OBSOLETE, AND WHY.
   t1_boot_post_sch35_jit203.txt, prints no handshake line at all.
   All nine are dated 2026-08-24 and ALL NINE PREDATE THE LATCH REPAIR.
 
-  §24.6 row W3-394 of nmg2-artifacts/docs/plans/2026-08-04-nmg2-emulator-impl.md measured that the
-  HF0->HF2 handshake is a TRANSIENT: a machine whose handshake COMPLETED and a machine whose
+  The HF0->HF2 handshake is a TRANSIENT: a machine whose handshake COMPLETED and a machine whose
   handshake NEVER RAN both present `icr=0 isr=0` at the end of the run. A terminal LEVEL READ
   therefore cannot tell a healthy machine from a dead one. The repair RE-POINTED the identifier
   `handshakePorts` from that level read to a LATCH, and added `handshakeAtEnd` as the level figure,

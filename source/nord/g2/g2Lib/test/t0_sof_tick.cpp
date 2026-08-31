@@ -347,24 +347,22 @@ extern "C"
 	{
 	}
 
-	/* THE BOARD NOW DRAINS ITS TRANSPORT HUB INTO THE DEVICE ON EVERY QUANTUM
-	 * BOUNDARY, so board.cpp references this entry point and a target that
-	 * links no mcf5307 archive must supply it. It is a SINK and not a
-	 * recorder: nothing in this file drives the hub, so no frame ever reaches
-	 * it, and a recorder here would be state no case reads. */
+	/* The Board drains its transport hub into the device on every quantum
+	 * boundary, so board.cpp references this entry point and a target that
+	 * links no mcf5307 archive must supply it. It is a sink and not a recorder:
+	 * nothing in this file drives the hub, so no frame ever reaches it. */
 	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
 	{
 	}
 
-	/* THE BOARD MOVES ITS HANDLE OFF THE STUB BACKEND AT CONSTRUCTION, so
+	/* The Board moves its handle off the Stub backend at construction, so
 	 * board.cpp references this entry point too and a target that links no
 	 * mcf5307 archive must supply it.
 	 *
-	 * IT ANSWERS 1, WHICH IS "THE HANDLE MOVED". The Board reads the return
-	 * only to detect a REFUSAL, and a refusal is a state this file's fake
+	 * It answers 1, which is "the handle moved". The Board reads the return
+	 * only to detect a refusal, and a refusal is a state this file's fake
 	 * device cannot be in: there is no backend here to refuse. Answering 0
-	 * would make every Board in this file print the refusal line, which is
-	 * output no case here asks for. */
+	 * would make every Board in this file print the refusal line. */
 	int isp1181_set_backend(isp1181_ctx*, int)
 	{
 		return 1;

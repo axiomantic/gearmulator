@@ -82,7 +82,7 @@ namespace
 	// the two sides move independently.
 	constexpr uint32_t gIcrBase = 0x04Cu;
 	constexpr uint32_t gIcrCount = 12u;
-	// AVR is the AUTOVECTOR CONTROL REGISTER at MBAR+$04B. MCF5307 UM Table
+	// AVR is the autovector control register at MBAR+$04B. MCF5307 UM Table
 	// B-1 lists it by address and width -- `MBAR+$04B AVCR 8` -- and gives
 	// $048, $049 and $04A no row at all; Table 8-1's $048 row is four byte
 	// columns whose first three are Reserved, and both G2 firmware images load

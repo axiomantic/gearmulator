@@ -1,17 +1,14 @@
-/* internalClient.cpp -- g2::InternalClient. Task PROTO-3.
- * Design section 15.1, boundary declaration 13.10.6.
+/* internalClient.cpp -- g2::InternalClient.
  *
- * THE HUB IS REACHED DIRECTLY AND THROUGH NOTHING ELSE. m_hub is the only
+ * The hub is reached directly and through nothing else. m_hub is the only
  * collaborator in this file: attach, detach and toDevice are called on it by
  * name, and no other endpoint appears anywhere below. That is what makes this
- * client a PEER of the socket and usbip attachments rather than a path through
- * one of them, and it is the property PROTO-3's check drives by running with
- * nothing else attached to the hub.
+ * client a peer of the socket and usbip attachments rather than a path through
+ * one of them.
  *
- * THE WHOLE ALLOCATION IS THE TWO VECTORS IN THE CONSTRUCTOR'S INITIALISER
- * LIST AND THERE IS NO OTHER ONE IN THIS FILE. Nothing below resizes, pushes
- * back, news or copies a container; the inbox is a ring index over storage
- * that already exists.
+ * The whole allocation is the two vectors in the constructor's initialiser
+ * list. Nothing below resizes, pushes back, news or copies a container; the
+ * inbox is a ring index over storage that already exists.
  */
 
 #include "internalClient.h"
@@ -39,7 +36,7 @@ namespace g2
 
 	bool InternalClient::send(const ProtocolFrame _frame) noexcept
 	{
-		/* THE VERDICT IS THE HUB'S AND IT IS RETURNED UNCHANGED. This client
+		/* The verdict is the hub's and it is returned unchanged. This client
 		 * adds no bound of its own on the outbound direction: the hub owns
 		 * maxFrameBytes and the queue depth for what leaves, and a second
 		 * refusal here would be a second place to keep that number. */
@@ -48,7 +45,7 @@ namespace g2
 
 	void InternalClient::onFrameFromDevice(const ProtocolFrame _frame) noexcept
 	{
-		/* A FRAME THAT CANNOT BE COPIED WHOLE IS DROPPED WHOLE. Truncating it
+		/* A frame that cannot be copied whole is dropped whole. Truncating it
 		 * into a slot that cannot hold it would hand the plugin a malformed
 		 * message that looks well-formed. */
 		if(_frame.size > m_maxFrameBytes)
@@ -57,9 +54,9 @@ namespace g2
 			return;
 		}
 
-		/* THE OCCUPANCY IS MEASURED AGAINST `release`, NOT `head`. The slots
+		/* The occupancy is measured against `release`, not `head`. The slots
 		 * between release and head were handed out by the last receive and are
-		 * still BORROWED by the plugin; overwriting one is exactly the
+		 * still borrowed by the plugin; overwriting one is exactly the
 		 * borrow-lifetime defect this inbox must not have. */
 		const uint64_t tail    = m_tail.load(std::memory_order_relaxed);
 		const uint64_t release = m_release.load(std::memory_order_acquire);
@@ -82,12 +79,12 @@ namespace g2
 
 	bool InternalClient::receive(ProtocolFrame& _out) noexcept
 	{
-		/* STEP 1: RELEASE WHAT THE PREVIOUS receive HANDED OUT. This is what
-		 * makes "valid until the NEXT receive" true rather than aspirational,
-		 * and it happens BEFORE this call reads anything, so a caller that
-		 * reads the previous frame up to the instant of this call sees intact
-		 * bytes. The release happens even on an empty inbox: the previous
-		 * borrow ended either way. */
+		/* Release what the previous receive handed out. This is what makes
+		 * "valid until the next receive" true rather than aspirational, and it
+		 * happens before this call reads anything, so a caller that reads the
+		 * previous frame up to the instant of this call sees intact bytes. The
+		 * release happens even on an empty inbox: the previous borrow ended
+		 * either way. */
 		const uint64_t head = m_head.load(std::memory_order_relaxed);
 		m_release.store(head, std::memory_order_release);
 

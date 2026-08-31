@@ -260,21 +260,17 @@ namespace
 	// findings about the machine and must not be reported as one.
 	constexpr unsigned g_sustainedQuanta = 2048u;
 
-	/* ------------------------------- THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE
+	/* ------------------------------- the arrival instrument's known positive
 	 *
-	 * THIS TEST IS RED BY DESIGN AND ITS RED WAS AMBIGUOUS. `arrival >= 0`
-	 * failing says the pattern did not appear at the sink; it does NOT say
-	 * whether the chain declined to carry it or whether the arrival path could
-	 * not have reported it either way. The sustained probe below separates a
-	 * slow chain from a silent one and does not touch that question.
+	 * `arrival >= 0` failing says the pattern did not appear at the sink; it
+	 * does not say whether the chain declined to carry it or whether the
+	 * arrival path could not have reported it either way.
 	 *
-	 * The control does. It places a sentinel at the TAIL position's transmit
+	 * The control does. It places a sentinel at the tail position's transmit
 	 * source and reads it back out of the codec sink through the same `pull`
 	 * and the same comparator the walk uses, so a failing `arrival` assertion
-	 * beside a passing control is a statement about the CHAIN and not about the
-	 * instrument. IT ADDS AN ASSERTION AND WEAKENS NONE: the arrival checks
-	 * below are untouched and still fail on an unpatched machine, which is what
-	 * milestone M6 asks them to do. */
+	 * beside a passing control is a statement about the chain and not about the
+	 * instrument. */
 	constexpr uint32_t g_sinkControlWord     = 0x2B6D51u;
 	constexpr int32_t  g_sinkControlExpected = int32_t(g_sinkControlWord);
 
@@ -287,17 +283,14 @@ namespace
 	constexpr unsigned g_sinkControlQuanta = 64u;
 	constexpr dsp56k::TWord g_dmaTxChannel = 4u;
 
-	/* THE TAIL IS FOUND AND NOT TYPED. The chain adapter's POSITION and the
-	 * hardware PORT are not the same number: dspSet.cpp binds
+	/* The tail is found and not typed. The chain adapter's position and the
+	 * hardware port are not the same number: dspSet.cpp binds
 	 * audioTxCallback(position) to peripherals(portOfPosition[position]), and
 	 * portOfPosition comes from the nine-entry table the firmware builds at
 	 * 0x30116970. Entry i holds the CS1 address of the port at chain position
 	 * i, and A3..A10 are eight ACTIVE-LOW one-cold selects, so the port number
 	 * is the index of the single line pulled down. On this machine position 7
-	 * is port 0.
-	 *
-	 * THE CONFIGURATION IS COPIED AND NOT SHARED, plan section 1.3 rule 1, for
-	 * the reason this file's machine placement is. */
+	 * is port 0. */
 	unsigned portOfChainPosition(g2::Board& _board, const unsigned _wanted, const unsigned _count)
 	{
 		constexpr uint32_t g_portTableBase = 0x30116970u;
@@ -570,16 +563,16 @@ namespace
 
 		// ---------------------------- the arrival instrument's known positive
 		//
-		// THE LINKS IT TRAVERSES: the tail DSP's X memory, its transmit DMA,
+		// The links it traverses: the tail DSP's X memory, its transmit DMA,
 		// the ESAI transmit register file, ESAI frame assembly, the installed
 		// WriteTxCallback (ChainAdapter::audioTxCallback(N-1)), fromEsaiFrame,
 		// mailbox N, ChainAdapter::advanceAll, extractCodecSink,
 		// CodecSink::push, Scheduler::pull and the walk's own two predicates.
 		//
-		// THE LINKS IT DOES NOT: no DSP core executes any part of it, and
+		// The links it does not: no DSP core executes any part of it, and
 		// positions 0..N-2, every receive callback, the mailbox hop chain and
-		// injectCodecSource are all UPSTREAM of the tail. It qualifies the
-		// arrival REPORTING path and makes no claim about the chain.
+		// injectCodecSource are all upstream of the tail. It qualifies the
+		// arrival reporting path and makes no claim about the chain.
 		{
 			const unsigned tailPort =
 				portOfChainPosition(board, _result.dspCount - 1u, _result.dspCount);
@@ -604,12 +597,12 @@ namespace
 							tailEsai.writeTX(reg, g_sinkControlWord);
 					}
 
-					// AND THE BUFFER THE TRANSMIT DMA REFILLS THAT REGISTER
-					// FROM. writeSlotToFrame copies the register file into the
+					// And the buffer the transmit DMA refills that register
+					// from. writeSlotToFrame copies the register file into the
 					// slot and then triggers the transmit DMA, which is
 					// serviced synchronously and overwrites the register before
 					// the next slot is assembled, so a register-only injection
-					// reaches ONE slot and the codec sink reads TWO. The window
+					// reaches one slot and the codec sink reads two. The window
 					// is read off the DMA's own source register and the ESAI's
 					// own transmit word count, never typed.
 					{
@@ -750,9 +743,9 @@ int main()
 
 		// ---------------- the arrival instrument's known positive
 		//
-		// IT RUNS BEFORE THE ARRIVAL CHECKS BECAUSE IT QUALIFIES THEM. A
+		// It runs before the arrival checks because it qualifies them. A
 		// failing `arrival >= 0` beside a passing control is a statement about
-		// the CHAIN; the same failure beside a failing control is a statement
+		// the chain; the same failure beside a failing control is a statement
 		// about nothing.
 		check(result.sinkControlPortFound,
 			"the firmware's port table names a port at chain position "

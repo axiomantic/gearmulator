@@ -1,39 +1,30 @@
-/* t0_rx_frame_zeroed.cpp -- the ESAI receive frame is ZEROED STORAGE, and the
- * registers the G2 producer never writes read a DETERMINISTIC ZERO.
+/* t0_rx_frame_zeroed.cpp -- the ESAI receive frame is zeroed storage, and the
+ * registers the G2 producer never writes read a deterministic zero.
  *
- * WHAT THIS ROW GUARDS, AND WHAT IT DELIBERATELY DOES NOT CLAIM.
+ * g2Lib's own frame.h states the precondition: "every register index other
+ * than `reg` is untouched: the conversion writes only [k][reg], so a frame
+ * handed to toEsaiFrame must already be zeroed elsewhere." The G2 producer
+ * writes register 0 alone (chainAdapter.cpp's kAudioReg). Nothing in g2Lib can
+ * satisfy "zeroed elsewhere" on its own -- the storage belongs to
+ * dsp56k::Audio::Frame, in the vendored dsp56300 tree.
  *
- * g2Lib's own frame.h states the precondition verbatim: "EVERY REGISTER INDEX
- * OTHER THAN `reg` IS UNTOUCHED: the conversion writes only [k][reg], so a
- * frame handed to toEsaiFrame must already be zeroed elsewhere." The G2
- * producer writes register 0 alone (chainAdapter.cpp's kAudioReg). NOTHING in
- * g2Lib can satisfy "zeroed elsewhere" on its own -- the storage belongs to
- * dsp56k::Audio::Frame, in the vendored dsp56300 tree. This row is where that
- * precondition is CHECKED rather than assumed, from the consumer that depends
- * on it.
- *
- * THE ZERO MEANS "THE SECOND RECEIVE LINE IS NOT MODELLED". IT DOES NOT MEAN
- * "THE HARDWARE IS SILENT THERE". On a real DSP56303, RX1 ($FFFFA9) is
+ * The zero means "the second receive line is not modelled". It does not mean
+ * "the hardware is silent there". On a real DSP56303, RX1 ($FFFFA9) is
  * receiver 1's data register and it is fed by the SDI1 pin; the G2 firmware
- * measurably enables RE0 AND RE1 and programs the receive DMA to walk RX0 and
+ * measurably enables RE0 and RE1 and programs the receive DMA to walk RX0 and
  * RX1 alternately. This emulation models register 0 only -- the second bus is
- * a SEPARATE Esai reached through getEsai1() -- so register 1 carries no
+ * a separate Esai reached through getEsai1() -- so register 1 carries no
  * modelled signal. A deterministic zero is the correct behaviour of an
- * UNMODELLED input, and the gap between "unmodelled" and "correctly emulated"
- * is real, separate, and larger than this row. NOTHING HERE MAY BE READ AS
- * CLOSING IT.
+ * unmodelled input, and the gap between "unmodelled" and "correctly emulated"
+ * is real and larger than this file.
  *
- * WHY THE STORAGE IS POISONED RATHER THAN TRUSTED TO BE DIRTY. The defect this
- * row exists for is a read of storage that was never written -- and freshly
- * mapped pages read as zero, so the defect is INVISIBLE roughly as often as it
- * is visible. Measured over 20 runs of the real firmware, the count of
- * receive-buffer words carrying garbage ranged over the whole 0..7 of 8 span,
- * three of those runs being fully clean. A row that constructed a frame and
- * hoped for dirt would be a coin flip. Placement-new over a byte pattern this
- * row writes ITSELF makes the pre-fix failure deterministic and makes the
- * post-fix zero mean the constructor produced it.
+ * The storage is poisoned rather than trusted to be dirty. The defect this
+ * file exists for is a read of storage that was never written -- and freshly
+ * mapped pages read as zero, so the defect is invisible roughly as often as it
+ * is visible. Placement-new over a byte pattern this file writes itself makes
+ * the pre-fix failure deterministic and makes the post-fix zero mean the
+ * constructor produced it.
  */
-
 #include "dsp56kBase/logging.h"
 
 #include "dsp56kEmu/audio.h"
@@ -64,11 +55,10 @@ namespace
 		}
 	}
 
-	/* THE POISON IS THE ALLOCATE-TIME PATTERN OF THE PLATFORM ALLOCATOR
-	 * (MallocPreScribble), and it is chosen for traceability and not for
-	 * taste: the same byte is what the real firmware run reports in every
-	 * varying word when the allocator is told to scribble, so a failure here
-	 * prints the value a reader has already seen in the probe. */
+	/* The poison is the allocate-time pattern of the platform allocator
+	 * (MallocPreScribble): the same byte is what a real firmware run reports in
+	 * every varying word when the allocator is told to scribble, so a failure
+	 * here prints the value a reader has already seen in the probe. */
 	constexpr unsigned char g_poisonByte = 0xAA;
 
 	uint64_t g_logLines = 0;
@@ -89,10 +79,10 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* ---------------- ROW A: the storage itself.
+	/* ---------------- Row A: the storage itself.
 	 *
 	 * A default-constructed RxFrame over poisoned bytes must read as zero in
-	 * EVERY register of EVERY slot -- the complete contents, not a sample of
+	 * every register of every slot -- the complete contents, not a sample of
 	 * them. This is the precondition frame.h names, stated as an assertion. */
 	void checkFrameConstructsZeroed()
 	{
@@ -102,15 +92,14 @@ namespace
 
 		std::memset(storage, g_poisonByte, sizeof(storage));
 
-		/* NO PARENTHESES, AND THE ROW IS WORTHLESS WITH THEM. `RxFrame()` is
-		 * VALUE-initialization, and because Frame's default constructor is
+		/* No parentheses, and the case is worthless with them. `RxFrame()` is
+		 * value-initialization, and because Frame's default constructor is
 		 * defaulted-on-first-declaration rather than user-provided, value-init
 		 * zero-initializes the whole object first -- so the parenthesised form
-		 * reads zero over poison EVEN WITH THE DEFECT PRESENT and passes for a
-		 * reason that has nothing to do with the member declaration. Observed:
-		 * the parenthesised form was written first and passed against the
-		 * defect. `new (p) RxFrame` is DEFAULT-initialization, which is what
-		 * `RxFrame m_rxFrame;` inside Esai actually does. */
+		 * reads zero over poison even with the defect present, for a reason
+		 * that has nothing to do with the member declaration. `new (p) RxFrame`
+		 * is default-initialization, which is what `RxFrame m_rxFrame;` inside
+		 * Esai actually does. */
 		RxFrame* const frame = new (static_cast<void*>(storage)) RxFrame;
 
 		for(uint32_t slot = 0; slot < dsp56k::Audio::MaxSlotsPerFrame; ++slot)
@@ -131,21 +120,19 @@ namespace
 		frame->~RxFrame();
 	}
 
-	/* ---------------- ROW B: the same property through the real receive path.
+	/* ---------------- Row B: the same property through the real receive path.
 	 *
-	 * Row A asserts on the container. This row asserts on what the DSP READS,
-	 * which is the thing the defect actually corrupted: Esai::readSlotFromFrame
-	 * copies the WHOLE RxSlot out of the frame into m_rx, so a register the
-	 * producer never wrote reaches Esai::readRX and, from there, $FFFFA9 and
-	 * the receive DMA.
+	 * Row A asserts on the container. This row asserts on what the DSP reads:
+	 * Esai::readSlotFromFrame copies the whole RxSlot out of the frame into
+	 * m_rx, so a register the producer never wrote reaches Esai::readRX and,
+	 * from there, $FFFFA9 and the receive DMA.
 	 *
-	 * BOTH RECEIVERS ARE ENABLED BECAUSE THE FIRMWARE ENABLES BOTH. readRX
-	 * returns 0 unconditionally for a receiver that is not enabled, so a row
+	 * Both receivers are enabled because the firmware enables both. readRX
+	 * returns 0 unconditionally for a receiver that is not enabled, so a case
 	 * that enabled RE0 alone would assert a zero the guard produced and would
-	 * pass against the defect. Registers 2 and 3 are deliberately NOT asserted
-	 * for that exact reason: RE2/RE3 are not enabled here, their zero would be
-	 * the guard's and not the storage's, and an assertion that cannot fail is
-	 * worse than none. */
+	 * pass against the defect. Registers 2 and 3 are deliberately not asserted
+	 * for that exact reason: RE2/RE3 are not enabled here, so their zero would
+	 * be the guard's and not the storage's. */
 	void checkReceivePathReadsZeroWhereUnmodelled()
 	{
 		constexpr uint32_t kSlots = 8;
@@ -176,7 +163,7 @@ namespace
 					_frame[k][0] = producerWord(k);
 			});
 
-		/* RDC is a five-bit field at a known position and the bound is DERIVED
+		/* RDC is a five-bit field at a known position and the bound is derived
 		 * from the library's own mask; a literal here would be a second
 		 * definition of a guest register. RDC holds slots-minus-one, so the
 		 * frame wraps after kSlots slots. */

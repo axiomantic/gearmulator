@@ -166,7 +166,7 @@ namespace
 	// The MBAR-relative offsets.
 	constexpr uint32_t kIcrBase = 0x04Cu;   // ICR0, UM Table 8-2
 	constexpr uint32_t kIrqpar  = 0x006u;   // IRQPAR, UM Table 8-1
-	// THE AVR REGISTER BYTE, the base of the longword group that contains it,
+	// The AVR register byte, the base of the longword group that contains it,
 	// and one Reserved byte of that group. All three from MCF5307 UM Table
 	// B-1, which lists `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER` and
 	// gives $048, $049 and $04A no row at all. This file owns its own copies
@@ -288,11 +288,10 @@ extern "C"
 		g_recorder.autovector = autovector;
 	}
 
-	// THE IRQ CALLBACK IS RECORDED AT THE POINT THE BOARD HANDS IT OVER, and
-	// case group 5 drives THAT POINTER. A case that called a named Board
+	// The IRQ callback is recorded at the point the Board hands it over, and
+	// case group 5 drives that pointer. A case that called a named Board
 	// method instead would stay green with a null callback still installed at
-	// isp1181_create -- which is exactly the defect, so the observation has to
-	// be taken here and nowhere else.
+	// isp1181_create, so the observation has to be taken here.
 	isp1181_ctx* isp1181_create(void* const user, const isp1181_irq_fn irq,
 	                            isp1181_tx_fn)
 	{
@@ -318,24 +317,22 @@ extern "C"
 	{
 	}
 
-	/* THE BOARD NOW DRAINS ITS TRANSPORT HUB INTO THE DEVICE ON EVERY QUANTUM
-	 * BOUNDARY, so board.cpp references this entry point and a target that
-	 * links no mcf5307 archive must supply it. It is a SINK and not a
-	 * recorder: nothing in this file drives the hub, so no frame ever reaches
-	 * it, and a recorder here would be state no case reads. */
+	/* The Board drains its transport hub into the device on every quantum
+	 * boundary, so board.cpp references this entry point and a target that
+	 * links no mcf5307 archive must supply it. It is a sink and not a recorder:
+	 * nothing in this file drives the hub, so no frame ever reaches it. */
 	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
 	{
 	}
 
-	/* THE BOARD MOVES ITS HANDLE OFF THE STUB BACKEND AT CONSTRUCTION, so
+	/* The Board moves its handle off the Stub backend at construction, so
 	 * board.cpp references this entry point too and a target that links no
 	 * mcf5307 archive must supply it.
 	 *
-	 * IT ANSWERS 1, WHICH IS "THE HANDLE MOVED". The Board reads the return
-	 * only to detect a REFUSAL, and a refusal is a state this file's fake
+	 * It answers 1, which is "the handle moved". The Board reads the return
+	 * only to detect a refusal, and a refusal is a state this file's fake
 	 * device cannot be in: there is no backend here to refuse. Answering 0
-	 * would make every Board in this file print the refusal line, which is
-	 * output no case here asks for. */
+	 * would make every Board in this file print the refusal line. */
 	int isp1181_set_backend(isp1181_ctx*, int)
 	{
 		return 1;
@@ -497,8 +494,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE USB DEVICE'S SERVICE REQUEST REACHES THE CORE AS AN
-	// AUTOVECTORED LEVEL 3, AND THE LEVEL IS DERIVED AND NOT WRITTEN DOWN.
+	// Case group 5. The USB device's service request reaches the core as an
+	// autovectored level 3, and the level is derived and not written down.
 	//
 	// The level, the autovector bit and the vector number were read out of the
 	// G2 firmware, not guessed: BOOT:0x31FE writes its handler to VBR+108 --
@@ -507,21 +504,18 @@ int main()
 	// effects through install_autovector(3, 0x30053C38) at its only call site.
 	// IRQPAR is never written by either image, so IRQ3 stays at its level 3.
 	//
-	// WHAT IS DRIVEN IS THE POINTER THE BOARD HANDED TO isp1181_create. A
+	// What is driven is the pointer the Board handed to isp1181_create. A
 	// Board that still passes nullptr there records a null callback and this
-	// group cannot run at all, which is the red this group was written to
-	// produce.
+	// group cannot run at all.
 	//
-	// THIS GROUP WRITES AVR AT MBAR+$04B, WHERE THE FIRMWARE WRITES IT. It
+	// This group writes AVR at MBAR+$04B, where the firmware writes it. It
 	// asserts the wire from the device's service request to the core; case
-	// group 6 is what pins the register BYTE, and it is the group to read for
-	// the manual citation.
+	// group 6 is what pins the register byte.
 	//
-	// THE ANTI-HARDCODE ASSERTION IS THE IRQPAR CASE. Level 3 alone is
+	// The anti-hardcode assertion is the IRQPAR case. Level 3 alone is
 	// satisfied by a board that writes the constant 3 into the core. Only a
-	// board that names the PIN and lets the controller apply UM Table 8-4
-	// moves to level 6 when IRQPAR[1] is set, and case 5c asserts exactly
-	// that move.
+	// board that names the pin and lets the controller apply UM Table 8-4
+	// moves to level 6 when IRQPAR[1] is set, and case 5c asserts that move.
 	{
 		g2::Board board(mbarOnlyConfig());
 
@@ -564,7 +558,7 @@ int main()
 			checkEqual(g_recorder.level, 0,
 				"the deassert drops the presentation to MCF5307_IRQ_NONE");
 
-			// 5c. THE LEVEL IS THE CONTROLLER'S, NOT THE BOARD'S. IRQPAR[1]
+			// 5c. The level is the controller's, not the Board's. IRQPAR[1]
 			// moves IRQ3 to level 6 by UM Table 8-4. A hardcoded level 3
 			// anywhere on this path is red here.
 			boardWrite(board, kMbarBase + kIrqpar, g_byte, 0x02u, status);
@@ -581,11 +575,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. THE AVR BYTE THE FIRMWARE ACTUALLY WRITES, AT MBAR+$04B.
+	// Case group 6. The AVR byte the firmware actually writes, at MBAR+$04B.
 	//
-	// WHY THIS GROUP WRITES $04B AND NOT $048. A test that writes where the
-	// MODEL listens cannot see a model listening at the wrong byte; only a
-	// test that writes where the FIRMWARE writes can.
+	// A test that writes where the model listens cannot see a model listening
+	// at the wrong byte; only a test that writes where the firmware writes
+	// can.
 	// MCF5307 UM Table B-1 lists the register by address and width:
 	// `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER $00 R/W`. There is no row
 	// for $048, $049 or $04A -- Table 8-1 gives the $048 row four byte columns
@@ -593,13 +587,13 @@ int main()
 	// is the register byte. Both firmware images agree: BOOT:0x320E and
 	// CODE:0x3005827E / CODE:0x30058522 each load $1000004B into a0 and touch
 	// the byte there, and no ALIGNED reference to $10000048 exists in either
-	// image. This group writes where the FIRMWARE writes.
+	// image. This group writes where the firmware writes.
 	{
 		g2::Board board(mbarOnlyConfig());
 
 		mcf5307_bus_status status = MCF5307_BUS_OK;
 
-		// 6a. KNOWN POSITIVE. The router owns $04B, and the way that is
+		// 6a. Known positive. The router owns $04B, and the way that is
 		// visible from the bus is the interrupt block's byte-only rule: a
 		// wider access to an owned offset is refused.
 		boardWrite(board, kMbarBase + kAvrRegister, g_word, 0x0008u, status);
@@ -610,9 +604,9 @@ int main()
 		checkEqual(int(status), int(MCF5307_BUS_SIZE_ILLEGAL),
 			"KNOWN POSITIVE: a word read of $04B is refused, so the interrupt block owns it");
 
-		// 6b. KNOWN NEGATIVE, SAME PREDICATE. $049 is a Reserved byte of the
-		// SAME longword group. isInterruptOwned is the one predicate that
-		// resolves both, and it must answer NO here, so the identical word
+		// 6b. Known negative, same predicate. $049 is a Reserved byte of the
+		// same longword group. isInterruptOwned is the one predicate that
+		// resolves both, and it must answer no here, so the identical word
 		// access falls through to the SIM and is accepted. A predicate that
 		// swallowed the whole $048..$04B group would be red on this line.
 		boardWrite(board, kMbarBase + kAvrGroupReserved, g_word, 0x0008u, status);
@@ -623,11 +617,10 @@ int main()
 		checkEqual(int(status), int(MCF5307_BUS_OK),
 			"KNOWN NEGATIVE: a word read of the Reserved $049 is accepted, so the interrupt block does NOT own it");
 
-		// 6c. THE FIRMWARE'S OWN WRITE, ASSERTED FROM THE CONTROLLER'S STATE.
+		// 6c. The firmware's own write, asserted from the controller's state.
 		// boardRead alone would be satisfied by the SIM's flat backing store
-		// answering the byte it was handed, which is exactly what happened
-		// before this repair. readRegister is the CONTROLLER, so only a byte
-		// that actually reached the controller reads back here.
+		// answering the byte it was handed. readRegister is the controller, so
+		// only a byte that actually reached the controller reads back here.
 		boardWrite(board, kMbarBase + kAvrRegister, g_byte, 0x08u, status);
 		checkEqual(int(status), int(MCF5307_BUS_OK),
 			"the firmware's byte write to $04B is accepted");
@@ -636,7 +629,7 @@ int main()
 		checkEqual(boardRead(board, kMbarBase + kAvrRegister, g_byte, status), uint32_t(0x08u),
 			"and the same byte reads back through the MBAR window");
 
-		// 6d. END TO END. Nothing below writes $048. The AVR bit 3 programmed
+		// 6d. End to end. Nothing below writes $048. The AVR bit 3 programmed
 		// at $04B above is the only thing that can make this autovectored.
 		check(g_usbIrq != nullptr,
 			"the IRQ wire exists for the end-to-end autovector case");
@@ -651,8 +644,8 @@ int main()
 			checkEqual(g_recorder.level, 3,
 				"the presentation carries IRQ3's level 3");
 
-			// ASSERTED FROM THE CONTROLLER'S STATE, NOT FROM THE WRITE. These
-			// two read what the arbiter COMPUTED. A board that forwarded a
+			// Asserted from the controller's state, not from the write. These
+			// two read what the arbiter computed. A board that forwarded a
 			// hardcoded autovector to the core would be green on the recorder
 			// and red here.
 			checkEqual(board.interrupts().presentedLevel(), 3,
@@ -666,9 +659,9 @@ int main()
 				"an autovectored external source carries no pass-through vector");
 		}
 
-		// 6e. $048 IS NOT THE REGISTER. Table B-1 gives it no row, so a byte
-		// written there must NOT reach the controller. Without this line the
-		// repair could be a widening that keeps the old wrong offset alive.
+		// 6e. $048 is not the register. Table B-1 gives it no row, so a byte
+		// written there must not reach the controller. Without this line a
+		// widening could keep the old wrong offset alive.
 		g2::Board second(mbarOnlyConfig());
 		boardWrite(second, kMbarBase + kAvrGroupBase, g_byte, 0x08u, status);
 		checkEqual(uint32_t(second.interrupts().readRegister(kAvrRegister)), uint32_t(0x00u),

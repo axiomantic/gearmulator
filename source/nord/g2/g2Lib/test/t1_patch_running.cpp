@@ -1,62 +1,49 @@
-// The M6 remainder: a REAL `.pch2` delivered to BOOTED, RUNNING firmware.
-// Tier T1: it needs the Clavia-derived artifacts and SKIPS with a reason when
+// A real `.pch2` delivered to booted, running firmware.
+// Tier T1: it needs the Clavia-derived artifacts and skips with a reason when
 // NMG2_ARTIFACTS does not resolve.
 //
-// WHAT WAS MISSING, AND IT WAS NOT A COMPONENT. Every piece already worked and
-// no file connected them. t0_usb_ingress_byte proves a patch byte reaches the
-// device register file the firmware reads -- on a Board WITH NO FIRMWARE IN IT.
-// t1_boot and t1_egress boot the firmware -- and load NO PATCH. The two sets of
-// files were DISJOINT: `pch2Load` and `InternalClient` appear nowhere in
-// g2TestConsole/main.cpp, which is where the machine is booted, while `Board`
-// appears there 29 times. So `--impulse`'s `arrival=-1` is a statement about an
-// UNPATCHED machine and says nothing about a patched one. This file is the
-// join.
+// t0_usb_ingress_byte proves a patch byte reaches the device register file the
+// firmware reads, on a Board with no firmware in it. t1_boot and t1_egress boot
+// the firmware and load no patch. So `--impulse`'s `arrival=-1` is a statement
+// about an unpatched machine and says nothing about a patched one. This file is
+// the join.
 //
-// THE TWO QUESTIONS IT MAKES ANSWERABLE.
+// The two questions it makes answerable.
 //
-//   1. Does MCU routine 0x30032A82 fire on a real patch load? The workspace
-//      FINDINGS record it as the project's oldest untested inference -- "that
-//      0x30032A82 ALSO fires on a real patch load is inferred FROM THE CALL
-//      CHAIN ALONE. No patch has ever been delivered to this firmware in the
-//      emulator." Nothing in the emulator names that address (a search for it
-//      under source/nord/g2 returns 0, against 23 for the `0x3003` prefix), so
-//      the only way to reach it is to let the firmware run the path.
+//   1. Does MCU routine 0x30032A82 fire on a real patch load? Nothing in the
+//      emulator names that address, so the only way to reach it is to let the
+//      firmware run the path.
 //
 //   2. Audio. `arrival=-1` on an unpatched machine is not a claim about a
 //      patched one.
 //
-// THE INSTRUMENT, AND WHY IT NEEDS NO PRODUCTION CHANGE. The MCF5307 core
-// fetches every instruction word through the bus read callback -- `cpu.nim`'s
+// The instrument needs no production change. The MCF5307 core fetches every
+// instruction word through the bus read callback -- `cpu.nim`'s
 // `ctx.readFn(ctx.user, ctx.pc, 2, addr status)` -- and Board::onRead routes
 // that to the MemoryMap, which routes it to the BusTarget attached at
-// Region::Sdram. That target is THIS FILE'S Ram. So a counter on 16-bit reads
-// at one SDRAM offset is an INSTRUCTION-FETCH COUNTER for that address, built
+// Region::Sdram. That target is this file's Ram. So a counter on 16-bit reads
+// at one SDRAM offset is an instruction-fetch counter for that address, built
 // entirely inside the test.
 //
-// THE INSTRUMENT'S CONTROLS, BOTH FROM THE SAME POPULATION. A zero from a
+// The instrument's controls, both from the same population. A zero from a
 // counter that never fires is not a measurement.
 //
-//   known positive   the address the MACHINE ITSELF is sitting at when the
+//   known positive   the address the machine itself is sitting at when the
 //                    window opens, read off Board::mcuReg(17) and installed as
 //                    a probe at that instant. It is not chosen by this file,
 //                    and it is fetched through the identical counter.
-//   known negative   an address inside the vector TABLE. Vectors are read as
+//   known negative   an address inside the vector table. Vectors are read as
 //                    32-bit longwords and never fetched as instruction words,
 //                    so the same counter must read 0 there.
 //
-// AND THE CONTROL THAT MAKES THE ANSWER AN ANSWER: the whole run happens TWICE
-// on the same code path, once WITHOUT a patch and once WITH one. A probe count
+// And the control that makes the answer an answer: the whole run happens twice
+// on the same code path, once without a patch and once with one. A probe count
 // that is non-zero in both runs says the routine fires anyway; non-zero only in
 // the patched run is the patch load reaching it.
 //
-// WHY THE MACHINE PLACEMENT IS COPIED RATHER THAN SHARED. Plan section 1.3
-// rule 1, the reason t1_egress and t1_kernel_load each carry their own: a
-// harness's configuration lives at its own site.
-//
-// EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). A release build deletes
+// Every verdict is an observable and not an assert(). A release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
 // not have. Nothing below calls assert() and nothing catches an exception.
-
 #include "gatedFixture.h"
 
 #include "../board.h"
@@ -108,9 +95,9 @@ namespace
 
 	// ------------------------------------------------ the ESAI underrun log filter
 	//
-	// INT-1's filter, with INT-1's limit: the underruns are REAL and expected in
-	// the boot regime, because nothing drains the ESAIs until the codec queues
-	// arrive. This hides the REPETITION and nothing else. Set
+	// The underruns are real and expected in the boot regime, because nothing
+	// drains the ESAIs until the codec queues arrive. This hides the repetition
+	// and nothing else. Set
 	// G2_LOG_ESAI_UNDERRUN to install no filter at all.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
@@ -135,7 +122,7 @@ namespace
 		Logging::setLogFunc(&filterLog);
 	}
 
-	// ------------------------------------------------- INT-1's machine placement
+	// ---------------------------------------------------- the machine placement
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
@@ -168,17 +155,16 @@ namespace
 
 	// ------------------------------------------------- the CS3 peek instrument
 	//
-	// t0_usb_ingress_byte's instrument, unchanged and for its reasons: the
-	// part's own peek command (0xD2) issued at the CS3 command port and read
-	// back at the CS3 data port, with the peek target selected by the
-	// endpoint-configuration command (0x20 + the endpoint's CONFIGURATION SLOT,
-	// which is not its number). It reads the head byte
-	// of the OUT buffer the given endpoint delivers into, and answers the
-	// model's benign 0x00 when that buffer holds nothing.
+	// t0_usb_ingress_byte's instrument: the part's own peek command (0xD2)
+	// issued at the CS3 command port and read back at the CS3 data port, with
+	// the peek target selected by the endpoint-configuration command (0x20 +
+	// the endpoint's configuration slot, which is not its number). It reads the
+	// head byte of the OUT buffer the given endpoint delivers into, and answers
+	// the model's benign 0x00 when that buffer holds nothing.
 	//
-	// WHY IT IS HERE AND NOT ONLY THERE. t0_usb_ingress_byte runs it on a Board
-	// with NO FIRMWARE IN IT. On a BOOTED machine the same reading answers a
-	// different question: whether the firmware ever took the packet out.
+	// t0_usb_ingress_byte runs it on a Board with no firmware in it. On a
+	// booted machine the same reading answers a different question: whether the
+	// firmware ever took the packet out.
 	constexpr uint32_t g_dataPort    = g2::g_cs3Base + 0x00u;
 	constexpr uint32_t g_commandPort = g2::g_cs3Base + 0x10u;
 
@@ -187,12 +173,12 @@ namespace
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
 
-	// THE CONFIGURATION SLOT ORDER, WHICH IS NOT THE ENDPOINT NUMBER. ISP1362
+	// The configuration slot order, which is not the endpoint number. ISP1362
 	// Rev. 06 section 15.1.1 orders the sixteen `0x20`..`0x2F` slots control
 	// OUT, control IN, then endpoints 1 to 14, so endpoint 0 is slot 0,
 	// endpoint 1 is slot 2, endpoint 2 is slot 3 and endpoint 3 is slot 4. The
 	// peek command answers about the buffer the last configuration command
-	// selected, and that operand is one of THESE. Passing an endpoint number
+	// selected, and that operand is one of these. Passing an endpoint number
 	// straight through selects a buffer one place low for every endpoint above
 	// 0, the read still succeeds, and the wrong answer arrives looking exactly
 	// like the right one.
@@ -207,7 +193,7 @@ namespace
 
 	// The synthetic object the known positive delivers. Its type byte is not
 	// 0x00, so a reading of it cannot be confused with the benign answer; it is
-	// also NOT 0x21, which is the type byte of the first object in every file
+	// also not 0x21, which is the type byte of the first object in every file
 	// of the corpus, so a reading of it cannot be confused with the PATCH's
 	// either. Its whole framed length is 3 + 15 = 18 bytes, well inside the
 	// 64-byte capacity the model gives the protocol endpoint.
@@ -233,10 +219,10 @@ namespace
 		return uint8_t(value & 0xffu);
 	}
 
-	// The largest FRAMED object in a `.pch2`, counting its 3-byte header, and
-	// how many objects it holds. Both are COMPUTED from the file this run
-	// loaded and neither is written here as a literal, so a different patch
-	// reports its own figures.
+	// The largest framed object in a `.pch2`, counting its 3-byte header, and
+	// how many objects it holds. Both are computed from the file this run loaded
+	// and neither is written here as a literal, so a different patch reports its
+	// own figures.
 	void measureObjects(const std::vector<uint8_t>& _file, unsigned& _count, size_t& _largest,
 		uint8_t& _firstType)
 	{
@@ -275,27 +261,25 @@ namespace
 
 	// ------------------------------------------------------------ the probe set
 	//
-	// THE ADDRESSES ARE THE FINDINGS' OWN and none of them is this file's
-	// invention. 0x30032A82 is the load-bearing unknown; 0x3001D85C and
-	// 0x3001DAD8 are the two routines the findings name as its callers, and
-	// they are probed too because "the caller never ran" and "the caller ran
-	// and did not reach it" are different findings about the machine.
-	// 0x30032254 is the three-piece assembly 0x30032A82 reaches.
+	// 0x30032A82 is the load-bearing unknown; 0x3001D85C and 0x3001DAD8 are its
+	// two callers, and they are probed too because "the caller never ran" and
+	// "the caller ran and did not reach it" are different findings about the
+	// machine. 0x30032254 is the three-piece assembly 0x30032A82 reaches.
 	constexpr uint32_t g_probeTarget   = 0x30032A82u;
 	constexpr uint32_t g_probeCallerA  = 0x3001D85Cu;
 	constexpr uint32_t g_probeCallerB  = 0x3001DAD8u;
 	constexpr uint32_t g_probeAssembly = 0x30032254u;
 
-	// THE KNOWN NEGATIVE. An address inside the vector TABLE this file writes.
+	// The known negative. An address inside the vector table this file writes.
 	// Vectors are read as 32-bit longwords, never fetched as instruction words,
 	// so the 16-bit counter must read 0 there. It is offset 4 rather than 0 so
 	// that it is not the reset vector either.
 	constexpr uint32_t g_probeNegative = g_vectorTableBase + 4u;
 
-	// How many quanta the machine runs after the patch is handed over. The
-	// findings name a 4000-tick deferred rebuild timer as the scheduler of the
-	// routine under test, so a window shorter than that could report a routine
-	// that had not been given the chance to run. This is more than ten times it.
+	// How many quanta the machine runs after the patch is handed over. A
+	// 4000-tick deferred rebuild timer schedules the routine under test, so a
+	// window shorter than that could report a routine that had not been given
+	// the chance to run. This is more than ten times it.
 	constexpr uint32_t g_observeQuanta = 50000u;
 
 	class Ram final : public g2::BusTarget
@@ -323,7 +307,7 @@ namespace
 
 		const Probe& probe(const size_t _index) const { return m_probes[_index]; }
 
-		// Zeroes every counter, so that a window's counts are the WINDOW's and
+		// Zeroes every counter, so that a window's counts are the window's and
 		// not the boot's.
 		void resetProbes()
 		{
@@ -347,7 +331,7 @@ namespace
 				return 0u;
 			}
 
-			// THE COUNT IS TAKEN ON 16-BIT READS AND ON NOTHING ELSE, because
+			// The count is taken on 16-bit reads and on nothing else, because
 			// that is the width the core fetches an instruction word at.
 			if(_size == 16)
 			{
@@ -392,10 +376,9 @@ namespace
 				if(index >= m_bytes.size())
 					continue;
 
-				// A CONTENT WRITE IS ONE THAT IS NOT THE DISPLAY CLEAR, which
-				// writes 0x20 and only 0x20. Plan section 24.6 row W3-397
-				// records what counting 0x20 as content cost: a blank screen
-				// exiting 0.
+				// A content write is one that is not the display clear, which
+				// writes 0x20 and only 0x20. Counting 0x20 as content reports a
+				// blank screen as a booted machine.
 				const int shift = int(8u * (count - 1u - i));
 				const uint8_t byte = uint8_t((_value >> shift) & 0xffu);
 
@@ -458,7 +441,7 @@ namespace
 
 	// ------------------------------------------------------ the impulse pattern
 	//
-	// t1_egress's two values, unchanged and for its reasons: they differ from
+	// t1_egress's two values: they differ from
 	// each other so a chain that carried slot 0 into both slots fails rather
 	// than passes, and neither is a power of two.
 	constexpr int32_t g_impulseLeft  = 0x0055AA33;
@@ -466,16 +449,13 @@ namespace
 
 	constexpr unsigned g_overrunQuanta = 1024u;
 
-	/* ------------------------------- THE ARRIVAL INSTRUMENT'S KNOWN POSITIVE
+	/* ------------------------------- the arrival instrument's known positive
 	 *
-	 * THE SAME GAP THIS FILE'S HEADER NAMES FOR THE ROUTINE PROBE, ONE FIELD
-	 * OVER. The routine probe has a known positive and a known negative and
-	 * this file will not read its zero without them. The ARRIVAL figure below
-	 * had neither: `arrival=-1` was printed by an instrument nothing had ever
+	 * Without it, `arrival=-1` is printed by an instrument nothing has ever
 	 * shown a frame to, so a chain that carried nothing and an arrival path
-	 * that could not report anything produced the same figure.
+	 * that could not report anything produce the same figure.
 	 *
-	 * The control places a sentinel at the TAIL position's transmit source and
+	 * The control places a sentinel at the tail position's transmit source and
 	 * reads it back out of the codec sink, through the same `pull` and the same
 	 * comparator the walk uses. Its sentinel is neither impulse word, so it
 	 * cannot be mistaken for the measurement it qualifies, and bit 23 is clear
@@ -492,16 +472,13 @@ namespace
 	constexpr unsigned g_sinkControlQuanta = 64u;
 	constexpr dsp56k::TWord g_dmaTxChannel = 4u;
 
-	/* THE TAIL IS FOUND AND NOT TYPED. The chain adapter's POSITION and the
-	 * hardware PORT are not the same number: dspSet.cpp binds
+	/* The tail is found and not typed. The chain adapter's position and the
+	 * hardware port are not the same number: dspSet.cpp binds
 	 * audioTxCallback(position) to peripherals(portOfPosition[position]), and
 	 * portOfPosition comes from the nine-entry table the firmware builds at
 	 * 0x30116970. Entry i holds the CS1 address of the port at chain position
 	 * i, and A3..A10 are eight ACTIVE-LOW one-cold selects, so the port number
-	 * is the index of the single line pulled down.
-	 *
-	 * THE CONFIGURATION IS COPIED AND NOT SHARED, plan section 1.3 rule 1, for
-	 * the reason the machine placement above is. */
+	 * is the index of the single line pulled down. */
 	unsigned portOfChainPosition(g2::Board& _board, const unsigned _wanted, const unsigned _count)
 	{
 		constexpr uint32_t g_portTableBase = 0x30116970u;
@@ -529,10 +506,9 @@ namespace
 		return _count;
 	}
 
-	// t0_usb_ingress_byte's in-process container, built here for the same
-	// reason it is built there: a one-object `.pch2` whose single object is
-	// small enough for the endpoint the model gives it. It carries no Clavia
-	// byte -- every byte of it is this process's own.
+	// A one-object `.pch2` whose single object is small enough for the endpoint
+	// the model gives it. It carries no Clavia byte -- every byte of it is this
+	// process's own.
 	std::vector<uint8_t> buildProbeContainer()
 	{
 		std::vector<uint8_t> file;
@@ -619,7 +595,7 @@ namespace
 	// window and then walks the codec. Returns false only when the machine could
 	// not be placed at all; a machine that ran and moved nothing returns true
 	// with a result that says so, because "the machine is silent" is a
-	// MEASUREMENT and must reach the assertions rather than a bail-out.
+	// measurement and must reach the assertions rather than a bail-out.
 	bool runOnce(const std::string& _directory, const std::vector<uint8_t>& _patch,
 		const bool _deliver, RunResult& _r)
 	{
@@ -730,15 +706,15 @@ namespace
 
 		// ------------------------------------------------- the patch hand-over
 		//
-		// THE CLIENT IS ATTACHED TO THE BOARD'S OWN HUB and to nothing else, so
+		// The client is attached to the Board's own hub and to nothing else, so
 		// what leaves it is drained by Board::pumpTransport at the next quantum
 		// boundary and handed to the device with isp1181_rx. There is no second
 		// path: this is the same `pch2Load` the plugin calls.
 		{
-			// The two inbox sizes bound the DEVICE-TO-PLUGIN direction only; the
-			// bound on what may be ORIGINATED is the hub's and the hub reports
+			// The two inbox sizes bound the device-to-plugin direction only; the
+			// bound on what may be originated is the hub's and the hub reports
 			// it. 4096 clears the largest object in the corpus, measured at
-			// 2492 bytes across all 73 files.
+			// 2492 bytes.
 			g2::InternalClient client(board.transport(), 4096, 4);
 
 			if(_deliver)
@@ -749,28 +725,27 @@ namespace
 				_r.loadReturned = true;
 			}
 
-			// THE PUMP, WITH NO MCU CYCLE AFTER IT, AND THAT ORDERING IS THE
-			// MEASUREMENT. Board::pumpTransport drains what pch2Load put in the
+			// The pump, with no MCU cycle after it, and that ordering is the
+			// measurement. Board::pumpTransport drains what pch2Load put in the
 			// hub and hands each frame to the device with isp1181_rx; it is
 			// public because tickSofIfDue calls it, and calling it directly
-			// delivers the frame WITHOUT letting the core run.
+			// delivers the frame without letting the core run.
 			//
-			// AN EARLIER FORM RAN ONE QUANTUM FIRST AND COULD NOT TELL TWO
-			// WORLDS APART. The pump and the firmware's service both happen
-			// inside that quantum, so "the packet arrived and the firmware
-			// drained it" and "the packet never arrived" both leave the buffer
-			// empty and both read 0x00. This reading is the ARRIVAL; the
-			// reading after the window is the DRAIN.
+			// Running one quantum first cannot tell two worlds apart: the pump
+			// and the firmware's service both happen inside that quantum, so
+			// "the packet arrived and the firmware drained it" and "the packet
+			// never arrived" both leave the buffer empty and both read 0x00.
+			// This reading is the arrival; the reading after the window is the
+			// drain.
 			board.pumpTransport();
 			_r.peekAfterHandover = peekHeadByte(board, g2::BoardConfig{}.usbProtocolEndpoint);
 
-			// The quantum the earlier form took first. It is still run, because
-			// the window below expects a machine that has serviced the packet.
+			// The window below expects a machine that has serviced the packet.
 			scheduler->runFrames(1);
 
 			// ------------------------------------------------ the window opens
 			//
-			// THE KNOWN POSITIVE IS READ OFF THE MACHINE HERE, not chosen above:
+			// The known positive is read off the machine here, not chosen above:
 			// it is the address the core is sitting at at this instant, so it is
 			// an address the machine itself demonstrably reaches.
 			_r.windowPc = board.mcuReg(g_regPc);
@@ -790,18 +765,18 @@ namespace
 			_r.hitsCallerB       = ram.probe(iCallerB).hits;
 			_r.hitsAssembly      = ram.probe(iAssembly).hits;
 
-			// THE SECOND READING. If the first was non-zero and this one is
-			// 0x00, the firmware TOOK the packet out during the window; if both
+			// The second reading. If the first was non-zero and this one is
+			// 0x00, the firmware took the packet out during the window; if both
 			// carry the same byte, it never did.
 			_r.peekAfterWindow = peekHeadByte(board, g2::BoardConfig{}.usbProtocolEndpoint);
 
 			// ------------------------------------------- the wire's known positive
 			//
-			// A ONE-OBJECT CONTAINER THIS PROCESS BUILT, small enough for the
-			// buffer the model gives the endpoint, delivered through THE SAME
-			// client, THE SAME hub, THE SAME pump and read back through THE SAME
+			// A one-object container this process built, small enough for the
+			// buffer the model gives the endpoint, delivered through the same
+			// client, the same hub, the same pump and read back through the same
 			// two bus writes and one bus read. It is what makes a 0x00 above a
-			// measurement of the PATCH rather than of a dead wire on a booted
+			// measurement of the patch rather than of a dead wire on a booted
 			// machine.
 			{
 				const std::vector<uint8_t> probeFile = buildProbeContainer();
@@ -866,19 +841,18 @@ namespace
 
 		// ---------------------------- the arrival instrument's known positive
 		//
-		// THE LINKS IT TRAVERSES: the tail DSP's X memory, its transmit DMA,
+		// The links it traverses: the tail DSP's X memory, its transmit DMA,
 		// the ESAI transmit register file, ESAI frame assembly, the installed
 		// WriteTxCallback (which is ChainAdapter::audioTxCallback(N-1)),
 		// fromEsaiFrame, mailbox N, ChainAdapter::advanceAll,
 		// extractCodecSink, CodecSink::push, Scheduler::pull, and the walk's
 		// own two predicates.
 		//
-		// THE LINKS IT DOES NOT: no DSP core executes any part of it, and
+		// The links it does not: no DSP core executes any part of it, and
 		// positions 0..N-2, every receive callback, the mailbox hop chain and
-		// injectCodecSource are all UPSTREAM of the tail. It says the sink can
-		// report a frame the TAIL transmitted; it says nothing about whether
-		// anything reaches the tail. That is exactly the half `arrival=-1`
-		// needed and did not have.
+		// injectCodecSource are all upstream of the tail. It says the sink can
+		// report a frame the tail transmitted; it says nothing about whether
+		// anything reaches the tail.
 		{
 			const unsigned tailPort = portOfChainPosition(board, _r.dspCount - 1u, _r.dspCount);
 
@@ -902,12 +876,12 @@ namespace
 							tailEsai.writeTX(reg, g_sinkControlWord);
 					}
 
-					// AND THE BUFFER THE TRANSMIT DMA REFILLS THAT REGISTER
-					// FROM. writeSlotToFrame copies the register file into the
+					// And the buffer the transmit DMA refills that register
+					// from. writeSlotToFrame copies the register file into the
 					// slot and then triggers the transmit DMA, which is
 					// serviced synchronously and overwrites the register before
 					// the next slot is assembled, so a register-only injection
-					// reaches ONE slot and the codec sink reads TWO. The window
+					// reaches one slot and the codec sink reads two. The window
 					// is read off the DMA's own source register and the ESAI's
 					// own transmit word count, never typed.
 					{
@@ -1031,9 +1005,9 @@ int main()
 
 		// ---------------------------------------------------------- the control
 		//
-		// THE UNPATCHED RUN IS FIRST and it runs the identical code path. It is
+		// The unpatched run is first and it runs the identical code path. It is
 		// what makes any probe count in the patched run a statement about the
-		// PATCH rather than about the firmware's ordinary idle.
+		// patch rather than about the firmware's ordinary idle.
 		RunResult control;
 		if(!runOnce(directory, patch, false, control))
 			return false;
@@ -1062,16 +1036,16 @@ int main()
 		// as the patch's.
 		// ---------------- the arrival instrument's known positive, both runs
 		//
-		// THE ARRIVAL FIGURE THIS FILE PRINTS IS NOW READABLE. Before it, a
-		// chain that carried nothing and an arrival path that could not report
-		// anything both printed `arrival=-1`, and nothing here could tell them
-		// apart. Both runs are asserted because both print an arrival figure,
-		// and a control that held on one run would say nothing about the other.
+		// Without a control, a chain that carried nothing and an arrival path
+		// that could not report anything both print `arrival=-1`, and nothing
+		// here tells them apart. Both runs are asserted because both print an
+		// arrival figure, and a control that held on one run would say nothing
+		// about the other.
 		//
-		// EVERY FIELD IS PINNED. The port is the one the FIRMWARE's table puts
+		// Every field is pinned. The port is the one the firmware's table puts
 		// at chain position N-1 and is not the position number -- on this
-		// machine it is 0 against a position of 7, and a control that assumed
-		// otherwise drove chain position 1 and reported a dead path on a
+		// machine it is 0 against a position of 7, and a control that assumes
+		// otherwise drives chain position 1 and reports a dead path on a
 		// healthy machine. The arrival is quantum 0 because the tail writes
 		// mailbox N in the same quantum the egress phase reads it. Both slots
 		// carry the sentinel, so neither line of extractCodecSink is passing a
@@ -1100,31 +1074,31 @@ int main()
 		check(!patched.halted,  "patched: the core is not halted when the window closes");
 		check(!patched.faulted, "patched: the board reports no fault when the window closes");
 
-		// ------------------------------------------------------------- THE ROW
+		// -------------------------------------------------- the load is accepted
 		//
-		// A REAL `.pch2` IS ACCEPTED BY THE BOARD'S OWN TRANSPORT HUB. Every
+		// A real `.pch2` is accepted by the Board's own transport hub. Every
 		// other measurement in this file is downstream of it: a load that was
-		// REFUSED originated some frames and not others, and a probe count taken
+		// refused originated some frames and not others, and a probe count taken
 		// after a partial hand-over is a count about neither machine.
 		check(patched.loadResult == g2::Pch2LoadResult::Loaded,
 			std::string("a real 18-object `.pch2` loads through the BOARD'S OWN hub into the running"
 			            " machine; pch2Load answered ") +
 			g2::pch2LoadResultName(patched.loadResult));
 
-		// ------------------------------------------------- the wire, on a BOOTED machine
+		// ------------------------------------------- the wire, on a booted machine
 		//
-		// THE KNOWN POSITIVE FOR EVERY 0x00 REPORTED ABOVE. Same board, same
+		// The known positive for every 0x00 reported above. Same board, same
 		// client, same hub, same pump, same three bus calls -- only the object
-		// is different, and the difference is its SIZE.
+		// is different, and the difference is its size.
 		check(patched.probeLoaded, "the one-object probe container loads through the same hub");
 		check(control.probeLoaded, "the one-object probe container loads on the control run too");
 
-		// THE KNOWN POSITIVE IS TAKEN ON THE CONTROL RUN AND ONLY THERE, and
+		// The known positive is taken on the control run and only there, and
 		// that is a property of the instrument rather than a weakening of it.
-		// The peek reads the HEAD of the endpoint's OUT FIFO, and on the control
-		// run the FIFO is empty when the probe object arrives, so the head IS
+		// The peek reads the head of the endpoint's OUT FIFO, and on the control
+		// run the FIFO is empty when the probe object arrives, so the head is
 		// the probe object -- with no firmware service in the story at all. The
-		// patched run's own reading is REPORTED in the verdict below rather than
+		// patched run's own reading is reported in the verdict below rather than
 		// asserted here, because on that run the head depends on whether the
 		// firmware has serviced the patch packet yet, and that is the thing this
 		// file is measuring rather than a precondition it may assume.
@@ -1134,15 +1108,15 @@ int main()
 			            " its own type byte ") + hex32(g_probeObjectType) + "; read " +
 			hex32(control.peekProbeObject));
 
-		// AND THE CONTROL THAT MAKES THAT KNOWN POSITIVE MEAN SOMETHING: on the
-		// run where NO patch was offered, the same reading before the probe
+		// And the control that makes that known positive mean something: on the
+		// run where no patch was offered, the same reading before the probe
 		// object is the benign 0x00.
 		check(control.peekAfterHandover == 0x00u,
 			"CONTROL: with no patch offered, the endpoint buffer is empty at the same instant");
 
-		// THE SENTENCE THIS FILE EXISTS TO HOLD. A byte of a REAL `.pch2` is in
+		// The property this file exists to hold. A byte of a real `.pch2` is in
 		// the device register file of a machine that has really booted. The
-		// expected value is COMPUTED from the file this run read and is not
+		// expected value is computed from the file this run read and is not
 		// written here as a literal, so the case cannot pass against a device
 		// that answers a fixed byte that happens to match.
 		check(patched.peekAfterHandover == firstType,
@@ -1152,9 +1126,9 @@ int main()
 
 		// -------------------------------------------------------- the verdict lines
 		//
-		// REPORTED AND NOT ASSERTED, deliberately. Each names a state of TODAY's
-		// machine, and an assertion on it would go RED on the day the machine
-		// improves -- which is the wrong direction for a gate to fire in.
+		// Reported and not asserted, deliberately. Each names a state of the
+		// machine as it is now, and an assertion on it would go red on the day
+		// the machine improves.
 		std::cout << "verdict: the firmware "
 		          << (patched.peekAfterWindow == patched.peekAfterHandover
 		              ? "NEVER TOOK the packet out of the endpoint buffer"

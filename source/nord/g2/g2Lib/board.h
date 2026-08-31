@@ -90,33 +90,26 @@ namespace g2
 		 * that wants conversions supplies them. */
 		Max1039Config adc;
 
-		/* THE ISP1181 ENDPOINT THE G2 PROTOCOL RUNS OVER. Plan section 1.3
-		 * rule 1 keeps it CONFIGURATION and not a constant this file invents,
-		 * and a caller may still name another one.
+		/* The ISP1181 endpoint the G2 protocol runs over. It is configuration
+		 * and not a constant this file invents; a caller may name another one.
 		 *
-		 * THE DEFAULT IS NOW A MEASUREMENT OF THE EMULATED FIRMWARE and no
-		 * longer a choice. `t1_usb_isr` boots the Clavia image, hands a real
-		 * `.pch2` to one endpoint and records every byte the firmware writes
-		 * to the CS3 command port. On endpoint 3 the firmware answers with
-		 * read-interrupt-register `0xC0`, endpoint-3 status `0x54`, READ
-		 * endpoint 3's buffer `0x14`, CLEAR endpoint 3's buffer `0x74` -- the
-		 * authority's OUT sequence, which is a DRAIN. The same file reads back
-		 * the DcEndpointConfiguration bytes the firmware itself writes and
-		 * finds EPDIR clear on endpoint 3's slot, so the firmware declared that
-		 * buffer host-to-device. Its control is endpoint 0 in the same run,
-		 * which answers `0xC0 0x50` and no more.
+		 * The default is a measurement of the emulated firmware. Booting the
+		 * Clavia image, handing a real `.pch2` to one endpoint and recording
+		 * every byte the firmware writes to the CS3 command port: on endpoint 3
+		 * the firmware answers with read-interrupt-register `0xC0`, endpoint-3
+		 * status `0x54`, READ endpoint 3's buffer `0x14`, CLEAR endpoint 3's
+		 * buffer `0x74` -- the authority's OUT sequence, which is a drain. The
+		 * DcEndpointConfiguration bytes the firmware itself writes have EPDIR
+		 * clear on endpoint 3's slot, so the firmware declared that buffer
+		 * host-to-device. Its control is endpoint 0 in the same run, which
+		 * answers `0xC0 0x50` and no more.
 		 *
-		 * WHAT DISCRIMINATED IT, AND WHAT DID NOT. The old default was
-		 * endpoint 2, taken from `fifoShape` in `src/isp1181/isp1181.nim`:
-		 * endpoint 2 is the lowest non-control endpoint with a 64-byte double
-		 * buffer. That table is a FIRMWARE CONFIGURATION and not a property of
-		 * the part -- ISP1362 Rev. 06 pp.51-53 put the size in FFOSZ[3:0] and
-		 * the buffering in DBLBUF, both fields of a register the firmware
-		 * writes -- and nothing read the firmware's writes back into it, so it
-		 * could not discriminate an endpoint at all. What the firmware DOES
-		 * with a delivered packet can, and it is what the default now rests
-		 * on. A capture of the real device's descriptors would still be a
-		 * better authority; none has been taken. */
+		 * `fifoShape` in `src/isp1181/isp1181.nim` cannot discriminate an
+		 * endpoint: it is a firmware configuration and not a property of the
+		 * part -- ISP1362 Rev. 06 pp.51-53 put the size in FFOSZ[3:0] and the
+		 * buffering in DBLBUF, both fields of a register the firmware writes.
+		 * A capture of the real device's descriptors would be a better
+		 * authority; none has been taken. */
 		int usbProtocolEndpoint = 3;
 	};
 
@@ -257,60 +250,51 @@ namespace g2
 		static void     onWrite(void* user, uint32_t addr, int size,
 		                        uint32_t value, mcf5307_bus_status* status);
 
-		/* THE BOARD'S TRANSPORT HUB. Design section 15.1 puts the three
-		 * attachments -- the internal client, the forked G2-Edit socket and
-		 * the usbip adapter -- on ONE hub, and design section 13.10.6 puts
-		 * that hub on the Board. It is a MEMBER and not a pointer, so there is
-		 * no state in which a Board has no hub and no order in which an
-		 * attachment can reach one that does not exist yet.
+		/* The Board's transport hub. The three attachments -- the internal
+		 * client, the forked G2-Edit socket and the usbip adapter -- share one
+		 * hub. It is a member and not a pointer, so there is no state in which
+		 * a Board has no hub and no order in which an attachment can reach one
+		 * that does not exist yet.
 		 *
-		 * ATTACHING IS THE CALLER'S AND NOT THIS CLASS'S. The Board attaches
-		 * NOTHING: an attachment that the Board created would make attachment
-		 * 1 a component of the Board rather than a peer of the other two, and
-		 * design section 15.1's whole point is that the three are siblings. */
+		 * Attaching is the caller's and not this class's. The Board attaches
+		 * nothing: an attachment the Board created would be a component of the
+		 * Board rather than a peer of the other two. */
 		TransportHub& transport() noexcept { return m_transport; }
 
-		/* ONE QUANTUM'S WORTH OF ATTACHMENT-TO-DEVICE TRAFFIC. It drains the
+		/* One quantum's worth of attachment-to-device traffic. It drains the
 		 * hub exactly once and hands every drained frame to the USB device.
 		 *
-		 * IT IS CALLED FROM tickSofIfDue AND THAT IS WHY IT IS ALSO PUBLIC.
-		 * tickSofIfDue is the one Board method the Scheduler calls
-		 * UNCONDITIONALLY on every frame, immediately before runMcu (design
-		 * section 13.5), so it is already the fixed per-quantum boundary this
-		 * drain must sit on, and hooking it there adds no call to the
-		 * Scheduler and edits no file the sched track owns. It is reachable on
+		 * It is called from tickSofIfDue, the one Board method the Scheduler
+		 * calls unconditionally on every frame, immediately before runMcu: the
+		 * fixed per-quantum boundary this drain must sit on. It is reachable on
 		 * its own so that a check can drive one quantum's transport without
 		 * driving a SOF tick.
 		 *
-		 * IT ALLOCATES NOTHING. The drain target is sized once, with the hub,
+		 * It allocates nothing. The drain target is sized once, with the hub,
 		 * in the constructor's member initialiser list. */
 		void pumpTransport() noexcept;
 
-		/* THE DEVICE'S TRANSMIT CALLBACK, PUBLIC FOR THE REASON onRead AND
-		 * onWrite ABOVE ARE PUBLIC: it is the exact function pointer handed to
-		 * isp1181_create, so a check that drives THIS drives the path the
-		 * DEVICE takes. A check that drove a private forwarding helper instead
-		 * would stay green with a null callback installed, which is the defect
-		 * measured for the bus pair and recorded above.
+		/* The device's transmit callback, public for the reason onRead and
+		 * onWrite above are public: it is the exact function pointer handed to
+		 * isp1181_create, so a check that drives this drives the path the
+		 * device takes. A check that drove a private forwarding helper instead
+		 * would stay green with a null callback installed.
 		 *
-		 * `endpoint` IS ACCEPTED AND NOT FILTERED. The hub carries bytes and
-		 * names no endpoint, design section 15.3 puts the protocol's framing
-		 * in the payload itself, and no authority in this project records
-		 * which endpoints the device transmits on. Refusing an endpoint here
-		 * would be inventing that authority. */
+		 * `endpoint` is accepted and not filtered. The hub carries bytes and
+		 * names no endpoint, the protocol's framing is in the payload itself,
+		 * and no authority in this project records which endpoints the device
+		 * transmits on. */
 		static void     onUsbTx(void* user, int endpoint, const uint8_t* data,
 		                        size_t len);
 
-		/* THE DEVICE'S SERVICE REQUEST, PUBLIC FOR THE REASON onUsbTx ABOVE IS
-		 * PUBLIC: it is the exact function pointer handed to isp1181_create,
-		 * so a check that drives THIS drives the path the DEVICE takes.
+		/* The device's service request, public for the reason onUsbTx above is
+		 * public: it is the exact function pointer handed to isp1181_create.
 		 *
-		 * IT NAMES THE PIN AND NOTHING ELSE. The level, the autovector bit and
+		 * It names the pin and nothing else. The level, the autovector bit and
 		 * the vector are the interrupt controller's to derive -- from IRQPAR
 		 * and from AVR, both of which the firmware programs through the MBAR
-		 * window -- so this callback carries no level of its own. Naming a
-		 * level here would freeze at construction a value the firmware is
-		 * still free to move. */
+		 * window. Naming a level here would freeze at construction a value the
+		 * firmware is still free to move. */
 		static void     onUsbIrq(void* user, int asserted);
 
 		/* The units, so a caller can load the flash images, install the HDI08
@@ -517,13 +501,13 @@ namespace g2
 		 * because no authority records it. */
 		int          m_usbProtocolEndpoint;
 
-		/* THE HUB, AND THE DRAIN TARGET IT FILLS. Both are sized in the
+		/* The hub, and the drain target it fills. Both are sized in the
 		 * constructor's member initialiser list and neither grows again:
-		 * pumpTransport runs on the scheduler thread inside a quantum
-		 * boundary, where design section 13.10 rule 1 forbids allocation.
-		 * m_drained holds kMaxEndpoints x queueDepth entries, which is every
-		 * frame the hub can possibly hand out in one drain, so a drain can
-		 * never be cut short by this buffer. */
+		 * pumpTransport runs on the scheduler thread inside a quantum boundary,
+		 * where allocation is forbidden. m_drained holds kMaxEndpoints x
+		 * queueDepth entries, which is every frame the hub can possibly hand
+		 * out in one drain, so a drain can never be cut short by this
+		 * buffer. */
 		TransportHub              m_transport;
 		std::vector<StampedFrame> m_drained;
 
