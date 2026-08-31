@@ -22,6 +22,20 @@
  * once -- the interleaving the pairing exists to exclude. The hammer below
  * runs the two halves against each other many times and counts that outcome.
  *
+ * WHAT THE HAMMER ACTUALLY ESTABLISHES ON THIS HOST, MEASURED. It establishes
+ * that both halves run, that the message thread's wait completes every round,
+ * and that each branch leaves the observable it promises. IT DOES NOT CATCH A
+ * WEAKENED ORDER HERE: on macOS arm64, weakening any of the four seq_cst
+ * operations to acquire or release leaves this file GREEN at 20,000 rounds,
+ * because the forbidden interleaving is not produced at runtime. A thread
+ * sanitizer does not close that gap either, and that was measured too --
+ * t1_state_handoff_load runs the same pairing under ThreadSanitizer and stays
+ * green under both weakenings, because a detector reports unsynchronized
+ * access to plain memory and an atomic read with a weaker order is still an
+ * atomic access. So NOTHING THIS REPOSITORY RUNS GOES RED when one of the four
+ * orders is weakened; the source and its comments are what pin them. A reader
+ * changing one of those four gets no test to tell them they were wrong.
+ *
  * THE FOUR OPERATIONS THAT MUST BE SEQ_CST: the audio thread's store of
  * m_inCallback and its load of m_ready (inside processAudio), and the message
  * thread's store of m_ready and load of m_inCallback (inside
@@ -198,9 +212,9 @@ int main()
 	 * after the callback cleared the flag -- observed through the ordering
 	 * the two seq_cst operations force, with the audio thread's progress
 	 * barrier proving the callback had genuinely started. A build in which
-	 * beginStateChange's spin reads with acquire instead of seq_cst can pass
-	 * this phase; that weakening is caught by the hammer above, whose
-	 * forbidden outcome needs all four operations. The wait itself is what
+	 * beginStateChange's spin reads with acquire instead of seq_cst passes
+	 * this phase, and passes the hammer above as well -- see the header for
+	 * what is and is not caught on this host. The wait itself is what
 	 * this phase proves: every round's spin observed the flag clear, which a
 	 * device with no acknowledgement at all would deadlock on. */
 	{
@@ -255,12 +269,15 @@ int main()
 	 * (it read the old value), the message's inCallback-load before audio's
 	 * inCallback-store (it read the clear flag), and the message's store
 	 * before its own load -- a cycle, which seq_cst forbids. Weaken any ONE
-	 * of the four to acquire and the cycle becomes schedulable, which is
-	 * exactly required-RED mutation (b). The observable that catches it is
-	 * m_numSamplesProcessed: only the ready branch advances it, so a round
-	 * whose audio half took the ready branch AND whose message spin returned
-	 * without waiting proves both halves proceeded. The counter is read
-	 * through the harness after the round. */
+	 * of the four to acquire and the cycle becomes PERMITTED by the language,
+	 * which is the reason the four orders are what they are. It is not
+	 * observed on this host: measured, this phase and the hammer above both
+	 * stay green under that weakening, so what follows is the drive and not a
+	 * detector for it. The observable is m_numSamplesProcessed: only the
+	 * ready branch advances it, so a round whose audio half took the ready
+	 * branch AND whose message spin returned without waiting would prove both
+	 * halves proceeded. The counter is read through the harness after the
+	 * round. */
 	{
 		constexpr int kRounds = 20000;
 

@@ -479,3 +479,114 @@ set_tests_properties(t1_boot_on_restore PROPERTIES LABELS "IntegrationTest" TIME
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_boot_on_restore APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+# ----------------- PLG-16, the state hand-off under load
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_state_handoff_load$
+#        on a thread-sanitizer build (-DG2_THREAD_SANITIZER=ON).
+#
+# TIER T1 AND GATED, through the same gatedFixture.h path every other gated
+# registration in this tree uses.
+#
+# WHAT THE TEST HOLDS. processAudio runs continuously on one thread while a
+# second thread drives getState, setState and the beginStateChange /
+# endStateChange window in a loop for 60 seconds. The assertion the run makes
+# is that NO DATA RACE IS REPORTED, plus the run's own known positives: the
+# audio half reached the shared payload, the message half completed rounds, and
+# the acknowledgement wait completed once per round.
+#
+# THE NEGATIVE CASE IS THE SECOND TARGET BELOW, and it is what makes the first
+# one's green mean something. It is the same source with G2_HANDOFF_DROP_ACK
+# defined, which removes the beginStateChange call from the message half's
+# payload edit -- the acknowledgement, and the store that withdraws readiness.
+# The audio half then stays on the ready branch and touches the payload while
+# the message half writes it. Its ctest PASS condition is the SANITIZER'S OWN
+# RACE REPORT and not an exit code: a build that produced no report would fail
+# this test, which is the only way the pair proves the instrument can see the
+# thing it is looking for.
+#
+# THE SANITIZER IS OPT-IN AND OFF BY DEFAULT. It is applied per target rather
+# than to the whole tree, so g2Lib is linked uninstrumented: a race entirely
+# inside g2Lib would not be seen. Both accesses under test are in this test's
+# own translation unit and in g2Device.cpp, which the target compiles directly,
+# so both are instrumented.
+#
+# The negative target is registered ONLY on a sanitizer build, because without
+# the sanitizer it can never produce the report its pass condition names, and a
+# test that cannot pass is a permanent red rather than a check.
+
+option(G2_THREAD_SANITIZER "Build the plugin-track concurrency tests with -fsanitize=thread" OFF)
+
+add_executable(t1_state_handoff_load
+	t1_state_handoff_load.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Device.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2State.cpp)
+target_link_libraries(t1_state_handoff_load PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t1_state_handoff_load PRIVATE Threads::Threads)
+set_property(TARGET t1_state_handoff_load PROPERTY FOLDER "G2/test")
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_handoffLoadSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_handoffLoadSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_handoffLoadSkipExitCode "${CMAKE_MATCH_1}")
+
+if(DEFINED ENV{NMG2_ARTIFACTS})
+	set(g2_handoffLoadArtifactsDefault "$ENV{NMG2_ARTIFACTS}")
+else()
+	get_filename_component(g2_handoffLoadArtifactsDefault "${CMAKE_SOURCE_DIR}/../nmg2-artifacts" ABSOLUTE)
+endif()
+
+set(NMG2_ARTIFACTS "${g2_handoffLoadArtifactsDefault}" CACHE PATH "Directory holding the Clavia-derived G2 artifacts. Gated tests skip when it names no directory.")
+
+# TIMEOUT 900: the load window is 60 seconds and a thread-sanitizer build runs
+# the same work several times slower.
+add_test(NAME t1_state_handoff_load COMMAND t1_state_handoff_load)
+set_tests_properties(t1_state_handoff_load PROPERTIES LABELS "IntegrationTest" TIMEOUT 900 SKIP_RETURN_CODE ${g2_handoffLoadSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_state_handoff_load APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
+
+if(G2_THREAD_SANITIZER)
+	target_compile_options(t1_state_handoff_load PRIVATE -fsanitize=thread -g)
+	target_link_options(t1_state_handoff_load PRIVATE -fsanitize=thread)
+
+	add_executable(t1_state_handoff_load_negative
+		t1_state_handoff_load.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Device.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2State.cpp)
+	target_link_libraries(t1_state_handoff_load_negative PRIVATE g2Lib Threads::Threads)
+	target_compile_definitions(t1_state_handoff_load_negative PRIVATE G2_HANDOFF_DROP_ACK=1)
+	target_compile_options(t1_state_handoff_load_negative PRIVATE -fsanitize=thread -g)
+	target_link_options(t1_state_handoff_load_negative PRIVATE -fsanitize=thread)
+	set_property(TARGET t1_state_handoff_load_negative PROPERTY FOLDER "G2/test")
+
+	add_test(NAME t1_state_handoff_load_negative COMMAND t1_state_handoff_load_negative)
+
+	# THE PASS CONDITION IS THE REPORT AND NOT THE EXIT STATUS. halt_on_error
+	# stops on the first race, so the run answers in seconds rather than
+	# spending its whole window after it has already answered.
+	#
+	# abort_on_error=0 AND exitcode=0 ARE LOAD-BEARING AND NOT A LOOSENING. On
+	# Darwin the sanitizer raises SIGABRT on a report, and ctest scores an
+	# aborted subprocess as an exception BEFORE it consults
+	# PASS_REGULAR_EXPRESSION -- so the report this test exists to see would be
+	# scored a failure. Exiting 0 hands the verdict to the regex instead, and a
+	# run that reported no race prints no such line and fails.
+	set_tests_properties(t1_state_handoff_load_negative PROPERTIES
+		LABELS "IntegrationTest"
+		TIMEOUT 900
+		ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1 abort_on_error=0 exitcode=0"
+		PASS_REGULAR_EXPRESSION "ThreadSanitizer: data race"
+		SKIP_REGULAR_EXPRESSION "SKIPPED: ")
+
+	if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+		set_property(TEST t1_state_handoff_load_negative APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+	endif()
+endif()
