@@ -26,9 +26,9 @@
 //     MBAR   the SIM, UART0, the M-Bus and the interrupt controller,
 //            through MbarRouter
 //
-// THE SDRAM GETS NO TARGET, AND THAT IS DELIBERATE RATHER THAN UNFINISHED.
-// Main memory is not one of the seven units this task composes; the harness
-// supplies it (see main.cpp). A region with no target answers exactly as a
+// The SDRAM gets no target on purpose. Main memory is not one of the units
+// this Board composes; the harness supplies it (see main.cpp). A region with
+// no target answers exactly as a
 // region with no window does -- see the unmapped note below.
 //
 // memoryMap.cpp already fixes what an address in no window does: an access that
@@ -188,16 +188,12 @@ namespace g2
 	{
 		_status = MCF5307_BUS_OK;
 
-		/* THE STUB ANSWERS EVERY CYCLE AT EVERY OFFSET, so neither arm can
-		 * produce anything but BUS_OK -- a fault status from a device that
-		 * accepts everything would be this file inventing a policy no design
-		 * section states, which is exactly what FlashWindow::write's comment
-		 * records for the flash. The 16 and 32-bit cycles are ANSWERED rather
-		 * than refused: the driver reads the part word-sized in the register
-		 * file idiom, and a refusal here would turn each such cycle into a
-		 * logged bus failure indistinguishable from the unmapped one this
-		 * wiring removes. The byte answer is REPLICATED across the access
-		 * width, big-endian, in the shape main.cpp's own Ram target models. */
+		/* The device answers every cycle at every offset, so neither arm can
+		 * produce anything but BUS_OK. The 16 and 32-bit cycles are answered
+		 * rather than refused: the driver reads the part word-sized in the
+		 * register file idiom, and a refusal here would turn each such cycle
+		 * into a logged bus failure indistinguishable from an unmapped one. The
+		 * byte answer is replicated across the access width, big-endian. */
 		const uint8_t value = isp1181_read(m_usb, _offset);
 
 		switch(_size)
@@ -217,9 +213,8 @@ namespace g2
 	{
 		_status = MCF5307_BUS_OK;
 
-		/* THE LOW BYTE ONLY. The stub keeps nothing it is handed and the full
-		 * model routes one register per address, so there is no wider state to
-		 * compose a multi-byte store into. */
+		/* The low byte only: the model routes one register per address, so
+		 * there is no wider state to compose a multi-byte store into. */
 		switch(_size)
 		{
 		case 8:
@@ -271,10 +266,8 @@ namespace g2
 	uint32_t Board::MbarRouter::read(const uint32_t _offset, const int _size,
 		mcf5307_bus_status& _status)
 	{
-		/* TASK BRD-34. IRQPAR, AVR and the internal control block are BYTE
-		 * registers -- MCF5307 UM Table B-1 gives each of them one byte -- so
-		 * a wider access is refused here rather than split, in the shape
-		 * uart0.cpp already uses for its own byte-only rule. */
+		/* IRQPAR, AVR and the internal control block are byte registers, so a
+		 * wider access is refused here rather than split. */
 		if(isInterruptOwned(_offset))
 		{
 			if(_size != 8)
@@ -357,29 +350,26 @@ namespace g2
 	{
 		Board* const board = static_cast<Board*>(user);
 
-		/* THE GUARD IS ON THE HANDLE AND NOT ON THE RESET. mcf5307.h records
-		 * that a board presenting a level 1 to 6 interrupt immediately after
-		 * mcf5307_reset is a DEFINED case, so a presentation before the first
-		 * reset is fine; a presentation before the core EXISTS has nowhere to
-		 * go. */
+		/* The guard is on the handle and not on the reset. Presenting a level 1
+		 * to 6 interrupt immediately after mcf5307_reset is a defined case, so
+		 * a presentation before the first reset is fine; a presentation before
+		 * the core exists has nowhere to go. */
 		if(!board->m_mcu)
 			return;
 
 		/* The whole current state, unconditionally, on every recomputation.
-		 * mcf5307_set_irq is IDEMPOTENT and mcf5307.h says so, which is what
-		 * licenses the board to present on a CLEAR exactly as it does on an
-		 * assert. */
+		 * mcf5307_set_irq is idempotent, which is what licenses the board to
+		 * present on a clear exactly as it does on an assert. */
 		mcf5307_set_irq(board->m_mcu, level, vector, autovector);
 	}
 
 	void Board::onInterruptAck(void*, const int, const uint8_t)
 	{
-		/* NOTHING IS CLEARED HERE AND THAT IS THE CONTRACT RATHER THAN AN
-		 * OMISSION. mcf5307.h states that an acknowledge clears an
-		 * EDGE-TRIGGERED source on the board's own side, and every source this
-		 * board carries is level-triggered: the timer's TER[REF] drops when
-		 * the firmware writes it and UART0's condition drops when the
-		 * firmware empties the receiver. */
+		/* Nothing is cleared here. An acknowledge clears an edge-triggered
+		 * source on the board's own side, and every source this board carries
+		 * is level-triggered: the timer's TER[REF] drops when the firmware
+		 * writes it and UART0's condition drops when the firmware empties the
+		 * receiver. */
 	}
 
 	/* The unconfigured Board. It DELEGATES rather than repeating the body, so
@@ -412,12 +402,10 @@ namespace g2
 		// reach a half-built decode.
 		attachUnits();
 
-		/* TASK BRD-34. BOTH TIMER MODULES ASSERT ON THE BOARD'S ONE
-		 * CONTROLLER. Uart0 already holds it -- the initialiser list above
-		 * hands it in, which is what replaces the nullptr default that left
-		 * its interrupt path dead on the assembled machine. THIS CALL IS THE
-		 * TIMERS' HALF OF THE SAME WIRE, and Sim::setInterruptController
-		 * forwards it to both modules. */
+		/* Both timer modules assert on the board's one controller. Uart0 is
+		 * handed it by the initialiser list above; this call is the timers'
+		 * half of the same wire, and Sim::setInterruptController forwards it to
+		 * both modules. */
 		m_sim.setInterruptController(&m_interrupts);
 
 		/* The DSP side of the host ports, attached from the constructor BODY
@@ -477,11 +465,10 @@ namespace g2
 		 * faulted() gives cannot drift from the machine it describes. */
 		m_faulted = mcf5307_faulted(m_mcu) != 0;
 
-		/* TASK BRD-33. THE TIMERS ARE ADVANCED FROM THE CYCLES THIS CALL
-		 * ACTUALLY RAN, and not from the budget it was asked for and not from
-		 * any clock outside the machine. That is what makes a timer tick a
+		/* The timers are advanced from the cycles this call actually ran, not
+		 * from the budget it was asked for. That is what makes a timer tick a
 		 * function of executed cycles and keeps it deterministic under the
-		 * scheduler's quantum. No new callback, no wall clock and no thread. */
+		 * scheduler's quantum. */
 		m_sim.advanceTimers(cycles);
 
 		return cycles;

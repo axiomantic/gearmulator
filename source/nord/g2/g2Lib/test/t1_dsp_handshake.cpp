@@ -1,57 +1,43 @@
-// Task BRD-18, with BRD-27 absorbed into it as STEP 2 on 2026-08-24 (plan
-// section 24.6 row W3-390). Tier T1: the block declares T1, so this file
-// resolves through ArtifactResolver and SKIPS with a reason when
-// NMG2_ARTIFACTS does not resolve.
+// Tier T1: the block declares T1, so this file resolves through
+// ArtifactResolver and skips with a reason when NMG2_ARTIFACTS does not
+// resolve. The gate is the tier and not a dependence on a file -- this check
+// reads no firmware artifact; it composes a `g2::Board`, drives host flags and
+// reads host registers, and every input it has is compiled in.
 //
-// THE GATE IS THE TIER AND NOT A DEPENDENCE ON A FILE, AND THAT IS SAID HERE
-// RATHER THAN LEFT TO BE DISCOVERED. This check reads no firmware artifact: it
-// composes a `g2::Board`, drives host flags and reads host registers, and every
-// input it has is compiled in. The gate is written because the block's heading
-// declares the tier, in the shape t1_sprintf_isolated already uses, so a
-// machine without artifacts reports the section 18.5 skip line rather than a
-// silent pass.
+// The drive and the census run over all eight host ports: for every `i` in
+// `[0, board.dspSet().dspCount())` it sets HF0 in host port `i`'s ICR, polls
+// that port's ISR for HF2 under the firmware's own `0xFDE8` iteration bound,
+// and after the drive returns it asserts that the count of ports whose ICR
+// carries HF0 and whose ISR carries HF2 equals `board.dspSet().dspCount()`,
+// which it separately asserts is eight.
 //
-// WHAT THIS CHECK ESTABLISHES. The drive AND the census run over ALL EIGHT
-// host ports: for every `i` in `[0, board.dspSet().dspCount())` it sets HF0 in
-// host port `i`'s ICR, polls that port's ISR for HF2 under the firmware's own
-// `0xFDE8` iteration bound, and after the drive returns it asserts that the
-// count of ports whose ICR carries HF0 AND whose ISR carries HF2 EQUALS
-// `board.dspSet().dspCount()`, which it separately asserts is eight.
-//
-// WHAT IT DOES NOT ESTABLISH, AND THE LIST IS THE POINT RATHER THAN A HEDGE.
-// It does NOT establish that a DSP running the firmware's own kernel answers
-// HF0 with HF2 -- plan section 6.6.11's closing paragraph records that predicate
-// as UNMEASURED -- nor that the firmware's `0x30039398` is ever reached, which
-// FINDING 2 puts behind case 6 of the message-dispatch switch at `0x30012050`.
+// What it does not establish: that a DSP running the firmware's own kernel
+// answers HF0 with HF2, nor that the firmware's `0x30039398` is ever reached.
 // This is evidence that the drive and the census run over eight ports and that
-// every slot's flags reach the host. IT IS NOT EVIDENCE THAT THE HANDSHAKE
-// COMPLETES FOR THE RIGHT REASON, and a later pass that finds the
+// every slot's flags reach the host. It is not evidence that the handshake
+// completes for the right reason, so a later pass that finds the
 // firmware-driven handshake still failing must suspect the reply predicate
-// first. No reply behaviour is invented here and none may be inferred from the
-// census.
+// first.
 //
-// HF0 IS DRIVEN THROUGH THE PORT'S ICR AND NEVER THROUGH TXH, TXM AND TXL, and
-// that sentence is load-bearing rather than a detail. `dsp56k::DspBoot` sits
-// unconditionally in front of every bridged port and absorbs the first transmit
-// words as a count header and an address, so a driver that reached for the
-// transmit registers would be driving a bootstrap. A CONTROL-REGISTER WRITE IS
-// NOT A TRANSMIT WORD AND REACHES THAT CONSUMER NOT AT ALL, so this check
-// drives no bootstrap and asserts nothing about program memory.
+// HF0 is driven through the port's ICR and never through TXH, TXM and TXL.
+// `dsp56k::DspBoot` sits unconditionally in front of every bridged port and
+// absorbs the first transmit words as a count header and an address, so a
+// driver that reached for the transmit registers would be driving a bootstrap.
+// A control-register write is not a transmit word and reaches that consumer not
+// at all, so this check drives no bootstrap and asserts nothing about program
+// memory.
 //
-// THE DSP-SIDE FLAG IS DRIVEN AND NOT EXECUTED, AND THAT IS A DECISION RATHER
-// THAN A SHORTCUT. No core executes here and no `Scheduler` is needed. The
-// reply is given through `dsp56k::HDI08::writeControlRegister` with the HCR_HF2
-// bit, at the slot the port is bridged to, and it is given ONLY WHEN THAT
-// SLOT'S OWN HSR ALREADY CARRIES HF0 -- so the poll loop measures the whole
-// chain (host ICR -> bridge -> DSP HSR -> DSP HCR -> bridge -> host ISR) and a
-// break anywhere along it exhausts the iteration bound instead of converging.
+// The DSP-side flag is driven and not executed: no core executes here and no
+// `Scheduler` is needed. The reply is given through
+// `dsp56k::HDI08::writeControlRegister` with the HCR_HF2 bit, at the slot the
+// port is bridged to, and it is given only when that slot's own HSR already
+// carries HF0 -- so the poll loop measures the whole chain (host ICR -> bridge
+// -> DSP HSR -> DSP HCR -> bridge -> host ISR) and a break anywhere along it
+// exhausts the iteration bound instead of converging.
 //
-// THE PREDICATE IS AND-ED FOR A MEASURED REASON AND NOT FOR SYMMETRY:
+// The predicate is and-ed for a measured reason and not for symmetry:
 // `mc68k::Hdi08::isr()` ORs `Txde` into every read it answers, so a census that
 // tested a non-zero ISR would count eight ports with nothing behind any of them.
-//
-// EVERY ASSERTION IN THIS FILE IS A RUNTIME check() AND NEVER A LANGUAGE
-// assert(). The default build type is Release, which defines NDEBUG.
 
 #include "board.h"
 #include "dspSet.h"
@@ -103,8 +89,8 @@ namespace
 		++g_failures;
 	}
 
-	// The eight host ports the machine presents. `g_hdi08PortCount` is BRD-15's
-	// own constant at hdi08Decode.h line 35 and is not restated as a literal.
+	// The eight host ports the machine presents, taken from hdi08Decode.h's own
+	// constant rather than restated as a literal.
 	constexpr unsigned g_expectedPortCount = unsigned(g2::g_hdi08PortCount);
 
 	// The firmware's own retry count for the handshake at `0x30039398`. It
@@ -119,14 +105,9 @@ namespace
 	constexpr TWord g_dspHf0 = TWord(1u) << dsp56k::HDI08::HSR_HF0;
 	constexpr TWord g_dspHf2 = TWord(1u) << dsp56k::HDI08::HCR_HF2;
 
-	// THIS FILE'S OWN CENSUS AND NOT ANOTHER FILE'S. t1_boot.cpp's helper is
-	// INT-1's and is outside this task's Files: line; this one is written over
-	// the same two register reads, `icr() & Hf0` and `isr() & Hf2`, whose
-	// enumerators BRD-16's own evidence table names.
-	//
-	// The `Hdi08Adapter` the `Board` already owns through `board.hdi08()` is the
-	// way in to port `i`. No per-port accessor spelling is invented here,
-	// because this plan declares none.
+	// The census is written over two register reads, `icr() & Hf0` and
+	// `isr() & Hf2`. The `Hdi08Adapter` the `Board` already owns through
+	// `board.hdi08()` is the way in to port `i`.
 	unsigned handshakePortCount(g2::Board& _board)
 	{
 		unsigned completed = 0;
@@ -154,7 +135,7 @@ namespace
 		uint32_t iterations = 0;
 	};
 
-	// The drive for ONE port. HF0 goes in through the ICR and through nothing
+	// The drive for one port. HF0 goes in through the ICR and through nothing
 	// else; the existing ICR byte is preserved rather than overwritten, so this
 	// sets a flag and does not reset the port.
 	DriveResult driveOnePort(g2::Board& _board, const unsigned _slot)
@@ -204,9 +185,9 @@ namespace
 		checkEqualCount(dspCount, g_expectedPortCount,
 			"the board's DSP set holds one slot per host port");
 
-		/* THE NEGATIVE CONTROL, AND IT IS NOT DECORATION. A census that answered
-		 * eight whatever the machine did would satisfy every line below it; this
-		 * one line is what a always-eight census cannot satisfy. */
+		/* The negative control: a census that answered eight whatever the machine
+		 * did would satisfy every line below it, and this one line is what such a
+		 * census cannot satisfy. */
 		checkEqualCount(handshakePortCount(board), 0u,
 			"no port completes the handshake before anything is driven");
 
@@ -222,11 +203,11 @@ namespace
 				"exactly the ports driven so far have completed the handshake, after driving"
 					+ onPort(i));
 
-			/* A WIRING THAT SENDS EVERY PORT TO ONE SLOT IS WHAT THIS SEPARATES
-			 * FROM THE CORRECT ONE. Under such a wiring the slot just replied to
-			 * mirrors its HF2 out to every port at once, so a port nobody has
-			 * driven reads HF2 set. The census above cannot see it, because an
-			 * undriven port has no HF0 in its ICR and the predicate is AND-ed. */
+			/* This separates a wiring that sends every port to one slot from the
+			 * correct one. Under such a wiring the slot just replied to mirrors
+			 * its HF2 out to every port at once, so a port nobody has driven
+			 * reads HF2 set. The census above cannot see it, because an undriven
+			 * port has no HF0 in its ICR and the predicate is and-ed. */
 			for(unsigned j = i + 1; j < dspCount; ++j)
 			{
 				const uint8_t isr = board.hdi08().port(static_cast<int>(j)).isr();
@@ -237,7 +218,7 @@ namespace
 			}
 		}
 
-		// THE CHECK: LINE'S CENSUS, ASSERTED AFTER THE DRIVE LOOP RETURNS.
+		// The census, asserted after the drive loop returns.
 		checkEqualCount(handshakePortCount(board), dspCount,
 			"every host port of the assembled machine completed the HF0/HF2 handshake");
 	}

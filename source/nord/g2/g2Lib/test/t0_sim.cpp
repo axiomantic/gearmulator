@@ -86,12 +86,10 @@ namespace
 	// MBAR+$1D0 is UIPCR on a read and UACR on a write, so from a reader's
 	// side it is ReadOnly: a write reaches UACR and never changes what a read
 	// returns. That is why no WriteOnly kind is needed here.
-	// TASK BRD-33 ADDED WriteOneToClear. The two TER rows were ReadWrite here
-	// while sim.cpp carried the ten timer addresses as plain storage. They are
-	// not storage: MCF5307 UM section 9.4.1.5 makes TER write-one-to-clear, so
-	// a write of ones CLEARS the bits it names and can never set one. A write
-	// probe therefore reaches NO bit of TER, and the row that called it fully
-	// writable was describing the inert model rather than the part.
+	// TER is write-one-to-clear, so a write of ones clears the bits it names and
+	// can never set one. A write probe therefore reaches no bit of TER, and a row
+	// that called it fully writable would describe an inert model rather than the
+	// part.
 	enum class Kind { ReadWrite, ReadOnly, WriteOneToClear };
 
 	struct RegisterFact

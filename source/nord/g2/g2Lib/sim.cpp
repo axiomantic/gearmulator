@@ -283,9 +283,8 @@ namespace g2
 			const uint32_t index = _offset + byte;
 			value <<= 8;
 
-			// TASK BRD-33. The ten timer register bytes come from the timer
-			// modules and not from this model's storage. Before BRD-33 they
-			// were storage, and the counter never counted.
+			// The ten timer register bytes come from the timer modules and not
+			// from this model's storage.
 			uint32_t blockOffset = 0;
 			if(Timer* const timer = timerForByte(index, blockOffset))
 				value |= timer->readByte(blockOffset);
@@ -329,7 +328,7 @@ namespace g2
 			const int shift = int(8 * (bytes - 1 - byte));
 			const uint8_t incoming = uint8_t((_value >> shift) & 0xffu);
 
-			// TASK BRD-33. A timer register byte carries its own write rules
+			// A timer register byte carries its own write rules
 			// -- TCR is read-only and TER is write-one-to-clear -- so the
 			// module owns the write and this model's write-protect mask does
 			// not reach it.

@@ -98,7 +98,7 @@ list(APPEND G2LIB_SOURCES
 	max1039.cpp
 )
 
-# ----------------- BRD-33, the MCF5307 general-purpose timers
+# ----------------- the MCF5307 general-purpose timers
 #
 # One Timer is one of the two general-purpose timer modules the MCF5307
 # carries, at MBAR+$140 and MBAR+$180. The Sim owns both and routes the ten

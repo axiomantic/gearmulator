@@ -1,11 +1,8 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// THE DSP IS REQUIRED AND NOT DECORATIVE. `HDI08::readStatusRegister` applies
+// The DSP is required and not decorative. `HDI08::readStatusRegister` applies
 // pending host flags from the atomic latch that `setPendingHostFlags01` writes;
 // no DSP means no latch and no status read.
-//
-// EVERY ASSERTION IN THIS FILE IS A RUNTIME check() AND NEVER A LANGUAGE
-// assert(). The default build type is Release, which defines NDEBUG.
 
 #include "dspSet.h"
 #include "hdi08Adapter.h"

@@ -1,49 +1,38 @@
-// Task BRD-33. The MCF5307 general-purpose timers.
+// The MCF5307 general-purpose timers.
 //
-// Plan section 13.1, BRD-33. Plan section 24.6 rows W3-369, W3-377, W3-378.
-// Design sections 9.4, 13.1.
+// What this test proves:
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail. Every case below reports through a counter and
-// the process exit status.
-//
-// WHAT THIS TEST PROVES, AND WHY EACH PART IS HERE.
-//
-//   1. THE COUNTER COUNTS, AND THE PRESCALER IS PART OF THE COUNT. TMR[15:8]
+//   1. The counter counts, and the prescaler is part of the count. TMR[15:8]
 //      is PS and the counter advances once per PS + 1 input clocks. A model
 //      that stored PS and ignored it counts 128 times too fast, so case group
-//      2 states the match in INPUT CLOCKS and not in counter ticks.
+//      2 states the match in input clocks and not in counter ticks.
 //
-//   2. THE REFERENCE MATCH SETS TER[REF] AND FRR DECIDES WHAT FOLLOWS. The
-//      match arrives on the tick whose PRE-INCREMENT counter equals TRR, which
+//   2. The reference match sets TER[REF] and FRR decides what follows. The
+//      match arrives on the tick whose pre-increment counter equals TRR, which
 //      is why TRR = 4 takes five ticks and TRR = 1 with PS = 127 takes 128 * 2
-//      input clocks. That is the (PS + 1) * (TRR + 1) period the MCF5307 User's
-//      Manual states for the timer module. With FRR set the counter restarts
-//      from zero and with FRR clear it runs on past TRR.
+//      input clocks -- the (PS + 1) * (TRR + 1) period. With FRR set the
+//      counter restarts from zero and with FRR clear it runs on past TRR.
 //
-//   3. TER IS WRITE-ONE-TO-CLEAR. The firmware's handler at 0x30001894 writes
+//   3. TER is write-one-to-clear. The firmware's handler at 0x30001894 writes
 //      2 to MBAR+$191, and a model that treated the register as write-any
 //      would be cleared by the 0 that the handler never writes and would not be
 //      cleared by the 2 that it does.
 //
-//   4. THE INTERRUPT IS RAISED ONLY WHEN TMR[ORI] IS SET, AND IT IS RAISED
-//      THROUGH THE CONTROLLER BRD-3 ALREADY BUILT. The other timer at
-//      MBAR+$140 is programmed TMR = 0x2B, whose ORI is CLEAR, so a unit that
+//   4. The interrupt is raised only when TMR[ORI] is set. The other timer at
+//      MBAR+$140 is programmed TMR = 0x2B, whose ORI is clear, so a unit that
 //      raised an interrupt regardless of ORI would fabricate one the hardware
-//      does not. The assertion runs through a RECORDING DOUBLE -- an
+//      does not. The assertion runs through a recording double -- an
 //      InterruptController whose present callback counts calls -- so the silent
 //      case fails if the call is made unconditionally.
 //
-//   5. THE SIM ROUTES THE TEN ADDRESSES TO THE UNITS. Before this task those
-//      ten addresses were plain read/write storage: the counter never counted.
-//      Case group 7 drives the Sim at its own BusTarget surface and asserts the
-//      counter it reads back is the unit's and not a stored byte.
+//   5. The Sim routes the ten addresses to the units. Case group 7 drives the
+//      Sim at its own BusTarget surface and asserts the counter it reads back
+//      is the unit's and not a stored byte.
 //
-//   6. THE BOARD ADVANCES THE TIMERS FROM THE CYCLES IT ACTUALLY RAN. Case
+//   6. The Board advances the timers from the cycles it actually ran. Case
 //      group 8 runs the real MCF5307 core over a page of NOPs and asserts the
 //      counter equals the cycle count runMcu returned. A Board that advanced
-//      nothing -- which is the defect W3-377 measured -- reads zero there.
+//      nothing reads zero there.
 
 #include "../board.h"
 #include "../interruptController.h"
@@ -91,7 +80,7 @@ namespace
 	// ------------------------------------------------------------ the double
 	//
 	// The recording double is a real InterruptController with a present
-	// callback that COUNTS. A count is what makes the ORI-clear case fail when
+	// callback that counts. A count is what makes the ORI-clear case fail when
 	// the raise is made unconditionally: an assertion on the presented level
 	// alone would read the same zero whether the unit stayed silent or called
 	// setInternalPending for a source whose ICR level is zero.
@@ -120,8 +109,7 @@ namespace
 		recorder->autovector = _autovector;
 	}
 
-	// The ICR byte, written out from the manual rather than taken from any
-	// header: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0] at bits 1:0.
+	// The ICR byte: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0] at bits 1:0.
 	uint8_t makeIcr(const int _level, const int _ip, const bool _avec)
 	{
 		uint8_t value = uint8_t((_level << 2) | (_ip & 0x03));
@@ -130,8 +118,8 @@ namespace
 		return value;
 	}
 
-	// The TMR bit positions, written out by hand from MCF5307 UM section 9.4.
-	// This file owns its own copy so the two sides move independently.
+	// The TMR bit positions. This file owns its own copy so the two sides move
+	// independently.
 	constexpr uint16_t kRst = 0x0001u;   // bit 0, timer enable
 	constexpr uint16_t kFrr = 0x0008u;   // bit 3, free run / restart
 	constexpr uint16_t kOri = 0x0010u;   // bit 4, output reference interrupt
@@ -149,8 +137,7 @@ namespace
 		return value;
 	}
 
-	// The two firmware words this task exists for, MEASURED at the end of a
-	// real boot and recorded in plan section 24.6 row W3-377.
+	// The two firmware words, measured at the end of a real boot.
 	constexpr uint16_t kFirmwareTmr2 = 0x7F3Bu;   // PS = 0x7F, FRR set, ORI SET
 	constexpr uint16_t kFirmwareTmr1 = 0x002Bu;   // PS = 0,    FRR set, ORI CLEAR
 	constexpr uint16_t kFirmwareTrr2 = 0x0032u;
@@ -181,11 +168,11 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 1. THE COUNTER COUNTS, AND THE MATCH ARRIVES ON THE (TRR + 1)th
-	// TICK AND NOT ON THE TRRth.
+	// Case group 1. The counter counts, and the match arrives on the (TRR + 1)th
+	// tick and not on the TRRth.
 	//
 	// PS = 0, so one input clock is one counter tick and the prescaler cannot
-	// hide the count. TRR = 4. FOUR advances do not set REF and the FIFTH does.
+	// hide the count. TRR = 4. Four advances do not set REF and the fifth does.
 	{
 		g2::Timer timer(g2::Timer::gTimer2InterruptIndex);
 		timer.writeTrr(4);
@@ -203,12 +190,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. THE PRESCALER IS PART OF THE COUNT.
+	// Case group 2. The prescaler is part of the count.
 	//
-	// PS = 127 and TRR = 1, which is the firmware's prescaler. The match
-	// arrives after 128 * 2 INPUT CLOCKS and not after 2. A model that stored
-	// PS and divided by nothing sets REF on the second input clock, which is
-	// the required-RED this case names.
+	// PS = 127 and TRR = 1, which is the firmware's prescaler. The match arrives
+	// after 128 * 2 input clocks and not after 2. A model that stored PS and
+	// divided by nothing sets REF on the second input clock.
 	{
 		g2::Timer timer(g2::Timer::gTimer2InterruptIndex);
 		timer.writeTrr(1);
@@ -230,7 +216,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. FRR DECIDES WHAT THE COUNTER DOES AFTER THE MATCH.
+	// Case group 3. FRR decides what the counter does after the match.
 	//
 	// The two halves are the same run with one bit exchanged. A model that
 	// ignored FRR reads the same counter in both halves, and one of the two
@@ -266,12 +252,12 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. TER IS WRITE-ONE-TO-CLEAR AND NOT WRITE-ANY.
+	// Case group 4. TER is write-one-to-clear and not write-any.
 	//
-	// The firmware's handler writes 2 to MBAR+$191. A write-any model is
-	// cleared by the 0 the handler never writes, and is SET to 0 by the 2 it
-	// does -- which happens to look the same for that one value, so both halves
-	// are needed: the 0 must NOT clear and the 2 MUST.
+	// The firmware's handler writes 2 to MBAR+$191. A write-any model is cleared
+	// by the 0 the handler never writes, and is set to 0 by the 2 it does --
+	// which happens to look the same for that one value, so both halves are
+	// needed: the 0 must not clear and the 2 must.
 	{
 		g2::Timer timer(g2::Timer::gTimer2InterruptIndex);
 		timer.writeTrr(0);
@@ -295,9 +281,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE INTERRUPT IS RAISED ONLY WHEN TMR[ORI] IS SET.
+	// Case group 5. The interrupt is raised only when TMR[ORI] is set.
 	//
-	// Both halves run the FIRMWARE'S OWN TMR words. Timer 2's 0x7F3B has ORI
+	// Both halves run the firmware's own TMR words. Timer 2's 0x7F3B has ORI
 	// set and timer 1's 0x2B has ORI clear, and the second half is the one that
 	// fails when the raise is made unconditionally.
 	{
@@ -333,7 +319,7 @@ int main()
 		checkEqual(recorder.level, 0,
 			"with REF cleared the controller presents no interrupt");
 
-		// THE SILENT TIMER. TMR = 0x2B has ORI CLEAR.
+		// The silent timer: TMR = 0x2B has ORI clear.
 		PresentRecorder silent;
 		g2::InterruptController quiet(&silent, recordPresent);
 		quiet.writeRegister(0x04Cu + g2::Timer::gTimer1InterruptIndex, makeIcr(1, 0, true));
@@ -352,11 +338,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. TMR[RST] IS THE ENABLE AND A DISABLED TIMER DOES NOT COUNT.
+	// Case group 6. TMR[RST] is the enable and a disabled timer does not count.
 	//
-	// MCF5307 UM section 9.4: RST = 0 disables the timer and resets it. Without
-	// this the two timers would count from the machine's first cycle, before
-	// the firmware has programmed either of them.
+	// RST = 0 disables the timer and resets it. Without this the two timers
+	// would count from the machine's first cycle, before the firmware has
+	// programmed either of them.
 	{
 		g2::Timer timer(g2::Timer::gTimer2InterruptIndex);
 		timer.writeTrr(4);
@@ -379,12 +365,10 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. THE SIM ROUTES THE TEN ADDRESSES TO THE UNITS.
+	// Case group 7. The Sim routes the ten addresses to the units.
 	//
 	// The Sim is driven at its own BusTarget surface, at the MBAR-relative
-	// offsets the manual assigns. Before this task every one of these ten
-	// addresses was plain storage, so the counter read back what was last
-	// written and never anything else.
+	// offsets the manual assigns.
 	{
 		g2::Sim sim;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -421,25 +405,24 @@ int main()
 		checkEqual(sim.read(0x191, 8, status), uint32_t(0),
 			"through the Sim, the firmware handler's write of 2 to MBAR+0x191 clears REF");
 
-		// The other unit is a SEPARATE unit and shares no state with it.
+		// The other unit is a separate unit and shares no state with it.
 		checkEqual(sim.read(0x14c, 16, status), uint32_t(0),
 			"TCN1 is a separate counter and stayed at zero while timer 2 ran");
 
-		// TCR is read-only on both units. UM Table B-1.
+		// TCR is read-only on both units.
 		sim.write(0x188, 16, 0xffffu, status);
 		checkEqual(sim.read(0x188, 16, status), uint32_t(0),
 			"TCR2 is read-only and a write reaches no bit of it");
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. THE BOARD ADVANCES THE TIMERS FROM THE CYCLES IT RAN.
+	// Case group 8. The Board advances the timers from the cycles it ran.
 	//
 	// The real MCF5307 core runs a page of NOPs out of CS0 and the counter is
-	// read back through the same bus callbacks the core uses. THE ASSERTION IS
-	// AN EQUALITY AGAINST THE CYCLE COUNT runMcu RETURNED, so a Board that
+	// read back through the same bus callbacks the core uses. The assertion is
+	// an equality against the cycle count runMcu returned, so a Board that
 	// advanced the timers from anything other than the cycles it ran is red
-	// here, and a Board that advanced nothing -- the defect row W3-377
-	// measured -- reads zero.
+	// here, and a Board that advanced nothing reads zero.
 	{
 		g2::BoardConfig config;
 		config.memory.cs0 = {kCs0Base, kCs0Size};
@@ -459,7 +442,7 @@ int main()
 
 		mcf5307_bus_status status = MCF5307_BUS_OK;
 
-		// PS = 0 so one cycle is one tick, FRR set, ORI CLEAR so nothing is
+		// PS = 0 so one cycle is one tick, FRR set, ORI clear so nothing is
 		// raised, RST set so the timer is enabled.
 		boardWrite(board, kMbarBase + 0x184, g_word, 0xffffu, status);
 		boardWrite(board, kMbarBase + 0x180, g_word, makeTmr(0, true, false, true), status);

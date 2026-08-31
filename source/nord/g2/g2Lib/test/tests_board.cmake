@@ -188,18 +188,14 @@ set_property(TARGET t0_hdi08_adapter PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_adapter COMMAND t0_hdi08_adapter)
 set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
 
-# ----------------- INT-6, the HDI08 host-to-DSP flag bridge
+# ----------------- the HDI08 host-to-DSP flag bridge
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_flag_bridge$
-#
-# T0 AND UNGATED. The test constructs a single DSP behind one host port, bridges
+# T0 and ungated. The test constructs a single DSP behind one host port, bridges
 # them, and asserts that an ICR write of HF0 (0x08) reaches the DSP's HSR, that
 # an ICR write without HF0 does not, and that an unbridged port does not forward.
-# No firmware artifact of any kind reaches it.
 #
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing,
-# t0_cs2_cfi and t0_bus_size_unit already use: it constructs an Hdi08Adapter and
-# an Hdi08Bridge with the real mc68k and dsp56kEmu behind them, and g2Lib carries
+# It links g2Lib and nothing else: it constructs an Hdi08Adapter and an
+# Hdi08Bridge with the real mc68k and dsp56kEmu behind them, and g2Lib carries
 # that link itself.
 
 add_executable(t0_hdi08_flag_bridge t0_hdi08_flag_bridge.cpp)
@@ -379,7 +375,7 @@ target_sources(t0_sof_tick PRIVATE
 
 # 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
 # class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
-# onto the link line. NONE of the three is the mcf5307 archive, so the property
+# onto the link line. None of the three is the mcf5307 archive, so the property
 # t0_sof_tick's own block protects is untouched.
 
 foreach(lib 68kEmu dsp56kEmu baseLib)
@@ -503,19 +499,16 @@ set_property(TARGET t0_board_mcu_handle PROPERTY FOLDER "G2/test")
 add_test(NAME t0_board_mcu_handle COMMAND t0_board_mcu_handle)
 set_tests_properties(t0_board_mcu_handle PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-29, CS3 wired to the ISP1181 stub
+# ----------------- CS3 wired to the ISP1181
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_cs3_wire$
+# T0 and ungated. The test drives the Board's installed bus callbacks at the CS3
+# window and asserts status only, because the unmapped read path zeroes its
+# return exactly as a benign device answer does and a value assertion would pass
+# without any wiring.
 #
-# T0 AND UNGATED. The test needs no firmware artifact of any kind: it drives
-# the Board's installed bus callbacks at the CS3 window and asserts STATUS
-# only, because the unmapped READ path zeroes its return exactly as the benign
-# stub answer does and a value assertion would pass without any wiring.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing,
-# t0_board_mcu_handle, t0_cs2_cfi and t0_bus_size_unit already use: it constructs
-# a Board over its own BoardConfig and drives Board::onRead / Board::onWrite,
-# the exact pointers mcf5307_create receives.
+# It links g2Lib and nothing else: it constructs a Board over its own
+# BoardConfig and drives Board::onRead / Board::onWrite, the exact pointers
+# mcf5307_create receives.
 
 add_executable(t0_cs3_wire t0_cs3_wire.cpp)
 target_link_libraries(t0_cs3_wire PRIVATE g2Lib)
@@ -526,25 +519,20 @@ set_tests_properties(t0_cs3_wire PROPERTIES LABELS "UnitTest")
 
 # ----------------- the isolated sprintf probe
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_sprintf_isolated$
+# Tier T1 and gated: the test drives the firmware's own sprintf, and the only
+# source of CODE_30000400.bin is the Clavia artifact directory. It resolves
+# through ArtifactResolver, never through getenv, and skips with a reason when
+# NMG2_ARTIFACTS is unset.
 #
-# TIER T1 AND GATED, AND NOT BY CHOICE. The commissioning task asked for T0 and
-# ungated. The test drives the FIRMWARE's own sprintf, and the only source of
-# CODE_30000400.bin is the Clavia artifact directory, so an ungated
-# registration would run a test whose input does not exist on a machine without
-# artifacts. It resolves through ArtifactResolver, never through getenv, and
-# reports the section 18.5 skip line with NMG2_ARTIFACTS unset.
-#
-# THE GATE VARIABLES ARE COMPUTED HERE rather than borrowed from
-# tests_int.cmake, because CMakeLists.txt includes THIS file first and the
-# variables do not exist yet at this point. The skip code is READ OUT OF
+# The gate variables are computed here rather than borrowed from
+# tests_int.cmake, because CMakeLists.txt includes this file first and the
+# variables do not exist yet at this point. The skip code is read out of
 # gatedFixture.h by the same regex tests_int.cmake uses, so the two spellings
 # cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever include site
 # sets it first wins and the second set is a no-op with the same value.
 #
-# IT LINKS g2Lib AND NOTHING ELSE, the arrangement every board test above uses.
-# Naming mcf5307::mcf5307 here would let the test pass with g2Lib's own link
-# line deleted.
+# It links g2Lib and nothing else. Naming mcf5307::mcf5307 here would let the
+# test pass with g2Lib's own link line deleted.
 
 add_executable(t1_sprintf_isolated t1_sprintf_isolated.cpp)
 target_link_libraries(t1_sprintf_isolated PRIVATE g2Lib)
@@ -575,9 +563,7 @@ if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_sprintf_isolated APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
 
-# ----------------- BRD-33, the MCF5307 general-purpose timers
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_timer$
+# ----------------- the MCF5307 general-purpose timers
 
 add_executable(t0_timer t0_timer.cpp)
 target_link_libraries(t0_timer PRIVATE g2Lib)
@@ -586,31 +572,27 @@ set_property(TARGET t0_timer PROPERTY FOLDER "G2/test")
 add_test(NAME t0_timer COMMAND t0_timer)
 set_tests_properties(t0_timer PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-34, the Board owns the interrupt controller
+# ----------------- the Board owns the interrupt controller
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_board_interrupts$
+# The assembled Board is driven and the core-facing call is observed, so this
+# check fails when the wire is absent rather than when the class is wrong.
+# t0_interrupts already drives InterruptController directly and cannot see that
+# defect at all.
 #
-# THE ASSEMBLED Board IS DRIVEN AND THE CORE-FACING CALL IS OBSERVED, so this
-# check fails when the WIRE is absent rather than when the class is wrong.
-# t0_interrupts already drives InterruptController directly, covers the class,
-# and cannot see that defect at all.
-#
-# THIS TARGET COMPILES board.cpp AND LINKS NO mcf5307 ARCHIVE, which is
-# t0_sof_tick's arrangement and is here for the same reason. The behaviour
-# under test is a call the Board makes OUT to mcf5307_set_irq, and mcf5307.h
-# publishes no getter for the presented interrupt state, so the test SUPPLIES
-# that entry point itself and records what arrives. The archive cannot be on
-# the link line: `nm -g libmcf5307.a` puts _mcf5307_set_irq in the same member
-# as _takeInterrupt and _pendingInterrupt, which the core needs, so the member
-# is always pulled and the test's own definition would be a duplicate symbol.
+# This target compiles board.cpp and links no mcf5307 archive. The behaviour
+# under test is a call the Board makes out to mcf5307_set_irq, and mcf5307.h
+# publishes no getter for the presented interrupt state, so the test supplies
+# that entry point itself and records what arrives. The archive cannot be on the
+# link line: `nm -g libmcf5307.a` puts _mcf5307_set_irq in the same member as
+# _takeInterrupt and _pendingInterrupt, which the core needs, so the member is
+# always pulled and the test's own definition would be a duplicate symbol.
 # Linking g2Lib would put that archive on the line through g2Lib's own PUBLIC
 # link, so this target names the g2Lib sources board.cpp needs instead.
 #
 # The mcf5307 include directory is taken from the imported target's INTERFACE
 # property rather than linking it, so the header arrives and the archive does
-# not. THE EXECUTABLE IS DECLARED UNCONDITIONALLY AND ONLY THE PROPERTY
-# REFERENCES ARE GUARDED, which is the discipline the t0_mcf5307_link and
-# t0_sof_tick blocks above both state.
+# not. The executable is declared unconditionally and only the property
+# references are guarded.
 
 add_executable(t0_board_interrupts
 	t0_board_interrupts.cpp
@@ -647,7 +629,7 @@ endif()
 
 # 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
 # class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
-# onto the link line. NONE of the three is the mcf5307 archive, so the property
+# onto the link line. None of the three is the mcf5307 archive, so the property
 # this block protects is untouched.
 
 foreach(lib 68kEmu dsp56kEmu baseLib)
@@ -662,33 +644,26 @@ add_test(NAME t0_board_interrupts COMMAND t0_board_interrupts)
 set_tests_properties(t0_board_interrupts PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- BRD-18, the boot handshake driven and censused over all
-#                   eight host ports (BRD-27 absorbed as STEP 2, plan §24.6
-#                   row W3-390)
+# ----------------- the boot handshake driven and censused over all eight host
+#                   ports
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_dsp_handshake$
+# Tier T1 and gated because the block declares the tier, which is not the usual
+# reason. The test reads no firmware artifact: it composes a Board, drives host
+# flags and reads host registers, and every input it has is compiled in. It
+# resolves through ArtifactResolver, so a machine without artifacts skips with a
+# reason rather than passing in silence.
 #
-# TIER T1 AND GATED BECAUSE THE BLOCK DECLARES THE TIER, and that reason is
-# written down because it is not the usual one. The test reads NO firmware
-# artifact: it composes a Board, drives host flags and reads host registers,
-# and every input it has is compiled in. It resolves through ArtifactResolver
-# exactly as t1_boot and t1_sprintf_isolated do, so a machine without artifacts
-# prints the section 18.5 skip line and reports NOT VERIFIED rather than
-# passing in silence.
-#
-# THE GATE VARIABLES ARE COMPUTED HERE under names of their own rather than
-# borrowed from the t1_sprintf_isolated block above, for the reason that block
-# already states about tests_int.cmake: a variable borrowed across blocks is how
-# one task's edit silently changes another task's registration. The skip code is
-# READ OUT OF gatedFixture.h by the same regex both other sites use, so the
+# The gate variables are computed here under names of their own rather than
+# borrowed from the t1_sprintf_isolated block above: a variable borrowed across
+# blocks is how one edit silently changes another registration. The skip code is
+# read out of gatedFixture.h by the same regex both other sites use, so the
 # spellings cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever
 # include site sets it first wins and every later set is a no-op with the same
 # value.
 #
-# IT LINKS g2Lib AND NOTHING ELSE, the arrangement t0_board_dsp_set uses for the
-# same composition: the real board.cpp with the real DspSet and Hdi08Bridge
-# behind it are all g2Lib sources. NOTHING HERE REFERENCES mcf5307::mcf5307, so
-# no if(TARGET) guard is needed and none is written.
+# It links g2Lib and nothing else: the real board.cpp with the real DspSet and
+# Hdi08Bridge behind it are all g2Lib sources. Nothing here references
+# mcf5307::mcf5307, so no if(TARGET) guard is needed.
 
 add_executable(t1_dsp_handshake t1_dsp_handshake.cpp)
 target_link_libraries(t1_dsp_handshake PRIVATE g2Lib)

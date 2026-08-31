@@ -1,72 +1,52 @@
-// Task BRD-34. The Board owns the interrupt controller and presents to the
-// core.
+// The Board owns the interrupt controller and presents to the core.
 //
-// Plan section 13.4, BRD-34. Plan section 24.6 rows W3-379, W3-380.
-// Design sections 5.2.2, 6.4, 9.4.
+// t0_interrupts already drives InterruptController directly and proves the
+// arbitration. It cannot see an absent wire: a Uart0 whose controller pointer
+// defaults to nullptr on the assembled machine, or a Sim whose
+// setInterruptController is never called. Every case below therefore drives the
+// assembled Board -- at the same bus callbacks the core uses -- and observes
+// what reaches the core.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail. Every case below reports through a counter and
-// the process exit status.
-//
-// WHAT THIS TEST PROVES, AND WHY IT IS AT THE BOARD TIER AND NOT THE CLASS
-// TIER. t0_interrupts already drives InterruptController directly and proves
-// the arbitration. It cannot see the defect this task repairs, because that
-// defect is an ABSENT WIRE and not a wrong class: before BRD-34 no production
-// code constructed an InterruptController at all, Uart0's controller pointer
-// defaulted to nullptr on the assembled machine, and Sim::setInterruptController
-// was never called. Every case below therefore drives the ASSEMBLED Board -- at
-// the same bus callbacks the core uses -- and observes what reaches the CORE.
-//
-//   0. THE BOARD PRESENTS NOTHING WHILE ITS CORE HANDLE IS NULL. Uart0's
+//   0. The Board presents nothing while its core handle is null. Uart0's
 //      constructor programs its vector into the controller, which presents,
 //      and that happens before mcf5307_create has returned.
 //
-//   1. A TIMER 2 REFERENCE MATCH WITH TMR[ORI] SET AND ICR2 AT MBAR+$04E
-//      PROGRAMMED TO 0x84 PRESENTS LEVEL 1, AUTOVECTORED. The whole path is
+//   1. A timer 2 reference match with TMR[ORI] set and ICR2 at MBAR+$04E
+//      programmed to 0x84 presents level 1, autovectored. The whole path is
 //      under the assertion: the ICR byte arrives through the MBAR window, the
 //      timer raises on the Board's controller, and the controller's winner
 //      reaches the core.
 //
-//   2. CLEARING TER[REF] THROUGH MBAR+$191 DROPS THE PRESENTATION TO LEVEL 0.
-//      The board presents on CLEAR as well as on ASSERT, which mcf5307.h's
-//      idempotence licenses. A board that presented only on assert would leave
-//      the core seeing a level 1 that no longer exists.
+//   2. Clearing TER[REF] through MBAR+$191 drops the presentation to level 0.
+//      The board presents on clear as well as on assert, which the core's
+//      idempotent set_irq licenses. A board that presented only on assert would
+//      leave the core seeing a level 1 that no longer exists.
 //
-//   3. THE TIMER AT MBAR+$140 WITH ORI CLEAR PRESENTS NOTHING AT ALL. The
-//      assertion is on the CALL COUNT and not on the level, so a board that
-//      presented a level 0 unconditionally is red here: a level assertion
-//      alone reads the same zero either way. The same case asserts TER1 DID
-//      take the match, so the silence is the ORI bit's and not a dead timer's.
+//   3. The timer at MBAR+$140 with ORI clear presents nothing at all. The
+//      assertion is on the call count and not on the level, so a board that
+//      presented a level 0 unconditionally is red here: a level assertion alone
+//      reads the same zero either way. The same case asserts TER1 did take the
+//      match, so the silence is the ORI bit's and not a dead timer's.
 //
-//   4. ONE CONTROLLER ARBITRATES ACROSS THE WHOLE MACHINE. UART0 (ICR4, level
+//   4. One controller arbitrates across the whole machine. UART0 (ICR4, level
 //      6, vectored 0x42) and timer 2 (ICR2, level 1, autovectored) are pending
 //      at once. The UART wins while it is asserted, and when the firmware reads
-//      URB the presentation FALLS BACK to the timer's level 1 -- which only a
-//      controller that can see BOTH sources can do. A Uart0 handed its own
+//      URB the presentation falls back to the timer's level 1 -- which only a
+//      controller that can see both sources can do. A Uart0 handed its own
 //      second controller presents a level 0 there, and never a level 6 at all,
 //      because the ICR bytes the MBAR window carries reach the Board's
 //      controller and not that second one.
 //
-// WHAT IS NOT HERE, STATED SO THE GREEN IS NOT OVERREAD.
+// What is not here:
 //
-//   * The plan's Check line also names a case in which masking the source in
-//     IMR at MBAR+$044 suppresses the presentation without disturbing TER.
-//     THAT CASE IS NOT IMPLEMENTED AND IT IS NOT SILENTLY DROPPED.
-//     InterruptController models three register groups and IMR is not one of
-//     them -- interruptController.h names $006 (IRQPAR), $048 (AVR) and
-//     $04C..$057 (the internal control block), and its writeRegister ignores
-//     every other offset. A mask between a source's pending bit and the
-//     arbiter is new arbitration in the CONTROLLER, and BRD-34's own second
-//     property forbids exactly that ("THIS TASK ADDS NO ARBITRATION, NO
-//     PENDING BIT AND NO PRIORITY DECISION") while its Files: line carries no
-//     controller file. The case is therefore a task for whoever adds IMR to
-//     BRD-3's class, and it is recorded here rather than faked.
+//   * Masking a source in IMR at MBAR+$044. InterruptController models three
+//     register groups and IMR is not one of them -- interruptController.h names
+//     $006 (IRQPAR), $048 (AVR) and $04C..$057 (the internal control block),
+//     and its writeRegister ignores every other offset. A mask between a
+//     source's pending bit and the arbiter is new arbitration in the
+//     controller.
 //
-//   * It asserts nothing about the boot spin at 0x30055FBC. t1_boot runs
-//     firmware on a core the Board does not own and never calls
-//     Board::resetMcu, so no interrupt this task wires can reach the firmware
-//     under test. Plan section 24.6 row W3-379 measures that and owns it.
+//   * Anything about the boot spin at 0x30055FBC.
 
 #include "../board.h"
 #include "../interruptController.h"
@@ -113,20 +93,19 @@ namespace
 
 	// ------------------------------------------------------------ the double
 	//
-	// THE RECORDING DOUBLE IS mcf5307_set_irq ITSELF. This target compiles
-	// ../board.cpp and links NO mcf5307 archive, so the definition below is
-	// the one the Board's present function reaches -- exactly the arrangement
-	// t0_sof_tick already uses to observe the Board's call out to isp1181_tick.
-	// It is the only arrangement that works: mcf5307.h publishes no getter for
-	// the presented interrupt state, and the real symbol cannot be interposed
-	// on a link that carries the archive, because `nm -g libmcf5307.a` puts
-	// _mcf5307_set_irq in the same member as _takeInterrupt and
-	// _pendingInterrupt, which the core's own execution path needs.
+	// The recording double is mcf5307_set_irq itself. This target compiles
+	// ../board.cpp and links no mcf5307 archive, so the definition below is the
+	// one the Board's present function reaches. mcf5307.h publishes no getter
+	// for the presented interrupt state, and the real symbol cannot be
+	// interposed on a link that carries the archive, because
+	// `nm -g libmcf5307.a` puts _mcf5307_set_irq in the same member as
+	// _takeInterrupt and _pendingInterrupt, which the core's own execution path
+	// needs.
 	//
-	// A CHECK BUILT ON InterruptController::presentedAutovector() WOULD NOT DO.
-	// It reads what the CONTROLLER computed, so a present function that
+	// A check built on InterruptController::presentedAutovector() would not do.
+	// It reads what the controller computed, so a present function that
 	// hardcoded the autovector argument on its way to the core would leave it
-	// green. What is recorded here is what the CORE was handed.
+	// green. What is recorded here is what the core was handed.
 	struct SetIrqRecorder
 	{
 		int calls = 0;
@@ -147,9 +126,8 @@ namespace
 
 	SetIrqRecorder g_recorder;
 
-	// The ICR byte, written out from the MCF5307 User's Manual rather than
-	// taken from any header: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0] at bits
-	// 1:0. This file owns its own copy so the two sides move independently.
+	// The ICR byte: bit 7 AVEC, IL[2:0] at bits 4:2, IP[1:0] at bits 1:0. This
+	// file owns its own copy so the two sides move independently.
 	uint8_t makeIcr(const int _level, const int _ip, const bool _avec)
 	{
 		uint8_t value = uint8_t((_level << 2) | (_ip & 0x03));
@@ -158,7 +136,7 @@ namespace
 		return value;
 	}
 
-	// The TMR bit positions, from MCF5307 UM section 9.4.
+	// The TMR bit positions.
 	constexpr uint16_t kRst  = 0x0001u;   // bit 0, timer enable
 	constexpr uint16_t kFrr  = 0x0008u;   // bit 3, free run / restart
 	constexpr uint16_t kOri  = 0x0010u;   // bit 4, output reference interrupt
@@ -179,7 +157,7 @@ namespace
 	// outside it depends on the number.
 	constexpr uint32_t kMbarBase = 0x10000000u;
 
-	// The MBAR-relative offsets, each from the MCF5307 User's Manual.
+	// The MBAR-relative offsets.
 	constexpr uint32_t kIcrBase = 0x04Cu;   // ICR0, UM Table 8-2
 	constexpr uint32_t kTmr1    = 0x140u;
 	constexpr uint32_t kTrr1    = 0x144u;
@@ -191,8 +169,8 @@ namespace
 	constexpr uint32_t kUrb     = 0x1CCu;   // UART0 receiver buffer
 	constexpr uint32_t kUimr    = 0x1D4u;   // UART0 interrupt mask register
 
-	// The core's size unit is BYTES, and Board::onRead / Board::onWrite are
-	// the pair that takes it.
+	// The core's size unit is bytes, and Board::onRead / Board::onWrite are the
+	// pair that takes it.
 	constexpr int g_byte = 1;
 	constexpr int g_word = 2;
 
@@ -218,13 +196,13 @@ namespace
 	}
 }
 
-// The mcf5307 and isp1181 entry points ../board.cpp calls. THIS TARGET LINKS
-// NO mcf5307 ARCHIVE, and these definitions are why: the recording
-// mcf5307_set_irq above is the observation mechanism, and a link that carried
-// the archive would refuse it as a duplicate symbol.
+// The mcf5307 and isp1181 entry points ../board.cpp calls. This target links no
+// mcf5307 archive: the recording mcf5307_set_irq above is the observation
+// mechanism, and a link that carried the archive would refuse it as a duplicate
+// symbol.
 //
 // Every stub answers the value mcf5307.h defines for a context that can do
-// nothing. NOTHING BELOW IS DRIVEN BY ANY CASE IN THIS FILE except
+// nothing. Nothing below is driven by any case in this file except
 // mcf5307_set_irq: the timers are advanced through Sim::advanceTimers and the
 // registers are written through the Board's own bus callbacks, so no case here
 // needs a core that executes.
@@ -278,7 +256,7 @@ extern "C"
 		return 0;
 	}
 
-	// THE ONE STUB THAT IS THE TEST. Every case below asserts on what arrived
+	// The one stub that is the test. Every case below asserts on what arrived
 	// here.
 	void mcf5307_set_irq(mcf5307_ctx* const ctx, const int level, const uint8_t vector,
 	                     const int autovector)
@@ -316,11 +294,11 @@ extern "C"
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 0. THE BOARD PRESENTS NOTHING WHILE ITS CORE HANDLE IS NULL.
+	// Case group 0. The Board presents nothing while its core handle is null.
 	//
 	// The controller exists before mcf5307_create returns, and Uart0's own
-	// constructor programs its vector into it -- which recomputes and
-	// PRESENTS. That presentation has no core to reach. The assertion is on
+	// constructor programs its vector into it, which recomputes and presents.
+	// That presentation has no core to reach. The assertion is on
 	// the whole construction, so it is red the moment the guard is removed:
 	// without it the sink is called with a null context.
 	{
@@ -332,7 +310,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. A TIMER 2 REFERENCE MATCH PRESENTS LEVEL 1, AUTOVECTORED.
+	// Case group 1. A timer 2 reference match presents level 1, autovectored.
 	//
 	// The ICR byte arrives through the MBAR window, so the read-back below is
 	// itself an assertion that the controller -- and not the SIM's plain
@@ -347,7 +325,7 @@ int main()
 		checkEqual(boardRead(board, icr2, g_byte, status), uint32_t(0x84u),
 			"ICR2 at MBAR+$04E reads back the 0x84 the firmware programs");
 
-		// PS = 0 so one input clock is one tick, FRR set, ORI SET, RST set.
+		// PS = 0 so one input clock is one tick, FRR set, ORI set, RST set.
 		boardWrite(board, kMbarBase + kTrr2, g_word, 4u, status);
 		boardWrite(board, kMbarBase + kTmr2, g_word, makeTmr(0, true, true, true), status);
 
@@ -368,10 +346,10 @@ int main()
 			"the presentation reached a non-nil core context");
 
 		// -------------------------------------------------------------------
-		// Case group 2. CLEARING TER[REF] DROPS THE PRESENTATION TO LEVEL 0.
+		// Case group 2. Clearing TER[REF] drops the presentation to level 0.
 		//
 		// TER is write-one-to-clear and the firmware's handler writes 2 to
-		// MBAR+$191. A board that presented only on ASSERT leaves the core
+		// MBAR+$191. A board that presented only on assert leaves the core
 		// seeing a level 1 that the machine no longer has.
 		g_recorder.reset();
 		boardWrite(board, kMbarBase + kTer2, g_byte, kRef, status);
@@ -389,9 +367,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE TIMER AT MBAR+$140 WITH ORI CLEAR PRESENTS NOTHING.
+	// Case group 3. The timer at MBAR+$140 with ORI clear presents nothing.
 	//
-	// THE ASSERTION IS ON THE CALL COUNT. An assertion on the presented level
+	// The assertion is on the call count. An assertion on the presented level
 	// alone reads the same zero whether the board stayed silent or presented a
 	// level 0, so only the count separates the two.
 	{
@@ -415,11 +393,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. ONE CONTROLLER ARBITRATES ACROSS THE WHOLE MACHINE.
+	// Case group 4. One controller arbitrates across the whole machine.
 	//
 	// UART0 is ICR4 and carries the vectored 0x42 its own constructor programs
 	// into the controller; timer 2 is ICR2 and is autovectored at level 1.
-	// BOTH ARE PENDING AT ONCE, so the presentation is an arbitration result
+	// Both are pending at once, so the presentation is an arbitration result
 	// and not a relay of whichever source moved last.
 	{
 		g2::Board board(mbarOnlyConfig());
@@ -437,7 +415,7 @@ int main()
 		board.sim().advanceTimers(5);
 
 		// The receiver and its RxRDY mask, which is what makes a received
-		// character an interrupt condition at all. UM Tables 14-8 and 14-11.
+		// character an interrupt condition at all.
 		boardWrite(board, kMbarBase + kUcr, g_byte, 0x01u, status);
 		boardWrite(board, kMbarBase + kUimr, g_byte, 0x02u, status);
 

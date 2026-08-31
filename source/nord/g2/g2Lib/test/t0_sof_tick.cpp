@@ -303,11 +303,9 @@ extern "C"
 		return 0;
 	}
 
-	/* TASK BRD-34 CONSEQUENCE. board.cpp now presents the Board's interrupt
-	 * state to the core, so a target that compiles it on its own must supply
-	 * this entry point too. NOTHING IN THIS TEST DRIVES IT: no case here
-	 * programs an ICR or raises a source, and the interrupt wiring is
-	 * t0_board_interrupts' subject. */
+	/* board.cpp presents the Board's interrupt state to the core, so a target
+	 * that compiles it on its own must supply this entry point too. Nothing in
+	 * this test drives it: no case here programs an ICR or raises a source. */
 	void mcf5307_set_irq(mcf5307_ctx*, int, uint8_t, int)
 	{
 	}
@@ -336,11 +334,10 @@ extern "C"
 		                             g_drivingBoard, g_seq++});
 	}
 
-	/* The two entry points the Board's CS3 window forwards to. Nothing in
-	 * THIS test drives the bus, so each answers the benign value the stub
-	 * itself answers: a byte of zero on a read, and nothing kept on a write.
-	 * They exist here only so that board.cpp, which now calls them from the
-	 * adapter, still links without a library. */
+	/* The two entry points the Board's CS3 window forwards to. Nothing in this
+	 * test drives the bus, so each answers a benign value: a byte of zero on a
+	 * read, and nothing kept on a write. They exist so that board.cpp, which
+	 * calls them from the adapter, still links without a library. */
 	uint8_t isp1181_read(isp1181_ctx*, const uint32_t)
 	{
 		return 0u;

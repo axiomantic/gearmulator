@@ -1,36 +1,28 @@
 // An isolated probe of the firmware's own `sprintf`, driven directly against
 // the MCF5307 core with NO boot, NO peripherals and NO Board.
 //
-// WHY THIS TEST EXISTS. Cell-level write tracing of the booted machine showed
+// Cell-level write tracing of the booted machine showed
 // that OS banner line 1 -- composed by
 // `sprintf(buf, "Version %d.%02d Exp", 1, 62)` -- reaches the display with
 // fifteen of its sixteen characters byte-perfect and correctly positioned, and
-// with the FINAL character wrong: 0x09 where 'p' is 0x70. Banner line 0 is a
+// with the final character wrong: 0x09 where 'p' is 0x70. Banner line 0 is a
 // plain literal copy with no formatting and is 16/16 correct. The only
 // difference between the two paths is the formatter, so the suspicion is a
-// CPU-core defect in EXECUTING the formatter rather than a display defect.
+// CPU-core defect in executing the formatter rather than a display defect.
 //
 // A boot cannot separate those two. This test removes everything but the
 // formatter: a flat RAM, the firmware image loaded at its load address, the
 // four arguments pushed exactly as the firmware's own call site pushes them,
 // and the program counter set to `sprintf`'s first instruction. If the buffer
 // comes back wrong here, the fault is in the core executing the formatter and
-// the display is exonerated. If it comes back RIGHT here, the fault is NOT in
+// the display is exonerated. If it comes back right here, the fault is not in
 // sprintf, which is an equally decisive result.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail. Every case reports through a counter and the
-// process exit status.
+// Tier T1 and gated: the test needs `CODE_30000400.bin`, a Clavia artifact, so
+// it resolves through ArtifactResolver and skips with a reason when
+// NMG2_ARTIFACTS does not resolve.
 //
-// TIER T1 AND GATED. The test needs `CODE_30000400.bin`, which is a Clavia
-// artifact, so it resolves through ArtifactResolver exactly as t1_boot does
-// and reports the section 18.5 skip line when NMG2_ARTIFACTS does not resolve.
-// The task that commissioned it asked for T0/ungated where possible; the
-// firmware image is reachable only through the artifact directory, so the gate
-// is mandatory and is written the way tests_int.cmake writes it.
-//
-// THE MEASURED FACTS THIS TEST IS BUILT ON, and where each comes from.
+// The measured facts this test is built on:
 //   - The image loads at 0x30000400. File offset = address - 0x30000400.
 //   - `sprintf` begins at 0x300D90C6 with `4e56 ffa8` = LINK.W A6,#-0x58.
 //     Case 0 below re-reads those four bytes out of the loaded image, so a
@@ -47,8 +39,8 @@
 //         (A7+16) int         second argument
 //     which is the ordinary C ABI: arguments pushed right to left.
 //
-// HOW THE RUN IS TERMINATED. The return address pushed under the arguments is
-// a SENTINEL inside RAM holding one HALT word, so the RTS at the end of
+// The return address pushed under the arguments is a sentinel inside RAM
+// holding one HALT word, so the RTS at the end of
 // `sprintf` lands on it and the core stops of its own accord. A sentinel in
 // unmapped space would also stop the core, but through a bus fault, and a
 // fault is exactly the signal this test needs to keep meaning "something went
@@ -120,7 +112,7 @@ namespace
 	// The sentinel the RTS returns to, and the one word stored there. 0x4AC8
 	// is HALT on this part. Whether the core executes it as HALT or stops on it
 	// as an opcode with no implemented semantics, it stops -- and the test
-	// asserts on the PROGRAM COUNTER, so either route is proof the formatter
+	// asserts on the program counter, so either route is proof the formatter
 	// returned to exactly this address.
 	constexpr uint32_t g_sentinel     = 0x30FF0000u;
 	constexpr uint16_t g_haltOpcode   = 0x4AC8u;
@@ -142,7 +134,7 @@ namespace
 
 	// A budget far larger than any plausible formatter. `sprintf` on this part
 	// is a few thousand instructions at worst; a million cycles is three orders
-	// of magnitude of headroom, and a run that hits it is REPORTED and never
+	// of magnitude of headroom, and a run that hits it is reported and never
 	// compared.
 	constexpr uint32_t g_cycleBudget       = 4000000u;
 	constexpr uint32_t g_cyclesPerIteration = 4096u;
@@ -368,8 +360,8 @@ namespace
 		_result.cycles = spent;
 		_result.pc = mcf5307_get_reg(mcu, g_regPc);
 		_result.faulted = mcf5307_faulted(mcu) != 0;
-		// EITHER PC IS PROOF THE FORMATTER RETURNED HERE. Measured: this core
-		// FETCHES the sentinel word, advances the program counter past it and
+		// Either PC is proof the formatter returned here: this core fetches the
+		// sentinel word, advances the program counter past it and
 		// then stops, so the PC settles at sentinel + 2 and the faulted flag is
 		// set by the sentinel itself. A stop anywhere else is not a return.
 		_result.reachedSentinel = _result.pc == g_sentinel || _result.pc == g_sentinel + 2u;
@@ -414,7 +406,7 @@ namespace
 			std::cout << " (last at 0x" << std::hex << r.lastFaultAddress << std::dec << ")";
 		std::cout << std::endl;
 
-		// The first divergence, named, so the report says WHICH byte and not
+		// The first divergence, named, so the report says which byte and not
 		// only that the blocks differ.
 		size_t firstDiff = expected.size();
 		for(size_t i = 0; i < expected.size() && i < r.buffer.size(); ++i)
@@ -437,8 +429,8 @@ namespace
 		check(!r.budgetExhausted, _label + ": the run ended before the cycle budget was exhausted");
 		check(r.reachedSentinel, _label + ": the formatter RETURNED to the sentinel");
 
-		// THE FAULTED FLAG IS NOT ASSERTED ON, AND THE REASON IS MEASURED. The
-		// sentinel word is what stops the core, and stopping on it SETS that
+		// The faulted flag is not asserted on. The sentinel word is what stops
+		// the core, and stopping on it sets that
 		// flag, so the flag is 1 on every successful run and can discriminate
 		// nothing. The two signals that do discriminate are asserted instead:
 		// the program counter, which says the formatter returned to exactly the
@@ -489,7 +481,7 @@ int main()
 		//
 		// A wrong entry point would execute whatever happens to live there and
 		// produce a mysterious result. These two checks make that failure
-		// explicit, and they read the LOADED IMAGE rather than restating a
+		// explicit, and they read the loaded image rather than restating a
 		// number this file already carries.
 		{
 			const size_t entryOffset = g_sprintfEntry - g_loadAddress;
@@ -517,17 +509,17 @@ int main()
 		// Every case below asks one question, and each differs from case 1 in
 		// exactly one respect, so a divergence names its own cause.
 
-		// Does the ADDRESS of the format matter, or its CONTENT? Same string,
+		// Does the address of the format matter, or its content? Same string,
 		// caller-supplied, in RAM the image does not occupy.
 		const uint32_t sameFormat = addScratch("Version %d.%02d Exp");
 
-		// Is it the conversions at all? A literal of the SAME LENGTH with no
+		// Is it the conversions at all? A literal of the same length with no
 		// conversion in it. If this one is correct and case 1 is not, the fault
 		// is in a conversion; if both are wrong, it is in the copy or the
 		// terminator.
 		const uint32_t literal16 = addScratch("Version 1.62 Exp");
 
-		// Does the fault depend on OUTPUT LENGTH? One character shorter, one
+		// Does the fault depend on output length? One character shorter, one
 		// longer, both literals.
 		const uint32_t literal15 = addScratch("Version 1.62 Ex");
 		const uint32_t literal17 = addScratch("Version 1.62 Expo");
@@ -537,7 +529,7 @@ int main()
 		const uint32_t just02D  = addScratch("%02d");
 		const uint32_t twoD     = addScratch("%d.%02d");
 
-		// A conversion NOT at the end: if the final character alone is wrong,
+		// A conversion not at the end: if the final character alone is wrong,
 		// a trailing literal after the last conversion is where it shows.
 		const uint32_t dThenTail = addScratch("%d.%02dZ");
 
@@ -550,12 +542,12 @@ int main()
 		probe("%d.%02d, conversion last",                twoD,       1, 62, "1.62");
 		probe("%d.%02d then one literal character",      dThenTail,  1, 62, "1.62Z");
 
-		// ---------------- the control: a PLANTED failure, traced to the verdict
+		// ---------------- the control: a planted failure, traced to the verdict
 		//
 		// Every case above passes. A harness in which nothing can fail would
 		// print exactly that, so one run is deliberately given a format pointer
-		// in UNMAPPED space. The two signals the cases assert on must both
-		// react, and the buffer must NOT come back as the banner. Without this
+		// in unmapped space. The two signals the cases assert on must both
+		// react, and the buffer must not come back as the banner. Without this
 		// the whole file is a green run over inputs that all pass, which proves
 		// only that the path is quiet.
 		{

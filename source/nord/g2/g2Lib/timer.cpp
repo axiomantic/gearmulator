@@ -1,54 +1,15 @@
-// Task BRD-33. One MCF5307 general-purpose timer.
+// One MCF5307 general-purpose timer.
 //
-// Plan section 13.1, BRD-33. Design sections 9.4, 13.1.
+// The timer period is (PS + 1) * (TRR + 1) input clocks, and that period is
+// what fixes where the comparison sits relative to the increment. A model that
+// matched on the tick that carries the counter to TRR would have a period of
+// (PS + 1) * TRR. The comparison therefore reads the counter before the tick
+// increments it: a counter standing at TRR matches on its next tick, so
+// TRR = 4 matches on the fifth tick and TRR = 0 matches on every tick.
 //
-// ---------------------------------------------------------------------------
-// PROVENANCE. Plan section 13.1 requires a record of what this task took and
-// where each fact was read.
-//
-// NO FILE OF MegabytePhreak/qemu-mcf5307 WAS OPENED FOR THIS TASK. The timer
-// module is written from the manual alone.
-//
-// THE MANUAL. MCF5307 ColdFire Integrated Microprocessor User's Manual,
-// Motorola, 1998 -- the same copy the provenance record at the head of
-// sim.cpp documents. Section 9.4 "Timer Module" and Appendix B Table B-1.
-//
-//   * The register block and its offsets ($00 TMR, $04 TRR, $08 TCR, $0C TCN,
-//     $11 TER) and the two module bases MBAR+$140 and MBAR+$180: section
-//     9.4.1 Table 9-5 and Table B-1.
-//   * TMR's fields -- PS at bits 15:8, CE at 7:6, OM at 5, ORI at 4, FRR at 3,
-//     CLK at 2:1, RST at 0: section 9.4.1.1.
-//   * THE PRESCALER DIVIDES THE INPUT CLOCK BY PS + 1: section 9.4.1.1. The
-//     firmware's PS of 0x7F is therefore one counter tick per 128 input
-//     clocks.
-//   * FRR: SET restarts the counter from zero on a reference match, CLEAR runs
-//     it on: section 9.4.1.1.
-//   * ORI enables the interrupt on a reference match: section 9.4.1.1.
-//   * RST: writing 0 disables AND resets the timer; the register file other
-//     than TMR itself is not cleared by it: section 9.4.1.1.
-//   * TER's REF (bit 1) and CAP (bit 0), and that BOTH ARE CLEARED BY WRITING
-//     A ONE: section 9.4.1.5.
-//   * THE TIMER PERIOD IS (PS + 1) * (TRR + 1) INPUT CLOCKS: section 9.4.2.
-//     That period is what fixes WHERE the comparison sits relative to the
-//     increment. A model that matched on the tick that carries the counter TO
-//     TRR would have a period of (PS + 1) * TRR, which the manual's formula
-//     contradicts. The comparison therefore reads the counter BEFORE the tick
-//     increments it: a counter standing at TRR matches on its next tick, so
-//     TRR = 4 matches on the fifth tick and TRR = 0 matches on every tick.
-//
-// THE INTERRUPT SOURCE INDEX IS THE ICR INDEX. MCF5307 UM Table 8-2 puts
-// timer 1 on ICR1 and timer 2 on ICR2, and InterruptController's source index
-// is that same index -- so timer 2's ICR is MBAR+$04C + 2 = MBAR+$04E, which
-// is exactly the ICR the firmware programs with $84.
-//
-// THE INTERRUPT IS A LEVEL SOURCE AND NOT A PULSE, which is why it is
+// The interrupt is a level source and not a pulse, which is why it is
 // recomputed from state rather than pulsed on the match. TER[REF] stays set
 // until the handler writes a one to it, and the source drops when it does.
-// That is Uart0::recomputeInterrupt's shape and it is deliberate: this task
-// adds no second interrupt mechanism.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG.
 
 #include "timer.h"
 
@@ -69,9 +30,9 @@ namespace g2
 	{
 		m_tmr = _value;
 
-		// UM section 9.4.1.1: RST = 0 disables the timer and RESETS it. The
-		// prescaler goes with the counter, or a timer re-enabled after a pause
-		// would carry a fraction of a tick across the disable.
+		// RST = 0 disables the timer and resets it. The prescaler goes with the
+		// counter, or a timer re-enabled after a pause would carry a fraction of
+		// a tick across the disable.
 		if((m_tmr & gTmrRst) == 0)
 		{
 			m_tcn = 0;
@@ -95,18 +56,17 @@ namespace g2
 
 	void Timer::writeTer(const uint8_t _value)
 	{
-		// WRITE-ONE-TO-CLEAR, UM section 9.4.1.5. A one clears the bit it
-		// names and a zero leaves it alone, so the firmware handler's write of
-		// 2 to MBAR+$191 clears REF and a write of 0 clears nothing.
+		// Write-one-to-clear: a one clears the bit it names and a zero leaves it
+		// alone, so the firmware handler's write of 2 to MBAR+$191 clears REF
+		// and a write of 0 clears nothing.
 		m_ter = uint8_t(m_ter & ~uint8_t(_value & (gTerRef | gTerCap)));
 		recomputeInterrupt();
 	}
 
 	bool Timer::coversByte(const uint32_t _blockOffset)
 	{
-		// The bytes the five registers occupy, and no others. A byte inside
-		// the block that no register claims is reserved and stays with the
-		// SIM's own storage, so this task changes nothing about it.
+		// A byte inside the block that no register claims is reserved and stays
+		// with the SIM's own storage.
 		return _blockOffset == gTmrOffset || _blockOffset == gTmrOffset + 1
 			|| _blockOffset == gTrrOffset || _blockOffset == gTrrOffset + 1
 			|| _blockOffset == gTcrOffset || _blockOffset == gTcrOffset + 1
@@ -145,7 +105,7 @@ namespace g2
 			case gTcnOffset + 1: writeTcn(uint16_t((m_tcn & 0xff00u) | _value)); break;
 			case gTerOffset:     writeTer(_value); break;
 
-			// TCR is READ ONLY, UM Table B-1. A write reaches no bit of it.
+			// TCR is read only. A write reaches no bit of it.
 			default: break;
 		}
 	}
@@ -155,10 +115,10 @@ namespace g2
 		if((m_tmr & gTmrRst) == 0)
 			return;
 
-		// THE PRESCALER DIVIDES BY PS + 1, UM section 9.4.1.1. The remainder
-		// is carried in m_prescaler, so the count is a function of the total
-		// input clocks and NOT of how they were split across calls -- which is
-		// what keeps a tick deterministic under the scheduler's quantum.
+		// The prescaler divides by PS + 1. The remainder is carried in
+		// m_prescaler, so the count is a function of the total input clocks and
+		// not of how they were split across calls, which is what keeps a tick
+		// deterministic under the scheduler's quantum.
 		const uint32_t divisor = uint32_t((m_tmr >> gTmrPrescalerShift) & 0xffu) + 1u;
 
 		m_prescaler += _inputClocks;
@@ -172,13 +132,13 @@ namespace g2
 
 	void Timer::tick()
 	{
-		// The comparison reads the counter BEFORE the increment, which is what
-		// makes the period (TRR + 1) ticks. See the provenance record above.
+		// The comparison reads the counter before the increment, which is what
+		// makes the period (TRR + 1) ticks.
 		if(m_tcn == m_trr)
 		{
 			m_ter = uint8_t(m_ter | gTerRef);
 
-			// FRR SET restarts from zero; FRR CLEAR runs on past TRR.
+			// FRR set restarts from zero; FRR clear runs on past TRR.
 			m_tcn = (m_tmr & gTmrFrr) ? uint16_t(0) : uint16_t(m_tcn + 1);
 
 			recomputeInterrupt();
@@ -190,7 +150,7 @@ namespace g2
 
 	void Timer::recomputeInterrupt()
 	{
-		// ORI IS TESTED HERE AND NOWHERE ELSE. The other timer is programmed
+		// ORI is tested here and nowhere else. The other timer is programmed
 		// TMR = 0x2B, whose ORI is clear, and it must stay silent.
 		setPending((m_ter & gTerRef) != 0 && (m_tmr & gTmrOri) != 0);
 	}

@@ -37,9 +37,9 @@ namespace g2
 		const std::vector<std::string>& log() const { return m_log; }
 		void clearLog() { m_log.clear(); }
 
-		// Task BRD-33. The two general-purpose timer modules. The SIM owns
-		// them because the ten addresses they answer are SIM addresses; the
-		// Board advances them from the cycles it ran.
+		// The two general-purpose timer modules. The SIM owns them because the
+		// ten addresses they answer are SIM addresses; the Board advances them
+		// from the cycles it ran.
 		Timer& timer1() { return m_timer1; }
 		Timer& timer2() { return m_timer2; }
 
@@ -52,12 +52,12 @@ namespace g2
 	private:
 		void logLine(const char* _reason, bool _isWrite, int _size, uint32_t _offset);
 
-		// Task BRD-33. The timer module ONE BYTE of the MBAR window belongs
-		// to, or NULLPTR when the byte is not one of the ten register bytes
-		// the two modules answer. _blockOffset receives the byte's offset
-		// within that module's block.
+		// The timer module one byte of the MBAR window belongs to, or nullptr
+		// when the byte is not one of the ten register bytes the two modules
+		// answer. _blockOffset receives the byte's offset within that module's
+		// block.
 		//
-		// THE ROUTE IS PER BYTE AND NOT PER REGISTER, because the SIM's read
+		// The route is per byte and not per register, because the SIM's read
 		// and write already walk the access one byte at a time and a second
 		// walk here could disagree with that one.
 		Timer* timerForByte(uint32_t _index, uint32_t& _blockOffset);

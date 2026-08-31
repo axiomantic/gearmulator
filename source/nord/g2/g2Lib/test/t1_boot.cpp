@@ -21,32 +21,10 @@
 // driven through them takes the path the real core takes. Nothing in this file
 // reaches the routing by any other door.
 //
-// WHY IT ONCE CREATED ITS OWN mcf5307_ctx, AND WHAT ENDED THAT. Task INT-7,
-// plan section 1.3 rule 12: the section this replaces is STRUCK AND QUOTED
-// rather than deleted, because it was CORRECT ON THE DAY IT WAS WRITTEN and a
-// reader who finds no trace of it will re-derive it. It read:
-//
-//     "WHY IT CREATES ITS OWN mcf5307_ctx. The Board owns a core but publishes
-//      no handle to it, so nothing outside the Board can call mcf5307_reset
-//      (which is the only way to set the program counter), mcf5307_halted,
-//      mcf5307_faulted or mcf5307_get_reg. Adding an accessor would be a write
-//      to `g2Lib/board.h`, which is NOT on this task's Files: line. The core
-//      this file creates is pointed at the SAME Board through the SAME two
-//      callbacks, so it exercises the composition and not a copy of it."
-//
-// THAT WAS A SCOPE CONSTRAINT AND TASK BRD-28 ENDED IT. board.h now publishes
-// `resetMcu`, `mcuReg`, `setMcuReg` and `mcuHalted`, and `faulted()` reads the
-// core's own flag -- every accessor the struck section names as absent. So the
-// second core became vestigial, and it was not free: Scheduler::runFrames calls
-// Board::runMcu on the BOARD's core, nothing ever called Board::resetMcu, and
-// that core was halted and faulted from the first instant and returned zero
-// cycles on every call. BRD-33 advances the MCF5307 timers from the cycles
-// runMcu actually ran, so the timers received zero cycles for the whole boot
-// and every interrupt-driven behaviour was unreachable under the one test that
-// boots real firmware.
-//
-// THIS FILE NOW RESETS AND OBSERVES THE BOARD'S OWN CORE, and Scheduler::
-// runFrames is the ONLY thing that advances it.
+// This file resets and observes the Board's own core, and Scheduler::runFrames
+// is the only thing that advances it. A second core created here would be
+// vestigial: runFrames calls Board::runMcu on the Board's core, so a separate
+// core would stay halted, return zero cycles, and leave the timers unadvanced.
 //
 // Where the windows come from, and which two this harness invents. CS1, CS3,
 // CS5 and the SDRAM come from memoryMap.h. CS2 is 0x12000000..0x127FFFFF,
@@ -183,12 +161,10 @@ namespace
 
 	// The two expected lines. Plan section 6.6.1 is their one home.
 	//
-	// THIS PROJECT PRESENTS THE G2X STRAP. Plan section 24.6 row W3-367 records
-	// the operator decision: AGENTS.md section 4.1 fixes this machine at panel
-	// latch bits 5:4 = 0b11, model code 1, and BRD-12 builds it there, so the
-	// firmware selects `Nord Modular G2X`. That string is SIXTEEN characters
-	// stored, so line 0's last cell is a real `X` and not the pad byte the
-	// base model's fifteen-character string produced.
+	// This machine is strapped G2X: panel latch bits 5:4 = 0b11, model code 1,
+	// so the firmware selects `Nord Modular G2X`. That string is sixteen
+	// characters stored, so line 0's last cell is a real `X` and not the pad
+	// byte the base model's fifteen-character string produced.
 	//
 	// The comparison still refuses to trim, and both literals are still written
 	// out in full rather than composed, so nothing here can agree with a wrong
@@ -213,18 +189,17 @@ namespace
 	// cannot produce: a printable character that is not a space. Every character
 	// of `Nord Modular G2` is one of these; nothing the clear writes is, and
 	// nothing a freshly constructed Ram holds is.
-	// THE G2 DISPLAY DOES NOT HOLD ASCII, AND ASSUMING IT DOES COSTS THREE
-	// INVESTIGATIONS. Plan section 24.6 row W3-374 is the record.
+	// The G2 display does not hold ASCII.
 	//
-	// The display helper at 0x30056FEA is a TABLE-TRANSLATING copy: it uses each
+	// The display helper at 0x30056FEA is a table-translating copy: it uses each
 	// source character as an index into a 256-byte per-display table at
 	// 0x302A0DE2 and stores table[char], never char. The firmware initialises
-	// that table to the identity and then deliberately remaps exactly FIVE
-	// entries, at 0x30056BE8..0x30056C04:
+	// that table to the identity and then deliberately remaps five entries, at
+	// 0x30056BE8..0x30056C04:
 	//
 	//     'g' -> 0x08   'p' -> 0x09   'q' -> 0x0A   'y' -> 0x0B   'j' -> 0x0C
 	//
-	// Those are the five DESCENDERS, and 0x08..0x0C is the CGRAM alias range for
+	// Those are the five descenders, and 0x08..0x0C is the CGRAM alias range for
 	// custom characters 0..4. Immediately afterwards the firmware uploads five
 	// 8-row glyph bitmaps from 0x300EC4B8 into those slots -- rendering them
 	// gives recognisable lowercase letterforms with descending tails.
@@ -253,7 +228,7 @@ namespace
 		return _byte >= g_cgramFirst && _byte <= g_cgramLast;
 	}
 
-	// A cell is CONTENT if it is an ordinary printable byte, or one of the five
+	// A cell is content if it is an ordinary printable byte, or one of the five
 	// CGRAM glyphs. The second clause is what stops a line whose only printable
 	// character is a descender from counting as blank.
 	constexpr bool isDisplayContent(const uint8_t _byte)
@@ -310,16 +285,15 @@ namespace
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
 	// The register indices of the mcf5307 C ABI. 17 is the program counter,
-	// 18 is the vector base register. machine.nim's regFileGet/regFileSet
-	// state the whole index space and why VBR is reachable through it.
+	// 18 is the vector base register.
 	constexpr int g_regPc  = 17;
 	constexpr int g_regVbr = 18;
 
-	// ------------------------------------------------ the vector table, TASK INT-8
+	// ------------------------------------------------------- the vector table
 	//
-	// MEASURED FROM THE OS IMAGE, and it is supplied here for the reason MBAR
-	// is supplied here: booting CODE directly skips the code that would set it
-	// up, and the machine needs it before the firmware gets there.
+	// Measured from the OS image, and supplied here for the reason MBAR is
+	// supplied here: booting CODE directly skips the code that would set it up,
+	// and the machine needs it before the firmware gets there.
 	//
 	// CODE_30000400.bin at 0x30058218 does
 	//
@@ -338,20 +312,17 @@ namespace
 	// handler, and VBR is that base. The 1 KiB it occupies is the gap below
 	// the image, which loads at 0x30000400 and never reaches down into it.
 	//
-	// WHAT IS LOAD-BEARING HERE IS VBR AND NOT THE TABLE, AND THE MEASUREMENT
-	// SAYS SO RATHER THAN THE OTHER WAY ROUND. The first exception this boot
-	// takes is vector 25, the level 1 autovector, at program counter
-	// 0x30011FE2 -- 0x46000 bytes of firmware short of the routine above. At
-	// that instant the longword at 0x30000064 already reads 0x30001854 and NOT
-	// the 0x300585CE this file writes, so the firmware has filled the table
-	// itself by then through some path that is not the routine above. Omitting
-	// the place() below leaves the whole run identical, assertion for
-	// assertion; overriding VBR does not, and the core faults to 0xFFFFFFFF.
+	// VBR is what is load-bearing here, not the table. The first exception this
+	// boot takes is vector 25, the level 1 autovector, at program counter
+	// 0x30011FE2. At that instant the longword at 0x30000064 already reads
+	// 0x30001854 and not the 0x300585CE this file writes, so the firmware has
+	// filled the table itself by then. Omitting the place() below leaves the
+	// whole run identical, assertion for assertion; overriding VBR does not, and
+	// the core faults to 0xFFFFFFFF.
 	//
-	// SO THIS TABLE IS A FLOOR AND NOT A FIX, AND IT IS LABELLED AS ONE. It
-	// holds for an exception taken before the firmware's own fill, which is a
-	// window no run has yet entered. Nothing below asserts it, and nothing can:
-	// its absence is invisible from outside.
+	// The table is a floor and not a fix. It holds for an exception taken before
+	// the firmware's own fill, which is a window no run has yet entered. Nothing
+	// below asserts it, and nothing can: its absence is invisible from outside.
 	constexpr uint32_t g_vectorTableBase    = 0x30000000u;
 	constexpr uint32_t g_vectorTableEntries = 256u;
 	constexpr uint32_t g_vectorHandler      = 0x300585CEu;
@@ -364,10 +335,9 @@ namespace
 	// it. The size is the SIM's own g_simSpaceSize, which covers UM Table B-1.
 	constexpr uint32_t g_mbarBase = 0x10000000u;
 
-	// General-purpose timer 2's counter. MCF5307 UM table 12-1 gives TCN2 at
-	// MBAR + $18C, and sim.cpp's register table carries the same offset. It is
-	// read HERE, through the bus, rather than from any Timer object, so the
-	// value the assertion holds is the one the core itself would see.
+	// General-purpose timer 2's counter, TCN2 at MBAR + $18C. It is read through
+	// the bus rather than from any Timer object, so the value the assertion
+	// holds is the one the core itself would see.
 	constexpr uint32_t g_tcn2Offset = 0x18Cu;
 
 	// MEASURED. Plan section 6.6.9, from the loader's CSAR2 = $1200,
@@ -377,9 +347,7 @@ namespace
 	constexpr uint32_t g_cs2Size = 0x00800000u;
 
 	// The CS3 window carrying the ISP1181 USB device. The base is memoryMap.h's
-	// g_cs3Base; the size is 64 KiB derived from CSMR3 at 0x100000A8
-	// (workspace logbook section 3.8), the same figure main.cpp and
-	// t0_cs3_wire.cpp configure.
+	// g_cs3Base; the size is 64 KiB, derived from CSMR3 at 0x100000A8.
 	constexpr uint32_t g_cs3Size = 0x00010000u;
 
 	// INVENTED BY THIS HARNESS AND LABELLED AS SUCH. No authority records CS0's
@@ -602,9 +570,9 @@ namespace
 			const uint32_t byte = g2::Board::onRead(&_board, base + col, g_byte, &status);
 
 			// Decode the five CGRAM glyphs back to the characters they render.
-			// The cells hold display codes, not ASCII -- see W3-374 at
-			// isDisplayContent above. Every other byte passes through untouched,
-			// so a genuinely wrong cell still reads as whatever it actually is.
+			// The cells hold display codes, not ASCII. Every other byte passes
+			// through untouched, so a genuinely wrong cell still reads as
+			// whatever it actually is.
 			out.push_back(cgramToAscii(uint8_t(byte & 0xffu)));
 		}
 
@@ -633,7 +601,7 @@ namespace
 		return out;
 	}
 
-	// Whether ONE HDI08 port stands, AT THIS INSTANT, with the handshake's two
+	// Whether one HDI08 port stands, at this instant, with the handshake's two
 	// flags both raised. HF0 is the host's own flag in ICR and HF2 is the DSP's
 	// answer in ISR, so both must be set: HF0 alone is the firmware talking to
 	// itself.
@@ -651,12 +619,11 @@ namespace
 		return (icr & mc68k::Hdi08::Hf0) != 0 && (isr & mc68k::Hdi08::Hf2) != 0;
 	}
 
-	// The number of ports raised at the instant of the call. THIS IS A LEVEL READ
-	// AND IT IS NOT AN ACCEPTANCE PREDICATE: plan section 24.6 row W3-394 measured
-	// icr=0x0 isr=0x6 on all eight ports at the end of a 424,537-iteration run, on
-	// a machine whose handshake had provably run. It is kept because the report
-	// prints it beside the latch, where the pair is what shows the event is a
-	// transient rather than a state.
+	// The number of ports raised at the instant of the call. This is a level read
+	// and not an acceptance predicate: a machine whose handshake has provably run
+	// reads icr=0x0 isr=0x6 afterwards. It is kept because the report prints it
+	// beside the latch, where the pair is what shows the event is a transient
+	// rather than a state.
 	int handshakePortCount(g2::Board& _board)
 	{
 		int completed = 0;
@@ -670,22 +637,20 @@ namespace
 		return completed;
 	}
 
-	/* THE ACCEPTANCE PREDICATE, AND IT IS AN EDGE DETECTOR. Plan section 24.6 row
-	 * W3-394: the firmware sets HF0, the DSP answers HF2, the routine returns and
-	 * the firmware clears HF0, so the two flags stand together only inside a
-	 * bounded window. A machine that never ran the handshake and a machine that
-	 * ran it and finished present the SAME registers afterwards, which is why the
-	 * terminal snapshot read zero for this whole project and was mistaken for a
-	 * defect report each time.
+	/* The acceptance predicate, and it is an edge detector. The firmware sets
+	 * HF0, the DSP answers HF2, the routine returns and the firmware clears HF0,
+	 * so the two flags stand together only inside a bounded window. A machine
+	 * that never ran the handshake and a machine that ran it and finished present
+	 * the same registers afterwards, so a terminal snapshot reads zero either
+	 * way.
 	 *
-	 * The latch is STICKY and PER PORT: once a port has been seen raised it stays
-	 * recorded for the rest of the run. That is what the hardware promises -- the
-	 * edge happens once -- so counting completions instead would assert a
-	 * repetition nothing guarantees, and asserting the fetch landmark at the
-	 * handshake routine alone would prove the firmware ASKED and not that any DSP
-	 * ANSWERED.
+	 * The latch is sticky and per port: once a port has been seen raised it stays
+	 * recorded for the rest of the run. The edge happens once, so counting
+	 * completions instead would assert a repetition nothing guarantees, and
+	 * asserting the fetch landmark at the handshake routine alone would prove the
+	 * firmware asked and not that any DSP answered.
 	 *
-	 * SAMPLED ONCE PER ITERATION OF THE DRIVE LOOP, at the same granularity the
+	 * Sampled once per iteration of the drive loop, at the same granularity the
 	 * loop advances the machine, so no completion can open and close between two
 	 * samples unobserved. */
 	void latchHandshakePorts(g2::Board& _board, std::vector<bool>& _latched)
@@ -710,42 +675,33 @@ namespace
 		return completed;
 	}
 
-	/* THE ITERATION BOUND. It is a STOP so that a machine which never converges
-	 * fails rather than hanging the suite; it is not a figure the firmware
-	 * publishes. The previous value, 0xFDE8, was the firmware's own handshake
-	 * retry count and it is demonstrably too small for a boot: plan section 24.6
-	 * row W3-394 measured the real boot needing roughly 425,000 iterations to
-	 * reach the patch browser. Sized above that, and the run costs roughly ninety
-	 * seconds when it is reached. */
+	/* The iteration bound is a stop so that a machine which never converges fails
+	 * rather than hanging the suite; it is not a figure the firmware publishes. A
+	 * real boot needs roughly 425,000 iterations to reach the patch browser, and
+	 * this is sized above that. */
 	constexpr uint32_t g_handshakeIterations = 500000u;
 
-	/* THE BUDGET OF THE ONE OBSERVING Board::runMcu CALL, AND OF NOTHING ELSE.
-	 * Task INT-7 deleted the per-iteration mcf5307_exec this used to size; the
-	 * single sample taken after the drive is over is its only remaining reader,
-	 * and that sample asks for a budget large enough that a running core cannot
-	 * answer zero merely because it was asked for nothing. */
+	/* The budget of the one observing Board::runMcu call, and of nothing else.
+	 * The single sample taken after the drive is over is its only reader, and it
+	 * asks for a budget large enough that a running core cannot answer zero
+	 * merely because it was asked for nothing. */
 	constexpr uint32_t g_cyclesPerIteration = 4096u;
 
-	/* ONE SCHEDULER FRAME PER ITERATION, AND IT IS NOW THE WHOLE DRIVE. Task
-	 * INT-7: there is ONE core, the Board's, so the frame turns the DSP set,
-	 * the chain, the panel AND the MCU. The mcf5307_exec calls that used to sit
-	 * beside this were DELETED rather than repointed at Board::runMcu, because
-	 * a second budget applied to the same core would double-count the cycles
-	 * the scheduler already allocated -- and BRD-33 feeds those cycles to the
-	 * timers, so double-counting them would falsify a timer tick.
+	/* One scheduler frame per iteration, and it is the whole drive. There is one
+	 * core, the Board's, so the frame turns the DSP set, the chain, the panel and
+	 * the MCU. A second budget applied to the same core would double-count the
+	 * cycles the scheduler already allocated, and those cycles are what advance
+	 * the timers, so double-counting them would falsify a timer tick.
 	 *
 	 * runFrames carries no cycle budget out of this file: it allocates the MCU's
 	 * cycles from its own Config rational, so what the drive inherits from the
-	 * loop is the ITERATION BOUND and nothing else. */
+	 * loop is the iteration bound and nothing else. */
 	constexpr size_t g_framesPerIteration = 1;
 
-	/* HOW LONG THE FIRMWARE IS GIVEN AFTER THE FIRST PRINTABLE CHARACTER.
-	 * The previous exit fired on the FIRST content write, which was correct only
-	 * while the sole content the boot ever produced was the flash-failure string.
-	 * With the flash gate cleared the firmware composes a real banner one
-	 * character at a time, so stopping at the first one samples the machine
-	 * mid-word -- the measured symptom was line 0 reading "Nord" and stopping.
-	 * The loop now keeps running after first content and leaves only once the
+	/* How long the firmware is given after the first printable character. The
+	 * firmware composes the banner one character at a time, so leaving on the
+	 * first content write samples the machine mid-word: line 0 reads "Nord" and
+	 * stops. The loop keeps running after first content and leaves only once the
 	 * display has been quiet for this many iterations. */
 	constexpr uint32_t g_bannerSettleIterations = 20000u;
 
@@ -772,7 +728,7 @@ namespace
 
 		std::string line0;
 		std::string line1;
-		// The LATCHED count -- ports observed with HF0 and HF2 raised together at
+		// The latched count -- ports observed with HF0 and HF2 raised together at
 		// any point during the drive -- and, beside it, the level read taken at
 		// the end. The second is reported and never asserted; see
 		// latchHandshakePorts.
@@ -785,26 +741,25 @@ namespace
 		bool     faulted        = false;
 		uint32_t iterations     = 0;
 
-		/* TASK INT-7. THE THREE SIGNALS THAT SAY THE BOARD'S OWN CORE IS THE
-		 * ONE THAT RAN, and each of them reads zero-or-true when it is not.
+		/* The three signals that say the Board's own core is the one that ran,
+		 * and each of them reads zero-or-true when it is not.
 		 *
-		 * `mcuCycles` is ONE Board::runMcu return value, sampled once after the
-		 * drive has finished. It is an OBSERVATION and not a second drive: the
+		 * `mcuCycles` is one Board::runMcu return value, sampled once after the
+		 * drive has finished. It is an observation and not a second drive: the
 		 * firmware is advanced by Scheduler::runFrames alone, and this call
-		 * exists because runFrames discards what runMcu returns and publishes
-		 * no cycle count of its own.
+		 * exists because runFrames discards what runMcu returns and publishes no
+		 * cycle count of its own.
 		 *
-		 * `haltedAtBanner` is Board::mcuHalted() sampled WHILE THE FIRMWARE
-		 * RUNS -- at the first iteration that observed display content -- and
-		 * not at the end, because "the core has not halted yet" is a claim
-		 * about the run and not about its aftermath. It starts TRUE so that a
-		 * run which never reaches that point fails rather than passing on an
-		 * unwritten field.
+		 * `haltedAtBanner` is Board::mcuHalted() sampled while the firmware runs
+		 * -- at the first iteration that observed display content -- and not at
+		 * the end, because "the core has not halted yet" is a claim about the run
+		 * and not about its aftermath. It starts true so that a run which never
+		 * reaches that point fails rather than passing on an unwritten field.
 		 *
 		 * `tcn2` is the SIM's general-purpose timer 2 counter read through the
-		 * bus. BRD-33 advances the timers from the cycles runMcu actually ran,
-		 * so a core that runs zero cycles leaves this at zero however long the
-		 * scheduler turns. */
+		 * bus. The timers advance from the cycles runMcu actually ran, so a core
+		 * that runs zero cycles leaves this at zero however long the scheduler
+		 * turns. */
 		uint32_t mcuCycles      = 0;
 		uint32_t tcn2           = 0;
 		bool     haltedAtBanner = true;
@@ -872,10 +827,9 @@ namespace
 			return false;
 		}
 
-		// TASK INT-8. The vector table, big-endian, 256 identical longwords.
-		// It goes in through Ram::place beside the image, which is the harness's
-		// other supply site, and it goes in BEFORE the watches below so that
-		// none of it is counted as the firmware's own traffic.
+		// The vector table, big-endian, 256 identical longwords. It goes in
+		// through Ram::place beside the image, and it goes in before the watches
+		// below so that none of it is counted as the firmware's own traffic.
 		{
 			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
 
@@ -931,21 +885,18 @@ namespace
 		ram.watchFetch(g_entryPc - g2::g_sdramBase);
 		ram.watchFetch(g_bannerFunction - g2::g_sdramBase);
 
-		/* TASK INT-7. THE BOARD'S OWN CORE IS RESET, AND NO SECOND CORE IS
-		 * CREATED. The Board already pointed its core at Board::onRead and
-		 * Board::onWrite, so this is the same composition the struck header
-		 * section went out of its way to reach -- reached now through the
-		 * handle BRD-28 published instead of through a copy. */
+		/* The Board's own core is reset, and no second core is created. The Board
+		 * already pointed its core at Board::onRead and Board::onWrite, so this
+		 * drives the composition rather than a copy of it. */
 		board.resetMcu(g_entrySp, g_entryPc);
 
-		/* TASK INT-8. VBR IS PLACED AFTER THE RESET AND NOT BEFORE IT, because
-		 * the reset is what defines the machine's starting state and a value
-		 * written ahead of it would depend on what the reset does NOT clear.
+		/* VBR is placed after the reset and not before it, because the reset is
+		 * what defines the machine's starting state and a value written ahead of
+		 * it would depend on what the reset does not clear.
 		 *
-		 * THE RETURN IS CHECKED. setMcuReg answers FALSE for an index the core
+		 * The return is checked: setMcuReg answers false for an index the core
 		 * refuses, and a core that refused this one would leave the table based
-		 * at zero with nothing said about it -- which is the failure this whole
-		 * block exists to remove. */
+		 * at zero with nothing said about it. */
 		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
 		{
 			std::cout << "FAIL the core refused VBR at register index "
@@ -987,7 +938,7 @@ namespace
 
 			scheduler->runFrames(g_framesPerIteration);
 
-			// THE LATCH IS SAMPLED BEFORE THE HALT TEST, so the iteration that
+			// The latch is sampled before the halt test, so the iteration that
 			// halts the core still contributes its observation.
 			latchHandshakePorts(board, handshakeLatched);
 
@@ -1005,26 +956,24 @@ namespace
 				{
 					_result.pcAtBanner = board.mcuReg(g_regPc);
 
-					// TASK INT-7. Sampled here, mid-run, and not at the end.
+					// Sampled here, mid-run, and not at the end.
 					_result.haltedAtBanner = board.mcuHalted();
 				}
 
-				/* THE BANNER IS LATCHED WHEN IT APPEARS, FOR THE SAME REASON THE
-				 * HANDSHAKE IS -- plan section 24.6 rows W3-394 and W3-395. BOTH
-				 * ARE TRANSIENTS. The firmware composes the banner, then boots on
-				 * and the PATCH BROWSER overwrites it: measured at the full bound,
-				 * line 0 reads "-:-       No Cat" and line 1 is blank, with the
-				 * banner long gone. A terminal sample of one run cannot satisfy
-				 * the banner clause and the handshake clause together, because
-				 * they are true at different times.
+				/* The banner is latched when it appears, for the same reason the
+				 * handshake is: both are transients. The firmware composes the
+				 * banner, then boots on and the patch browser overwrites it --
+				 * at the full bound line 0 reads "-:-       No Cat" and line 1
+				 * is blank. A terminal sample of one run cannot satisfy the
+				 * banner clause and the handshake clause together, because they
+				 * are true at different times.
 				 *
-				 * So the FIRST composed banner is captured and kept. The settle
+				 * So the first composed banner is captured and kept. The settle
 				 * counter still runs, because the banner is written a character
 				 * at a time and a capture on the first content byte would catch
-				 * a partial line -- that is the defect the settle window was
-				 * added to fix. What changes is that reaching the settle no
-				 * longer STOPS the drive: it freezes the banner and lets the
-				 * machine run on so the handshake can be observed. */
+				 * a partial line. Reaching the settle does not stop the drive:
+				 * it freezes the banner and lets the machine run on so the
+				 * handshake can be observed. */
 				if(++settleIterations >= g_bannerSettleIterations && !bannerLatched)
 				{
 					bannerLatched = true;
@@ -1035,9 +984,9 @@ namespace
 		}
 
 		/* A run that never composed a banner latched nothing, and the empty
-		 * strings it leaves must fail the comparison rather than read as a
-		 * pass. readDisplayLine is called here ONLY in that case, so the
-		 * assertion reports what the display actually held. */
+		 * strings it leaves must fail the comparison rather than read as a pass.
+		 * readDisplayLine is called here only in that case, so the assertion
+		 * reports what the display actually held. */
 		if(!bannerLatched)
 		{
 			_result.line0 = readDisplayLine(board, 0, 0);
@@ -1067,10 +1016,9 @@ namespace
 		_result.handshakePorts = latchedPortCount(handshakeLatched);
 		_result.handshakeAtEnd = handshakePortCount(board);
 
-		/* TASK INT-7. THE ONE SAMPLE OF Board::runMcu's RETURN VALUE, taken
-		 * after the drive is over so that it cannot alter what any other
-		 * counter above measured. See the BootResult comment for why it exists
-		 * at all. */
+		/* The one sample of Board::runMcu's return value, taken after the drive
+		 * is over so that it cannot alter what any other counter above
+		 * measured. */
 		_result.mcuCycles = board.runMcu(g_cyclesPerIteration);
 
 		{
@@ -1232,7 +1180,7 @@ namespace
 		          << " (latched) handshakeAtEnd=" << _r.handshakeAtEnd
 		          << " (level read, reported only)" << std::endl;
 
-		// TASK INT-7. The Board's own core, reported before it is asserted on.
+		// The Board's own core, reported before it is asserted on.
 		std::cout << "boot: boardCore mcuCycles=" << _r.mcuCycles
 		          << " haltedAtBanner=" << (_r.haltedAtBanner ? 1 : 0)
 		          << " tcn2=" << _r.tcn2 << std::endl;
@@ -1313,8 +1261,8 @@ int main()
 		      "display 0 line 1 equals " + escapedLine(g_expectedLine1) +
 		      "; read " + escapedLine(result.line1));
 
-		// CLAUSE 2, the handshake count, compared AS A NUMBER. It is the LATCHED
-		// count: ports seen with HF0 and HF2 raised TOGETHER at any sample of the
+		// Clause 2, the handshake count, compared as a number. It is the latched
+		// count: ports seen with HF0 and HF2 raised together at any sample of the
 		// drive. The bound and the iterations actually run are both named from
 		// the values themselves, so neither can go stale against a literal.
 		check(result.handshakePorts == int(g2::g_hdi08PortCount),
@@ -1416,9 +1364,9 @@ int main()
 		      "scheduler turned them rather than leaving them bootstrapped and "
 		      "still; counted " + dspCycleList(result));
 
-		// ------------------------------------ task INT-7, the Board's own core runs
+		// ------------------------------------------- the Board's own core runs
 		//
-		// THE THREE CLAUSES ARE NOT ONE CLAUSE SAID THREE WAYS. A core that is
+		// The three clauses are not one clause said three ways. A core that is
 		// halted returns zero cycles, so the first two would collapse into each
 		// other if halt were the only way to reach zero -- but a core with a
 		// zero budget also returns zero while never halting, and a running core

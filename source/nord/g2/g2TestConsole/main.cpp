@@ -59,9 +59,8 @@ namespace
 	constexpr uint32_t g_cs4Base = 0x14000000u;
 	constexpr uint32_t g_cs4Size = 0x00010000u;
 
-	// MEASURED, the workspace logbook section 3.8: CS3 is a 64 KiB window,
-	// derived from CSMR3 at 0x100000A8. The OS touches only 0x13000000 and
-	// 0x13000010 inside it.
+	// CS3 is a 64 KiB window, derived from CSMR3 at 0x100000A8. The OS touches
+	// only 0x13000000 and 0x13000010 inside it.
 	constexpr uint32_t g_cs3Size = 0x00010000u;
 
 	constexpr uint32_t g_cs1Size   = 0x00010000u;
