@@ -23,9 +23,8 @@
 // because a manifest whose shape is checked and whose values are not carries the
 // authority of a checked artifact while describing a state that has moved.
 //
-// IT DOES NOT REACH THE RUN PATH. Whether the Scheduler is built from those
-// macros is REPO-9's `t1_timebase_gate`, which is Wave 3b because it reads
-// `Scheduler::Config`, a type SCH-18 creates in Wave 3a.
+// It does not reach the run path: whether the Scheduler is built from those
+// macros is `t1_timebase_gate`'s question.
 //
 // A NOTE ON THE NEGATIVE CASES. The plan asks for "a manifest with four lines
 // and one with six". A parse that merely counted lines would satisfy that by
@@ -89,7 +88,7 @@ namespace
 	// The same five symbols as they are DEFINED, for the comparison against the
 	// same five as they are RECORDED.
 	//
-	// ONE TOKEN BECOMES BOTH COLUMNS, and that is the whole point: the number is
+	// One token becomes both columns, and that is the whole point: the number is
 	// never written here, so this table cannot become a third copy of it that
 	// drifts from the header in its turn. A macro that is renamed or deleted
 	// stops being an identifier and the compile fails, rather than a row
@@ -386,7 +385,7 @@ int main()
 				check(recorded != entries.end() && recorded->value == defined.value, what);
 			}
 
-			// The comparison is CLOSED OVER THE REQUIRED SET. Without this, a
+			// The comparison is closed over the required set. Without this, a
 			// sixth symbol added to the manifest and to the required set, and
 			// not to the table above, would be recorded and never compared --
 			// which is the silence this comparison exists to end, returning

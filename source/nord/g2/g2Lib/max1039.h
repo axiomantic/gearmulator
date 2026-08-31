@@ -1,32 +1,11 @@
-// Task BRD-24. The MAX1039 slave, U12 on the panel board.
+// The MAX1039 slave, U12 on the panel board: a twelve-channel eight-bit
+// two-wire analogue-to-digital converter.
 //
-// Plan sections 13.5, 13.5.1, 13.5.3. The device is covered by no design
-// section.
-//
-// WHAT THIS FILE IS. A twelve-channel eight-bit two-wire analogue-to-digital
-// converter, modelled as far as this machine's own evidence reaches: the
-// schematic that wires it, the datasheet that describes it and the firmware
-// that drives it.
-//
-// THE ADDRESS IS A PARAMETER WITH THE MEASURED VALUE AS ITS SHIPPED DEFAULT.
-// It is documentary rather than empirical -- read from one datasheet at a
-// superseded revision, with no bus scan behind it -- so the day a hardware read
-// disagrees, one default moves and no test is rewritten. One parameterised
-// model also serves the whole family, whose members differ at the bus in
-// nothing but this value.
-//
-// PIN 13 IS AIN11/REF AND NOT AN UNWIRED TWELFTH CHANNEL. The board feeds the
+// Pin 13 is AIN11/REF and not an unwired twelfth channel. The board feeds the
 // reference into it, so the datasheet's own rule applies: while SEL1 is set the
 // pin is excluded from a multichannel scan and a direct single-ended read of it
-// returns ground. That is why the reference pin is not a settable channel and
+// returns ground. The reference pin is therefore not a settable channel and
 // takes its potential from the reference argument.
-//
-// NO VOLTAGE IS SHIPPED HERE. Every potential is a configuration argument,
-// because the only figure anyone has for this board comes off a schematic
-// annotation and a header carrying it would make it look measured.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG.
 
 #pragma once
 

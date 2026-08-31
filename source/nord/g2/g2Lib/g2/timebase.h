@@ -53,8 +53,8 @@
 
 /* ---------------- the MCU clocks
  *
- * THE MCU HAS TWO CLOCK DOMAINS AND THEY CAN NEVER BE EQUAL, so the design
- * names two symbols and the integer that relates them, and a bus-clock figure
+ * The MCU has two clock domains and they can never be equal, so two symbols and
+ * the integer that relates them are named separately, and a bus-clock figure
  * can never be substituted into a core-cycle budget by accident.
  *
  * The part is an MCF5407CAI162, read off the schematic at U14. Oscillator Y1
@@ -62,11 +62,10 @@
  * labels `CPU Ck 54MHz` at CLKIN, and into `DSP Ck` at every DSP's EXTAL. The
  * internal PLL multiplies CLKIN by 3 for the core and the bus runs at CLKIN.
  *
- * THE TWO BUS SYMBOLS BELOW ARE NOT DERIVED HERE AND READ 0u. Measurement
- * register rows 5 and 6, owner SPK-9, spike criterion (j). A source that used
- * either one would compute with a zero, so g2Lib/CMakeLists.txt FAILS THE
- * CONFIGURE STEP if any file under source/nord/g2/ names either symbol. THIS
- * FILE IS THE ONE EXEMPT FILE, because it is their declaration site.
+ * The two bus symbols below are not derived here and read 0u. A source that
+ * used either one would compute with a zero, so g2Lib/CMakeLists.txt FAILS THE
+ * CONFIGURE STEP if any file under source/nord/g2/ names either symbol. This
+ * file is the one exempt file, because it is their declaration site.
  *
  * That exemption is why their G2_STATIC_ASSERTs live here and not in
  * t0_timebase_header.c: the rule "one assertion for each declared macro" and
@@ -81,15 +80,15 @@
 /* PSTCLK/BCLKO. The manual permits 2, 3 or 4, and nothing else.             */
 #define G2_MCU_BUS_DIVIDER            0u         /* NOT DERIVED              */
 
-/* The core clock. THIS IS THE ONLY ONE THAT MAY REACH mcf5307_exec's
+/* The core clock. This is the only one that may reach mcf5307_exec's
  * max_cycles.
  *
- * Three times the 54 MHz the schematic itself labels at CLKIN. THE OSCILLATOR
- * CAN IS RATED 53.620 MHz, so a strict reading of the part value gives
+ * Three times the 54 MHz the schematic itself labels at CLKIN. The oscillator
+ * can is rated 53.620 MHz, so a strict reading of the part value gives
  * 160,860,000 instead. The label is carried because it agrees with the
  * MCF5407CAI162 speed grade exactly and the can's rating does not; the two are
  * 0.7 per cent apart, which is close enough that only a scope on CLKIN
- * separates them. Measurement register row 7 owns that until one is taken.  */
+ * separates them.                                                           */
 #define G2_MCU_CORE_CLOCK_HZ          162000000u
 
 /* The MCU context's rational. THE NUMERATOR IS THE CORE CLOCK, NOT THE BUS
@@ -151,8 +150,7 @@ G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER == 0u,
 
 /* 1 is illegal for the bus divider whatever criterion (j) returns: the MCF5307
  * manual permits only 2, 3 or 4, and the MCF5407 the schematic reads at U14
- * multiplies CLKIN by 3. This assertion outlives the two above and is the
- * reason the core clock and the bus clock are separate symbols at all. */
+ * multiplies CLKIN by 3. */
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER != 1u,
 	"Neither reading of the part has a divide-by-one option.");
 

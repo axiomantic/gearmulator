@@ -2,9 +2,7 @@
 // running the core against the board. Tier T0: this test needs no firmware
 // artifact of any kind.
 //
-// Design sections 5.2.1, 6.4.
-//
-// WHAT DEFECT THIS TEST EXISTS TO CATCH, AND WHY IT COST A MILESTONE. The core
+// The defect this test exists to catch. The core
 // passes `size` as A COUNT OF BYTES -- 1, 2 or 4 -- and mcf5307.h states it
 // twice, once per callback typedef. g2Lib's MemoryMap takes a WIDTH IN BITS --
 // 8, 16 or 32 -- and memoryMap.h states that. The two readings disagree on
@@ -14,23 +12,22 @@
 // zero instructions. That is exactly what happened -- "memoryMap: SIZE_ILLEGAL
 // read of 2 bits at 0x30000400", the first fetch of the boot image.
 //
-// WHY IT SURVIVED. Nothing had ever let the CORE drive the board. Every board
-// test up to that point supplied the width by hand, and every one of them
-// supplied it in the MemoryMap's unit, so no test ever presented the core's
-// unit to the callbacks. A mismatch that is invisible to every caller except
-// the one caller that matters is not caught by adding more callers of the same
-// kind; it is caught by making the real one drive.
+// A board test that supplies the width by hand supplies it in the MemoryMap's
+// unit, so it never presents the core's unit to the callbacks. A mismatch that
+// is invisible to every caller except the one caller that matters is not caught
+// by adding more callers of the same kind; it is caught by making the real one
+// drive.
 //
-// SO THIS TEST DRIVES THE REAL ONE. A real mcf5307 core, created against a real
+// So this test drives the real one. A real mcf5307 core, created against a real
 // g2::Board through Board::onRead and Board::onWrite -- the exact function
 // pointers the Board itself installs -- executes a real instruction of each of
 // the three widths, and the assertions are about what ARRIVED AT THE UNIT and
 // what LANDED IN THE REGISTERS. A test that only checked that 1 maps to 8 would
 // be checking the conversion's arithmetic against itself; it would pass against
 // a board whose conversion is right and whose forwarding is broken, and it
-// would say nothing about the fetch that actually stopped the milestone.
+// would say nothing about the fetch that actually stopped the boot.
 //
-// THE NEGATIVE HALF IS NOT OPTIONAL. A conversion that answered "8 bits" to
+// The negative half is not optional. A conversion that answered "8 bits" to
 // anything it did not recognise would make every case below pass while turning
 // the callbacks into a funnel that accepts every width. So the sizes the ABI
 // CANNOT produce are presented too, and each must be refused. 8, 16 and 32 are
@@ -41,7 +38,7 @@
 // from both directions -- every member accepted, every non-member refused --
 // which is the same shape the core's own t_bus_size_unit holds on its side.
 //
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
+// Nothing here aborts and nothing here uses assert(). The default build is
 // Release and it defines NDEBUG, so an assert() would be removed and a report
 // built on one could never fire.
 
@@ -200,12 +197,12 @@ namespace
 	//
 	// TWO WINDOWS AND NO MORE. The code and the stack live in the SDRAM window
 	// and the data the program touches lives in the CS3 window, so the CS3
-	// record holds THE PROGRAM'S OPERAND ACCESSES AND NOTHING ELSE -- no
+	// record holds the program's operand accesses and nothing else -- no
 	// instruction fetch, no stack traffic. That is what makes an exact-sequence
 	// assertion possible instead of a "contains" one.
 	//
-	// Both bases are the constants memoryMap.h ships from AGENTS.md section 2.2.
-	// Every other window is left absent, so the Board's own units answer
+	// Both bases are the constants memoryMap.h ships. Every other window is
+	// left absent, so the Board's own units answer
 	// nowhere; this test asserts nothing about them.
 	constexpr uint32_t g_codeBase  = g2::g_sdramBase;
 	constexpr uint32_t g_codeSize  = 0x1000u;
@@ -409,7 +406,7 @@ int main()
 			++steps;
 		}
 
-		/* THE PROGRESS ASSERTIONS, WRITTEN SO THAT "NOTHING RAN" FAILS THEM.
+		/* The progress assertions, written so that "nothing ran" fails them.
 		 * A core that faults on its first instruction fetch -- which is what
 		 * the unconverted board produces -- leaves the program counter at the
 		 * entry point and the fault flag set, so both of these are red in that
@@ -440,7 +437,7 @@ int main()
 		              "the three transfer widths reach the unit as 8, 16 and 32 bits, in order");
 
 		// ------------------------------------------------------------------
-		// THE INSTRUCTION FETCH ITSELF. It is the access the defect stopped
+		// The instruction fetch itself. It is the access the defect stopped
 		// first, and it is a WORD access: the core presents 2 bytes and the
 		// unit must see 16 bits. Asserting the first recorded code access
 		// pins that directly rather than by implication.
@@ -470,7 +467,7 @@ int main()
 		           "the longword read replaced the whole of d2");
 
 		// ------------------------------------------------------------------
-		// WHAT THE STORES LEFT BEHIND. A byte store that had been widened
+		// What the stores left behind. A byte store that had been widened
 		// would have overwritten the three bytes after it, so the untouched
 		// neighbours are as load-bearing as the written bytes.
 		checkEqual(data.peek(0u), g_storeByte & 0xffu,       "the byte store wrote data + 0");

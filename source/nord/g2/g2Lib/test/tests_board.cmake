@@ -209,17 +209,14 @@ set_property(TARGET t0_board_surface PROPERTY FOLDER "G2/test")
 add_test(NAME t0_board_surface COMMAND t0_board_surface)
 set_tests_properties(t0_board_surface PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-17, bounded non-blocking control on the HDI08 transfer path
+# ----------------- bounded non-blocking control on the HDI08 transfer path
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_hdi08_nonblocking$
-#
-# TIMEOUT IS PART OF THE ASSERTION AND IS NOT HOUSEKEEPING. The defect this task
-# prevents is a blocking wait on a full dsp56k receive ring under a
+# The TIMEOUT is part of the assertion and is not housekeeping. The defect
+# guarded against is a blocking wait on a full dsp56k receive ring under a
 # single-threaded scheduler, which is a DEADLOCK and not a wrong answer. A build
-# whose bound is removed therefore hangs rather than returning a wrong count, and
-# a hung test reports neither pass nor fail. The timeout is what turns that
-# deadlock into a red, and the mutation runs recorded in the task report depend
-# on it.
+# whose bound is removed hangs rather than returning a wrong count, and a hung
+# test reports neither pass nor fail. The timeout is what turns that deadlock
+# into a red.
 
 add_executable(t0_hdi08_nonblocking t0_hdi08_nonblocking.cpp)
 target_link_libraries(t0_hdi08_nonblocking PRIVATE g2Lib)
@@ -228,33 +225,29 @@ set_property(TARGET t0_hdi08_nonblocking PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_nonblocking COMMAND t0_hdi08_nonblocking)
 set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 120)
 
-# ----------------- BRD-22, the 1 kHz USB start-of-frame tick
+# ----------------- the 1 kHz USB start-of-frame tick
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_sof_tick$
-#
-# THIS TARGET COMPILES board.cpp AND LINKS NO LIBRARY, and that is the
+# This target compiles board.cpp and links no library, and that is the
 # observation mechanism rather than a shortcut. The behaviour under test is a
-# call the Board makes OUT to isp1181_tick, and the shipped Board exposes no
-# way to observe it. The test therefore supplies its own definitions of the
-# mcf5307 entry points board.cpp uses, which requires that libmcf5307.a is
-# absent from this link: defining isp1181_tick while that archive is on the
-# link line is a duplicate-symbol error as soon as anything pulls the archive
-# member that also defines it. Linking g2Lib would put that archive on the
-# line through g2Lib's own PUBLIC link.
+# call the Board makes OUT to isp1181_tick, and the shipped Board exposes no way
+# to observe it. The test therefore supplies its own definitions of the mcf5307
+# entry points board.cpp uses, which requires that libmcf5307.a is absent from
+# this link: defining isp1181_tick while that archive is on the link line is a
+# duplicate-symbol error as soon as anything pulls the archive member that also
+# defines it. Linking g2Lib would put that archive on the line through g2Lib's
+# own PUBLIC link.
 #
 # The mcf5307 include directory is taken from the imported target's INTERFACE
 # property rather than linking it, so the header arrives and the archive does
 # not.
 #
-# THE EXECUTABLE IS DECLARED UNCONDITIONALLY AND ONLY THE INCLUDE DIRECTORY IS
-# GUARDED, which is the same discipline the t0_mcf5307_link block above states.
-# At G2_LINK_MCF5307=OFF the imported target does not exist, so naming it in a
-# generator expression fails the GENERATE step of any configure that turns the
-# option off -- and t0_clock_guard's control configure is exactly such a
-# configure, so an unguarded reference here turns that test red. Guarding the
-# target instead of the executable keeps BRD-23's negative case intact: at OFF
-# this target still builds and still fails at the COMPILE step on the missing
-# mcf5307.h, rather than passing by building nothing.
+# The executable is declared unconditionally and only the include directory is
+# guarded. At G2_LINK_MCF5307=OFF the imported target does not exist, so naming
+# it in a generator expression fails the GENERATE step of any configure that
+# turns the option off -- and t0_clock_guard's control configure is exactly such
+# a configure. Guarding the target instead of the executable keeps the negative
+# case intact: at OFF this target still builds and still fails at the COMPILE
+# step on the missing mcf5307.h, rather than passing by building nothing.
 
 add_executable(t0_sof_tick t0_sof_tick.cpp ../board.cpp)
 target_include_directories(t0_sof_tick PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
@@ -267,15 +260,13 @@ set_property(TARGET t0_sof_tick PROPERTY FOLDER "G2/test")
 add_test(NAME t0_sof_tick COMMAND t0_sof_tick)
 set_tests_properties(t0_sof_tick PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-20, the P-memory write funnel
+# ----------------- the P-memory write funnel
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_pmem_funnel$
-#
-# THE TEST LINKS g2Lib AND NAMES NO OTHER LIBRARY. The funnel is a g2Lib
-# source, and the just-in-time compiler it must notify arrives through g2Lib's
-# own PUBLIC link of dsp56kEmu. Nothing here references mcf5307::mcf5307, so
-# no if(TARGET) guard is needed: this block is inert in the option-OFF
-# configure that t0_clock_guard runs as its control.
+# The test links g2Lib and names no other library. The funnel is a g2Lib source,
+# and the just-in-time compiler it must notify arrives through g2Lib's own
+# PUBLIC link of dsp56kEmu. Nothing here references mcf5307::mcf5307, so no
+# if(TARGET) guard is needed: this block is inert in the option-OFF configure
+# that t0_clock_guard runs as its control.
 #
 # NMG2_ARTIFACTS is not read. Every word the test puts into P memory is
 # assembled from text the test file authors, so no Clavia byte reaches it.
@@ -287,22 +278,19 @@ set_property(TARGET t0_pmem_funnel PROPERTY FOLDER "G2/test")
 add_test(NAME t0_pmem_funnel COMMAND t0_pmem_funnel)
 set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
 
-# ----------------- INT-1, the board composition (plan section 24.6 row W3-115)
+# ----------------- the board composition
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_board_routing$
-#
-# THE TEST LINKS g2Lib AND NAMES NO OTHER LIBRARY, which is t0_board_surface's
+# The test links g2Lib and names no other library, which is t0_board_surface's
 # form and not t0_sof_tick's. The distinction is deliberate. t0_sof_tick
-# compiles ../board.cpp directly and DEFINES the mcf5307 entry points itself,
-# so it must keep libmcf5307.a off the link line. This test needs the OPPOSITE:
-# the real Flash, Panel, Latches, Hdi08Adapter, MemoryMap, Sim and Uart0, all of
-# which are g2Lib sources, plus the real board.cpp that composes them -- and
-# board.cpp is itself a g2Lib source. Linking g2Lib delivers every one of them
-# with the real mcf5307 behind it, which is the composition W3-115 asks for.
+# compiles ../board.cpp directly and DEFINES the mcf5307 entry points itself, so
+# it must keep libmcf5307.a off the link line. This test needs the OPPOSITE: the
+# real Flash, Panel, Latches, Hdi08Adapter, MemoryMap, Sim and Uart0, all of
+# which are g2Lib sources, plus the real board.cpp that composes them. Linking
+# g2Lib delivers every one of them with the real mcf5307 behind it.
 #
-# NOTHING HERE REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and
-# adding one would be noise: this block is inert in the option-OFF configure
-# that t0_clock_guard runs as its control, exactly as t0_pmem_funnel's is.
+# Nothing here references mcf5307::mcf5307, so no if(TARGET) guard is needed:
+# this block is inert in the option-OFF configure that t0_clock_guard runs as
+# its control.
 #
 # NMG2_ARTIFACTS is not read. Both flash images the test loads are byte patterns
 # the test file authors, so no Clavia byte reaches it and the tier stays T0.
@@ -314,49 +302,35 @@ set_property(TARGET t0_board_routing PROPERTY FOLDER "G2/test")
 add_test(NAME t0_board_routing COMMAND t0_board_routing)
 set_tests_properties(t0_board_routing PROPERTIES LABELS "UnitTest")
 
-# ----------------- INT-1 consequence: t0_sof_tick's include path
+# ----------------- t0_sof_tick's include path
 #
-# THIS BLOCK IS APPENDED RATHER THAN FOLDED INTO t0_sof_tick's OWN BLOCK ABOVE,
-# because this file is written by more than one task and an edit inside another
-# task's block is how two writers lose each other's work. It adds one include
-# directory to an existing target and changes nothing else about it.
+# board.h holds the composed units BY VALUE, so it includes hdi08Adapter.h,
+# which includes "mc68k/hdi08.h". Every consumer of board.h therefore needs the
+# directory that resolves it. t0_board_routing and t0_board_surface get it for
+# free because they LINK g2Lib, whose PUBLIC hardwareLib link exports it.
+# t0_sof_tick does NOT link g2Lib: it compiles ../board.cpp directly and defines
+# the mcf5307 entry points itself, to keep libmcf5307.a off its link line.
 #
-# WHY IT IS NEEDED. INT-1's composition makes board.h hold the seven units BY
-# VALUE, so board.h now includes hdi08Adapter.h, which includes "mc68k/hdi08.h".
-# Every consumer of board.h therefore needs the directory that resolves it.
-# t0_board_routing and t0_board_surface get it for free because they LINK g2Lib,
-# whose PUBLIC hardwareLib link exports it. t0_sof_tick does NOT link g2Lib: it
-# compiles ../board.cpp directly and defines the mcf5307 entry points itself, to
-# keep libmcf5307.a off its link line (its own block states why). That is still
-# correct and is not changed here -- it just leaves the target without the
-# include directory that board.h now requires.
-#
-# THE INCLUDE DIRECTORY IS TAKEN FROM hardwareLib's INTERFACE PROPERTY and the
+# The include directory is taken from hardwareLib's INTERFACE property and the
 # target is NOT linked, so the header arrives and no archive joins the link. The
-# GUARD IS ON THE PROPERTY REFERENCE AND NOT ON THE EXECUTABLE, which is the
-# discipline the t0_mcf5307_link and t0_sof_tick blocks above both state: naming
-# a target that does not exist fails the GENERATE step of a configure that turns
-# the option off, and t0_clock_guard's control configure is exactly such a run.
+# guard is on the property reference and not on the executable: naming a target
+# that does not exist fails the GENERATE step of a configure that turns the
+# option off, and t0_clock_guard's control configure is exactly such a run.
 
 if(TARGET hardwareLib)
 	target_include_directories(t0_sof_tick PRIVATE
 		$<TARGET_PROPERTY:hardwareLib,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
-# ----------------- INT-1 consequence: t0_sof_tick's own sources
+# ----------------- t0_sof_tick's own sources
 #
-# THE COMPOSITION CHANGED WHAT ../board.cpp DEPENDS ON, and this is the second
-# half of that consequence. board.cpp now CONSTRUCTS the seven units and calls
-# into them, so a target that compiles board.cpp on its own must supply their
-# objects too. Before INT-1, board.cpp referenced no g2Lib symbol at all and
-# t0_sof_tick's two-source executable was complete.
+# board.cpp CONSTRUCTS the composed units and calls into them, so a target that
+# compiles board.cpp on its own must supply their objects too.
 #
-# THIS DOES NOT WEAKEN WHAT t0_sof_tick's OWN BLOCK PROTECTS. That block keeps
+# This does not weaken what t0_sof_tick's own block protects. That block keeps
 # libmcf5307.a off the link line, because the test DEFINES the mcf5307 entry
 # points itself and the archive would collide with them. None of the sources
-# below is an mcf5307 source and 68kEmu is not that archive, so the property is
-# untouched: the test still defines its own mcf5307 stubs and still links no
-# mcf5307 archive.
+# below is an mcf5307 source and 68kEmu is not that archive.
 #
 # 68kEmu IS LINKED because hdi08Adapter.cpp holds mc68k::Hdi08 instances by
 # value and needs their definitions. It is guarded on the same principle as the
@@ -385,27 +359,16 @@ foreach(lib 68kEmu dsp56kEmu baseLib)
 endforeach()
 
 
-# ----------------- BRD-8, the CS2 CFI query-mode protocol
+# ----------------- the CS2 CFI query-mode protocol
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_cs2_cfi$
+# Ungated and T0 on purpose: a gated test cannot report on a blocker that gates
+# the gate.
 #
-# UNGATED AND T0 ON PURPOSE. This is the check for the M3 CFI blocker that plan
-# section 6.6.9 specifies, so it belongs in the default suite: a gated test
-# cannot report on a blocker that gates the gate. BRD-8's other deliverable, the
-# gated T1 CS2 layout test, stays gated and is untouched by this block.
-#
-# THE T1 IDENTIFIER IS SPELLED OUT IN WORDS RATHER THAN WRITTEN AS A TOKEN ON
-# PURPOSE. The plan measures "is any T1 test registered here?" with a grep for
-# the bare prefix over this file and records the answer as zero. A mention of
-# the literal inside a COMMENT would turn that measurement into a false
-# positive, which is the failure shape where an absence and an unsearched file
-# produce the same output.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing
-# already uses for the same reason: it drives Board::onRead and Board::onWrite
-# with the real mcf5307 behind them, and g2Lib carries that link itself. NOTHING
-# HERE REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
-# written -- an unguarded reference is what the t0_mcf5307_link block warns about.
+# The test links g2Lib and nothing else, which is the arrangement
+# t0_board_routing already uses for the same reason: it drives Board::onRead and
+# Board::onWrite with the real mcf5307 behind them, and g2Lib carries that link
+# itself. Nothing here references mcf5307::mcf5307, so no if(TARGET) guard is
+# needed and none is written.
 
 add_executable(t0_cs2_cfi t0_cs2_cfi.cpp)
 target_link_libraries(t0_cs2_cfi PRIVATE g2Lib)
@@ -417,18 +380,15 @@ set_tests_properties(t0_cs2_cfi PROPERTIES LABELS "UnitTest")
 
 # ----------------- the unit of the core's `size` argument, proved end to end
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_bus_size_unit$
+# T0 and ungated. The test hand-encodes MOVE instructions and needs no firmware
+# artifact of any kind: the defect it guards is what made the firmware execute
+# zero instructions, and a gated test cannot report on a blocker that gates the
+# gate.
 #
-# T0 AND UNGATED. The test hand-encodes six MOVE instructions and needs no
-# firmware artifact of any kind, so it belongs in the default suite: the defect
-# it guards is what made the firmware execute zero instructions, and a gated
-# test cannot report on a blocker that gates the gate.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement t0_board_routing
-# and t0_cs2_cfi already use: it drives Board::onRead and Board::onWrite with the
-# real mcf5307 core behind them, and g2Lib carries that link itself. NOTHING HERE
-# REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
-# written -- an unguarded reference is what the t0_mcf5307_link block warns about.
+# The test links g2Lib and nothing else, which is the arrangement
+# t0_board_routing and t0_cs2_cfi already use: it drives Board::onRead and
+# Board::onWrite with the real mcf5307 core behind them. Nothing here references
+# mcf5307::mcf5307, so no if(TARGET) guard is needed and none is written.
 
 add_executable(t0_bus_size_unit t0_bus_size_unit.cpp)
 target_link_libraries(t0_bus_size_unit PRIVATE g2Lib)
@@ -437,20 +397,16 @@ set_property(TARGET t0_bus_size_unit PROPERTY FOLDER "G2/test")
 add_test(NAME t0_bus_size_unit COMMAND t0_bus_size_unit)
 set_tests_properties(t0_bus_size_unit PROPERTIES LABELS "UnitTest")
 
-# ----------------- BRD-24, the M-Bus controller and the MAX1039 slave
+# ----------------- the M-Bus controller and the MAX1039 slave
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t0_mbus$
+# T0 and ungated. The test needs no firmware artifact of any kind: it drives the
+# module the way the measured firmware drives it and asserts the interlock the
+# firmware requires, which no static status byte can satisfy.
 #
-# T0 AND UNGATED. The test needs no firmware artifact of any kind: it drives
-# the module the way the measured firmware drives it and asserts the interlock
-# the firmware requires, which is the M3 blocker that no static status byte can
-# satisfy.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement
-# t0_board_routing, t0_cs2_cfi and t0_bus_size_unit already use: its clause-3
-# cases drive Board::onRead and Board::onWrite with the real mcf5307 core behind
-# them, and g2Lib carries that link itself. NOTHING HERE REFERENCES
-# mcf5307::mcf5307, so no if(TARGET) guard is needed and none is written.
+# The test links g2Lib and nothing else: some of its cases drive Board::onRead
+# and Board::onWrite with the real mcf5307 core behind them. Nothing here
+# references mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
+# written.
 
 add_executable(t0_mbus t0_mbus.cpp)
 target_link_libraries(t0_mbus PRIVATE g2Lib)
@@ -460,16 +416,12 @@ add_test(NAME t0_mbus COMMAND t0_mbus)
 set_tests_properties(t0_mbus PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- BRD-24 consequence: t0_sof_tick's own sources
+# ----------------- t0_sof_tick's own sources, continued
 #
-# THE COMPOSITION GAINED TWO UNITS AND t0_sof_tick COMPILES ../board.cpp ON ITS
-# OWN, so it must supply their objects too. This block is appended rather than
-# folded into the INT-1 block above, for the reason that block already states:
-# this file is written by more than one task and an edit inside another task's
-# block is how two writers lose each other's work.
-#
-# NEITHER SOURCE IS AN mcf5307 SOURCE, so the property t0_sof_tick's own block
-# protects -- no mcf5307 archive on its link line -- is untouched.
+# The composition gained the M-Bus and its slave, and t0_sof_tick compiles
+# ../board.cpp on its own, so it must supply their objects too. Neither source
+# is an mcf5307 source, so the property t0_sof_tick's own block protects -- no
+# mcf5307 archive on its link line -- is untouched.
 
 target_sources(t0_sof_tick PRIVATE
 	../mbus.cpp

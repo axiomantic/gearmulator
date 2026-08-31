@@ -1,40 +1,33 @@
-// Task BRD-20. The P-memory write funnel. Tier T0: no firmware artifact of
-// any kind is read, and every word this file puts into P memory is assembled
-// here from text it authors itself.
+// Tier T0: no firmware artifact of any kind is read, and every word this file
+// puts into P memory is assembled here from text it authors itself.
 //
-// Plan section 13.3, BRD-20. Design section 10.5, section 17 row 7.1.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). base.cmake sets
+// No assertion in this file is a language assert(). base.cmake sets
 // CMAKE_BUILD_TYPE to Release when the caller names none, and Release carries
-// -DNDEBUG, so Release-with-NDEBUG is what a fresh clone and CI both build. An
-// assert() here would be the predicate that compiles away in exactly the
-// configuration that matters most. Every case below is a runtime check with a
-// failure counter and a non-zero return from main, which is what the rest of
-// this directory does.
+// -DNDEBUG, so an assert() here would be the predicate that compiles away in
+// exactly the configuration a fresh clone and CI both build.
 //
-// WHAT THE FUNNEL IS FOR, AND WHY "NO CRASH" IS NOT THE TEST. g2::writePMem is
+// What the funnel is for, and why "no crash" is not the test. g2::writePMem is
 // the one function in the G2 that writes DSP P memory, and it always tells the
 // just-in-time compiler that the word changed. Skipping that notification does
-// not corrupt memory and does not fault on most hosts: the write lands, and
-// the DSP goes on running the block the compiler built BEFORE the write. The
+// not corrupt memory and does not fault on most hosts: the write lands, and the
+// DSP goes on running the block the compiler built BEFORE the write. The
 // firmware's new code is in memory and the old code is what executes. That is
 // silent on Linux and Windows; on macOS the MMU path is force-disabled
 // (dsp56kBase/mmuarray.h:67-69) and the same defect can present as a
 // segmentation fault instead. A test that asserted only "no crash" would pass
 // everywhere but macOS while the real defect shipped.
 //
-// SO CASE GROUP 2 IS THE TEST. It compiles a block, overwrites the block's
+// So case group 2 is the test. It compiles a block, overwrites the block's
 // first word THROUGH THE FUNNEL, re-executes the same address, and asserts the
-// NEW code ran. The observable is the DSP's own instruction counter rather
-// than a register value: it depends on nothing but `nop` and `jmp`, whose
-// encodings this repository already exercises, and the two programs differ in
-// length by construction so the expected counts are known without measuring
-// them.
+// NEW code ran. The observable is the DSP's own instruction counter rather than
+// a register value: it depends on nothing but `nop` and `jmp`, whose encodings
+// this repository already exercises, and the two programs differ in length by
+// construction so the expected counts are known without measuring them.
 //
-// WHY THE COUNTER AND NOT A REGISTER. An immediate-move's placement rule
-// (which byte of the destination an 8-bit literal lands in) is a detail of the
-// instruction set that this test would then be asserting instead of asserting
-// the funnel. The instruction counter is a property of the block that ran.
+// An immediate-move's placement rule -- which byte of the destination an 8-bit
+// literal lands in -- is a detail of the instruction set that a register-based
+// observable would assert instead of asserting the funnel. The instruction
+// counter is a property of the block that ran.
 
 #include "pmemFunnel.h"
 
@@ -173,9 +166,8 @@ int main()
 		"the fixture's two instruction words differ, so a program built from "
 		"them is distinguishable from one that is not");
 
-	// THE WORD CASE GROUP 1 WRITES MUST NOT BE THE VALUE EMPTY P MEMORY
-	// ALREADY HOLDS, and this assertion is here because the first version of
-	// this file got it wrong. `nop` on the DSP56300 encodes as 0x000000, which
+	// The word case group 1 writes must not be the value empty P memory already
+	// holds. `nop` on the DSP56300 encodes as 0x000000, which
 	// is exactly what an untouched P word reads, so a group that wrote `nop`
 	// asserted "the word landed" against a value that was already there: a
 	// funnel that wrote NOTHING passed, and so did one that wrote to the
@@ -187,13 +179,12 @@ int main()
 		"so 'the word landed' is not satisfied by an untouched address");
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE FUNNEL WRITES THE WORD, AND THE WORD WAS NOT THERE
-	// BEFORE.
+	// Case group 1. The funnel writes the word, and the word was not there
+	// before.
 	//
 	// The before state is asserted because a funnel that wrote nothing would
 	// be indistinguishable from a correct one if the target already held the
-	// value. This is the same discipline BRD-19's bootstrap test applies to
-	// its own P memory.
+	// value.
 	{
 		constexpr dsp56k::TWord address = 0x400;
 
@@ -214,8 +205,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. A WRITE THROUGH THE FUNNEL REPLACES CODE THE COMPILER HAS
-	// ALREADY BUILT. THIS IS THE CASE THE TASK EXISTS FOR.
+	// Case group 2. A write through the funnel replaces code the compiler has
+	// already built. This is the case the funnel exists for.
 	//
 	// Program v1 at 0x100 is three nop and the jmp that ends the block: FOUR
 	// instructions. The funnel then overwrites the block's FIRST word with the
@@ -254,8 +245,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE SAME AT A SECOND, INDEPENDENT ADDRESS, AND IN THE
-	// OPPOSITE DIRECTION.
+	// Case group 3. The same at a second, independent address, and in the
+	// opposite direction.
 	//
 	// Group 2 shortened a block. A funnel that always invalidated the address
 	// it was given but also, say, invalidated everything, would pass group 2.

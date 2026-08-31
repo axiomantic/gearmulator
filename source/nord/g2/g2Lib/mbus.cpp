@@ -1,14 +1,7 @@
-// Task BRD-24. The M-Bus controller. See mbus.h for what this unit is.
-//
-// PROVENANCE. The register map, the bit names and the START/STOP rules come
-// from MCF5307UM chapter 15 and Table 15-1. What the model must PRODUCE comes
-// from a disassembly of this machine's own firmware, which polls MBSR at
-// MBAR+$28C in both the register-relative and the absolute form and never reads
-// MBAR+$284 at all.
-//
-// WHERE MBAR IS, IS NOT THIS FILE'S QUESTION. The offsets below are
-// MBAR-relative and the decode produces them, which is what keeps the inferred
-// base out of this unit entirely.
+// See mbus.h for what this unit is. The register map, the bit names and the
+// START/STOP rules come from MCF5307UM chapter 15 and Table 15-1. This machine's
+// firmware polls MBSR at MBAR+$28C in both the register-relative and the
+// absolute form, and never reads MBAR+$284 at all.
 
 #include "mbus.h"
 
@@ -120,9 +113,8 @@ namespace g2
 		case g_mbcr:
 			return m_mbcr;
 		case g_mbsr:
-			/* THE STATUS REGISTER IS COMPOSED AND NEVER STORED. A stored byte
-			 * cannot report the bus busy after a START and idle after a STOP,
-			 * which is what the firmware requires of it. */
+			/* Composed and never stored: a stored byte cannot report the bus
+			 * busy after a START and idle after a STOP. */
 			return uint8_t((m_busBusy ? g_mbb : 0u)
 			             | (m_interrupt ? g_mif : 0u)
 			             | (m_notAcknowledged ? g_rxak : 0u));
@@ -147,9 +139,9 @@ namespace g2
 			writeControl(_value);
 			break;
 		case g_mbsr:
-			/* MIF IS CLEARED BY WRITING ZERO TO IT and is the only bit of this
-			 * register a write reaches in a master transfer. The firmware
-			 * spells it `v & $FD`. */
+			/* MIF is cleared by writing zero to it, and is the only bit of this
+			 * register a write reaches in a master transfer. The firmware spells
+			 * it `v & $FD`. */
 			if((_value & g_mif) == 0u)
 				m_interrupt = false;
 			break;
@@ -168,11 +160,10 @@ namespace g2
 
 		m_mbcr = _value;
 
-		/* MSTA 0 to 1 GENERATES A START AND 1 TO 0 GENERATES A STOP, and MBB
-		 * follows the bus conditions rather than the register bit: the firmware
-		 * clears MSTA and then requires MBB CLEAR, and later sets MSTA and
-		 * requires MBB SET, which is why the transition and not the level is
-		 * what this model keys on. */
+		/* MSTA 0 to 1 generates a START and 1 to 0 generates a STOP. MBB follows
+		 * the bus conditions rather than the register bit: the firmware clears
+		 * MSTA and then requires MBB CLEAR, and later sets MSTA and requires MBB
+		 * SET, so the transition and not the level is what this model keys on. */
 		if(!wasMaster && isMaster)
 		{
 			m_busBusy      = true;
@@ -208,7 +199,7 @@ namespace g2
 			m_notAcknowledged = !(m_slave && m_slave->write(_value));
 		}
 
-		/* MIF IS SET AT THE END OF EVERY BYTE TRANSFER. This model has no clock,
+		/* MIF is set at the end of every byte transfer. This model has no clock,
 		 * so the transfer completes within the write that started it. */
 		m_interrupt = true;
 	}
@@ -217,11 +208,11 @@ namespace g2
 	{
 		const uint8_t result = m_received;
 
-		/* A DATA REGISTER READ HANDS BACK THE BYTE THE LAST TRANSFER CLOCKED IN
-		 * AND STARTS THE NEXT ONE, which is why the firmware's first read after
-		 * the address phase is a dummy whose value it discards.
+		/* A data register read hands back the byte the last transfer clocked in
+		 * and starts the next one, so the firmware's first read after the address
+		 * phase is a dummy whose value it discards.
 		 *
-		 * NO NOT-ACKNOWLEDGE IS EVER SENT. The firmware clears TXAK on every
+		 * No not-acknowledge is ever sent: the firmware clears TXAK on every
 		 * received byte with no index test, so nothing here may invent the NACK
 		 * that would end the transfer. */
 		if((m_mbcr & g_msta) != 0u && (m_mbcr & g_mtx) == 0u)

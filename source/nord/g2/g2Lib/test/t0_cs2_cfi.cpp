@@ -1,18 +1,8 @@
-// Task BRD-8, admitted to this file set by the operator ruling of 2026-08-17
-// (plan section 24.6 row W3-183, section 7.2.2 group G-M3). Tier T0: this test
-// runs with NMG2_ARTIFACTS unset and is registered UNGATED, because it is the
-// check for the M3 CFI blocker and a gated test cannot report on a blocker that
-// gates the gate.
+// Tier T0: this test runs with NMG2_ARTIFACTS unset and is registered UNGATED,
+// because it is the check for the CFI blocker and a gated test cannot report on
+// a blocker that gates the gate.
 //
-// Plan sections 6.6.9 (the M3 acceptance floor), 24.6 rows W3-183, W3-184,
-// W3-185 and W3-186.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail. Every case below reports through a counter and
-// the process exit status.
-//
-// WHY QUERY MODE AND NOT STORED BYTES. The CS2 container header OVERLAPS the
+// Why query mode and not stored bytes. The CS2 container header OVERLAPS the
 // CFI window completely. Measured from the L1 container builder and re-derived
 // here from the same two constants: HEADER_SIZE = 0x14, ENTRY_STRIDE = 0x2C and
 // an entry of a 4-byte tag followed by seven 32-bit fields, so section-table
@@ -27,41 +17,32 @@
 // hardware separates them ONLY BY MODE, so the 0x0098 write is the MODE
 // SELECTOR and not a write to be accepted and ignored.
 //
-// WHAT THIS TEST PROVES, AND WHY EACH PART IS HERE.
-//   1. THE TRANSITION, NOT THE BYTES. A CFI response is bytes that look like
+// What this test proves, and why each part is here.
+//   1. The transition, not the bytes. A CFI response is bytes that look like
 //      data, so a test that only reads them back proves STORAGE. Every case
 //      below pins the mode BEFORE the command and AFTER it, and case 5 reads
 //      the container header back byte for byte after the reset command: a model
 //      that stored the signature into the image cannot pass that one.
-//   2. PER-INSTANCE STATE. Case 7 puts one Flash in query mode and asserts a
+//   2. Per-instance state. Case 7 puts one Flash in query mode and asserts a
 //      second Flash in the same process is unaffected. A file-local static in
-//      flash.cpp would be process-global and would fail here. That is the
-//      correctness defect W3-183 names, and it is why flash.h had to be
-//      admitted rather than the flag hidden in the .cpp.
-//   3. THE ENTRY POINT THE FIRMWARE WILL ACTUALLY USE. Cases 1 to 8 drive the
+//      flash.cpp would be process-global and would fail here.
+//   3. The entry point the firmware will actually use. Cases 1 to 8 drive the
 //      Flash model directly. Case 9 drives Board::onRead and Board::onWrite --
 //      the function pointers handed to the MCF5307 core -- because a test can
-//      pass while exercising a neighbouring entry point. board.h and board.cpp
-//      are READ and LINKED by this test and are not written by it.
+//      pass while exercising a neighbouring entry point.
 //
-// THE PRIMARY VENDOR COMMAND SET ID THIS MODEL RETURNS IS 2, AND THE SOURCE IS
-// CITED AS W3-185 REQUIRES. 2 is AMD/Fujitsu Standard. The source is flash.cpp's
-// own comment -- "the erased state of an AMD-style flash" -- so 2 is what the
-// existing model IMPLIES. THAT IS A READING OF A COMMENT AND NOT A FIRMWARE
-// MEASUREMENT, and the firmware accepts either value, so nothing here forecloses
-// 1 if a measurement later says so. Changing it moves one constant and one
-// expected block.
+// The Primary Vendor Command Set ID this model returns is 2, AMD/Fujitsu
+// Standard. The source is flash.cpp's own comment -- "the erased state of an
+// AMD-style flash" -- so 2 is what the existing model IMPLIES. That is a
+// reading of a comment and not a firmware measurement, and the firmware accepts
+// either value, so nothing here forecloses 1 if a measurement later says so.
 //
-// THE ID IS FORMED EXACTLY AS SECTION 6.6.9 CLAUSE 2 WRITES IT: the BYTE at
-// CS2 + 0x26 is the high half and the BYTE at CS2 + 0x28 is the low half. That
-// is read8 at those two addresses, which is what the clause says. A strict
-// JEDEC 16-bit part carries each datum in the LOW byte of its word -- at 0x27
-// and 0x29 -- which is where clause 1 puts Q, R and Y. The two placements
-// disagree for the ID pair and cannot both hold. The floor's literal wording is
-// implemented, because the floor is the acceptance criterion and it is written
-// from the firmware's own combination at 0x30004396; the JEDEC note establishes
-// WHICH word addresses carry the field, not how the firmware combines them.
-// This divergence is reported to the operator rather than resolved here.
+// The ID is formed as the firmware combines it: the BYTE at CS2 + 0x26 is the
+// high half and the BYTE at CS2 + 0x28 is the low half, which is read8 at those
+// two addresses. A strict JEDEC 16-bit part carries each datum in the LOW byte
+// of its word -- at 0x27 and 0x29 -- which is where Q, R and Y go here. The two
+// placements disagree for the ID pair and cannot both hold; the firmware's own
+// combination at 0x30004396 is what this model satisfies.
 
 #include "../board.h"
 #include "../flash.h"
@@ -108,11 +89,10 @@ namespace
 
 	// ---------------------------------------------------------------- fixture
 	//
-	// The CS0 and CS2 bases and sizes come from this fixture. AGENTS.md section
-	// 2.2 records CS0's and CS2's bases as unrecorded and plan section 1.3
-	// rule 1 forbids writing them into a header, so no shipped header carries a
-	// number and this test supplies its own. THE CS2 BASE IS THE ONE THE
-	// FIRMWARE ITSELF PROGRAMS: the loader reset stub writes CSAR2 = 0x1200, so
+	// The CS0 and CS2 bases and sizes come from this fixture: no authority
+	// records CS0's or CS2's base, so no shipped header carries a number and
+	// this test supplies its own. The CS2 base is the one the firmware itself
+	// programs: the loader reset stub writes CSAR2 = 0x1200, so
 	// the window is 0x12000000 and the floor's addresses are absolute against
 	// it. The SIZE is this fixture's own and is only large enough to hold the
 	// header the cases read; the measured window is 8 MB and nothing here
@@ -148,9 +128,8 @@ namespace
 	constexpr uint32_t kIdHighHalf = 0x26u;
 	constexpr uint32_t kIdLowHalf  = 0x28u;
 
-	// The block every mode assertion compares. It starts at the load address
-	// and ends at the last byte of the compressed length, which is exactly the
-	// range W3-184's acceptance names: 0x20 to 0x2B.
+	// The block every mode assertion compares. It starts at the load address and
+	// ends at the last byte of the compressed length: 0x20 to 0x2B.
 	constexpr uint32_t kBlockStart = 0x20u;
 	constexpr uint32_t kBlockLength = 0x0Cu;
 
@@ -286,10 +265,10 @@ namespace
 	// MCF5307 core, so they are what the firmware will drive. They are called
 	// here rather than busRead and busWrite for exactly that reason.
 	//
-	// AND THAT MAKES THE SIZE ARGUMENT THE CORE'S UNIT, WHICH IS A COUNT OF
-	// BYTES. mcf5307.h states it twice, once per callback typedef. The three
+	// That makes the size argument the core's unit, which is a count of BYTES.
+	// mcf5307.h states it twice, once per callback typedef. The three
 	// constants below are named rather than written as bare 1 and 2, because
-	// this file used to pass 8 and 16 here -- the MemoryMap's unit -- and a
+	// a file that passes 8 and 16 here -- the MemoryMap's unit -- and a
 	// silent swap of one unit for another is the defect the conversion in
 	// board.cpp exists to prevent.
 	constexpr int g_byte = 1;
@@ -458,9 +437,8 @@ int main()
 
 	// ---------------- case 9: an unloaded CS2 derives the ID the firmware rejects
 	//
-	// This is the state W3-186 measures on the board today: 0xFF fill, an ID of
-	// 0xFFFF, the firmware falling through to a return of 0 and the gate
-	// halting. It is asserted so a later pass can see the before state change.
+	// An erased CS2 gives 0xFF fill, an ID of 0xFFFF, the firmware falling
+	// through to a return of 0 and the gate halting.
 
 	{
 		g2::Flash erased(kCs0Base, kCs0Size, kCs2Base, kCs2Size);

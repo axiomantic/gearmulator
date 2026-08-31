@@ -25,17 +25,16 @@ namespace g2
 	Hdi08Adapter::Hdi08Adapter(const Hdi08Decode _decode)
 		: m_decode(_decode)
 	{
-		/* THE PORT ANSWERS ITS OWN INIT REQUEST, AND THAT IS WHY THIS SITS HERE
-		 * RATHER THAN ON WHATEVER LATER OWNS THE DSP BEHIND THE PORT. Clearing
-		 * INIT is the host interface's own hardware reporting that the
-		 * initialisation it was asked for has finished; it does not depend on
-		 * what is wired to the far side of the port, and a port with nothing
-		 * behind it must still answer or a host polling the bit never leaves
-		 * the loop. `mc68k::Hdi08::write8` stores the byte and clears nothing,
-		 * so the callback is the seam that models the hardware.
+		/* The port answers its own init request. Clearing INIT is the host
+		 * interface's own hardware reporting that the initialisation it was
+		 * asked for has finished; it does not depend on what is wired to the far
+		 * side of the port, and a port with nothing behind it must still answer
+		 * or a host polling the bit never leaves the loop.
+		 * `mc68k::Hdi08::write8` stores the byte and clears nothing, so the
+		 * callback is the seam that models the hardware.
 		 *
-		 * THE CALLBACK HOLDS A REFERENCE INTO m_ports, WHICH IS WHY THIS CLASS
-		 * DELETES ITS COPY AND MOVE. See hdi08Adapter.h. */
+		 * The callback holds a reference into m_ports, which is why this class
+		 * deletes its copy and move. See hdi08Adapter.h. */
 		for(mc68k::Hdi08& port : m_ports)
 		{
 			port.setInitHdi08Callback([&port]
@@ -136,41 +135,36 @@ namespace g2
 	}
 
 	// -----------------------------------------------------------------------
-	// Task BRD-17. Bounded, non-blocking control on the HDI08 transfer path.
+	// Bounded, non-blocking control on the HDI08 transfer path.
 	//
-	// TWO DIFFERENT HDI08 MODELS LIVE IN THIS BUILD TREE AND THE TWO FUNCTIONS
-	// BELOW ARE ABOUT THE OTHER ONE. Everything above is `mc68k::Hdi08`, the
+	// Two different HDI08 models live in this build tree and the two functions
+	// below are about the other one. Everything above is `mc68k::Hdi08`, the
 	// HOST side, which is callback-driven and has no blocking wait. These two
-	// are about `dsp56k::HDI08`, the DSP side, in `dsp56300`. A reader who
-	// conflates the two will look for a blocking wait in `mc68k` and not find
-	// one.
+	// are about `dsp56k::HDI08`, the DSP side, in `dsp56300`.
 	//
-	// WHY A BOUND AT ALL. `dsp56k::HDI08::writeRX` pushes host words into
+	// `dsp56k::HDI08::writeRX` pushes host words into
 	// `RingBuffer<TWord, 8192, true>`, and `push_back` on a FULL ring waits on a
 	// condition variable until a reader drains it. The G2 runs the MCU, the
 	// eight DSPs and the panel from ONE thread, so there is no reader to drain
 	// it and the wait never returns. That is a deadlock, not a slow path.
 	//
-	// THE BLOCKING PRIMITIVE IS THE SEMAPHORE, NOT `waitNotFull()`. On this
-	// ring `Lock` is true, and `RingBuffer::waitNotFull()` opens with
-	// `if constexpr(Lock) return;` -- it is INERT here. The wait that actually
-	// blocks is `m_writeSem.wait()` inside `push_back`, which is
-	// `SpscSemaphoreWithCount` and is condition-variable backed. Bounding the
-	// call is therefore the only control available from outside the class:
-	// there is no non-blocking push to call instead.
+	// The blocking primitive is the semaphore, not `waitNotFull()`. On this ring
+	// `Lock` is true, and `RingBuffer::waitNotFull()` opens with
+	// `if constexpr(Lock) return;` -- it is INERT here. The wait that blocks is
+	// `m_writeSem.wait()` inside `push_back`, which is `SpscSemaphoreWithCount`
+	// and is condition-variable backed. Bounding the call is therefore the only
+	// control available from outside the class: there is no non-blocking push to
+	// call instead.
 	//
-	// THE COUNT IS RETURNED RATHER THAN LEFT ON AN OBJECT. A quantum's transfer
+	// The count is returned rather than left on an object: a quantum's transfer
 	// is one call, the caller needs the count to know what it must re-offer next
-	// quantum, and a return value cannot be read stale. BRD-17's `Files:` line
-	// and the G-M3 file union both name this .cpp and neither names
-	// hdi08Adapter.h, so these are free functions and not members.
+	// quantum, and a return value cannot be read stale.
 
 	uint32_t hdi08QuantumWordBudget(const dsp56k::HDI08& _dsp)
 	{
-		// DERIVED FROM THE RING, NEVER WRITTEN AS A LITERAL. A number here would
-		// be a second definition of a buffer size `dsp56300` owns, and it would
-		// go stale silently the day that ring is resized. Half the capacity is
-		// the headroom rule: BRD-17 requires the per-quantum bound to sit BELOW
+		// Derived from the ring, never written as a literal: a number here would
+		// be a second definition of a buffer size `dsp56300` owns. Half the
+		// capacity is the headroom rule -- the per-quantum bound must sit BELOW
 		// the capacity, so that a quantum which moves its whole budget still
 		// leaves the DSP room to be pushed to again before it has drained.
 		return static_cast<uint32_t>(_dsp.rxData().capacity() / 2u);
@@ -185,18 +179,16 @@ namespace g2
 		if(moved > budget)
 			moved = budget;
 
-		// THE BUDGET ALONE DOES NOT MAKE THIS NON-BLOCKING. A ring with less
-		// free space than the budget would still block on the push that fills
-		// it. The free-space clamp is the half that closes the deadlock; the
-		// budget is the half that stops one quantum from monopolising the ring.
+		// The budget alone does not make this non-blocking: a ring with less free
+		// space than the budget would still block on the push that fills it. The
+		// free-space clamp is what closes the deadlock; the budget is what stops
+		// one quantum from monopolising the ring.
 		const uint32_t freeSlots = static_cast<uint32_t>(_dsp.rxData().remaining());
 		if(moved > freeSlots)
 			moved = freeSlots;
 
-		// A DEBUG ASSERTION AS WELL, AND IT IS NOT THE CHECK'S PREDICATE.
-		// t0_hdi08_nonblocking asserts the same property with a runtime
-		// comparison, because a release build removes this line and the bound
-		// must be checked in a release build too.
+		// A debug assertion only: a release build removes this line, so the bound
+		// is checked with a runtime comparison in the test as well.
 		assert(moved <= budget && moved <= freeSlots && "the bounded transfer would block");
 
 		if(moved)

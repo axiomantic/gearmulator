@@ -42,7 +42,7 @@ set_tests_properties(t0_skip_discipline PROPERTIES LABELS "UnitTest")
 # absent.
 
 # The test also compares each recorded value against the macro that defines it,
-# so it needs g2/timebase.h. AN INCLUDE DIRECTORY RATHER THAN g2Lib: the header
+# so it needs g2/timebase.h. An include directory rather than g2Lib: the header
 # is macros and static inline functions and needs no library, and linking one
 # would put a T0 text test behind the whole board's compile.
 

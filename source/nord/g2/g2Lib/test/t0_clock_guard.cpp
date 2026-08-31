@@ -4,43 +4,43 @@
  * unverified, so its literal is banned rather than tracked. The case asserts it
  * appears nowhere in this repository, and it matches every spelling of it.
  *
- * CASE 1, THE CORE CLOCK'S DOMAIN. The MCF5307 has two clock domains and the
+ * Case 1, the core clock's domain. The MCF5307 has two clock domains and the
  * User's Manual section 4.2 documents no divide-by-one option, so PSTCLK is
  * the bus clock times 2, 3 or 4 and the two can never be equal. The hazard
  * this case exists to close is therefore a SUBSTITUTION: a bus-domain figure
  * standing in the symbol that reaches a core-cycle budget.
  *
- * THE PREDICATE BINDS TO THE SYMBOL AND NOT TO A LITERAL, and the difference
+ * The predicate binds to the symbol and not to a literal, and the difference
  * decides the outcome in both directions. A tree-wide ban on one number
  * forbids RECORDING A MEASUREMENT -- the bus clock is a real derived figure
  * and it has to be writable somewhere -- while saying nothing at all about
  * what the core-clock symbol carries. Bound to the symbol instead, the same
- * intent reads: EVERY DEFINITION OF THE CORE-CLOCK SYMBOL CARRIES A FREQUENCY
- * IN THE CORE-CLOCK DOMAIN. A bus figure recorded in a bus symbol passes; a
+ * intent reads: every definition of the core-clock symbol carries a frequency
+ * in the core-clock domain. A bus figure recorded in a bus symbol passes; a
  * bus figure standing in the core symbol does not.
  *
- * THE DOMAIN FLOOR IS DERIVED AND ITS TWO HALVES ARE NAMED AT THE CONSTANT.
+ * The domain floor is derived and its two halves are named at the constant.
  * The bus-clock interval comes from the firmware and the divider floor from
  * the manual; neither is invented here and neither is a catalog speed grade.
  * The forbidden region therefore CONTAINS the whole bus-clock interval, so
  * the substitution case is a corollary of the floor rather than a second
  * rule.
  *
- * A DEFINITION IS THE PREDICATE'S SUBJECT, NOT A MENTION. What a symbol
+ * A definition is the predicate's subject, not a mention. What a symbol
  * carries is decided at `#define SYM value` and at `SYM = value`, so those
  * two shapes are what the scan matches. A static assertion or a fixture that
  * PINS the number is a mechanism that goes red on its own when the definition
  * moves, and turning those red from here would only duplicate them.
  *
- * A SINGLE-SPELLING SCAN IS A CHECK THAT A ONE-CHARACTER EDIT WALKS AROUND,
+ * A single-spelling scan is a check that a one-character edit walks around,
  * and that was MEASURED rather than argued: a fixed-string search for the
  * plain decimal form matched a header holding it and matched NEITHER the
  * digit-separator form, which the compiler reads as the same number, NOR the
- * exponent form. Plan section 7.7 measurement 6 carries the transcript. So a
- * value is RENDERED into every spelling a compiler accepts, and the scan and
+ * exponent form. So a value is RENDERED into every spelling a compiler
+ * accepts, and the scan and
  * the parser are driven through each rendering in turn.
  *
- * EVERY SPELLING CARRIES FOUR CONTROLS, and each one closes a way the case
+ * Every spelling carries its own controls, and each one closes a way the case
  * could pass while proving nothing:
  *
  *   FLAGGED    the core symbol defined as an out-of-domain frequency. The
@@ -75,8 +75,8 @@
  * stays silent, so a guard that failed every configure for some other reason
  * would not be mistaken for a working one.
  *
- * EVERY NEEDLE AND EVERY FREQUENCY IN THIS FILE IS ASSEMBLED FROM FRAGMENTS
- * AT RUN TIME, and that is load-bearing three times over.
+ * Every needle and every frequency in this file is assembled from fragments
+ * at run time, and that is load-bearing.
  *
  *   1. Case 1 scans every file in this repository with no exclusion list, so
  *      a file that spelled a guarded definition out in full would match
@@ -89,10 +89,9 @@
  *      whole project would stop configuring. The two symbols are therefore
  *      built from a shared prefix and a suffix and are never contiguous in
  *      this source.
- *   3. TASK SCH-0's CHECK STILL BANS THE BUS CLOCK'S DECIMAL LITERAL
- *      TREE-WIDE. Section 7.4.2 keeps each task to its own files, so this
- *      task does not repair that ban; it works inside it, and every frequency
- *      here is therefore a product of factors rather than a written-out
+ *   3. A second check still bans the bus clock's decimal literal tree-wide.
+ *      This file works inside that ban, so every frequency here is a product
+ *      of factors rather than a written-out
  *      number. Repairing the second copy of the ban belongs to whoever owns
  *      that check, and until then a plain decimal here turns it red.
  */
@@ -151,7 +150,7 @@ namespace
 	 * derivation rather than a coincidence. Spike criterion (j) owns the
 	 * figure; measurement register rows 5 and 6 carry it.
 	 *
-	 * THE DIVIDER FLOOR IS 2 BECAUSE 2 HOLDS UNDER BOTH READINGS OF THE PART.
+	 * The divider floor is 2 because 2 holds under both readings of the part.
 	 * The MCF5307 manual's section 4.2 permits 2, 3 or 4 and no divide-by-one;
 	 * the MCF5407CAI162 the schematic reads at U14 multiplies CLKIN by 3. Two
 	 * is the weaker of the two claims and is therefore the one the floor is
@@ -170,7 +169,7 @@ namespace
 		return kBusClockLowerBoundHz * kSmallestBusDivider;
 	}
 
-	/* THE PREDICATE ITSELF, AND IT HAS EXACTLY ONE SITE. The controls and the
+	/* The predicate itself, and it has exactly one site. The controls and the
 	 * repository scan below both ask this function and neither restates the
 	 * comparison, so a mutation of the verdict cannot leave the controls green
 	 * while the scan goes blind. Measured: a second copy of this comparison
@@ -325,7 +324,7 @@ namespace
 	 * non-ignored ones. `.gitignore` ignores /build/, so a build tree at that
 	 * one path is out of scope -- and a build tree at ANY OTHER PATH is not.
 	 * A CTest log quotes the output of the tests it ran, and this case's own
-	 * diagnostic QUOTES THE DEFINITION LINE IT OBJECTS TO. So a second build
+	 * diagnostic quotes the definition line it objects to. So a second build
 	 * tree, at any name but `build`, puts that line into
 	 * <tree>/Testing/Temporary/LastTest.log and the next run reports it again,
 	 * on matches that are all log lines. The case would then be reporting its
@@ -673,7 +672,7 @@ namespace
 
 	/* Every frequency a line defines the symbol as.
 	 *
-	 * A LINE IS SEARCHED FOR EVERY OCCURRENCE and not for its first, because a
+	 * A line is searched for every occurrence and not for its first, because a
 	 * reported line may mention the symbol before it defines it. An occurrence
 	 * that is not followed by a frequency is not a definition and contributes
 	 * nothing -- which is what keeps a comparison such as `SYM == value` out

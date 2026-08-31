@@ -1,30 +1,24 @@
-// Task BRD-17. Tier T0: this test needs no firmware artifact of any kind.
+// Tier T0: this test needs no firmware artifact of any kind.
 //
-// Plan section 13.3, BRD-17. Design section 10.7.
+// `dsp56k::HDI08` -- the DSP side, in `dsp56300`, NOT the `mc68k::Hdi08` host
+// side the adapter wraps -- moves host words into a ring buffer whose push
+// blocks when the ring is full. Under a single-threaded scheduler a blocking
+// push is a deadlock. The bound on the words one quantum may move, and the
+// count it reports moving, are what this test drives.
 //
-// WHAT THIS TEST IS FOR. `dsp56k::HDI08` -- the DSP side, in `dsp56300`, NOT
-// the `mc68k::Hdi08` host side BRD-16 adapts -- moves host words into a ring
-// buffer whose push blocks when the ring is full. Under a single-threaded
-// scheduler a blocking push is a deadlock. BRD-17 puts a bound on the words one
-// quantum may move and EXPOSES the count it moved, and this test drives that
-// bound.
-//
-// THE BOUND IS ASSERTED FROM TWO SIDES ON PURPOSE. A bound that is never hit
+// The bound is asserted from two sides on purpose. A bound that is never hit
 // and a bound that does not exist produce the same green, so this file drives a
 // request ABOVE the bound and asserts the count is clamped, and a request BELOW
 // the bound and asserts the count is NOT clamped. Either case alone cannot tell
 // a working bound from a stuck constant.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). BRD-17's own block requires
-// the bound to be checked in a release build as well as a debug build, and a
-// release build removes an assertion. The production code keeps a debug
-// assertion as well; it is not this check's predicate.
+// No assertion in this file is a language assert(): the bound must be checked
+// in a release build as well as a debug build, and a release build removes an
+// assertion. The production code keeps a debug assertion as well; it is not
+// this check's predicate.
 //
-// THE TWO DECLARATIONS BELOW ARE WRITTEN OUT HERE RATHER THAN INCLUDED.
-// BRD-17's `Files:` line and the G-M3 file union (plan section 7.2.2) both name
-// `g2Lib/hdi08Adapter.cpp` and neither names `g2Lib/hdi08Adapter.h`, so this
-// task adds no declaration to that header. A mismatch between these
-// declarations and the definitions in hdi08Adapter.cpp is a LINK error, not a
+// The two declarations below are written out here rather than included, so a
+// mismatch with the definitions in hdi08Adapter.cpp is a LINK error and not a
 // silent pass.
 
 #include "dsp56kEmu/dsp.h"
@@ -77,7 +71,7 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	// A REAL DSP IS REQUIRED AND THE REASON IS NOT COSMETIC. `HDI08::writeRX`
+	// A real DSP is required. `HDI08::writeRX`
 	// ends in `IPeripherals::setDelayCycles`, which dereferences `m_dsp`
 	// unconditionally (peripherals.cpp:118). A PeripheralsNop with no DSP
 	// attached segfaults there, so the environment below builds the DSP that
@@ -153,11 +147,10 @@ int main()
 	Env env;
 
 	// -----------------------------------------------------------------------
-	// Case group 0. THE BOUND ITSELF IS BELOW THE RING CAPACITY.
+	// Case group 0. The bound itself is below the ring capacity.
 	//
-	// BRD-17 requires the per-quantum bound to sit BELOW the buffer capacity,
-	// not at it. A bound equal to the capacity would leave the DSP no headroom
-	// and is the mutation this group exists to catch.
+	// The per-quantum bound must sit BELOW the buffer capacity, not at it. A
+	// bound equal to the capacity would leave the DSP no headroom.
 	{
 		Fixture f(env);
 		const uint32_t budget = g2::hdi08QuantumWordBudget(*f.hdi08);
@@ -169,7 +162,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. A REQUEST BELOW THE BOUND IS NOT CLAMPED.
+	// Case group 1. A request below the bound is not clamped.
 	//
 	// This is the half that separates a working bound from a stuck constant. If
 	// the transfer returned the budget no matter what it was asked for, this
@@ -188,7 +181,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. A REQUEST OF EXACTLY THE RING CAPACITY IS CLAMPED.
+	// Case group 2. A request of exactly the ring capacity is clamped.
 	//
 	// Exactly the capacity is the largest request an UNBOUNDED transfer can
 	// satisfy without blocking, so this group observes a removed clamp as a
@@ -208,10 +201,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. MORE WORDS THAN THE CAPACITY IN ONE QUANTUM.
-	//
-	// BRD-17's Check: drive more words than the queue capacity within one
-	// quantum and assert the exposed moved-word count against the capacity.
+	// Case group 3. More words than the capacity in one quantum: drive more
+	// words than the queue capacity within one quantum and assert the exposed
+	// moved-word count against the capacity.
 	{
 		Fixture f(env);
 		const uint32_t budget = g2::hdi08QuantumWordBudget(*f.hdi08);
@@ -232,7 +224,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. A NEARLY FULL RING MOVES ONLY WHAT FITS.
+	// Case group 4. A nearly full ring moves only what fits.
 	//
 	// The budget alone does not make the transfer non-blocking: a ring with less
 	// free space than the budget would still block. This group leaves seven free

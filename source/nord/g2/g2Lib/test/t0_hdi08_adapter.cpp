@@ -289,7 +289,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE INIT BIT CLEARS ITSELF.
+	// Case group 5. The INIT bit clears itself.
 	//
 	// A DSP56300 host port drives ICR's INIT bit low again once the interface
 	// initialisation it requested has completed, so a host that writes INIT and
@@ -298,7 +298,7 @@ int main()
 	// nothing; the port that owns the register has to answer through the init
 	// callback, which is the seam the Nord Lead 2X uses for the same reason.
 	//
-	// EVERY ASSERTION BELOW IS AN EXACT REGISTER VALUE AND NOT A BIT TEST. The
+	// Every assertion below is an exact register value and not a bit test. The
 	// two shapes this must tell apart -- INIT cleared, and INIT cleared along
 	// with bits the host set in the same byte -- differ only in the bits a
 	// masked test would discard.
@@ -376,7 +376,7 @@ int main()
 				"an ICR write without INIT raises no Trdy");
 		}
 
-		// Case 5d -- THE BROADCAST INITIALISES ALL EIGHT. CS1 offset zero drives
+		// Case 5d -- the broadcast initialises all eight. CS1 offset zero drives
 		// every populated select low, which is how one store initialises the
 		// whole array.
 		{
@@ -397,7 +397,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. THE RX-EMPTY CALLBACK HAS A DEFAULT.
+	// Case group 6. The rx-empty callback has a default.
 	//
 	// `mc68k::Hdi08::readRX` calls the rx-empty callback on the first byte of a
 	// read sequence without testing it first, so a usable callback is part of
@@ -406,7 +406,7 @@ int main()
 	// read instead of reading an empty register as zero, which is what the
 	// hardware does.
 	//
-	// AN EMPTY FUNCTION MUST BE SUBSTITUTED AND NOT STORED, so a caller that
+	// An empty function must be substituted and not stored, so a caller that
 	// clears the callback and keeps the port alive does not re-arm the abort.
 	// That is why clearing is asserted apart from never installing: a
 	// constructor-only default would satisfy one and leave the other armed.
@@ -432,7 +432,7 @@ int main()
 				"a port whose rx-empty callback was cleared reads an empty RX register as zero");
 		}
 
-		// Case 6c -- AN INSTALLED CALLBACK IS STILL THE ONE THAT RUNS. A default
+		// Case 6c -- an installed callback is still the one that runs. A default
 		// that swallowed the caller's own handler would satisfy 6a and 6b and be
 		// visible nowhere else.
 		{

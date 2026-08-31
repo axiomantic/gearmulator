@@ -1,27 +1,19 @@
-// Task BRD-24. The M-Bus controller and the MAX1039 slave. Tier T0: this test
-// needs no firmware artifact of any kind.
+// Tier T0: this test needs no firmware artifact of any kind.
 //
-// Plan sections 13.5, 13.5.1, 13.5.2 and 13.5.3. Design section 6.4 for the
-// MBAR window; the M-Bus and the slave are covered by no design section.
-//
-// WHY A STATIC STATUS BYTE CANNOT SATISFY THIS FILE. The interlock conditions
+// Why a static status byte cannot satisfy this file. The interlock conditions
 // the replay below asserts include a pair that are directly contradictory for
 // any constant MBSR -- MBB must read CLEAR after a STOP and SET after the next
 // START -- and a second pair that require MIF to be re-settable after a
 // software clear.
 //
-// THE ADDRESS CASE IS WRITTEN FIRST ON PURPOSE. A slave that acknowledges
-// every address passes every bus-level case in this file while hiding a wrong
+// The address case is written first on purpose. A slave that acknowledges every
+// address passes every bus-level case in this file while hiding a wrong
 // address, so the discriminating case comes before the ones that depend on it.
 //
-// EVERY VOLTAGE AND EVERY REFERENCE IN THIS FILE IS THIS FIXTURE'S. The
-// schematic's 3.033 V is a configuration argument and no shipped header
-// carries it; the values below are powers of two so that every expected
-// conversion result is an exact integer rather than a rounding of one.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG, so an assert() would be removed and a report
-// built on one could never fire.
+// Every voltage and every reference in this file is this fixture's. The
+// schematic's 3.033 V is a configuration argument and no shipped header carries
+// it; the values below are powers of two so that every expected conversion
+// result is an exact integer rather than a rounding of one.
 
 #include "board.h"
 #include "max1039.h"
@@ -116,7 +108,7 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE FIXTURE'S ELECTRICAL VALUES. Every one is a power of two so that
+	// The fixture's electrical values. Every one is a power of two so that
 	// volts * 256 / reference is an exact integer for every channel below.
 	// NONE of them is a claim about the machine: the schematic's 3.033 V is a
 	// configuration argument and this fixture deliberately does not use it, so
@@ -166,7 +158,7 @@ namespace
 	constexpr unsigned g_measuredScanLength = 7u;
 
 	// -----------------------------------------------------------------------
-	// DRIVING THE CONTROLLER THE WAY THE FIRMWARE DOES. Every access below is
+	// Driving the controller the way the firmware does. Every access below is
 	// a byte access, because every M-Bus register is byte-wide.
 	constexpr int g_byteWidth = 8;
 
@@ -199,8 +191,8 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE INTERLOCK CONDITIONS, OBSERVED AT THE INSTRUCTION THE FIRMWARE
-	// OBSERVES THEM AT. The replay below reproduces the measured transaction
+	// The interlock conditions, observed at the instruction the firmware
+	// observes them at. The replay below reproduces the measured transaction
 	// sequence -- the recovery block, transaction A (setup byte), transaction B
 	// (configuration byte), and the state machine's states 0 to 3 -- and
 	// records what MBSR reported at each poll.
@@ -328,7 +320,7 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE BOARD FIXTURE FOR CLAUSE 3. Only the MBAR window is populated: the
+	// The board fixture for the routing cases. Only the MBAR window is populated: the
 	// clause is about the router, and a window this test never drives would
 	// only add ways for it to fail for another task's reason.
 	constexpr uint32_t g_mbarBase = 0x16000000u;
@@ -503,7 +495,7 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 2 -- THE CONTROL REGISTER IS MODELLED AND NOT DISCARDED.
+	// The control register is modelled and not discarded.
 	// ==================================================================
 	{
 		g2::Max1039 adc(makeAdcConfig());
@@ -551,9 +543,9 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 4 -- THE ACCESS WIDTHS AND THE WINDOW BOUND, ON BRD-2's OWN
-	// PATTERN. Every M-Bus register is byte-wide, so a 16- or 32-bit access
-	// is rejected and logged with the offset, the width and the direction.
+	// The access widths and the window bound. Every M-Bus register is
+	// byte-wide, so a 16- or 32-bit access is rejected and logged with the
+	// offset, the width and the direction.
 	// ==================================================================
 	{
 		const uint32_t registers[] =
@@ -617,8 +609,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 3 -- THE ROUTER REACHES THE NEW UNIT AND STILL REACHES THE OLD
-	// TWO. Every access goes through the installed callback, because that is
+	// The router reaches the new unit and still reaches the older two. Every
+	// access goes through the installed callback, because that is
 	// the path the core takes.
 	// ==================================================================
 	{
@@ -689,7 +681,7 @@ int main()
 		          + hex32(g2::MBus::g_madr + 1u)},
 		         "an unmodelled offset inside the module window reaches the M-Bus");
 
-		// THE TWO REGRESSION CASES. A case that only exercised the new offsets
+		// The two regression cases. A case that only exercised the new offsets
 		// would pass against a router that had broken both existing arms.
 		busWrite(board, g_mbarBase + 0x080u, g_word, 0xA6A6u, status);
 		checkEqual(busRead(board, g_mbarBase + 0x080u, g_word, status), 0xA6A6u,
@@ -708,8 +700,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 2a -- THE TWO WRITE-ONLY REGISTERS ARE ROUTED BY BIT 7
-	// AND NOT BY POSITION. The part accepts one or two bytes in either order.
+	// The two write-only registers are routed by bit 7 and not by position.
+	// The part accepts one or two bytes in either order.
 	// ==================================================================
 	{
 		g2::Max1039 forward(makeAdcConfig());
@@ -771,8 +763,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 2b -- THIS FIRMWARE'S ACTUAL ORDER IS MEASURED AND THE
-	// TEST MAY ASSERT IT: setup first, then configuration, in two SEPARATE
+	// This firmware's actual order is measured, so the test asserts it: setup
+	// first, then configuration, in two SEPARATE
 	// transactions, each opened by its own address byte and closed by its own
 	// STOP. The model must accept either order because the part does; the
 	// firmware happens to send this one.
@@ -809,7 +801,7 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 3 -- CH11 IS THE REFERENCE PIN, NOT AN UNWIRED CHANNEL.
+	// CH11 is the reference pin, not an unwired channel.
 	// With SEL1 set it is excluded from a multichannel scan, and a DIRECT
 	// single-ended selection of it returns GND.
 	// ==================================================================
@@ -847,8 +839,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 4 -- THE SCALE IS DERIVED FROM THE REFERENCE, AND THE
-	// SETUP BYTE'S SEL FIELD IS WHAT SELECTS THE REFERENCE.
+	// The scale is derived from the reference, and the setup byte's SEL field
+	// is what selects the reference.
 	// ==================================================================
 	{
 		// The same input at two different reference values.
@@ -937,8 +929,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 5 -- THE CLOCK MODE IS DECODED, AND EXTERNAL CLOCK MODE
-	// IS WHAT THIS FIRMWARE SELECTS. The wrong model is the plausible one:
+	// The clock mode is decoded, and external clock mode is what this firmware
+	// selects. The wrong model is the plausible one:
 	// internal clock is the part's power-on default.
 	// ==================================================================
 	{
@@ -964,8 +956,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 6 -- THE READ SIDE SUPPLIES BYTES INDEFINITELY AND IS
-	// NEVER NOT-ACKNOWLEDGED. The firmware clears TXAK unconditionally with
+	// The read side supplies bytes indefinitely and is never
+	// not-acknowledged. The firmware clears TXAK unconditionally with
 	// no index test, never writes the state variable back, and issues NO STOP
 	// for the read transaction. The consequence of getting this wrong is not
 	// a wrong value; it is a hang.
@@ -995,8 +987,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 7 -- THE SCAN SEQUENCE IS WHAT THE CONFIGURATION BYTE
-	// ASKED FOR, AND ITS LENGTH MOVES WITH CS.
+	// The scan sequence is what the configuration byte asked for, and its
+	// length moves with CS.
 	// ==================================================================
 	{
 		g2::Max1039 adc(makeAdcConfig());

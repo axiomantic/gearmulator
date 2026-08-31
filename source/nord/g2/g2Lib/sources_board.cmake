@@ -53,14 +53,13 @@ list(APPEND G2LIB_SOURCES
 	uart0.cpp
 )
 
-# ----------------- BRD-20, the P-memory write funnel
+# ----------------- the P-memory write funnel
 #
-# pmemFunnel.h declares the one function that writes DSP program memory and
-# pmemFunnel.cpp carries it. Both are listed: the header for the IDE source
-# group, and the translation unit because a build that compiles the test
-# without compiling this source fails at the LINK step on g2::writePMem.
+# Both files are listed: the header for the IDE source group, and the
+# translation unit because a build that compiles the test without compiling this
+# source fails at the LINK step on g2::writePMem.
 #
-# THE PAIR IS THE LINT'S ONLY ALLOW-LIST. `.github/workflows/track-board.yml`
+# The pair is the lint's only allow-list. `.github/workflows/track-board.yml`
 # fails when any other file under source/nord/g2/ names a P-memory write, so
 # moving either name out of this directory moves the allow-list with it.
 
@@ -87,12 +86,10 @@ list(APPEND G2LIB_SOURCES
 	board.cpp
 )
 
-# ----------------- BRD-24, the M-Bus controller and the MAX1039 slave
+# ----------------- the M-Bus controller and the MAX1039 slave
 #
-# mbus.h declares the module at MBAR+0x280 and the byte-level slave seam it
-# drives; max1039.h declares the one slave on that bus. Both translation units
-# are listed: a build that compiles the test without compiling them fails at the
-# LINK step on g2::MBus and g2::Max1039.
+# Both translation units are listed: a build that compiles the test without
+# compiling them fails at the LINK step on g2::MBus and g2::Max1039.
 
 list(APPEND G2LIB_SOURCES
 	mbus.h

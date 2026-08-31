@@ -89,7 +89,7 @@ namespace g2
 		// Exiting 0 on a skip is scored Passed, which is the same answer ctest
 		// gives a run that executed every gated body and verified the firmware.
 		//
-		// tests_int.cmake READS THIS NUMBER OUT OF THIS HEADER and hands it to
+		// tests_int.cmake reads this number out of this header and hands it to
 		// SKIP_RETURN_CODE, and fails the configure when it cannot find it. The
 		// two spellings therefore cannot drift apart in silence.
 		constexpr int g_gatedSkipExitCode = 77;

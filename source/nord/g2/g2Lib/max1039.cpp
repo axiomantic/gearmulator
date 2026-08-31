@@ -1,18 +1,12 @@
-// Task BRD-24. The MAX1039 slave. See max1039.h for what this unit is.
+// See max1039.h for what this unit is. The register layout, the
+// reference-selection table, the channel map, the scan modes and the two clock
+// modes are read from Maxim document 19-2442 Rev 0, which is not the current
+// revision, so no electrical limit from it is quoted here.
 //
-// PROVENANCE. The register layout, the reference-selection table, the channel
-// map, the scan modes and the two clock modes are read from Maxim document
-// 19-2442 Rev 0. That is NOT the current revision, so no electrical limit from
-// it is quoted here; the address, the register map and the cycle formats carry
-// across revisions because a shipped part's two-wire address cannot move
-// without breaking every existing design.
-//
-// WHAT IS DELIBERATELY NOT MODELLED, because nothing drives it and a model
-// built for an unexercised path cannot be told from a wrong one: the
-// pseudo-differential channel map, the scan mode that sweeps up from AIN6, the
-// bipolar transfer function, the configuration-register reset the setup byte's
-// RST bit performs, and the twelve-byte result RAM that internal clock mode
-// reads back FIFO.
+// Deliberately not modelled: the pseudo-differential channel map, the scan mode
+// that sweeps up from AIN6, the bipolar transfer function, the
+// configuration-register reset the setup byte's RST bit performs, and the
+// twelve-byte result RAM that internal clock mode reads back FIFO.
 
 #include "max1039.h"
 
@@ -63,9 +57,9 @@ namespace g2
 
 	float Max1039::channelVolts(const uint8_t _channel) const
 	{
-		/* PIN 13 CARRIES WHAT THE BOARD FEEDS IT whether the setup register is
-		 * using it as a reference or reading it as a channel, so its potential
-		 * is the reference argument and not a setter of its own. */
+		/* Pin 13 carries what the board feeds it whether the setup register is
+		 * using it as a reference or reading it as a channel, so its potential is
+		 * the reference argument and not a setter of its own. */
 		if(_channel == g_referenceChannel)
 			return m_externalReferenceVolts;
 
@@ -110,10 +104,10 @@ namespace g2
 	{
 		std::vector<uint8_t> channels;
 
-		/* SCAN 01 AND SCAN 11 BOTH CONVERT THE SELECTED CHANNEL ALONE, and in
+		/* Scan 01 and scan 11 both convert the selected channel alone, and in
 		 * external clock mode the datasheet says there is no difference between
-		 * them at all. Scan 10's own sweep start is not modelled and this
-		 * branch answers for it. */
+		 * them at all. Scan 10's own sweep start is not modelled and this branch
+		 * answers for it. */
 		if(m_scan != g_scanUpFromZero)
 		{
 			channels.push_back(m_channelSelect);
@@ -161,10 +155,10 @@ namespace g2
 
 	bool Max1039::start(const uint8_t _address7, const bool _read)
 	{
-		/* THE ADDRESS DISCRIMINATES, AND THIS IS THE ONE SITE THAT DECIDES IT.
-		 * The HS-mode master code 0000 1xxx falls out of the same rule: its
-		 * address bits match nothing, so it is not acknowledged, which is the
-		 * response the datasheet calls expected rather than an error. */
+		/* This is the one site that decides selection. The HS-mode master code
+		 * 0000 1xxx falls out of the same rule: its address bits match nothing,
+		 * so it is not acknowledged, which the datasheet calls expected rather
+		 * than an error. */
 		if(_address7 != m_address)
 		{
 			m_selected = false;
@@ -191,10 +185,10 @@ namespace g2
 		if(!m_selected)
 			return false;
 
-		/* THE TWO REGISTERS ARE WRITE-ONLY AND THERE IS NO REGISTER-ADDRESS
-		 * BYTE. Bit 7 of each written byte routes it, so a master may send one
-		 * byte or two, in either order, and this model decodes each byte on its
-		 * own rather than by its position in the transaction. */
+		/* The two registers are write-only and there is no register-address byte.
+		 * Bit 7 of each written byte routes it, so a master may send one byte or
+		 * two, in either order, and this model decodes each byte on its own
+		 * rather than by its position in the transaction. */
 		if((_byte & g_registerSelect) != 0u)
 			applySetup(_byte);
 		else
@@ -210,11 +204,11 @@ namespace g2
 
 		const uint8_t channel = m_sequence[m_position];
 
-		/* THE SCAN REPEATS AND THE READ NEVER ENDS ITSELF. In external clock
-		 * mode the part converts until it receives a not-acknowledge, and this
+		/* The scan repeats and the read never ends itself. In external clock mode
+		 * the part converts until it receives a not-acknowledge, and this
 		 * firmware never sends one: it clears TXAK on every byte with no index
-		 * test and issues no STOP for the read. The driver carries no timeout,
-		 * no retry and no error path, so a read that ended itself would stop the
+		 * test and issues no STOP for the read. The driver carries no timeout, no
+		 * retry and no error path, so a read that ended itself would stop the
 		 * machine rather than mis-report it. */
 		m_position = (m_position + 1u) % m_sequence.size();
 

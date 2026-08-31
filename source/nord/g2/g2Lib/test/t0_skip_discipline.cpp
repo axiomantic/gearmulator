@@ -321,7 +321,7 @@ int main()
 				"exit code: a run that executed one gated body is 0 even though other bodies skipped");
 		}
 
-		// ---------------- THE HALF CTEST READS
+		// ---------------- the half ctest reads
 		//
 		// Everything above asserts the skip MESSAGE. ctest reads no message. It
 		// reads a process exit status, so the status is the half that decides

@@ -1,22 +1,16 @@
-// Task INT-1, the board composition assigned by plan section 24.6 row W3-115.
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// Plan section 24.6 row W3-115, INT-1's block, section 7.2.2 group G-M3.
-// Design sections 5.2.1, 6.4.
+// The flash, panel, CS5 latches, HDI08 adapter, memory map, SIM and UART0 are
+// reachable from the Board's bus callbacks. This test asserts that and nothing
+// else: it reads no firmware, boots nothing, and asserts nothing about the
+// banner.
 //
-// WHAT THIS TEST IS. W3-115's acceptance is that "the flash, panel, CS5
-// latches, HDI08 adapter, memory map, SIM and UART0 [are] reachable from the
-// `Board`'s bus callbacks". This test is that acceptance, and nothing else in
-// INT-1 is in its scope: it reads no firmware, boots nothing, and asserts
-// nothing about the banner.
-//
-// WHY EVERY CASE ASSERTS A VALUE AND NOT A STATUS ALONE. The defect this test
-// exists to catch is a `Board` whose callbacks answer `0u` with a bus-OK
-// status at EVERY address. A test that read an address and checked only that
-// the access completed would pass against exactly that defect, because the
-// broken board completes every access. So each unit is made to answer a value
-// that NO OTHER UNIT in the composition produces, and each case asserts WHICH
-// unit answered rather than that something did:
+// Every case asserts a value and not a status alone. The defect this test
+// exists to catch is a `Board` whose callbacks answer `0u` with a bus-OK status
+// at EVERY address, and a test that read an address and checked only that the
+// access completed would pass against exactly that defect. So each unit is made
+// to answer a value that NO OTHER UNIT in the composition produces, and each
+// case asserts WHICH unit answered rather than that something did:
 //
 //     CS0    the flash boot image, first byte 0xA0 and last byte 0xB0
 //     CS1    the HDI08 array, which reports the port a write selected
@@ -31,26 +25,20 @@
 // answers two windows, and a router that sent both windows to the same image
 // would pass a test that used the same bytes for each.
 //
-// THE NEGATIVE HALF IS NOT OPTIONAL AND IT IS HALF THE CASES. A router that
-// sent every address to every unit would satisfy every positive case above.
-// So every window is probed one byte BELOW its base and one byte ABOVE its
-// last byte, and the fixture leaves a gap between every pair of windows so
-// that those two addresses fall in no window at all. An address in no window
-// must report MCF5307_BUS_UNMAPPED, which is the answer memoryMap.cpp already
-// gives and which this test does not re-decide.
+// The negative half is not optional. A router that sent every address to every
+// unit would satisfy every positive case above. So every window is probed one
+// byte BELOW its base and one byte ABOVE its last byte, and the fixture leaves
+// a gap between every pair of windows so that those two addresses fall in no
+// window at all. An address in no window must report MCF5307_BUS_UNMAPPED,
+// which is the answer memoryMap.cpp already gives and which this test does not
+// re-decide.
 //
-// THE ONE ADDRESS WHOSE OWNER IS NOT OBSERVABLE, STATED RATHER THAN HIDDEN.
-// MBAR+0x1D0 is UIPCR. sim.cpp's DIVERGENCE note assigns that one offset to
-// the SIM because the firmware reads it as a model strap, and gives BRD-4
-// "every other UART offset". Both models answer 0x0E there and both restrict
-// it to byte access, so NO assertion can tell which one replied. The case
-// below asserts the value the two agree on and says so; it is not evidence
-// about the split, and the split is proved at MBAR+0x1F0 instead, where the
-// two models genuinely differ.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG, so an assert() would be removed and a report
-// built on one could never fire.
+// One address's owner is not observable. MBAR+0x1D0 is UIPCR, assigned to the
+// SIM because the firmware reads it as a model strap, with UART0 taking every
+// other UART offset. Both models answer 0x0E there and both restrict it to byte
+// access, so NO assertion can tell which one replied. The case below asserts
+// the value the two agree on and says so; the split is proved at MBAR+0x1F0
+// instead, where the two models genuinely differ.
 
 #include "board.h"
 
@@ -100,24 +88,23 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE FIXTURE LAYOUT, AND WHICH NUMBERS HAVE AN AUTHORITY BEHIND THEM.
+	// The fixture layout, and which numbers have an authority behind them.
 	//
-	// FOUR BASES ARE RECORDED and this fixture uses the shipped constants
+	// Four bases are recorded, and this fixture uses the shipped constants
 	// rather than repeating their values: g_cs1Base, g_cs3Base, g_cs5Base and
-	// g_sdramBase in memoryMap.h, from AGENTS.md section 2.2.
+	// g_sdramBase in memoryMap.h.
 	//
-	// CS0's, CS2's and CS4's BASES ARE RECORDED BY NO AUTHORITY, and NO
-	// AUTHORITY RECORDS A SIZE FOR ANY WINDOW. memoryMap.h states both facts
-	// and plan section 1.3 rule 1 makes them configuration that a caller
-	// supplies. The values below are therefore THIS FIXTURE'S, chosen only so
-	// that the windows are disjoint and separated by gaps, and they are NOT a
-	// claim about the machine. The one exception is the MBAR window's SIZE,
-	// which sim.h records as g_simSpaceSize from MCF5307 UM Appendix B.
+	// CS0's, CS2's and CS4's bases are recorded by no authority, and no
+	// authority records a size for any window, so both are configuration a
+	// caller supplies. The values below are therefore THIS FIXTURE'S, chosen
+	// only so that the windows are disjoint and separated by gaps, and they are
+	// NOT a claim about the machine. The one exception is the MBAR window's
+	// SIZE, which sim.h records as g_simSpaceSize from MCF5307 UM Appendix B.
 	//
-	// CS1's size is the 0x800 that BRD-15's own decode test uses, because the
-	// HDI08 decode reads address lines inside that span.
+	// CS1's size is 0x800 because the HDI08 decode reads address lines inside
+	// that span.
 	//
-	// THE GAPS ARE LOAD-BEARING. Every window is followed by unmapped space,
+	// The gaps are load-bearing. Every window is followed by unmapped space,
 	// so "one byte past the end" is an address that no window claims and the
 	// negative cases below have somewhere to land.
 	constexpr uint32_t g_cs0Base = 0x10000000u;
@@ -153,9 +140,9 @@ namespace
 		config.memory.cs5   = {g2::g_cs5Base,    g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,       g2::g_simSpaceSize};
 
-		// CS3 is the ISP1181 and the SDRAM is main memory. NEITHER is one of
-		// the seven units W3-115 names, so this fixture leaves both windows
-		// absent. An absent window has size zero and answers nowhere, which is
+		// CS3 is the ISP1181 and the SDRAM is main memory. Neither is one of
+		// the composed units, so this fixture leaves both windows absent. An
+		// absent window has size zero and answers nowhere, which is
 		// what makes the CS3 and SDRAM cases below assert UNMAPPED.
 
 		config.hdi08 = g2::Hdi08Decode(g2::g_hdi08ExpandedPorts);
@@ -175,8 +162,7 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// EVERY ACCESS IN THIS FILE GOES THROUGH THE INSTALLED CALLBACK, AND THAT
-	// IS A CORRECTION RATHER THAN A PREFERENCE.
+	// Every access in this file goes through the installed callback.
 	//
 	// An earlier revision of this test called Board::busRead directly. It
 	// passed all 65 cases -- and it ALSO passed with the old
@@ -189,9 +175,9 @@ namespace
 	// mcf5307_create. Driving THEM means a body that stops forwarding turns
 	// this test red, which is the property the earlier revision lacked.
 	//
-	// AND IT ALSO MEANS THE SIZE ARGUMENT IS THE CORE'S, WHICH IS A COUNT OF
-	// BYTES AND NOT A WIDTH IN BITS. mcf5307.h states that unit twice, once per
-	// callback typedef. This test used to pass 8, 16 and 32 here -- the
+	// It also means the size argument is the core's, which is a count of BYTES
+	// and not a width in bits. mcf5307.h states that unit twice, once per
+	// callback typedef. A test that passes 8, 16 or 32 here -- the
 	// MemoryMap's unit -- and the callbacks forwarded them unconverted, so the
 	// widths agreed by accident on every line of this file and disagreed on
 	// every access a real core makes. The three constants below are named
@@ -388,7 +374,7 @@ int main()
 		}
 
 		// 0x110007F0 is port 0's block and +4 is the longword register that
-		// pushes a word. BRD-15's own decode test pins both. The address is
+		// pushes a word. The address is
 		// ABSOLUTE here: the board is what must turn it into the offset the
 		// adapter expects, and that conversion is the thing under test.
 		const uint32_t port0Word = 0x00BEAD00u;
@@ -488,12 +474,12 @@ int main()
 		checkEqual(simValue, 0xA6A6u,
 		           "the UART0 writes left the SIM's CSAR0 untouched");
 
-		// THE ONE ADDRESS WHOSE OWNER IS NOT OBSERVABLE. MBAR+0x1D0 is
-		// UIPCR. sim.cpp's DIVERGENCE note gives that single offset to the
-		// SIM and every other UART offset to BRD-4. Both models answer 0x0E
-		// and both restrict it to byte access, so this case asserts the
-		// value the two AGREE on. It is a consistency check and it is NOT
-		// evidence about which unit replied; the split is proved above.
+		// The one address whose owner is not observable. MBAR+0x1D0 is UIPCR,
+		// which goes to the SIM while every other UART offset goes to UART0.
+		// Both models answer 0x0E and both restrict it to byte access, so this
+		// case asserts the value the two AGREE on. It is a consistency check
+		// and it is NOT evidence about which unit replied; the split is proved
+		// above.
 		checkByte(board, g_mbarBase + 0x1D0u, 0x0Eu,
 		          "MBAR+0x1D0 answers the UIPCR strap value both models agree on");
 	}
@@ -503,8 +489,8 @@ int main()
 	// ==================================================================
 	{
 		// CS3 is the ISP1181 and the SDRAM is main memory. Neither is one of
-		// the seven units W3-115 names, and this fixture attaches nothing to
-		// either, so both must report UNMAPPED rather than answering zero
+		// the composed units, and this fixture attaches nothing to either, so
+		// both must report UNMAPPED rather than answering zero
 		// with a bus-OK status.
 		checkUnmapped(board, g2::g_cs3Base,
 		              "CS3 has no unit attached and reports unmapped");
@@ -522,10 +508,9 @@ int main()
 	}
 
 	// ==================================================================
-	// A default-constructed Board answers nowhere. BRD-21's surface task
-	// ships a Board with no configuration, and an unconfigured board must
-	// report unmapped rather than accept every access -- which is the
-	// exact defect this test exists to catch.
+	// A default-constructed Board answers nowhere: an unconfigured board must
+	// report unmapped rather than accept every access, which is the exact
+	// defect this test exists to catch.
 	// ==================================================================
 	{
 		g2::Board bare;

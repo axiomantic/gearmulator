@@ -50,16 +50,16 @@ namespace g2
 		// words, then the Primary Vendor Command Set ID. Every other offset
 		// falls through to the image, so query mode does not swallow the map.
 		//
-		// THE ID IS 2 AND ITS SOURCE IS THIS FILE'S OWN kErasedByte COMMENT --
-		// an AMD-style part -- so it is an IMPLICATION of the existing model
-		// and not a firmware measurement. The firmware accepts 1 or 2.
+		// The ID is 2 -- an AMD-style part, which is an implication of this
+		// file's own kErasedByte and not a firmware measurement. The firmware
+		// accepts 1 or 2.
 		//
-		// THE ID's HIGH HALF IS THE BYTE AT 0x26 AND ITS LOW HALF THE BYTE AT
+		// The ID's high half is the byte at 0x26 and its low half the byte at
 		// 0x28, which is how the firmware combines them. A strict JEDEC part
 		// carries each datum in the LOW byte of its word, at 0x27 and 0x29,
-		// which is where this table puts Q, R and Y. The two placements
-		// disagree for the ID pair; the firmware's combination is what the
-		// probe actually branches on, so it is what this table satisfies.
+		// which is where this table puts Q, R and Y. The two placements disagree
+		// for the ID pair; the firmware's combination is what the probe branches
+		// on, so it is what this table satisfies.
 		constexpr uint32_t kCfiWindowFirst = 0x20u;
 		constexpr uint32_t kCfiWindowLast  = 0x29u;
 

@@ -1,26 +1,18 @@
-// Task INT-1. The test console.
+// The test console.
 //
-// Plan section 15 (INT-1), section 7.4.2. This directory is SHARED BY ORDER and
-// not by ownership: INT-1 creates this file in Wave 4a, INT-2 extends it in
-// Wave 5b, PLG-14 in Wave 6 and PERF-1 in Wave 7, and no two writers share a
-// wave.
+// `g2TestConsole --boot` boots the Clavia OS image directly at 0x30000400 and
+// PRINTS display 0's 32 character cells as they stand in main memory. It
+// asserts nothing: the assertions live in `t1_boot`, which is a ctest target.
+// This program is the operator-facing window onto the same boot, and its output
+// is meant to be read by a person bringing the machine up.
 //
-// WHAT THIS PROGRAM IS. `g2TestConsole --boot` boots the Clavia OS image
-// directly at 0x30000400 and PRINTS display 0's 32 character cells as they
-// stand in main memory. It asserts nothing. INT-1's Check puts the assertions
-// in `t1_boot`, which is a ctest target; this program is the operator-facing
-// window onto the same boot, and its output is meant to be read by a person
-// bringing the machine up.
+// Its absence was itself a defect. Without this file
+// `g2TestConsole/CMakeLists.txt` generates a placeholder translation unit whose
+// `main` returns 0 immediately, so the acceptance command exits 0 and prints
+// nothing. The generator stops firing the moment this file is present.
 //
-// IT EXISTS BECAUSE ITS ABSENCE WAS ITSELF A DEFECT. Until this file existed
-// `g2TestConsole/CMakeLists.txt` generated a placeholder translation unit whose
-// `main` returned 0 immediately, so the milestone's own acceptance command
-// exited 0 and printed nothing -- plan section 24.6 row W3-95, the project's
-// signature defect sitting on a milestone definition. The generator stops
-// firing the moment this file is present.
-//
-// EVERY ADDRESS AND EVERY WINDOW BELOW HAS THE SAME PROVENANCE AS
-// `g2Lib/test/t1_boot.cpp` AND IS DOCUMENTED THERE. Two of them -- CS0's base
+// Every address and every window below has the same provenance as
+// `g2Lib/test/t1_boot.cpp` and is documented there. Two of them -- CS0's base
 // and CS4's base -- are INVENTED BY THIS HARNESS because no authority records
 // them, and they are labelled at their site rather than presented as measured.
 
@@ -39,8 +31,8 @@
 
 namespace
 {
-	// Plan section 6.6.4 clause 1: the display buffer base, confirmed at
-	// 0x30057040 as `addil #808062392,%d0`.
+	// The display buffer base, confirmed at 0x30057040 as
+	// `addil #808062392,%d0`.
 	constexpr uint32_t g_displayBase   = 0x302A0DB8u;
 	constexpr uint32_t g_displayStride = 298u;
 	constexpr uint32_t g_lineWidth     = 16u;
@@ -49,12 +41,12 @@ namespace
 	constexpr uint32_t g_entrySp = 0x30400000u;
 	constexpr int      g_regPc   = 17;
 
-	// MEASURED, plan section 6.6.3: the loader's `movel #0x10000001,%d0` /
+	// MEASURED: the loader's `movel #0x10000001,%d0` /
 	// `movec %d0,%mbar` at loader offset 0x1E. The OS never writes MBAR, so a
 	// direct boot of the OS image makes this the harness's job.
 	constexpr uint32_t g_mbarBase = 0x10000000u;
 
-	// MEASURED, plan section 6.6.9: CSAR2 = $1200 and CSMR2 = $007F0001 at
+	// MEASURED: CSAR2 = $1200 and CSMR2 = $007F0001 at
 	// loader offsets 0x70 and 0x7c give 0x12000000..0x127FFFFF.
 	constexpr uint32_t g_cs2Base = 0x12000000u;
 	constexpr uint32_t g_cs2Size = 0x00800000u;
@@ -74,10 +66,9 @@ namespace
 	constexpr uint32_t g_iterations        = 0xFDE8u;
 	constexpr uint32_t g_cyclesPerIteration = 4096u;
 
-	// The SDRAM the firmware executes from. board.cpp attaches the seven units
-	// plan section 24.6 row W3-115 names and leaves Region::Sdram with no target
-	// on purpose, so the store is the harness's to supply. Big-endian, matching
-	// the part.
+	// The SDRAM the firmware executes from. board.cpp leaves Region::Sdram with
+	// no target on purpose, so the store is the harness's to supply.
+	// Big-endian, matching the part.
 	class Ram final : public g2::BusTarget
 	{
 	public:
@@ -291,10 +282,9 @@ namespace
 
 		mcf5307_destroy(mcu);
 
-		// A BOOT THAT PRODUCED NO BANNER IS NOT A SUCCESS, AND THIS PROGRAM MUST
-		// NOT REPORT ONE. Plan section 24.6 row W3-95 records the shape being
-		// avoided here: the milestone's own acceptance command exiting 0 while
-		// the machine did nothing. `--boot` therefore reports success only when
+		// A boot that produced no banner is not a success, and this program must
+		// not report one: an acceptance command that exits 0 while the machine
+		// did nothing says nothing. `--boot` reports success only when
 		// the firmware actually composed something printable into display 0 and
 		// the core is still running; a faulted or halted core is an error exit
 		// whose diagnosis is the lines printed above.

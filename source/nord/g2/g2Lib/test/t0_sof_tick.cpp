@@ -1,64 +1,51 @@
-// Task BRD-22. The 1 kHz USB start-of-frame tick. Tier T0: this test needs no
-// firmware artifact of any kind.
+// Tier T0: this test needs no firmware artifact of any kind.
 //
-// Plan section 13.4, BRD-22. Design sections 9.4 and 13.10.5.
+// The Scheduler calls Board::tickSofIfDue(frameIndex) on EVERY frame,
+// unconditionally, and passes the authoritative virtual frame index. The Board
+// owns the test: it divides by 96 itself and issues one USB start-of-frame tick
+// on each due frame. This test drives the method one quantum at a time and
+// records the frame index of every tick the Board issued, so the assertion is
+// over WHICH frames ticked and not only over how many ticks there were.
 //
-// WHAT THIS TEST IS. The Scheduler calls Board::tickSofIfDue(frameIndex) on
-// EVERY frame, unconditionally, and passes the authoritative virtual frame
-// index. The Board owns the test: it divides by 96 itself and issues one USB
-// start-of-frame tick on each due frame. This test drives the method one
-// quantum at a time and records the frame index of every tick the Board
-// issued, so the assertion is over WHICH frames ticked and not only over how
-// many ticks there were.
+// A count alone cannot separate a divisor that fires twice on one boundary and
+// misses the next from one that fires once on each: the two produce the same
+// total over a long run. The assertions below compare the whole recorded index
+// sequence against the whole expected sequence, so a double and a miss no
+// longer cancel.
 //
-// WHY THE INDICES AND NOT THE COUNT. A count alone cannot separate a divisor
-// that fires twice on one boundary and misses the next from one that fires
-// once on each: the two produce the same total over a long run. The
-// assertions below compare the whole recorded index sequence against the whole
-// expected sequence, so a double and a miss no longer cancel.
+// The two numeric cases bracket the boundary. 1,000 quanta tick 11 times and
+// 960 quanta tick 10, because frame 0 satisfies the divisor and the multiples
+// of 96 below 1,000 are 0, 96, ... 960. Only an implementation that skipped
+// frame 0 would answer 10 for 1,000, so both cases are asserted here.
 //
-// THE TWO NUMERIC CASES COME FROM THE PLAN AND THEY BRACKET THE BOUNDARY.
-// 1,000 quanta tick 11 times and 960 quanta tick 10, because frame 0 satisfies
-// the divisor and the multiples of 96 below 1,000 are 0, 96, ... 960. An
-// earlier revision of the plan asserted 10 for 1,000, which a correct
-// implementation fails and which only an implementation that skipped frame 0
-// would pass. Both cases are asserted here so the boundary is pinned from
-// both sides.
-//
-// HOW THE TICK IS OBSERVED, AND WHY THE TARGET LINKS NO LIBRARY. This
+// How the tick is observed, and why the target links no library. This
 // executable compiles board.cpp together with this file and supplies its own
 // definitions of the mcf5307 C entry points board.cpp uses. That makes
 // isp1181_tick observable without adding a test-only accessor to the shipped
 // Board, and it is the reason tests_board.cmake names ../board.cpp as a source
 // rather than linking g2Lib. Defining isp1181_tick while ALSO linking
-// libmcf5307.a is a duplicate-symbol link error the moment anything in the
-// link pulls the archive member that defines it, so the seam is taken by
-// owning the whole link line instead. The Board now creates and destroys its
-// USB device, so isp1181_create and isp1181_destroy are supplied here too and
-// the same duplicate-symbol reasoning covers them.
+// libmcf5307.a is a duplicate-symbol link error the moment anything in the link
+// pulls the archive member that defines it, so the seam is taken by owning the
+// whole link line instead. The Board creates and destroys its USB device, so
+// isp1181_create and isp1181_destroy are supplied here too.
 //
-// HOW THIS FILE MODELS HANDLE IDENTITY, AND WHY THE MODEL IS THE POINT. The
-// isp1181_create below hands back a DISTINCT, non-null handle on every call,
-// drawn from a token pool this file never clears -- so no two handles in the
-// whole process are equal, not even across runs. That is what separates the
-// assertion "the tick reached the CORRECT handle" from the strictly weaker
-// "the tick reached a CONSTANT handle". A stub that returned one address for
-// every call would collapse the two into the same statement and the
-// strengthening below would assert nothing new: a permanently nil handle
-// passes "constant" and fails "correct".
+// How this file models handle identity. The isp1181_create below hands back a
+// DISTINCT, non-null handle on every call, drawn from a token pool this file
+// never clears -- so no two handles in the whole process are equal. That is
+// what separates the assertion "the tick reached the CORRECT handle" from the
+// strictly weaker "the tick reached a CONSTANT handle": a permanently nil
+// handle passes "constant" and fails "correct".
 //
-// THE NEGATIVE CASE DRIVES A WRONG HANDLE THROUGH THE SAME PREDICATE. Two
+// The negative case drives a wrong handle through the same predicate. Two
 // Boards are alive at once, each with its own device, and the ONE predicate
 // everyTickOfBoardCarried is run twice against the first Board's ticks: once
 // with that Board's own handle, which must hold, and once with the OTHER
-// Board's handle, which must NOT. Without the second run the predicate is
-// never observed to reject anything, and a predicate nobody has watched fail
-// is a claim rather than a mechanism.
+// Board's handle, which must NOT. Without the second run the predicate is never
+// observed to reject anything.
 //
-// THE MODULUS APPEARS HERE AS THIS FILE'S OWN LITERAL. board.cpp derives it
+// The modulus appears here as this file's own literal. board.cpp derives it
 // from G2_FRAME_RATE_HZ; this file writes 96 out. A change that moves one and
-// not the other turns this test red, which is what makes the relation a
-// mechanism rather than a shared constant nobody checks.
+// not the other turns this test red.
 
 #include "board.h"
 
@@ -134,7 +121,7 @@ namespace
 	// because push_back leaves references to existing elements valid, so every
 	// handle stays live and distinct for the whole run.
 	//
-	// IT IS NEVER CLEARED, AND THAT IS DELIBERATE. Every handle this file hands
+	// It is never cleared, and that is deliberate. Every handle this file hands
 	// out is distinct across the WHOLE process, so a Board that cached a handle
 	// belonging to an earlier run is caught instead of excused by an address
 	// the allocator happened to reuse.
@@ -159,7 +146,7 @@ namespace
 	// both the positive and the negative case below would pass against a Board
 	// that ticks never.
 	//
-	// THIS IS THE ONE PREDICATE BOTH CASES RUN. The negative case exists to
+	// This is the one predicate both cases run. The negative case exists to
 	// watch it return false, which is the only thing that establishes it can.
 	bool everyTickOfBoardCarried(const int _tag, const isp1181_ctx* const _handle)
 	{
@@ -424,11 +411,11 @@ int main()
 		check(handleA != nullptr && handleB != nullptr && handleA != handleB,
 		      "the two Boards were given two different non-null handles");
 
-		// EACH BOARD REGISTERED ITSELF AS ITS DEVICE'S OWNER. The user pointer
-		// is what the irq and tx callbacks will be handed when task BRD-3 and
-		// the TransportHub route them, so a Board that registered null or its
-		// neighbour would deliver another Board's interrupts. That defect is
-		// invisible in the tick record, which carries only the handle.
+		// Each Board registered itself as its device's owner. The user pointer
+		// is what the irq and tx callbacks are handed, so a Board that
+		// registered null or its neighbour would deliver another Board's
+		// interrupts. That defect is invisible in the tick record, which
+		// carries only the handle.
 		check(g_creates.size() == 2u && g_creates[0].user == addrA,
 		      "Board A registered itself as its device's user pointer");
 		check(g_creates.size() == 2u && g_creates[1].user == addrB,

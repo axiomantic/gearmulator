@@ -26,11 +26,10 @@ add_compile_options("$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-elid
 # MSVC spells it /Zc:nrvo-, introduced in VS 2022 17.4. cl KEEPS COMPILING
 # through an unrecognised option, reporting only warning D9002, so an
 # unconditional flag would be ignored in silence on an older toolchain and this
-# directory would advertise a guard it does not have - the very defect the flag
-# above exists to catch. Both conditions below must therefore hold: the version
-# test does not depend on the CMake release carrying a D9002 pattern in
-# check_cxx_compiler_flag's FAIL_REGEX list, and the probe does not depend on
-# the version table. A gap is REPORTED, never taken in silence.
+# directory would advertise a guard it does not have. Both conditions below must
+# therefore hold: the version test does not depend on the CMake release carrying
+# a D9002 pattern in check_cxx_compiler_flag's FAIL_REGEX list, and the probe
+# does not depend on the version table.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	set(_g2_nrvo_gap "")
 

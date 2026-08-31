@@ -1,25 +1,15 @@
-// Task BRD-24. The M-Bus controller.
+// The MCF5307 M-Bus module at MBAR+$280, modelled as far as the firmware drives
+// it. It is a BusTarget, so it takes the MBAR-relative offset the decode
+// produced and carries no knowledge of where the boot loader put MBAR.
 //
-// Plan sections 13.5, 13.5.1, 13.5.2, 13.5.3. Design section 6.4 for the MBAR
-// window; the M-Bus module is covered by no design section.
+// The status register is not storage. MBB tracks the MSTA transitions in MBCR
+// and MIF tracks byte completions, because the firmware requires MBB to read
+// CLEAR after a STOP and SET after the next START, and MIF to be re-settable
+// after each software clear. No constant satisfies either requirement.
 //
-// WHAT THIS FILE IS. The MCF5307 M-Bus module at MBAR+$280, modelled as far as
-// the firmware drives it. It is a BusTarget, so it takes the MBAR-relative
-// offset the BRD-1 decode produced and carries no knowledge of where the boot
-// loader put MBAR.
-//
-// THE STATUS REGISTER IS NOT STORAGE, AND THAT IS THE WHOLE POINT OF THE UNIT.
-// MBB tracks the MSTA transitions in MBCR and MIF tracks byte completions,
-// because the firmware requires MBB to read CLEAR after a STOP and SET after the
-// next START, and MIF to be re-settable after each software clear. No constant
-// satisfies either requirement.
-//
-// A NOT-ACKNOWLEDGE IS NOT A FAULT. The firmware never inspects RXAK, so a NACK
+// A not-acknowledge is not a fault. The firmware never inspects RXAK, so a NACK
 // it cannot see must not become a failure this model invents. RXAK is reported
 // and nothing else happens.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). The default build is
-// Release and it defines NDEBUG.
 
 #pragma once
 
