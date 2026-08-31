@@ -622,3 +622,28 @@ set_property(TARGET t0_scheduler_state PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_scheduler_state COMMAND t0_scheduler_state)
 set_tests_properties(t0_scheduler_state PROPERTIES LABELS "UnitTest")
+
+# ---------------- SCH-36 - t0_state_excludes_regime
+#
+# An ordinary executable. It asserts that the CODEC REGIME does not travel with
+# a saved state block: a play-regime snapshot loaded into a boot-regime machine
+# leaves the BOOT regime standing, every other state item survives the round
+# trip by value, and design section 15.6's step 4 leaves both codec queues
+# untouched when step 3 restored a snapshot.
+#
+# THE REGIME IS ASSERTED THROUGH WHAT A QUANTUM DOES and never through a byte
+# offset: a boot quantum emits five phases and a play quantum seven, which is
+# the separation t0_codec_regimes establishes. The source carries a known
+# positive for that instrument, so a run in which every quantum looked like a
+# boot quantum cannot pass by accident.
+#
+# NO CASE IN THE SOURCE IS AN assert() AND NO CASE CATCHES AN EXCEPTION. Every
+# verdict is the failure counter and the process exit status.
+
+add_executable(t0_state_excludes_regime
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_state_excludes_regime.cpp)
+target_link_libraries(t0_state_excludes_regime PRIVATE g2Lib)
+set_property(TARGET t0_state_excludes_regime PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_state_excludes_regime COMMAND t0_state_excludes_regime)
+set_tests_properties(t0_state_excludes_regime PROPERTIES LABELS "UnitTest")
