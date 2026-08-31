@@ -62,6 +62,13 @@ if(DSP56300_DEBUGGER)
 	target_link_libraries(g2Lib PUBLIC dsp56kDebugger)
 endif()
 
+# gdbStub.cpp's loopback socket. On Windows the Berkeley calls live in ws2_32
+# and nothing else in this library pulls it in; every other platform carries
+# them in libc and needs no entry here.
+if(WIN32)
+	target_link_libraries(g2Lib PUBLIC ws2_32)
+endif()
+
 set_property(TARGET g2Lib PROPERTY FOLDER "G2")
 
 target_include_directories(g2Lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)

@@ -4,11 +4,33 @@
 
 #include "gdbStub.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
-#include <unistd.h>
+/* THE SOCKET LAYER IS THE ONLY PLATFORM-DEPENDENT PART OF THIS FILE, and it is
+ * confined to the block below and to the six wrappers under it. Winsock is
+ * Berkeley sockets with four differences and no more: the handle is a UINT_PTR
+ * rather than an int, the library needs starting once per process, close is
+ * spelled closesocket, and the byte pointers of setsockopt, send and recv are
+ * char* rather than void*. Each difference is answered once here so that the
+ * protocol code below reads the same on every platform.
+ *
+ * The whole of g2Lib is in the windows-2022 MSVC leg of the CI matrix and
+ * gdbStub.cpp is unconditionally in sources_board.cmake, so a POSIX-only
+ * include block here is a broken build and not a missing feature. */
+#ifdef _WIN32
+#	ifndef WIN32_LEAN_AND_MEAN
+#		define WIN32_LEAN_AND_MEAN
+#	endif
+#	ifndef NOMINMAX
+#		define NOMINMAX
+#	endif
+#	include <winsock2.h>
+#	include <ws2tcpip.h>
+#else
+#	include <arpa/inet.h>
+#	include <netinet/in.h>
+#	include <netinet/tcp.h>
+#	include <sys/socket.h>
+#	include <unistd.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -37,6 +59,91 @@ namespace g2
 		// The signal a stop reply carries. SIGTRAP is what a debugger expects
 		// from a breakpoint, a watchpoint and a completed step alike.
 		const char* const g_sigTrap = "05";
+
+		/* The six wrappers. Each takes and returns the intptr_t handle
+		 * GdbStub stores, so nothing below this point names a platform
+		 * socket type. */
+
+#ifdef _WIN32
+		using PlatformSocket = SOCKET;
+#else
+		using PlatformSocket = int;
+#endif
+
+		// The stored handle as the platform's own socket type. The calls that
+		// take no byte pointer -- bind, listen, accept, getsockname -- differ
+		// in nothing else and are spelled directly with this.
+		PlatformSocket socketArg(const std::intptr_t _fd)
+		{
+			return static_cast<PlatformSocket>(_fd);
+		}
+
+		/* Starts Winsock once per process and answers whether sockets can be
+		 * created at all. Winsock refuses every call before WSAStartup and
+		 * there is no other place a library-only component can do it: the
+		 * stub has no process entry point of its own. On POSIX there is
+		 * nothing to start and the answer is unconditionally yes. */
+		bool socketsReady()
+		{
+#ifdef _WIN32
+			static const bool ready = []
+			{
+				WSADATA data{};
+				return ::WSAStartup(MAKEWORD(2, 2), &data) == 0;
+			}();
+			return ready;
+#else
+			return true;
+#endif
+		}
+
+		std::intptr_t socketClose(const std::intptr_t _fd)
+		{
+#ifdef _WIN32
+			return ::closesocket(socketArg(_fd));
+#else
+			return ::close(socketArg(_fd));
+#endif
+		}
+
+		/* setsockopt's value pointer is const char* on Winsock and const
+		 * void* on POSIX, and its length is int on both. A const char* is
+		 * the one spelling both accept. */
+		int socketSetOption(const std::intptr_t _fd, const int _level, const int _option,
+			const int _value)
+		{
+			const int value = _value;
+#ifdef _WIN32
+			return ::setsockopt(socketArg(_fd), _level, _option,
+				reinterpret_cast<const char*>(&value), int(sizeof value));
+#else
+			return ::setsockopt(socketArg(_fd), _level, _option,
+				reinterpret_cast<const char*>(&value), socklen_t(sizeof value));
+#endif
+		}
+
+		/* Answers the bytes sent, or a value <= 0 for a closed or failed
+		 * connection. Winsock's length and return are int; POSIX's are
+		 * size_t and ssize_t. The narrowing to int is safe because every
+		 * caller here sends a packet, and PacketSize is 0x1000. */
+		long socketSend(const std::intptr_t _fd, const char* _data, const size_t _size)
+		{
+#ifdef _WIN32
+			return long(::send(socketArg(_fd), _data, int(_size), 0));
+#else
+			return long(::send(socketArg(_fd), _data, _size, 0));
+#endif
+		}
+
+		// Answers the bytes read. Every caller here reads exactly one byte.
+		long socketRecv(const std::intptr_t _fd, char* _data, const size_t _size)
+		{
+#ifdef _WIN32
+			return long(::recv(socketArg(_fd), _data, int(_size), 0));
+#else
+			return long(::recv(socketArg(_fd), _data, _size, 0));
+#endif
+		}
 
 		bool hexDigit(const char _c, unsigned& _value)
 		{
@@ -189,12 +296,14 @@ namespace g2
 
 	uint16_t GdbStub::listenOn(const uint16_t _port)
 	{
-		m_listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
+		if(!socketsReady())
+			return 0;
+
+		m_listenFd = std::intptr_t(::socket(AF_INET, SOCK_STREAM, 0));
 		if(m_listenFd < 0)
 			return 0;
 
-		int one = 1;
-		::setsockopt(m_listenFd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+		socketSetOption(m_listenFd, SOL_SOCKET, SO_REUSEADDR, 1);
 
 		/* Loopback and never INADDR_ANY. This is an unauthenticated channel with
 		 * full read and write access to the emulated machine. */
@@ -203,10 +312,11 @@ namespace g2
 		addr.sin_port        = htons(_port);
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-		if(::bind(m_listenFd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0 ||
-		   ::listen(m_listenFd, 1) != 0)
+		if(::bind(socketArg(m_listenFd), reinterpret_cast<sockaddr*>(&addr),
+		          socklen_t(sizeof addr)) != 0 ||
+		   ::listen(socketArg(m_listenFd), 1) != 0)
 		{
-			::close(m_listenFd);
+			socketClose(m_listenFd);
 			m_listenFd = -1;
 			return 0;
 		}
@@ -216,9 +326,9 @@ namespace g2
 		sockaddr_in bound{};
 		socklen_t   length = sizeof bound;
 
-		if(::getsockname(m_listenFd, reinterpret_cast<sockaddr*>(&bound), &length) != 0)
+		if(::getsockname(socketArg(m_listenFd), reinterpret_cast<sockaddr*>(&bound), &length) != 0)
 		{
-			::close(m_listenFd);
+			socketClose(m_listenFd);
 			m_listenFd = -1;
 			return 0;
 		}
@@ -232,12 +342,11 @@ namespace g2
 		if(m_listenFd < 0)
 			return false;
 
-		m_clientFd = ::accept(m_listenFd, nullptr, nullptr);
+		m_clientFd = std::intptr_t(::accept(socketArg(m_listenFd), nullptr, nullptr));
 		if(m_clientFd < 0)
 			return false;
 
-		int one = 1;
-		::setsockopt(m_clientFd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+		socketSetOption(m_clientFd, IPPROTO_TCP, TCP_NODELAY, 1);
 
 		m_running = true;
 		return true;
@@ -249,7 +358,7 @@ namespace g2
 
 		while(sent < _size)
 		{
-			const ssize_t n = ::send(m_clientFd, _data + sent, _size - sent, 0);
+			const long n = socketSend(m_clientFd, _data + sent, _size - sent);
 
 			if(n <= 0)
 				return false;
@@ -275,49 +384,63 @@ namespace g2
 
 	/* Read one packet and acknowledge it. Everything ahead of the `$` is
 	 * discarded, which is what makes the peer's own `+` and `-` transparent
-	 * here. */
+	 * here.
+	 *
+	 * A CHECKSUM MISMATCH IS NOT THE END OF THE SESSION. `-` is the
+	 * protocol's request to send that packet again, so the debugger answers
+	 * it with a retransmission and this loop reads that. Returning FALSE
+	 * there closed the session instead: servePacket forwards a false to
+	 * serve(), which stops the packet loop, so one corrupted byte took the
+	 * debugger down rather than costing it one round trip. FALSE is reserved
+	 * for the client having gone, which is what a recv of anything other
+	 * than one byte means. */
 	bool GdbStub::readPacket(std::string& _payload)
 	{
-		char c = 0;
-
 		for(;;)
 		{
-			if(::recv(m_clientFd, &c, 1, 0) != 1)
+			char c = 0;
+
+			for(;;)
+			{
+				if(socketRecv(m_clientFd, &c, 1) != 1)
+					return false;
+				if(c == '$')
+					break;
+			}
+
+			_payload.clear();
+			unsigned sum = 0;
+
+			for(;;)
+			{
+				if(socketRecv(m_clientFd, &c, 1) != 1)
+					return false;
+				if(c == '#')
+					break;
+				_payload += c;
+				sum += unsigned(uint8_t(c));
+			}
+
+			char given[2] = {0, 0};
+			if(socketRecv(m_clientFd, &given[0], 1) != 1 || socketRecv(m_clientFd, &given[1], 1) != 1)
 				return false;
-			if(c == '$')
-				break;
+
+			char want[3];
+			std::snprintf(want, sizeof want, "%02x", sum & 0xffu);
+
+			if(want[0] != given[0] || want[1] != given[1])
+			{
+				// A NAK, and then this is not a packet. Ask for it again and
+				// read the retransmission.
+				const char minus = '-';
+				if(!sendRaw(&minus, 1))
+					return false;
+				continue;
+			}
+
+			const char plus = '+';
+			return sendRaw(&plus, 1);
 		}
-
-		_payload.clear();
-		unsigned sum = 0;
-
-		for(;;)
-		{
-			if(::recv(m_clientFd, &c, 1, 0) != 1)
-				return false;
-			if(c == '#')
-				break;
-			_payload += c;
-			sum += unsigned(uint8_t(c));
-		}
-
-		char given[2] = {0, 0};
-		if(::recv(m_clientFd, &given[0], 1, 0) != 1 || ::recv(m_clientFd, &given[1], 1, 0) != 1)
-			return false;
-
-		char want[3];
-		std::snprintf(want, sizeof want, "%02x", sum & 0xffu);
-
-		if(want[0] != given[0] || want[1] != given[1])
-		{
-			// A NAK, and then this is not a packet. The caller reads the next one.
-			const char minus = '-';
-			(void)sendRaw(&minus, 1);
-			return false;
-		}
-
-		const char plus = '+';
-		return sendRaw(&plus, 1);
 	}
 
 	// ------------------------------------------------------------ the commands
@@ -685,9 +808,9 @@ namespace g2
 		removeWatchers();
 
 		if(m_clientFd >= 0)
-			::close(m_clientFd);
+			socketClose(m_clientFd);
 		if(m_listenFd >= 0)
-			::close(m_listenFd);
+			socketClose(m_listenFd);
 
 		m_clientFd = -1;
 		m_listenFd = -1;

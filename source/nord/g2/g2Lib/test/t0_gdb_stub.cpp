@@ -30,13 +30,31 @@
 #include "board.h"
 #include "gdbStub.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
-#include <unistd.h>
+/* The test client's own socket layer, and it is the same four Winsock
+ * differences gdbStub.cpp answers: the handle is a UINT_PTR, the library needs
+ * starting, close is closesocket, and the byte pointers are char*. The test is
+ * registered unconditionally and g2Lib is in the windows-2022 MSVC leg of the
+ * CI matrix, so a POSIX-only client here would break the same build the stub's
+ * own includes did. */
+#ifdef _WIN32
+#	ifndef WIN32_LEAN_AND_MEAN
+#		define WIN32_LEAN_AND_MEAN
+#	endif
+#	ifndef NOMINMAX
+#		define NOMINMAX
+#	endif
+#	include <winsock2.h>
+#	include <ws2tcpip.h>
+#else
+#	include <arpa/inet.h>
+#	include <netinet/in.h>
+#	include <netinet/tcp.h>
+#	include <sys/socket.h>
+#	include <unistd.h>
+#endif
 
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
@@ -267,7 +285,12 @@ namespace
 	public:
 		bool connect(const uint16_t _port)
 		{
-			m_fd = ::socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+			WSADATA data{};
+			if(::WSAStartup(MAKEWORD(2, 2), &data) != 0)
+				return false;
+#endif
+			m_fd = Socket(::socket(AF_INET, SOCK_STREAM, 0));
 			if(m_fd < 0)
 				return false;
 
@@ -276,39 +299,65 @@ namespace
 			addr.sin_port        = htons(_port);
 			addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-			if(::connect(m_fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0)
+			if(::connect(fd(), reinterpret_cast<sockaddr*>(&addr), socklen_t(sizeof addr)) != 0)
 			{
-				::close(m_fd);
+				closeFd();
 				m_fd = -1;
 				return false;
 			}
 
-			int one = 1;
-			::setsockopt(m_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+			const int one = 1;
+			::setsockopt(fd(), IPPROTO_TCP, TCP_NODELAY,
+				reinterpret_cast<const char*>(&one), int(sizeof one));
 			return true;
 		}
 
 		void close()
 		{
 			if(m_fd >= 0)
-				::close(m_fd);
+				closeFd();
 			m_fd = -1;
 		}
 
-		// Send one request, read the acknowledgement and the reply packet, and
-		// return the reply's payload. Runs on the client thread only.
-		std::string exchange(const std::string& _payload)
+		/* Send one request, read the acknowledgement and the reply packet, and
+		 * return the reply's payload. Runs on the client thread only.
+		 *
+		 * _corruptFirst sends the SAME request once with a broken checksum
+		 * first and requires a `-` for it. A stub that treats a checksum
+		 * mismatch as the end of the session answers nothing here, and the
+		 * exchange reports that rather than hanging: the stub is pumped by
+		 * exactly one servePacket call either way, so a stub that gave up on
+		 * the bad packet has no second read to consume the retransmission. */
+		std::string exchange(const std::string& _payload, const bool _corruptFirst = false)
 		{
 			const std::string out = framed(_payload);
 
-			if(::send(m_fd, out.data(), out.size(), 0) != ssize_t(out.size()))
+			if(_corruptFirst)
+			{
+				std::string bad = out;
+				// The last checksum digit, flipped. The payload is untouched,
+				// so the retransmission below is byte for byte the packet the
+				// stub must end up answering.
+				bad[bad.size() - 1] = bad[bad.size() - 1] == '0' ? '1' : '0';
+
+				if(!sendAll(bad))
+					return "<send failed>";
+
+				char nak = 0;
+				if(recvOne(nak) != 1)
+					return "<no nak>";
+				if(nak != '-')
+					return std::string("<expected nak, got ") + nak + ">";
+			}
+
+			if(!sendAll(out))
 				return "<send failed>";
 
 			// The acknowledgement, then the packet. A '-' means the stub read a
 			// bad checksum, which is a failure this test reports rather than
 			// retries.
 			char ack = 0;
-			if(::recv(m_fd, &ack, 1, 0) != 1)
+			if(recvOne(ack) != 1)
 				return "<no ack>";
 			if(ack != '+')
 				return std::string("<nak ") + ack + ">";
@@ -316,19 +365,19 @@ namespace
 			std::string payload;
 			char        c = 0;
 
-			while(::recv(m_fd, &c, 1, 0) == 1 && c != '$')
+			while(recvOne(c) == 1 && c != '$')
 			{
 			}
 			if(c != '$')
 				return "<no packet>";
 
-			while(::recv(m_fd, &c, 1, 0) == 1 && c != '#')
+			while(recvOne(c) == 1 && c != '#')
 				payload += c;
 			if(c != '#')
 				return "<unterminated packet>";
 
 			char sum[2] = {0, 0};
-			if(::recv(m_fd, &sum[0], 1, 0) != 1 || ::recv(m_fd, &sum[1], 1, 0) != 1)
+			if(recvOne(sum[0]) != 1 || recvOne(sum[1]) != 1)
 				return "<no checksum>";
 
 			unsigned expected = 0;
@@ -342,14 +391,53 @@ namespace
 				return "<bad checksum>";
 
 			const char plus = '+';
-			if(::send(m_fd, &plus, 1, 0) != 1)
+			if(!sendAll(std::string(1, plus)))
 				return "<ack failed>";
 
 			return payload;
 		}
 
 	private:
-		int m_fd = -1;
+#ifdef _WIN32
+		using Socket = SOCKET;
+#else
+		using Socket = int;
+#endif
+
+		Socket fd() const { return static_cast<Socket>(m_fd); }
+
+		void closeFd()
+		{
+#ifdef _WIN32
+			::closesocket(fd());
+#else
+			::close(fd());
+#endif
+		}
+
+		bool sendAll(const std::string& _text)
+		{
+			size_t sent = 0;
+			while(sent < _text.size())
+			{
+				const long n = long(::send(fd(), _text.data() + sent,
+					int(_text.size() - sent), 0));
+				if(n <= 0)
+					return false;
+				sent += size_t(n);
+			}
+			return true;
+		}
+
+		long recvOne(char& _c)
+		{
+			return long(::recv(fd(), &_c, 1, 0));
+		}
+
+		// intptr_t, not int: Winsock's SOCKET is a UINT_PTR and its
+		// INVALID_SOCKET is all bits set, which is -1 in this type, so the
+		// `< 0` tests above hold on both platforms.
+		std::intptr_t m_fd = -1;
 	};
 
 	/* The two-thread rendezvous. The main thread posts a request and then pumps
@@ -362,6 +450,10 @@ namespace
 		std::condition_variable cv;
 		std::string             request;
 		std::string             reply;
+		// Whether the client sends this request once with a broken checksum
+		// before sending it correctly. Carried per request and not per
+		// session, so one case exercises the NAK and the rest do not.
+		bool                    corruptFirst = false;
 		bool                    hasRequest = false;
 		bool                    hasReply   = false;
 		bool                    quit       = false;
@@ -372,16 +464,18 @@ namespace
 		for(;;)
 		{
 			std::string request;
+			bool        corruptFirst = false;
 			{
 				std::unique_lock<std::mutex> lock(_channel.mutex);
 				_channel.cv.wait(lock, [&] { return _channel.hasRequest || _channel.quit; });
 				if(_channel.quit)
 					return;
 				request               = _channel.request;
+				corruptFirst          = _channel.corruptFirst;
 				_channel.hasRequest   = false;
 			}
 
-			const std::string reply = _client.exchange(request);
+			const std::string reply = _client.exchange(request, corruptFirst);
 
 			{
 				std::lock_guard<std::mutex> lock(_channel.mutex);
@@ -399,13 +493,14 @@ namespace
 	 * stub: the main thread is inside servePacket() for exactly as long as the
 	 * stub is answering, and back here -- with the machine quiescent -- when it
 	 * has answered. */
-	std::string ask(const std::string& _payload)
+	std::string ask(const std::string& _payload, const bool _corruptFirst = false)
 	{
 		{
 			std::lock_guard<std::mutex> lock(g_channel->mutex);
-			g_channel->request    = _payload;
-			g_channel->hasRequest = true;
-			g_channel->hasReply   = false;
+			g_channel->request      = _payload;
+			g_channel->corruptFirst = _corruptFirst;
+			g_channel->hasRequest   = true;
+			g_channel->hasReply     = false;
 		}
 		g_channel->cv.notify_all();
 
@@ -497,6 +592,25 @@ int main()
 		          "phase one: ? reports the halt reason of a machine waiting to run");
 		checkText(ask("qC"), "",
 		          "phase one: an unsupported packet is answered with the empty reply");
+
+		/* A CHECKSUM MISMATCH COSTS A ROUND TRIP AND NOT THE SESSION. The
+		 * client sends this request once with a broken checksum, requires a
+		 * `-` for it, and then sends the same request correctly. The stub is
+		 * pumped by ONE servePacket call across both, so a stub that returned
+		 * false on the mismatch has no read left to consume the
+		 * retransmission and this case reports what arrived instead --
+		 * `<stub served nothing>` -- rather than the reply. That is what makes
+		 * it discriminate: the same case passes only when the mismatch is
+		 * answered with a NAK and the loop reads on. */
+		checkText(ask("qSupported:multiprocess+", true), "PacketSize=1000",
+		          "phase one: a bad checksum is NAKed and the retransmission is "
+		          "answered, on the same session");
+
+		// The session is still usable after the NAK, and that is a separate
+		// clause: a stub that answered the retransmission and then closed
+		// would pass the clause above and fail this one.
+		checkText(ask("?"), "T05",
+		          "phase one: the session survives the NAK");
 	}
 
 	// ==================================================================

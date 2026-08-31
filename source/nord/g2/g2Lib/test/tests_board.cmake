@@ -713,3 +713,67 @@ set_property(TARGET t0_gdb_stub PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_gdb_stub COMMAND t0_gdb_stub)
 set_tests_properties(t0_gdb_stub PROPERTIES LABELS "UnitTest")
+
+# ----------------- M4 clause 1, the DSP DMA check driven through the command
+#                   that ships it
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_dump_dsp_dma$
+#
+# TIER T1 AND GATED because the body boots the firmware. The registers the check
+# reads are the ones the emulated kernel programmed, so an unbooted machine
+# gives the check nothing to be right or wrong about. A machine without the
+# artifacts prints the section 18.5 skip line and reports NOT VERIFIED.
+#
+# IT RUNS THE BINARY AND NOT A LIBRARY CALL. The expectation table, the
+# firmware's position-to-port mapping and the conjunction that turns the rows
+# into one verdict all live in g2TestConsole/main.cpp. A test that re-stated any
+# of them would assert its own copy, so the test spawns g2TestConsole and reads
+# its stdout. G2_TEST_CONSOLE_BINARY is the generator expression for that target
+# and never a composed path: a path spelled here would name today's layout.
+#
+# THE DEPENDENCY IS DECLARED, not assumed from build order. Without it the test
+# links and runs against whatever g2TestConsole happens to be on disk, which is
+# the stale-artifact shape.
+#
+# The gate variables carry names of their own, for the reason the blocks above
+# state: a variable borrowed across blocks is how one task's edit silently
+# changes another task's registration.
+
+# THE GUARD IS A QUESTION ABOUT THE BUILD AND NOT ABOUT THE TARGET, and
+# tests_plugin.cmake states the reason at length for the same condition.
+# if(TARGET g2TestConsole) is false HERE in every configure, real or scratch:
+# the parent adds g2Lib before g2TestConsole, so the target does not exist yet
+# at this point and the guard would register nothing with configure exit 0 and
+# no diagnostic. What discriminates the two configures is g2Lib's PARENT
+# directory: source/nord/g2 in the real build, which adds g2TestConsole beside
+# g2Lib, and t0_clock_guard's scratch directory otherwise. Without this,
+# add_dependencies names a target the scratch project never creates and takes
+# that unrelated test red.
+
+get_directory_property(g2_dumpDspDmaParentOfG2Lib DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.." PARENT_DIRECTORY)
+
+if(EXISTS "${g2_dumpDspDmaParentOfG2Lib}/g2TestConsole/CMakeLists.txt")
+	add_executable(t1_dump_dsp_dma t1_dump_dsp_dma.cpp)
+	target_link_libraries(t1_dump_dsp_dma PRIVATE g2Lib)
+	target_compile_definitions(t1_dump_dsp_dma PRIVATE
+		G2_TEST_CONSOLE_BINARY="$<TARGET_FILE:g2TestConsole>")
+	add_dependencies(t1_dump_dsp_dma g2TestConsole)
+	set_property(TARGET t1_dump_dsp_dma PROPERTY FOLDER "G2/test")
+
+	file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_dumpDspDmaSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+	if(NOT g2_dumpDspDmaSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+		message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+	endif()
+
+	set(g2_dumpDspDmaSkipExitCode "${CMAKE_MATCH_1}")
+
+	add_test(NAME t1_dump_dsp_dma COMMAND t1_dump_dsp_dma)
+	set_tests_properties(t1_dump_dsp_dma PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_dumpDspDmaSkipExitCode})
+
+	if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+		set_property(TEST t1_dump_dsp_dma APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+	endif()
+else()
+	message(STATUS "g2TestConsole is not part of this configure; t1_dump_dsp_dma is not registered")
+endif()

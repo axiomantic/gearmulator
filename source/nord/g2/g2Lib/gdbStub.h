@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -154,9 +155,15 @@ namespace g2
 
 		Board& m_board;
 
-		int      m_listenFd = -1;
-		int      m_clientFd = -1;
-		uint16_t m_port     = 0;
+		/* A socket handle, and it is intptr_t and not int because Winsock's
+		 * SOCKET is a UINT_PTR. INVALID_SOCKET is all bits set, which is
+		 * exactly -1 in this type, so the invalid value and the `< 0` test
+		 * that spells it are the same on both platforms. */
+		using SocketHandle = std::intptr_t;
+
+		SocketHandle m_listenFd = -1;
+		SocketHandle m_clientFd = -1;
+		uint16_t     m_port     = 0;
 
 		bool m_running = false;
 
