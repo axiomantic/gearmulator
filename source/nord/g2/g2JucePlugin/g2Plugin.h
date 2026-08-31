@@ -48,8 +48,37 @@
 #include "synthLib/plugin.h"
 #include "synthLib/resampler.h"
 
+#include "scheduler.h"
+
+#include <cstdint>
+
 namespace g2
 {
+	class Device;
+
+	/* `L`, the lookahead, in 96 kHz frames.
+	 *
+	 * The worst-case synchronous patch compile is 695.38 microseconds, taken
+	 * on a 71-word download through the lazy trigger. One 96 kHz frame is
+	 * 1/96000 s = 10.4167 microseconds, and 695.38 / 10.4167 = 66.76, so 67
+	 * whole frames is the first count that covers it.
+	 *
+	 * THE COMPILE WORK WAS MEASURED THROUGH PROXY CODE. The real prologue
+	 * words have never been captured, so the measurement drove sliding windows
+	 * of the 573-word kernel -- right length, wrong content -- and per-module
+	 * patch code is unmeasured. A larger true figure moves this constant and
+	 * nothing else, because every consumer derives from it. */
+	constexpr unsigned kLookaheadFrames = 67;
+
+	/* `D_codec`, in 96 kHz frames. Zero: no converter delay is modelled.
+	 *
+	 * It is a NAMED TERM rather than an omitted one, so that a decision to
+	 * model the converter is one edit at one site. The consequence of the zero
+	 * is bounded and known: against hardware measured at the analogue jacks
+	 * this emulation is up to 2 frames -- about 21 microseconds at 96 kHz --
+	 * shorter than the machine. */
+	constexpr unsigned kDelayCodecFrames = 0;
+
 	class Plugin : public synthLib::Plugin
 	{
 	public:
@@ -60,7 +89,74 @@ namespace g2
 		 * Legacy. */
 		synthLib::Resampler::Mode resamplerMode() const noexcept { return m_resamplerMode; }
 
+		/* THE HOST'S ONE MOMENT. Both `B` and the reported latency are
+		 * computed here and nowhere else, from the same host block and the
+		 * same host rate, so the two can never disagree about which
+		 * prepareToPlay they belong to.
+		 *
+		 * Answers whether the machine is ready to render: false when the
+		 * arguments are refused, and false when a growing `B` forced a
+		 * re-create that did not boot. The derived figures below are written
+		 * on every accepted call regardless, because a host asks for the
+		 * latency whether or not there is firmware to run. */
+		bool prepareToPlay(uint32_t _maxHostBlockSamples, float _hostSamplerate);
+
+		/* `B`, the largest host block the plugin accepts, in 96 kHz frames.
+		 * Zero before the first accepted prepareToPlay. */
+		uint32_t maxHostBlockFrames() const noexcept { return m_maxHostBlockFrames; }
+
+		/* `D_total(R)`, in host samples at the rate the last accepted
+		 * prepareToPlay was given. Zero before that call. */
+		uint32_t reportedLatencySamples() const noexcept { return m_reportedLatencySamples; }
+
+		/* `D_chain`, in 96 kHz frames: one hop for each link between the
+		 * DSPs, taken from the configuration this plugin will build the
+		 * Scheduler from. */
+		uint32_t chainDelayFrames() const noexcept;
+
+		/* How many times a prepareToPlay found a LARGER maximum block and
+		 * therefore had to re-create the Scheduler. An equal or smaller
+		 * maximum leaves this alone, because `B` is a ceiling. */
+		uint32_t schedulerRecreations() const noexcept { return m_schedulerRecreations; }
+
+		/* The configuration the next re-create will use. `lookaheadFrames` is
+		 * `kLookaheadFrames` from construction and `maxHostBlockFrames` is the
+		 * running ceiling. */
+		const Scheduler::Config& schedulerConfig() const noexcept { return m_schedulerConfig; }
+
+		/* `B` from a host block and a host rate, with no side effect.
+		 *
+		 * THE `+1` IS DERIVED AND IS NOT MARGIN. `framesForBlock` in
+		 * g2/timebase.h answers either floor(n * r) or floor(n * r) + 1 for a
+		 * given block, depending on where its accumulator stands, so the
+		 * larger of the two is the only value that bounds every block.
+		 *
+		 * THE 512-SAMPLE RESAMPLER PRE-WARM PLAYS NO PART. It calls process()
+		 * with an empty callback and never reaches the Device, so there is no
+		 * max() against it here. */
+		static uint32_t maxHostBlockFramesFor(uint32_t _maxHostBlockSamples, float _hostSamplerate) noexcept;
+
+		/* `D_resampler(R)`: the framework resampler's own input and output
+		 * delay, in host samples, as the 512-sample pre-warm computed it.
+		 *
+		 * ResamplerInOut's two getters are private to the framework's Plugin.
+		 * The public input-to-output figure carries them plus the host block
+		 * term and the Device's internal latency; subtracting the block term
+		 * leaves the resampler's contribution, and this Device declares no
+		 * internal latency of its own. At a 96 kHz host rate the resampler is
+		 * bypassed and this is 0. */
+		uint32_t resamplerDelaySamples() const noexcept;
+
 	private:
+		bool recreateScheduler();
+
 		synthLib::Resampler::Mode m_resamplerMode = synthLib::Resampler::Mode::Legacy;
+
+		Device*  m_device                 = nullptr;
+		Scheduler::Config m_schedulerConfig{};
+		uint32_t m_blockSizeSamples       = 0;
+		uint32_t m_maxHostBlockFrames     = 0;
+		uint32_t m_reportedLatencySamples = 0;
+		uint32_t m_schedulerRecreations   = 0;
 	};
 }

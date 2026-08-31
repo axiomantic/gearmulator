@@ -479,3 +479,52 @@ set_tests_properties(t1_boot_on_restore PROPERTIES LABELS "IntegrationTest" TIME
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_boot_on_restore APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+# ----------------- `B`, the largest host block the plugin accepts
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_max_host_block$
+#
+# TIER T0 AND UNGATED: no firmware artifact and no booted machine. B is derived
+# from the host's maximum block and the host's rate alone, and the B = 0
+# rejection is a Config-only rejection inside Scheduler::create.
+#
+# IT COMPILES ../../g2JucePlugin/g2Plugin.cpp DIRECTLY alongside g2Device.cpp
+# and g2State.cpp and links g2Lib, the same arrangement as the other
+# plugin-track registrations: g2Plugin.cpp is a g2JucePlugin source and naming
+# that directory's target here would couple this test to its whole surface.
+
+add_executable(t0_max_host_block
+	t0_max_host_block.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Plugin.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Device.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2State.cpp)
+target_link_libraries(t0_max_host_block PRIVATE g2Lib)
+set_property(TARGET t0_max_host_block PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_max_host_block COMMAND t0_max_host_block)
+set_tests_properties(t0_max_host_block PROPERTIES LABELS "UnitTest")
+
+# ----------------- the latency the plugin reports to the host
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_latency_formula$
+#
+# TIER T0 AND UNGATED, for the same reason: the formula reads three constants,
+# the chain configuration and two framework getters, and boots nothing.
+#
+# THE ASSERTION THIS REGISTRATION EXISTS FOR is the CEILING. Above 16,384
+# frames the framework clamps the latency it is handed and only logs it, so the
+# plugin would report a figure shorter than it takes and every host would
+# silently mis-compensate. The test asserts the sum against that bound both
+# arithmetically and behaviorally, through Scheduler::create's acceptance at
+# the bound and its BadLookahead one frame above it.
+
+add_executable(t0_latency_formula
+	t0_latency_formula.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Plugin.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Device.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2State.cpp)
+target_link_libraries(t0_latency_formula PRIVATE g2Lib)
+set_property(TARGET t0_latency_formula PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_latency_formula COMMAND t0_latency_formula)
+set_tests_properties(t0_latency_formula PROPERTIES LABELS "UnitTest")
