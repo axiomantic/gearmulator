@@ -345,14 +345,14 @@ int main()
 	 *
 	 * Empty is the production value and means "derive it from the machine", so
 	 * the default Config case above already covers the accepted-empty half. What
-	 * is rejected is a NAMED order that is not one: the wrong length, a slot
+	 * is rejected is a named order that is not one: the wrong length, a slot
 	 * that does not exist, or a slot named twice. The last is the one with no
 	 * downstream symptom -- a duplicate leaves one slot unwired while two chain
 	 * positions drive another, and nothing further along reports either.
 	 *
-	 * THE ACCEPTED CASE IS PAIRED WITH THEM rather than left to the default
-	 * Config, because a factory that rejected EVERY named order would satisfy
-	 * the three refusals alone.
+	 * The accepted case is paired with them rather than left to the default
+	 * Config, because a factory that rejected every named order would satisfy
+	 * the refusals alone.
 	 */
 	{
 		g2::Scheduler::Config config;

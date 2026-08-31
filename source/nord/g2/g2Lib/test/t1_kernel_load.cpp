@@ -1,57 +1,43 @@
-// Task DSP-14. Tier T1: this test needs the Clavia firmware artifacts and
-// SKIPS with a reason when NMG2_ARTIFACTS does not resolve.
+// This test needs the Clavia firmware artifacts and skips with a reason when
+// NMG2_ARTIFACTS does not resolve.
 //
-// Plan section 15 (DSP-14), design sections 2.1, 2.3, 12.5, 18.3.
+// The board does not program the DMA; the firmware does, through the kernel it
+// downloads. So this file boots the real firmware on the real composition and
+// then reads, out of the emulated DSPs' own peripherals, the four DMA channels
+// the kernel programs. Nothing here writes a DMA register. A test that
+// programmed the channels it then checked would assert that this file can
+// spell.
 //
-// WHAT THIS TEST IS. Design section 12.5 states it in the document's own words:
-// "The board does not program the DMA. The firmware does, through the kernel
-// that it downloads ... The design records them here as an acceptance test, not
-// as configuration. If the emulated DSP does not receive exactly these writes
-// at boot, something else is wrong, and the test says so."
+// The three things it asserts, and where each figure comes from:
 //
-// So this file boots the real firmware on the real composition and then reads,
-// out of the emulated DSPs' own peripherals, the four DMA channels the kernel
-// programs. Nothing here writes a DMA register. A test that programmed the
-// channels it then checked would assert that this file can spell.
+//   1. Eight DSPs each receive one whole kernel image. The word count is not a
+//      literal here: it is read out of the firmware's own container header and
+//      only then compared against 573. See findKernelImages below for why the
+//      header is self-identifying and why a scan for it cannot land on a
+//      coincidence.
 //
-// THE THREE THINGS IT ASSERTS, AND WHERE EACH FIGURE COMES FROM.
+//   2. The four channels carry the documented constants, position by position.
 //
-//   1. Eight DSPs each receive one whole kernel image. The word count is NOT a
-//      literal here: it is READ OUT OF THE FIRMWARE'S OWN CONTAINER HEADER,
-//      design section 2.1, and only then compared against the 573 that section
-//      records. See findKernelImages below for why the header is
-//      self-identifying and why a scan for it cannot land on a coincidence.
+//   3. The DCR request source is the hardware field and not the library
+//      enumerator. The two number spaces agree for the primary ESAI (11 and
+//      12) and differ for ESAI_1, where the hardware writes 21 and 22 while the
+//      library names Esai1ReceiveData = 22 and Esai1TransmitData = 23. A check
+//      that took the library value for the wire value would demand a transmit
+//      source on the receive channel and call the result an acceptance
+//      criterion.
 //
-//   2. The four channels carry the section 2.3 constants, position by position.
+// Chain position is not hardware port, and this file derives the map rather
+// than carrying it. The map is the firmware's own nine-entry table at
+// 0x30116970, and readChainPositions below reads it out of the booted machine.
+// The ordering itself is deliberately not written into this file as data: a
+// copy of it here would be a second definition site that a firmware change
+// could not move.
 //
-//   3. The DCR request source is the HARDWARE field and NOT the library
-//      enumerator. Plan task DSP-2 is the single definition site for the two
-//      number spaces: they agree for the primary ESAI (11 and 12) and differ for
-//      ESAI_1, where the hardware writes 21 and 22 while the library names
-//      Esai1ReceiveData = 22 and Esai1TransmitData = 23. A check that took the
-//      library value for the wire value would demand a TRANSMIT source on the
-//      RECEIVE channel and call the result an acceptance criterion.
-//
-// CHAIN POSITION IS NOT HARDWARE PORT, AND THIS FILE DERIVES THE MAP RATHER
-// THAN CARRYING IT. Plan section 24.6 row W3-399: the console's own DMA check
-// walked hardware ports and compared each against its own number as if that
-// were a chain position, and reported three mismatches against a machine that
-// was correct. The map is the firmware's own nine-entry table at 0x30116970,
-// and readChainPositions below reads it out of the booted machine. THE ORDERING
-// ITSELF IS DELIBERATELY NOT WRITTEN INTO THIS FILE AS DATA: a copy of it here
-// would be a second definition site that a firmware change could not move, which
-// is the defect W3-399 exists to record.
-//
-// EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). The default build is
+// Every verdict is an observable and not an assert(). The default build is
 // Release with NDEBUG, which deletes every assert(), so a predicate spelled as
 // one is a predicate the shipped build does not have. Nothing below calls
 // assert(); the static_assert uses are compile-time and survive NDEBUG by
 // construction.
-//
-// THE MACHINE PLACEMENT IS INT-1's, AND IT IS COPIED RATHER THAN SHARED. The
-// constants, the Ram and makeConfig below are t1_boot.cpp's, because plan
-// section 1.3 rule 1 keeps a harness's own configuration at its own site and
-// this task's Files: line names no header it could share one through.
 
 #include "gatedFixture.h"
 
@@ -91,11 +77,9 @@ namespace
 		++g_failures;
 	}
 
-	// ------------------------------------------------ the ESAI underrun log filter
-	//
-	// INT-1's filter, and its limit is INT-1's limit: the underruns are REAL and
-	// expected in the boot regime, because nothing drains the ESAIs until the
-	// codec queues arrive. This hides the REPETITION and nothing else. Set
+	// The ESAI underrun log filter. The underruns are real and expected in the
+	// boot regime, because nothing drains the ESAIs until the codec queues
+	// arrive. This hides the repetition and nothing else. Set
 	// G2_LOG_ESAI_UNDERRUN to install no filter at all.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
@@ -133,8 +117,6 @@ namespace
 		          << std::endl;
 	}
 
-	// ------------------------------------------------- INT-1's machine placement
-
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
@@ -157,11 +139,10 @@ namespace
 	constexpr uint32_t g_cs1Size = 0x00010000u;
 	constexpr uint32_t g_cs5Size = 0x00000010u;
 
-	// The SDRAM store the harness supplies. board.cpp attaches the seven units
-	// plan section 24.6 row W3-115 names and leaves Region::Sdram with no target
-	// on purpose, so a firmware image has to live somewhere. A plain big-endian
-	// byte array with no decode of its own; every address it answers has already
-	// been decoded by the BRD-1 MemoryMap.
+	// The SDRAM store the harness supplies. board.cpp leaves Region::Sdram with
+	// no target on purpose, so a firmware image has to live somewhere. A plain
+	// big-endian byte array with no decode of its own; every address it answers
+	// has already been decoded by the MemoryMap.
 	class Ram final : public g2::BusTarget
 	{
 	public:
@@ -249,55 +230,50 @@ namespace
 		return config;
 	}
 
-	// ------------------------------------------- design section 2.1, the container
-	//
 	// Each DSP kernel image in the OS image is a 10-byte header followed by the
 	// code:
 	//
 	//   +0x00  4  pointer to the first code word: the image address plus 0x0A
 	//   +0x04  4  zero, most probably the P-memory load address
-	//   +0x08  2  the BYTE count of the code, three bytes for each 24-bit word
+	//   +0x08  2  the byte count of the code, three bytes for each 24-bit word
 	//   +0x0A  n  the code, most significant byte first
 	//
-	// WHY A SCAN IS SAFE HERE, AND WHY IT IS NOT A SEARCH FOR A MAGIC NUMBER.
-	// The +0x00 field is a SELF-REFERENCE: it must equal the load address of the
-	// scan position plus 0x0A. A run of bytes that happens to look like a header
-	// has to also carry, four bytes earlier, the exact address of where it sits
-	// in a machine it knows nothing about. That is the identification; the
-	// byte-count field is then READ and never matched against.
+	// The scan is not a search for a magic number. The +0x00 field is a
+	// self-reference: it must equal the load address of the scan position plus
+	// 0x0A. A run of bytes that happens to look like a header has to also carry,
+	// four bytes earlier, the exact address of where it sits in a machine it
+	// knows nothing about. That is the identification; the byte-count field is
+	// then read and never matched against.
 	//
-	// THE WORD COUNT IS DERIVED AND NOT TYPED. `wordCount` is the header's byte
-	// count divided by three. Design section 2.1's figure of 573 is asserted
-	// AGAINST that derivation at the assertion site, which is the direction that
-	// makes the firmware the authority and the document the claim under test.
+	// The word count is derived and not typed: it is the header's byte count
+	// divided by three. The documented figure of 573 is asserted against that
+	// derivation at the assertion site, which is the direction that makes the
+	// firmware the authority and the document the claim under test.
 	//
-	// THE SCAN FINDS SEVEN CONTAINERS AND NOT THREE, AND THAT IS A MEASUREMENT
-	// THIS FILE MAKES RATHER THAN A DEFECT IT WORKS AROUND. Measured 2026-08-25
-	// over CODE_30000400.bin: seven containers stand in one contiguous run at
+	// The scan finds seven containers and not three. Measured over
+	// CODE_30000400.bin: seven containers stand in one contiguous run at
 	// 0x30108150, 0x30108814, 0x30108ED8, 0x3010959C, 0x301096AA, 0x30109750 and
-	// 0x30109832, carrying 573, 573, 573, 86, 51, 71 and 19 words. THE FIRST
-	// THREE ARE DESIGN SECTION 2.2's KERNEL IMAGES. The next three are the
-	// P-code overlays design section 24's open question 2 records -- "0x30038D1E
-	// downloads 86 words to DSP 0, 51 to the middle DSPs and 71 to DSP N-1" --
-	// which arrive at patch-build time and not at boot, and the seventh, of 19
-	// words, is named by nothing this file could find.
+	// 0x30109832, carrying 573, 573, 573, 86, 51, 71 and 19 words. The first
+	// three are the kernel images. The next three are P-code overlays --
+	// 0x30038D1E downloads 86 words to DSP 0, 51 to the middle DSPs and 71 to
+	// DSP N-1 -- which arrive at patch-build time and not at boot, and the
+	// seventh, of 19 words, is named by nothing this file could find.
 	//
-	// SO THE SCAN IS DELIBERATELY NOT NARROWED TO THREE. Narrowing it by word
+	// So the scan is deliberately not narrowed to three. Narrowing it by word
 	// count would make the 573 this file exists to check into the thing that
 	// selects what gets checked, and a check that picks its own evidence by the
-	// answer is no check. WHICH CONTAINER IS A KERNEL IS DECIDED BY THE MACHINE:
+	// answer is no check. Which container is a kernel is decided by the machine:
 	// the eight booted DSPs are asked which container their program memory
 	// holds, and the word count is read off whichever one each of them names.
 	constexpr uint32_t g_containerHeaderSize = 0x0Au;
 	constexpr uint32_t g_bytesPerWord        = 3u;
 
-	// Design section 2.1: "573 words of 24-bit code". The one place this file
-	// names the figure, and it appears as the RIGHT-HAND SIDE of a comparison
-	// against a count read out of the firmware.
+	// 573 words of 24-bit code. The one place this file names the figure, and it
+	// appears as the right-hand side of a comparison against a count read out of
+	// the firmware.
 	constexpr uint32_t g_designWordCount = 573u;
 
-	// Design section 2.2: the OS carries three kernel images, and they are not
-	// copies of each other.
+	// The OS carries three kernel images, and they are not copies of each other.
 	constexpr size_t g_designImageCount = 3u;
 
 	struct KernelImage
@@ -365,18 +341,15 @@ namespace
 		return out;
 	}
 
-	// ---------------------------------- plan section 24.6 row W3-399, the position
-	//
 	// The firmware builds a nine-entry table at 0x30116970 (`set_hdi08_bases`,
-	// 0x300391E8) at boot. Entry i holds the CS1 address of the port at CHAIN
-	// POSITION i, and CS1's A3 to A10 are eight ACTIVE-LOW one-cold selects
-	// (design section 13.3, task BRD-15), so the port is the index of the single
-	// line pulled down. The ninth entry is the broadcast address and belongs to
-	// no position.
+	// 0x300391E8) at boot. Entry i holds the CS1 address of the port at chain
+	// position i, and CS1's A3 to A10 are eight active-low one-cold selects, so
+	// the port is the index of the single line pulled down. The ninth entry is
+	// the broadcast address and belongs to no position.
 	//
-	// READ OUT OF THE BOOTED MACHINE, which is the whole point: this is the
-	// firmware's own answer to "which port is which", taken without inference
-	// from anything on our side of the boundary.
+	// It is read out of the booted machine, which is the whole point: this is
+	// the firmware's own answer to "which port is which", taken without
+	// inference from anything on our side of the boundary.
 	constexpr uint32_t g_portTableBase = 0x30116970u;
 
 	// Returns the number of ports the table named, and fills _positionOfPort so
@@ -419,16 +392,13 @@ namespace
 		return named;
 	}
 
-	// ------------------------------------------------------- design section 2.3
-	//
 	// The four channels the kernel programs, each in the order the MOVEP block
 	// writes them: DSR, DDR, DCO, DCR.
 	//
-	// THE REQUEST SOURCE IS THE HARDWARE DCR FIELD. Plan task DSP-2 carries the
-	// two number spaces and is their single definition site. Reading these as
-	// library `RequestSource` enumerators would demand 22 and 23 on channels 3
-	// and 5 -- and library 22 is Esai1ReceiveData, so channel 5, the ESAI_1
-	// TRANSMIT channel, would be asserted to sit on a RECEIVE source.
+	// The request source is the hardware DCR field. Reading these as library
+	// `RequestSource` enumerators would demand 22 and 23 on channels 3 and 5 --
+	// and library 22 is Esai1ReceiveData, so channel 5, the ESAI_1 transmit
+	// channel, would be asserted to sit on a receive source.
 	constexpr dsp56k::TWord g_esaiRx0   = 0xFFFFA8u;  // ESAI RX0
 	constexpr dsp56k::TWord g_esai1Rx0  = 0xFFFF88u;  // ESAI_1 RX0
 	constexpr dsp56k::TWord g_esaiTx0   = 0xFFFFA0u;  // ESAI TX0
@@ -441,11 +411,11 @@ namespace
 	constexpr dsp56k::TWord g_dsr5      = 0x001D10u;
 
 	// The DCO count field. $007001 gives 8 outer slots, the inter-DSP bus;
-	// $001001 gives 2, the stereo pair at the chain's two ends. Design 2.4.
+	// $001001 gives 2, the stereo pair at the chain's two ends.
 	constexpr dsp56k::TWord g_dcoChain    = 0x007001u;
 	constexpr dsp56k::TWord g_dcoEndpoint = 0x001001u;
 
-	// The hardware DCR request source, verbatim from DSP-14's own table.
+	// The hardware DCR request source.
 	constexpr dsp56k::TWord g_rsEsaiRx  = 11u;
 	constexpr dsp56k::TWord g_rsEsai1Rx = 21u;
 	constexpr dsp56k::TWord g_rsEsaiTx  = 12u;
@@ -461,36 +431,34 @@ namespace
 	              uint32_t(dsp56k::DmaChannel::DcrBits::Drs0) + 4u,
 	              "the DMA request source must be five contiguous DCR bits");
 
-	// The library's own values for the pair DSP-2 translates. They are named here
-	// ONLY so that the difference this file exists to hold apart is visible in
-	// the source, and they are never used as an expectation.
+	// The library's own values for the ESAI_1 pair. They are named here only so
+	// that the difference this file exists to hold apart is visible in the
+	// source, and they are never used as an expectation.
 	static_assert(uint32_t(dsp56k::DmaChannel::RequestSource::Esai1ReceiveData) != g_rsEsai1Rx &&
 	              uint32_t(dsp56k::DmaChannel::RequestSource::Esai1TransmitData) != g_rsEsai1Tx,
 	              "DSP-2's two number spaces have collapsed: the hardware DCR field and the "
 	              "library enumerator now agree for ESAI_1, so this file's distinction is stale");
 
-	// ------------------------------- the kernel's own MOVEP block, design 2.3
-	//
-	// "The MOVEP immediate encoding is `08 F4 xx` plus one immediate word. The
+	// The MOVEP immediate encoding is `08 F4 xx` plus one immediate word. The
 	// byte `xx` is the field `1Spppppp`. The bit `S` selects the X or the Y
-	// space. The six bits `pppppp` give the address as $FFFFC0 + pppppp."
+	// space. The six bits `pppppp` give the address as $FFFFC0 + pppppp.
 	//
-	// WHY THIS EXISTS BESIDE THE REGISTER READS AND DOES NOT REPLACE THEM. Two
-	// of the sixteen registers section 2.3 names cannot be read back off a
-	// running DSP: see the transmit-source clause at the assertion site. For
-	// those two the kernel's own instruction is the only place the write is
-	// still visible, and for the other fourteen the register read is the
-	// stronger evidence because it proves the emulator ACTED on the write.
+	// This exists beside the register reads and does not replace them. Two of
+	// the sixteen registers cannot be read back off a running DSP: see the
+	// transmit-source clause at the assertion site. For those two the kernel's
+	// own instruction is the only place the write is still visible, and for the
+	// others the register read is the stronger evidence because it proves the
+	// emulator acted on the write.
 	constexpr uint32_t g_movepImmediateOpcode = 0x08F4u;
 	constexpr uint32_t g_movepPeripheralBase  = 0xFFFFC0u;
 	constexpr uint32_t g_movepAddressMask     = 0x3Fu;
 	constexpr uint32_t g_movepYSpaceBit       = 0x40u;
 	constexpr uint32_t g_movepImmediateBit    = 0x80u;
 
-	// The first X-space immediate written to each peripheral address, which is
-	// the value the design table decodes. A later write to the same address is
-	// deliberately not taken: the table records the PROGRAMMING and not what the
-	// running kernel does with the register afterwards.
+	// The first X-space immediate written to each peripheral address. A later
+	// write to the same address is deliberately not taken: what is recorded is
+	// the programming and not what the running kernel does with the register
+	// afterwards.
 	std::map<uint32_t, dsp56k::TWord> decodeMovepImmediates(const KernelImage& _image)
 	{
 		std::map<uint32_t, dsp56k::TWord> out;
@@ -519,7 +487,7 @@ namespace
 		return out;
 	}
 
-	// The four register addresses of one DMA channel, DERIVED from the library's
+	// The four register addresses of one DMA channel, derived from the library's
 	// own XIO enumeration rather than typed. The block descends: channel 5 is
 	// lowest and each channel is four registers, DCR, DCO, DDR, DSR ascending.
 	struct ChannelRegisters
@@ -565,8 +533,8 @@ namespace
 		dsp56k::TWord requestSource;
 	};
 
-	// One position's four rows of the section 2.3 table. `_count` and not a
-	// literal eight, so the tail follows the DSP set's own size.
+	// One position's four rows of the expectation. `_count` and not a literal
+	// eight, so the tail follows the DSP set's own size.
 	std::vector<ChannelExpectation> expectedChannels(const unsigned _position, const unsigned _count)
 	{
 		const bool head = _position == 0u;
@@ -586,18 +554,15 @@ namespace
 		return buf;
 	}
 
-	// ------------------------------------------------------------------ the run
-
-	// WRITTEN OUT RATHER THAN READ FROM THE OBJECT UNDER TEST, on t1_boot's
-	// precedent: DspSet holds a fixed array and dspCount() returns its size, so
-	// a comparison against that same accessor would agree with itself whatever
-	// the array became.
+	// Written out rather than read from the object under test: DspSet holds a
+	// fixed array and dspCount() returns its size, so a comparison against that
+	// same accessor would agree with itself whatever the array became.
 	constexpr unsigned g_expectedDspCount = 8u;
 
-	// THE ITERATION BOUND IS A STOP AND NOT A FIGURE THE FIRMWARE PUBLISHES, on
-	// t1_boot's precedent, so a machine that never converges fails rather than
-	// hanging the suite. The loop leaves EARLY on the convergence predicate, so
-	// this number bounds a failure and does not price a pass.
+	// The iteration bound is a stop and not a figure the firmware publishes, so
+	// a machine that never converges fails rather than hanging the suite. The
+	// loop leaves early on the convergence predicate, so this number bounds a
+	// failure and does not price a pass.
 	constexpr uint32_t g_iterationBound = 500000u;
 
 	constexpr size_t g_framesPerIteration = 1;
@@ -615,7 +580,7 @@ namespace
 
 		unsigned dspCount = 0;
 
-		// Indexed by HARDWARE PORT throughout. The chain position of port i is
+		// Indexed by hardware port throughout. The chain position of port i is
 		// positionOfPort[i]; see readChainPositions.
 		std::vector<unsigned> positionOfPort;
 		unsigned              positionsNamed = 0;
@@ -631,7 +596,7 @@ namespace
 			bool          latched = false;
 		};
 
-		// [port][channel], AT THE INSTANT THE CHANNEL WAS ARMED. This is the set
+		// [port][channel], at the instant the channel was armed. This is the set
 		// the assertions read; see latchChannels for why a terminal read is the
 		// wrong instant for two of the four registers.
 		std::vector<std::vector<Registers>> armed;
@@ -663,45 +628,37 @@ namespace
 		return true;
 	}
 
-	/* THE INSTANT IS PART OF THE OBSERVATION, AND A TERMINAL READ IS THE WRONG
-	 * ONE FOR TWO OF THE FOUR REGISTERS. Plan section 24.6 row W3-394 records
-	 * this class on this project already: two assertions that sampled transients
-	 * at the wrong instant and were read as emulator defects.
+	/* The instant is part of the observation, and a terminal read is the wrong
+	 * one for two of the four registers. A terminal read of channel 4's DSR
+	 * gives $001E0C and of channel 5's gives $001E1C, against the documented
+	 * $001D00 and $001D10. Neither is a defect: DSR is the source pointer of a
+	 * transmit channel and `DmaChannel::execTransfer` advances it on every
+	 * transfer (`dma.cpp`, the `increment(m_dsr)` and `m_dsr += ...` sites), so
+	 * after eighteen thousand frames it holds wherever the traversal has
+	 * reached and not what the kernel wrote. The receive channels' DSR is a
+	 * fixed peripheral address and does not move, which is exactly why the
+	 * defect showed on two rows and not on eight.
 	 *
-	 * MEASURED HERE, 2026-08-25, BEFORE THE LATCH EXISTED. A terminal read of
-	 * channel 4's DSR gives $001E0C and of channel 5's gives $001E1C, against the
-	 * $001D00 and $001D10 design section 2.3 records. NEITHER IS A DEFECT: DSR is
-	 * the SOURCE POINTER of a transmit channel and `DmaChannel::execTransfer`
-	 * ADVANCES IT on every transfer (`dma.cpp`, the `increment(m_dsr)` and
-	 * `m_dsr += ...` sites), so after eighteen thousand frames it holds wherever
-	 * the traversal has reached and not what the kernel wrote. The receive
-	 * channels' DSR is a fixed peripheral address and does not move, which is
-	 * exactly why the defect showed on two rows and not on eight.
+	 * The kernel's own MOVEP block settles it without inference from either
+	 * side: decoding the three 573-word images out of CODE_30000400.bin gives
+	 * `MOVEP #$001D00,X:$FFFFDF` and `MOVEP #$001D10,X:$FFFFDB` in all three --
+	 * DSR4 and DSR5 -- so the documented table is right and the register had
+	 * simply moved on.
 	 *
-	 * THE KERNEL'S OWN MOVEP BLOCK SETTLED IT WITHOUT INFERENCE FROM EITHER SIDE,
-	 * the same way row W3-399 settled the position map: decoding the three 573-word
-	 * images out of CODE_30000400.bin gives `MOVEP #$001D00,X:$FFFFDF` and
-	 * `MOVEP #$001D10,X:$FFFFDB` in all three -- DSR4 and DSR5 -- so section 2.3's
-	 * table is right and the register had simply moved on.
+	 * So each register is latched at its own first non-zero value, and the four
+	 * are not sampled together. Sampling all four at the instant the DCR first
+	 * goes non-zero reports $001E00 and $001E10 -- the documented pair plus
+	 * exactly $100, identically on all eight ports -- because DCR4 is one of the
+	 * three register-form MOVEP writes and lands later than the immediate block,
+	 * by which time the kernel has already moved DSR to the second transmit
+	 * bank. A per-register latch reads the first write each register takes.
 	 *
-	 * SO EACH REGISTER IS LATCHED AT ITS OWN FIRST NON-ZERO VALUE, and the four
-	 * are NOT sampled together. Sampling all four at the instant the DCR first
-	 * goes non-zero was tried and MEASURED WRONG, 2026-08-25: it reported
-	 * $001E00 and $001E10 -- the section 2.3 pair plus exactly $100, identically
-	 * on all eight ports -- because DCR4 is one of the three REGISTER-form MOVEP
-	 * writes and lands later than the immediate block, by which time the kernel
-	 * has already moved DSR to the second transmit bank. A per-register latch
-	 * reads the FIRST write each register takes, which is the immediate the
-	 * design table decodes.
-	 *
-	 * WHAT THIS DOES NOT CLAIM: the sample is taken once per ESAI frame, so it is
-	 * the first frame boundary at or after the write and not the writing
+	 * What this does not claim: the sample is taken once per ESAI frame, so it
+	 * is the first frame boundary at or after the write and not the writing
 	 * instruction itself. A register written twice inside one frame would be
-	 * latched at the second value. That is a bound on the instant and not a proof
-	 * of it, and it is written here rather than left for a reader to discover
-	 * from a number that is off by a bank.
+	 * latched at the second value.
 	 *
-	 * A REGISTER WHOSE FIRST WRITTEN VALUE IS ZERO NEVER LATCHES, and the DCR
+	 * A register whose first written value is zero never latches, and the DCR
 	 * clause below is what reports that rather than letting a zero read as an
 	 * expectation that happened to be zero. */
 	bool latchFirst(dsp56k::TWord& _slot, const dsp56k::TWord _now)
@@ -765,7 +722,7 @@ namespace
 			return false;
 		}
 
-		// INT-8's vector table: big-endian, 256 identical longwords.
+		// The vector table: big-endian, 256 identical longwords.
 		{
 			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
 
@@ -811,15 +768,15 @@ namespace
 
 		_result.armed.assign(_result.dspCount, std::vector<LoadResult::Registers>(g_channelCount));
 
-		/* THE DRIVE LEAVES ON THE PROPERTY THE ASSERTIONS READ, and that is
+		/* The drive leaves on the property the assertions read, and that is
 		 * deliberate. The convergence predicate is "every slot has taken a
-		 * program AND every slot's four DMA channels carry a non-zero DCR", so
+		 * program and every slot's four DMA channels carry a non-zero DCR", so
 		 * the registers this file goes on to check are the registers that made
 		 * the loop stop. A fixed iteration count would either cost the suite the
 		 * full bound on every run or sample a machine mid-download.
 		 *
-		 * IT IS NOT THE SAME PREDICATE AS THE ACCEPTANCE. Convergence asks only
-		 * that a DCR is non-zero; the acceptance asks what is IN it. A firmware
+		 * It is not the same predicate as the acceptance. Convergence asks only
+		 * that a DCR is non-zero; the acceptance asks what is in it. A firmware
 		 * that armed four channels with the wrong sources would satisfy the loop
 		 * and fail the assertions, which is the direction that keeps the exit
 		 * condition from deciding the verdict. */
@@ -829,7 +786,7 @@ namespace
 
 			scheduler->runFrames(g_framesPerIteration);
 
-			// SAMPLED BEFORE THE EXIT TESTS, so the iteration that satisfies the
+			// Sampled before the exit tests, so the iteration that satisfies the
 			// convergence predicate still contributes its observation.
 			latchChannels(board, _result);
 
@@ -867,13 +824,13 @@ namespace
 					                      dma.getDCO(channel), dma.getDCR(channel), true};
 			}
 
-			// WHICH IMAGE LANDED, READ OUT OF THE DSP'S OWN P MEMORY. A whole
+			// Which image landed, read out of the DSP's own P memory. A whole
 			// image matching word for word is what "received 573 words" means
 			// operationally: a download that stopped short leaves the remainder
 			// unwritten and cannot match.
 			const dsp56k::Memory& memory = board.dspSet().dsp(port).memory();
 
-			// THE LONGEST MATCH WINS AND NOT THE FIRST. A short container is a
+			// The longest match wins and not the first. A short container is a
 			// prefix of a long one whenever their first words agree, so a
 			// first-match rule would let a 19-word overlay claim a slot holding a
 			// 573-word kernel and the word-count assertion below would then be
@@ -976,12 +933,10 @@ int main()
 			return false;
 		}
 
-		// ------------------------------------------- the container, before the run
-		//
 		// The word count the machine is going to be held to is read out of the
-		// firmware FIRST, so a failure here is read as "the container is not
-		// where design section 2.1 says it is" and never as "the DSPs did not
-		// receive the kernel".
+		// firmware first, so a failure here is read as "the container is not
+		// where it is documented to be" and never as "the DSPs did not receive
+		// the kernel".
 		const std::vector<uint8_t> code = readFile(directory + "/CODE_30000400.bin");
 
 		if(code.empty())
@@ -999,10 +954,10 @@ int main()
 			return false;
 		}
 
-		// Design section 2.2: THREE kernel images, and they are not copies of each
-		// other. The count is taken over the containers that carry the design's
-		// word count; the containers that do not are the patch-time overlays and
-		// are reported rather than hidden.
+		// Three kernel images, and they are not copies of each other. The count
+		// is taken over the containers that carry the documented word count; the
+		// containers that do not are the patch-time overlays and are reported
+		// rather than hidden.
 		{
 			std::vector<const KernelImage*> kernels;
 
@@ -1052,7 +1007,6 @@ int main()
 
 		reportSuppressedLogLines();
 
-		// ------------------------------------------------------- the machine ran
 		check(result.converged,
 		      "every slot took a program and armed its four DMA channels within the "
 		      "iteration bound of " + std::to_string(g_iterationBound) +
@@ -1065,12 +1019,10 @@ int main()
 		      "the board attached " + std::to_string(g_expectedDspCount) + " DSPs; it attached " +
 		      std::to_string(result.dspCount));
 
-		// ------------------------------------------------- W3-399, the position map
-		//
-		// The map is asserted to be a PERMUTATION before it is used. A table that
+		// The map is asserted to be a permutation before it is used. A table that
 		// named one position twice would silently make two ports share a row of
-		// the section 2.3 expectation, and the second of them would be checked
-		// against the first one's constants.
+		// the expectation, and the second of them would be checked against the
+		// first one's constants.
 		check(result.positionsNamed == result.dspCount,
 		      "the firmware's table at " + hex6(g_portTableBase) + " names a chain position for "
 		      "every one of the " + std::to_string(result.dspCount) + " ports; it named " +
@@ -1095,7 +1047,7 @@ int main()
 			      "no two ports are checked against the same row of the design section 2.3 table");
 		}
 
-		// -------------------------------------------- clause 1, the kernel download
+		// Clause 1, the kernel download.
 		for(unsigned port = 0; port < result.dspCount; ++port)
 		{
 			check(result.landed[port],
@@ -1106,12 +1058,11 @@ int main()
 			      "own containers word for word, which is what receiving a whole download means; a "
 			      "download that stopped short leaves the remainder unwritten and matches nothing");
 
-			// THE WORD COUNT IS THE MACHINE'S ANSWER HELD AGAINST THE DOCUMENT'S
-			// CLAIM. Which container this slot holds was decided by comparing
+			// The word count is the machine's answer held against the document's
+			// claim. Which container this slot holds was decided by comparing
 			// program memory; how many words that container carries was read out
-			// of its own header; and design section 18.3's "all eight DSPs
-			// receive 573 words" is the right-hand side. Nothing here selected a
-			// container by its length.
+			// of its own header; and "all eight DSPs receive 573 words" is the
+			// right-hand side. Nothing here selected a container by its length.
 			const size_t words = result.imageOfPort[port] >= 0
 				? images[size_t(result.imageOfPort[port])].words.size()
 				: 0u;
@@ -1122,12 +1073,12 @@ int main()
 			      std::to_string(g_designWordCount));
 		}
 
-		// ------------------------------------------ clause 2, the DMA constants
+		// Clause 2, the DMA constants.
 		for(unsigned port = 0; port < result.dspCount; ++port)
 		{
 			const unsigned position = result.positionOfPort[port];
 
-			// The MOVEP block of the image THIS PORT actually holds, so the
+			// The MOVEP block of the image this port actually holds, so the
 			// instruction and the register belong to the same DSP.
 			const std::map<uint32_t, dsp56k::TWord> movep =
 				result.imageOfPort[port] >= 0
@@ -1154,34 +1105,33 @@ int main()
 				      std::to_string(e.requestSource) + " and not the library enumerator; it is " +
 				      std::to_string(requestSource));
 
-				/* THE SOURCE REGISTER IS TWO DIFFERENT KINDS OF THING AND ONLY
-				 * ONE OF THEM SURVIVES TO BE READ BACK, so this row is routed by
-				 * WHAT THE EXPECTATION IS and never by which reading passes.
+				/* The source register is two different kinds of thing and only
+				 * one of them survives to be read back, so this row is routed by
+				 * what the expectation is and never by which reading passes.
 				 *
-				 * On channels 2 and 3 the source is a PERIPHERAL address -- ESAI
+				 * On channels 2 and 3 the source is a peripheral address -- ESAI
 				 * RX0 and ESAI_1 RX0 -- which nothing moves, so the DSP's own
 				 * register is read and it is the stronger evidence: it shows the
 				 * emulator took the write and kept it.
 				 *
-				 * On channels 4 and 5 the source is a DATA-MEMORY pointer into
-				 * the transmit buffers, and the kernel BANKS IT. MEASURED
-				 * 2026-08-25 on all eight ports, at the first frame boundary at
-				 * which the register is non-zero and again at the end of an
-				 * 18,058-iteration run: DSR4 reads $001E00 and DSR5 reads
-				 * $001E10, which is the section 2.3 pair plus exactly $100, with
-				 * the tail's channel 4 among them although its DCR carries DE
-				 * CLEAR and it has therefore transferred nothing. A value that
-				 * appears without a transfer is a WRITE, so the kernel moves the
-				 * pointer to the second bank inside the frame in which it
-				 * programs it, and no frame-boundary read of this emulator can
-				 * catch the first bank.
+				 * On channels 4 and 5 the source is a data-memory pointer into
+				 * the transmit buffers, and the kernel banks it. Measured on all
+				 * eight ports, at the first frame boundary at which the register
+				 * is non-zero and again at the end of an 18,058-iteration run:
+				 * DSR4 reads $001E00 and DSR5 reads $001E10, which is the
+				 * documented pair plus exactly $100, with the tail's channel 4
+				 * among them although its DCR carries DE clear and it has
+				 * therefore transferred nothing. A value that appears without a
+				 * transfer is a write, so the kernel moves the pointer to the
+				 * second bank inside the frame in which it programs it, and no
+				 * frame-boundary read of this emulator can catch the first bank.
 				 *
-				 * SO THE ROW IS CHECKED AGAINST THE KERNEL'S OWN INSTRUCTION AND
-				 * IT SAYS SO IN ITS OWN FAILURE MESSAGE. That is weaker than the
-				 * other fifteen rows -- it proves the DSP was SENT the write and
-				 * not that the emulated DMA acted on it -- and the clause under
-				 * it is what keeps the weakening from being vacuous: the live
-				 * register must still hold a written, data-space pointer. */
+				 * So the row is checked against the kernel's own instruction and
+				 * it says so in its own failure message. That is weaker than the
+				 * other rows -- it proves the DSP was sent the write and not that
+				 * the emulated DMA acted on it -- and the clause under it is what
+				 * keeps the weakening from being vacuous: the live register must
+				 * still hold a written, data-space pointer. */
 				if(e.dsr >= g_peripheralSpaceFirst)
 				{
 					check(m.dsr == e.dsr, where + "DSR is the peripheral address " + hex6(e.dsr) +

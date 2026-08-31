@@ -1,55 +1,6 @@
-/* t0_transport_hub.cpp -- the check of task SCH-29.
- * Design sections 13.10.6, 15.1 and 18.2.
+/* The check of g2::TransportHub.
  *
- * WHAT THIS ROW OWNS, AND WHY EACH CASE CANNOT BE REPLACED BY A BUILD:
- *
- *  1. THE FIXED ALLOCATION. The hub's whole allocation happens in the
- *     constructor and its byte total equals
- *         kMaxEndpoints x queueDepth x (sizeof(StampedFrame) + maxFrameBytes)
- *     NOT ONE FACTOR OF THAT PRODUCT IS WRITTEN AS A LITERAL HERE. The
- *     endpoint count is read from g2::TransportHub::kMaxEndpoints, the two
- *     sizes are this test's own constructor arguments, and the derived
- *     ceiling is computed from section 15.3's wire framing -- one type byte,
- *     a two-byte length and the largest payload a two-byte length can name.
- *     A literal 3, a literal 65538 or a literal 3146976 would be this
- *     project's signature defect: a constant standing where the generating
- *     count belongs.
- *
- *  2. NOTHING ALLOCATES AFTER CONSTRUCTION. This is the property that is
- *     easiest to assert vacuously, so it is asserted against an ARMED global
- *     operator new/delete pair, in the shape t0_mailbox_surface.cpp already
- *     uses, across a window that drives every declared method -- attach,
- *     toDevice at and past both refusal boundaries, drainToDevice, fromDevice
- *     and detach -- and the window's own byte and call totals must both be
- *     zero. The endpoints used inside the window carry FIXED ARRAYS and no
- *     container, so a non-zero count inside the window is the hub's and
- *     nothing else's.
- *
- *  3. THE DECLARATION ORDER. ProtocolFrame and StampedFrame are declared
- *     BEFORE TransportHub. This is a property of the header's source text and
- *     no C++ expression can read it, so the check reads the header itself --
- *     the path arrives on argv[1] rather than being guessed, for the reason
- *     t0_clock_guard and t0_block_table_harness already give. The search
- *     carries its own known-negative: a token that is not in the file must
- *     report absent, so a "not found" from this scanner is an absence and not
- *     an unread file.
- *
- *  4. THE TWO REFUSALS. A frame larger than maxFrameBytes is refused, and a
- *     frame offered to an endpoint whose queue already holds queueDepth
- *     frames is refused. Both report through the RETURNED BOOL.
- *
- *  5. THE FIXED ENDPOINT ORDER AND THE STAMP. drainToDevice visits endpoints
- *     in attachment order and stamps every frame it drains with the index of
- *     the quantum it drained in. Frames delivered from three endpoints in the
- *     same quantum reach the device in attachment order, on every quantum of
- *     a long run.
- *
- *  6. THE BORROW LIFETIME. The pointers one drainToDevice returns are still
- *     readable IMMEDIATELY BEFORE the next drainToDevice on the same hub, and
- *     this test reads them there -- after further toDevice traffic has run
- *     against the same endpoint, which is the case a naive ring would fail.
- *
- * NOTHING IN THIS FILE IS AN assert() AND NOTHING CATCHES AN EXCEPTION. The
+ * Nothing in this file is an assert() and nothing catches an exception. The
  * default build type of this repository is Release and Release defines NDEBUG,
  * which deletes every assert(); every run-time verdict here reports through
  * this file's own failure counter, and every compile-time verdict is a
@@ -149,11 +100,10 @@ void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
 namespace
 {
-	/* ---------------------------------------------------------------- the
-	 * declared surface, pinned through fully qualified types. Taking the
+	/* The declared surface, pinned through fully qualified types. Taking the
 	 * address of a member function odr-uses it, so a renamed or re-signed
-	 * method is a COMPILE error here and a declared-but-undefined one is a
-	 * LINK error. A build of the library alone sees neither. */
+	 * method is a compile error here and a declared-but-undefined one is a
+	 * link error. A build of the library alone sees neither. */
 	void (g2::TransportHub::* const kAttach)(g2::TransportEndpoint&)
 		= &g2::TransportHub::attach;
 	void (g2::TransportHub::* const kDetach)(g2::TransportEndpoint&)
@@ -183,28 +133,21 @@ namespace
 		g2::ProtocolFrame>,
 		"StampedFrame carries a whole ProtocolFrame.");
 
-	/* THE ENDPOINT COUNT IS READ FROM THE PRODUCTION DECLARATION, and the
-	 * whole allocation assertion below is built on it. Section 15.1 fixes the
-	 * three attachments; this test names none of them and copies the count
-	 * from nowhere. */
+	/* The endpoint count is read from the production declaration, and the
+	 * whole allocation assertion below is built on it. */
 	static_assert(g2::TransportHub::kMaxEndpoints >= 2,
 		"The fixed endpoint order is only observable with at least two "
 		"endpoints, and this test drives kMaxEndpoints of them.");
 
-	/* ---------------------------------------------------------------- the
-	 * two sizes this test constructs with.
-	 *
-	 * THE CEILING IS DERIVED, NOT COPIED. Section 15.3 frames a message as
-	 * [1-byte type][2-byte length][payload], so the largest frame the wire can
-	 * carry is one type byte, two length bytes, and the largest payload a
-	 * two-byte length can name. Writing 65538 here would be the same defect as
-	 * writing 3 for the endpoint count. */
+	/* The ceiling is derived, not copied. A message is framed as [1-byte
+	 * type][2-byte length][payload], so the largest frame the wire can carry
+	 * is one type byte, two length bytes, and the largest payload a two-byte
+	 * length can name. */
 	constexpr size_t kDerivedCeiling = 1u + 2u
 		+ static_cast<size_t>(std::numeric_limits<uint16_t>::max());
 
-	/* queueDepth is an ordinary tunable and is this test's own INPUT, not a
-	 * copy of production state: it is passed to the constructor on the line
-	 * below and read back nowhere. */
+	/* queueDepth is this test's own input, not a copy of production state: it
+	 * is passed to the constructor and read back nowhere. */
 	constexpr size_t kQueueDepth = 16;
 
 	constexpr size_t allocationFor(const size_t maxFrameBytes,
@@ -214,9 +157,8 @@ namespace
 			* (sizeof(g2::StampedFrame) + maxFrameBytes);
 	}
 
-	/* ---------------------------------------------------------------- an
-	 * endpoint that records what the hub hands it, WITHOUT ALLOCATING, so that
-	 * it can live inside an armed window. */
+	/* An endpoint that records what the hub hands it without allocating, so
+	 * that it can live inside an armed window. */
 	constexpr size_t kRecordCapacity = 256;
 	constexpr size_t kRecordBytes    = 64;
 
@@ -269,8 +211,7 @@ namespace
 		return true;
 	}
 
-	/* ---------------------------------------------------------------- case 3:
-	 * the declaration order, read from the header's own source text. */
+	/* The declaration order, read from the header's own source text. */
 	void checkDeclarationOrder(const char* const headerPath)
 	{
 		std::FILE* const f = std::fopen(headerPath, "rb");
@@ -291,13 +232,11 @@ namespace
 
 		check(!text.empty(), "the header the order case reads is not empty");
 
-		/* THE TOKENS ARE THE DEFINITIONS AND NOT THE NAMES, and that is the
-		 * load-bearing part of this case. A forward declaration --
-		 * `struct StampedFrame;` before the class, with the body after it --
-		 * compiles, links and satisfies every other assertion in this file,
-		 * and it is EXACTLY the earlier draft's shape that design section
-		 * 13.10.6 records. Comparing the position of the DEFINITION is what
-		 * tells the two apart; comparing the position of the name does not. */
+		/* The tokens are the definitions and not the names. A forward
+		 * declaration -- `struct StampedFrame;` before the class, with the
+		 * body after it -- compiles, links and satisfies every other assertion
+		 * in this file. Comparing the position of the definition tells the two
+		 * apart; comparing the position of the name does not. */
 		const std::string protocolFrame = "struct ProtocolFrame\n\t{";
 		const std::string stampedFrame  = "struct StampedFrame\n\t{";
 		const std::string transportHub  = "class TransportHub\n\t{";
@@ -306,7 +245,7 @@ namespace
 		const size_t atStamped   = text.find(stampedFrame);
 		const size_t atHub       = text.find(transportHub);
 
-		/* THE KNOWN-NEGATIVE CONTROL. Without it, "not found" and "the file
+		/* The known-negative control. Without it, "not found" and "the file
 		 * was never really searched" produce the same three npos values and
 		 * every assertion below would be an absence proof resting on nothing. */
 		const size_t atAbsent = text.find("struct ThisDeclarationDoesNotExist");
@@ -338,10 +277,9 @@ namespace
 		check(text.find(transportHub, atHub + 1) == std::string::npos,
 			"`class TransportHub` is defined exactly once");
 
-		/* AND NO FORWARD DECLARATION STANDS IN FOR EITHER DEFINITION. Without
-		 * this pair, a header that forward-declares the struct above the class
-		 * and defines it below satisfies the two order assertions above while
-		 * being the very draft they exist to refuse. */
+		/* Without this pair, a header that forward-declares the struct above
+		 * the class and defines it below satisfies the two order assertions
+		 * above. */
 		check(text.find("struct ProtocolFrame;") == std::string::npos,
 			"no forward declaration of ProtocolFrame stands in for its "
 			"definition above TransportHub");
@@ -350,9 +288,8 @@ namespace
 			"definition above TransportHub");
 	}
 
-	/* ---------------------------------------------------------------- case 1:
-	 * the fixed allocation total, measured at two different pairs of sizes so
-	 * that the assertion is against the FORMULA and not against one product. */
+	/* The fixed allocation total, measured at two different pairs of sizes so
+	 * that the assertion is against the formula and not against one product. */
 	void checkFixedAllocation(const size_t maxFrameBytes, const size_t queueDepth,
 		const char* const what)
 	{
@@ -369,7 +306,7 @@ namespace
 			"at construction would satisfy the byte total only by matching "
 			"zero, which no non-degenerate size pair does");
 
-		/* The hub must be USED after the measurement, or a constructor that
+		/* The hub must be used after the measurement, or a constructor that
 		 * allocated the right number of bytes and threw them away would pass. */
 		RecordingEndpoint endpoint;
 		hub.attach(endpoint);
@@ -384,12 +321,9 @@ namespace
 
 int main(const int argc, const char* const* const argv)
 {
-	/* UNBUFFERED, AND THE REASON IS A MEASUREMENT. A mutation that made the
-	 * constructor under-allocate crashed this program later on, and every FAIL
-	 * line the earlier cases had already printed was lost with the buffer -- so
-	 * the run reported a bare SIGTRAP and said nothing about which assertion
-	 * had already caught the defect. A verdict that is only readable if the
-	 * program survives to exit is a verdict the worst failures delete. */
+	/* Unbuffered: a defect that crashes this program later on would lose every
+	 * FAIL line the earlier cases printed. A verdict that is only readable if
+	 * the program survives to exit is a verdict the worst failures delete. */
 	std::setvbuf(stdout, nullptr, _IONBF, 0);
 
 	printf("t0_transport_hub: kMaxEndpoints=%zu sizeof(StampedFrame)=%zu "
@@ -398,7 +332,6 @@ int main(const int argc, const char* const* const argv)
 		kDerivedCeiling, kQueueDepth,
 		allocationFor(kDerivedCeiling, kQueueDepth));
 
-	/* ---------------- case 3: the declaration order. */
 	if(argc < 2)
 	{
 		printf("FAIL the header path arrives on argv[1]; the registration "
@@ -411,8 +344,6 @@ int main(const int argc, const char* const* const argv)
 		checkDeclarationOrder(argv[1]);
 	}
 
-	/* ---------------- case 1: the fixed allocation, at the derived ceiling
-	 * and at a second, unrelated pair of sizes. */
 	checkFixedAllocation(kDerivedCeiling, kQueueDepth,
 		"the hub's construction allocates exactly "
 		"kMaxEndpoints x queueDepth x (sizeof(StampedFrame) + maxFrameBytes) "
@@ -422,21 +353,18 @@ int main(const int argc, const char* const* const argv)
 		"kMaxEndpoints x queueDepth x (sizeof(StampedFrame) + maxFrameBytes) "
 		"at a second, unrelated pair of sizes");
 
-	/* ---------------- case 2: nothing allocates after construction.
+	/* Nothing allocates after construction.
 	 *
-	 * Every object the window touches is constructed BEFORE the window opens,
+	 * Every object the window touches is constructed before the window opens,
 	 * and every endpoint in it carries fixed arrays, so a non-zero count
 	 * inside the window belongs to the hub.
 	 *
-	 * THE STEADY RATE IS kPerQuantum AND NOT queueDepth, AND THE REASON IS A
-	 * REAL PROPERTY OF THE BORROW CONTRACT RATHER THAN A CONVENIENCE. The
-	 * frames one drain hands out stay borrowed until the NEXT drain, and they
-	 * sit in the very slots a producer would otherwise refill, so the depth a
-	 * producer can use inside one quantum is queueDepth MINUS whatever the
-	 * last drain lent out. Driving queueDepth frames on every quantum would
-	 * therefore alternate between full and fully blocked, and an expectation
-	 * written as `200 x endpoints x queueDepth` would be a claim the contract
-	 * contradicts. The burst phase below asserts that borrow cost EXACTLY. */
+	 * The steady rate is kPerQuantum and not queueDepth. The frames one drain
+	 * hands out stay borrowed until the next drain, and they sit in the very
+	 * slots a producer would otherwise refill, so the depth a producer can use
+	 * inside one quantum is queueDepth minus whatever the last drain lent out.
+	 * Driving queueDepth frames on every quantum would alternate between full
+	 * and fully blocked. The burst phase below asserts that borrow cost. */
 	{
 		constexpr size_t kFrameBytes = 32;
 		constexpr size_t kQuanta     = 200;
@@ -481,7 +409,7 @@ int main(const int argc, const char* const* const argv)
 			drained += hub.drainToDevice(out.data(), out.size());
 		}
 
-		/* THE BURST, still inside the window: the depth-refusal path must not
+		/* The burst, still inside the window: the depth-refusal path must not
 		 * allocate either, and its exact accept count is the borrow cost. */
 		for(size_t e = 0; e < g2::TransportHub::kMaxEndpoints; ++e)
 		{
@@ -507,7 +435,7 @@ int main(const int argc, const char* const* const argv)
 			"nothing allocates after construction: the same window allocates "
 			"ZERO bytes");
 
-		/* The window must have DONE something, or a hub whose every method
+		/* The window must have done something, or a hub whose every method
 		 * returned immediately would pass the two assertions above. */
 		checkEqual(accepted,
 			kQuanta * g2::TransportHub::kMaxEndpoints * kPerQuantum,
@@ -539,8 +467,6 @@ int main(const int argc, const char* const* const argv)
 		}
 	}
 
-	/* ---------------- case 4a: a frame larger than maxFrameBytes is refused,
-	 * and the largest permitted frame is NOT. */
 	{
 		constexpr size_t kFrameBytes = 40;
 		g2::TransportHub  hub(kFrameBytes, kQueueDepth);
@@ -570,8 +496,6 @@ int main(const int argc, const char* const* const argv)
 			"the accepted frame kept every one of its bytes");
 	}
 
-	/* ---------------- case 4b: an endpoint queue filled to queueDepth makes
-	 * toDevice return false, and the queued frames survive. */
 	{
 		constexpr size_t kFrameBytes = 24;
 		g2::TransportHub  hub(kFrameBytes, kQueueDepth);
@@ -594,7 +518,7 @@ int main(const int argc, const char* const* const argv)
 			"an endpoint queue filled to queueDepth makes toDevice return "
 			"false");
 
-		/* THE REFUSAL IS PER ENDPOINT. A hub with one shared queue would
+		/* The refusal is per endpoint. A hub with one shared queue would
 		 * refuse here too, and this case is what tells the two apart. */
 		check(hub.toDevice(b, g2::ProtocolFrame{ payload[0], kFrameBytes }),
 			"a full queue on one endpoint does not refuse another endpoint: "
@@ -613,7 +537,6 @@ int main(const int argc, const char* const* const argv)
 		}
 	}
 
-	/* ---------------- case 5: the fixed attachment order and the stamp. */
 	{
 		constexpr size_t kFrameBytes = 16;
 		constexpr size_t kQuanta     = 100;
@@ -627,7 +550,7 @@ int main(const int argc, const char* const* const argv)
 
 		for(size_t quantum = 0; quantum < kQuanta; ++quantum)
 		{
-			/* Every endpoint delivers in the SAME quantum, which is the case
+			/* Every endpoint delivers in the same quantum, which is the case
 			 * the fixed order exists for. The seed encodes the endpoint, so
 			 * "in attachment order" is a statement about which endpoint's
 			 * bytes landed at which out-index. */
@@ -663,8 +586,8 @@ int main(const int argc, const char* const* const argv)
 		}
 	}
 
-	/* ---------------- case 5b: detaching the FIRST endpoint leaves the order
-	 * of the rest, so the order is attachment order and not call order. */
+	/* Detaching the first endpoint leaves the order of the rest, so the order
+	 * is attachment order and not call order. */
 	{
 		constexpr size_t kFrameBytes = 16;
 		g2::TransportHub  hub(kFrameBytes, kQueueDepth);
@@ -680,7 +603,7 @@ int main(const int argc, const char* const* const argv)
 		fillPattern(payload[0], kFrameBytes, 31u);
 		fillPattern(payload[1], kFrameBytes, 32u);
 
-		/* Delivered in REVERSE attachment order on purpose. */
+		/* Delivered in reverse attachment order on purpose. */
 		check(hub.toDevice(c, g2::ProtocolFrame{ payload[1], kFrameBytes }),
 			"the last-attached endpoint delivered first");
 		check(hub.toDevice(b, g2::ProtocolFrame{ payload[0], kFrameBytes }),
@@ -700,12 +623,10 @@ int main(const int argc, const char* const* const argv)
 			"a detached endpoint is refused by toDevice");
 	}
 
-	/* ---------------- case 6: the borrow lifetime.
-	 *
-	 * The pointers one drainToDevice returns are read IMMEDIATELY BEFORE the
-	 * next drainToDevice, AFTER further traffic has run against the same
-	 * endpoint. A hub that released its slots at the end of the drain would
-	 * have overwritten them by then, and this case is what sees that. */
+	/* The borrow lifetime. The pointers one drainToDevice returns are read
+	 * immediately before the next drainToDevice, after further traffic has run
+	 * against the same endpoint. A hub that released its slots at the end of
+	 * the drain would have overwritten them by then. */
 	{
 		constexpr size_t kFrameBytes = 16;
 		g2::TransportHub  hub(kFrameBytes, kQueueDepth);
@@ -744,8 +665,6 @@ int main(const int argc, const char* const* const argv)
 		hub.drainToDevice(later.data(), later.size());
 	}
 
-	/* ---------------- case 7: fromDevice reaches every attached endpoint, in
-	 * attachment order, and no detached one. */
 	{
 		constexpr size_t kFrameBytes = 12;
 		g2::TransportHub  hub(kFrameBytes, kQueueDepth);
@@ -771,9 +690,6 @@ int main(const int argc, const char* const* const argv)
 			"the second attachment received every byte of the frame");
 	}
 
-	/* ---------------- case 8: `max` truncates the drain and leaves the rest
-	 * queued. The parameter is in the declared signature, so its behaviour is
-	 * part of the contract. */
 	{
 		constexpr size_t kFrameBytes = 8;
 		g2::TransportHub  hub(kFrameBytes, kQueueDepth);

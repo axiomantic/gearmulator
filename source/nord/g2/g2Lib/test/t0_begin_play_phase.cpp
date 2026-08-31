@@ -1,40 +1,28 @@
-/* t0_begin_play_phase.cpp -- the check of SCH-21 step 1 (the block's own
- * former Check: line). Design sections 13.6.1, 13.10 rule 3 and 13.10.5.
- *
- * WHAT beginPlayPhase IS. It is the boot-to-play transition, as one call, and
- * design section 13.10 rule 3 states its five steps in order:
+/* beginPlayPhase is the boot-to-play transition, as one call, in five steps:
  *
  *   1  Clear both codec queues.
  *   2  Push exactly lookaheadFrames zero frames into the CodecSource.
  *   3  Zero all seven chain-health counters and both diagnostic counters,
- *      BEFORE step 4, so the priming run's own counters stay visible.
- *   4  Run exactly lookaheadFrames quanta in the PLAY regime.
+ *      before step 4, so the priming run's own counters stay visible.
+ *   4  Run exactly lookaheadFrames quanta in the play regime.
  *   5  Clear the recorded owning-thread identity.
  *
  * It touches no emulated machine state, clears no fault, and does not reset
  * the virtual frame index -- its own quanta advance it by L.
  *
- * THE HAND-OFF STATE THIS FILE ASSERTS, EXACTLY: the CodecSource holds 0
- * frames, the CodecSink holds exactly L, all seven chain-health counters are
- * 0, and the frame index is bootQuanta + L.
+ * Every "is zero" assertion here is guarded by a known positive that ran
+ * first, which is why the boot run below is many quanta rather than one. A
+ * counter that was never able to leave zero makes "it is zero afterwards" a
+ * comparison of 0 against 0, which no mutation of the zeroing step could turn
+ * red.
  *
- * EVERY "IS ZERO" ASSERTION HERE IS GUARDED BY A KNOWN POSITIVE THAT RAN
- * FIRST, and that is the whole reason the boot run below is 37 quanta rather
- * than one. A counter that was never able to leave zero makes "it is zero
- * afterwards" a comparison of 0 against 0, which no mutation of the zeroing
- * step could turn red. The guards are named at each case.
- *
- * THE MCU RATE IS 0/1 AND THAT IS A MEASURING INSTRUMENT, NOT A MACHINE
- * CONFIGURATION. With a numerator of zero the section 13.4.6 block's budget is
- * zero at every quantum, so `want <= 0` holds at every quantum, the role
- * filler is never invoked and longDispatchQuanta(0) counts QUANTA RUN SINCE
- * THE LAST ZEROING, exactly. That turns step 3's "zero the two diagnostic
- * counters" and step 4's "exactly L quanta" into two exact equalities instead
- * of two bounds. A denominator of zero is the only rejected rational
- * (Status::BadRational), so 0/1 is a legal Config.
- *
- * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION, so
- * this file reports identically under NDEBUG and without it.
+ * The MCU rate of 0/1 is a measuring instrument, not a machine configuration.
+ * With a numerator of zero the budget is zero at every quantum, so `want <= 0`
+ * holds at every quantum, the role filler is never invoked and
+ * longDispatchQuanta(0) counts quanta run since the last zeroing, exactly.
+ * That turns "zero the two diagnostic counters" and "exactly L quanta" into
+ * two exact equalities instead of two bounds. A denominator of zero is the
+ * only rejected rational (Status::BadRational), so 0/1 is a legal Config.
  */
 
 #include "board.h"
@@ -96,9 +84,8 @@ namespace
 		return "?";
 	}
 
-	/* THE TRACE SINK. It records the phase tag and the frame index of every
-	 * phase, in the order the Scheduler emits them. It is the only seam that
-	 * reaches the phases that run serially inside the Scheduler. */
+	/* The only seam that reaches the phases that run serially inside the
+	 * Scheduler. */
 	class RecordingTrace final : public g2::TraceSink
 	{
 	public:
@@ -125,7 +112,7 @@ namespace
 		uint64_t       m_frame[kMax]{};
 	};
 
-	/* THE FIVE UNCONDITIONAL PHASES -- the whole of a BOOT quantum. */
+	/* The unconditional phases -- the whole of a boot quantum. */
 	constexpr g2::TracePhase kBootQuantum[] =
 	{
 		g2::TracePhase::Swap,
@@ -135,8 +122,8 @@ namespace
 		g2::TracePhase::Dsp
 	};
 
-	/* THE SEVEN PHASES OF A PLAY QUANTUM. The ingress precedes the whole run
-	 * phase and the egress follows it. */
+	/* A play quantum: the ingress precedes the whole run phase and the egress
+	 * follows it. */
 	constexpr g2::TracePhase kPlayQuantum[] =
 	{
 		g2::TracePhase::Swap,
@@ -156,10 +143,8 @@ namespace
 	constexpr unsigned kBootQuanta   = 37;
 	constexpr unsigned kDspCount     = static_cast<unsigned>(g2::kJobCount);
 
-	/* THE CAPACITY IS DERIVED FROM THE TWO Config FIELDS AND NEVER WRITTEN AS
-	 * A LITERAL. Design section 13.6.1 fixes both queue capacities at
-	 * lookaheadFrames + B, so a literal here would be the rule copied rather
-	 * than the rule read. */
+	/* Both queue capacities are lookaheadFrames + B, so the capacity is derived
+	 * from the two Config fields rather than written as a literal. */
 	constexpr size_t kCapacity = static_cast<size_t>(kLookahead) + kMaxHostBlock;
 
 	/* Asserts one whole trace against a quantum table, position by position,
@@ -198,11 +183,10 @@ namespace
 		return _at + _quanta * _phases;
 	}
 
-	/* THE NUMBER OF SECOND-BUS WINDOW QUANTA in the half-open frame-index range
+	/* The number of second-bus window quanta in the half-open frame-index range
 	 * [_from, _from + _count). The second bus advances -- and therefore counts
 	 * an underrun -- only when frameIndex % divider == 0, so the expected
-	 * second-bus reading is DERIVED from the divider the Config carries and is
-	 * never written here as a literal. */
+	 * second-bus reading is derived from the divider the Config carries. */
 	uint64_t windowQuanta(const uint64_t _from, const uint64_t _count, const unsigned _divider)
 	{
 		uint64_t n = 0;
@@ -216,10 +200,9 @@ namespace
 		return n;
 	}
 
-	/* Reads back the seven chain-health counters of design section 13.10.5's
-	 * observability block. THE THREE PER-POSITION COUNTERS ARE ASSERTED AT
-	 * EVERY POSITION, because a zeroing that missed one position would
-	 * otherwise pass. */
+	/* Reads back the chain-health counters. The per-position counters are
+	 * asserted at every position, because a zeroing that missed one position
+	 * would otherwise pass. */
 	void checkSevenCounters(const g2::Scheduler& _s, const uint64_t _underrun,
 		const uint64_t _secondUnderrun, const uint64_t _phaseError,
 		const uint64_t _starved, const uint64_t _overflow,
@@ -261,9 +244,8 @@ int main()
 
 	if(!dsp56k::g_useJIT)
 	{
-		/* In an interpreter build no Scheduler can be created at all
-		 * (section 11.4.3), so the refusal is the only claim this file may
-		 * make. */
+		/* In an interpreter build no Scheduler can be created at all, so the
+		 * refusal is the only claim this file may make. */
 		g2::Board          board;
 		g2::SerialExecutor executor;
 
@@ -283,10 +265,10 @@ int main()
 		return g_failures == 0 ? 0 : 1;
 	}
 
-	/* THE BOARD IS DECLARED FIRST. Every context borrows a core, two ESAI
-	 * ports and a landed flag owned by a slot of the Board's DSP set, so the
-	 * Board must OUTLIVE the Scheduler and declaration order is the only thing
-	 * that enforces it. */
+	/* The Board is declared first. Every context borrows a core, two ESAI ports
+	 * and a landed flag owned by a slot of the Board's DSP set, so the Board
+	 * must outlive the Scheduler and declaration order is the only thing that
+	 * enforces it. */
 	g2::Board          board;
 	g2::SerialExecutor executor;
 	RecordingTrace     trace;
@@ -314,10 +296,7 @@ int main()
 
 	g2::Scheduler& s = *scheduler;
 
-	/* -----------------------------------------------------------------
-	 * CASE 1. A fresh Scheduler is the BOOT machine, and the boot run is
-	 * what arms every known positive the later cases need.
-	 */
+	/* The boot run is what arms every known positive the later cases need. */
 	checkEqual(s.frameIndex(), 0u, "a fresh Scheduler is at frame 0");
 
 	s.runFrames(kBootQuanta);
@@ -329,19 +308,17 @@ int main()
 
 	checkQuanta(trace, 0, kBootQuanta, kBootQuantum, kBootPhases, 0, "boot");
 
-	/* -----------------------------------------------------------------
-	 * CASE 2. THE KNOWN POSITIVES. Each of these asserts that a counter the
-	 * next case will require to be ZERO is able to be NON-zero first, which
-	 * is what stops case 4 from comparing 0 against 0.
+	/* The known positives. Each asserts that a counter a later case requires to
+	 * be zero is able to be non-zero first.
 	 *
 	 * underrunFrames: no firmware is downloaded, so every slot's run gate is
 	 * shut, no transmit callback ever fires and advanceAll counts an audio-bus
-	 * underrun at EVERY position for EVERY quantum. The count is therefore
-	 * exactly the number of boot quanta -- an equality, not a bound.
+	 * underrun at every position for every quantum. The count is therefore
+	 * exactly the number of boot quanta, an equality and not a bound.
 	 *
-	 * longDispatchQuanta(0): the MCU rate is 0/1, so the section 13.4.6
-	 * block's `want <= 0` branch is taken at every quantum and the counter is
-	 * exactly the number of quanta run.
+	 * longDispatchQuanta(0): the MCU rate is 0/1, so the `want <= 0` branch is
+	 * taken at every quantum and the counter is exactly the number of quanta
+	 * run.
 	 */
 	for(unsigned p = 0; p < kDspCount; ++p)
 	{
@@ -365,24 +342,19 @@ int main()
 	checkEqual(s.longDispatchQuanta(0), kBootQuanta,
 		"KNOWN POSITIVE: the MCU context's longDispatchQuanta counts every boot quantum at rate 0/1");
 
-	/* THE BOOT REGIME TOUCHES NEITHER QUEUE, which is the property SCH-22's
-	 * boot regime exists to deliver and which case 4's "the source is empty"
+	/* The boot regime touches neither queue, which "the source is empty" below
 	 * would otherwise be unable to distinguish from "the boot drained it". */
 	checkEqual(s.starvedFrames(), 0u, "the boot regime consumed no source frame");
 	checkEqual(s.droppedFrames(), 0u, "the boot regime pushed no sink frame");
 
-	/* THE OWNING THREAD IS RECORDED BY THE FIRST runFrames. */
+	/* The owning thread is recorded by the first runFrames. */
 	check(s.owningThread() == std::this_thread::get_id(),
 		"KNOWN POSITIVE: the boot run recorded this thread as the owner");
 
-	/* -----------------------------------------------------------------
-	 * CASE 3. beginPlayPhase, and the trace it emits.
-	 *
-	 * Step 4 runs exactly L quanta and they run in the PLAY regime, so the
-	 * records it adds are exactly L x seven, in the play order. A regime gate
-	 * that never reaches the two calls leaves each of these quanta five
-	 * records long and the count below reports it.
-	 */
+	/* Step 4 runs exactly L quanta in the play regime, so the records it adds
+	 * are exactly L play quanta, in the play order. A regime gate that never
+	 * reaches the two codec calls leaves each of these quanta a boot quantum
+	 * long and the count below reports it. */
 	trace.clear();
 
 	scheduler->beginPlayPhase();
@@ -392,39 +364,26 @@ int main()
 
 	checkQuanta(trace, 0, kLookahead, kPlayQuantum, kPlayPhases, kBootQuanta, "priming");
 
-	/* -----------------------------------------------------------------
-	 * CASE 4. THE HAND-OFF STATE, ASSERTED EXACTLY.
-	 */
 	checkEqual(s.frameIndex(), static_cast<uint64_t>(kBootQuanta) + kLookahead,
 		"the frame index is bootQuanta + L: beginPlayPhase does not reset it and its own quanta advance it");
 
-	/* THE SEVEN COUNTERS AFTER THE HAND-OFF, AND THE SPEC'S TWO CLAUSES ABOUT
-	 * THEM DISAGREE IN THIS FIXTURE. THE MORE SPECIFIC ONE WINS AND THE
-	 * DISAGREEMENT IS STATED RATHER THAN PAPERED OVER.
+	/* The counters after the hand-off are not asserted zero. This fixture
+	 * downloads no firmware, so every slot's run gate is shut, no transmit
+	 * callback ever fires, and each of the L priming quanta is a real audio-bus
+	 * underrun at every position. Since the zeroing happens before the priming
+	 * run, those readings must survive: asserting zero would require the
+	 * implementation to clear after the priming run and hide a DSP that
+	 * underran during priming.
 	 *
-	 *   Clause A, the hand-off state: "all seven chain-health counters 0".
-	 *   Clause B, step 3: the zeroing happens BEFORE the priming run of step 4,
-	 *   "so that priming-run underruns stay visible ... A DSP that underruns
-	 *   during priming is a real finding, and clearing afterwards would hide
-	 *   it."
-	 *
-	 * The two agree only when the priming run is CLEAN. THIS FIXTURE DOWNLOADS
-	 * NO FIRMWARE, so every slot's run gate is shut, no transmit callback ever
-	 * fires, and each of the L priming quanta is a real audio-bus underrun at
-	 * every position. Clause A therefore cannot hold here, and clause B says in
-	 * as many words that the reading must survive. Asserting zero would require
-	 * the implementation to clear AFTER the priming run, which is the exact
-	 * defect clause B names.
-	 *
-	 * WHAT IS ASSERTED INSTEAD IS STRICTLY STRONGER THAN ZERO, because it
-	 * separates three implementations that "== 0" cannot:
+	 * What is asserted instead is stronger than zero, because it separates
+	 * three implementations that "== 0" cannot:
 	 *
 	 *   zeroed before step 4  ->  L               (correct)
 	 *   zeroed after step 4   ->  0
 	 *   never zeroed          ->  bootQuanta + L
 	 *
-	 * Every expected value below is DERIVED -- from L, from the boot count and
-	 * from the Config's own second-bus divider -- and none is a literal. */
+	 * Every expected value below is derived, from L, from the boot count and
+	 * from the Config's own second-bus divider. */
 	{
 		const uint64_t expectedSecondBus =
 			windowQuanta(kBootQuanta, kLookahead, config.secondBusFrameDivider);
@@ -439,22 +398,18 @@ int main()
 			/* underflowFrames       */ 0,
 			"after beginPlayPhase");
 
-		/* THE SECOND-BUS EXPECTATION IS ONLY A DISCRIMINATOR IF IT IS NOT
-		 * ZERO. At divider 4 and a boot of 37 the priming range is
-		 * [37, 41), which holds exactly one window quantum -- frame 40 -- so
-		 * this guard is what stops the row above from being 0 == 0. */
+		/* The second-bus expectation is a discriminator only if it is not zero,
+		 * so this guard is what stops the row above from being 0 == 0. */
 		check(expectedSecondBus > 0,
 			"KNOWN POSITIVE: the priming run covers at least one second-bus window quantum");
 
-		/* THE PRIMING RUN CONSUMED EXACTLY THE L FRAMES STEP 2 PRIMED. Had
-		 * step 2 pushed fewer, the source would have run dry and starvedFrames
-		 * would name the shortfall; the zero above is therefore a statement
-		 * about step 2 and step 4 agreeing, not a counter nothing can move --
-		 * t0_codec_regimes drives the same counter off zero. */
+		/* The priming run consumed exactly the L frames step 2 primed. Had step
+		 * 2 pushed fewer, the source would have run dry and starvedFrames would
+		 * name the shortfall, so the zero above is a statement about step 2 and
+		 * step 4 agreeing rather than a counter nothing can move. */
 	}
 
-	/* STEP 3 HAPPENS BEFORE STEP 4, AND THIS IS THE ASSERTION THAT SAYS SO.
-	 * At an MCU rate of 0/1 the counter equals the quanta run since the last
+	/* At an MCU rate of 0/1 the counter equals the quanta run since the last
 	 * zeroing. Zeroing before the priming run leaves exactly L; zeroing after
 	 * it would leave 0; not zeroing at all would leave bootQuanta + L. The
 	 * three are distinct values, so this one equality discriminates all
@@ -462,22 +417,18 @@ int main()
 	checkEqual(s.longDispatchQuanta(0), kLookahead,
 		"the two diagnostic counters were zeroed BEFORE the priming run, and the priming run was L quanta");
 
-	/* STEP 5. */
 	check(s.owningThread() == std::thread::id{},
 		"beginPlayPhase cleared the recorded owning-thread identity");
 
-	/* -----------------------------------------------------------------
-	 * CASE 5. THE TWO QUEUE DEPTHS, MEASURED THROUGH THE DECLARED SURFACE.
+	/* The two queue depths, measured through the declared surface: there is no
+	 * queue-depth accessor. push() returns the frames the CodecSource accepted
+	 * and pull() returns the frames the CodecSink supplied, so a request of
+	 * capacity + 1 on each measures the free space and the depth exactly.
 	 *
-	 * Design section 13.10.5 declares no queue-depth accessor, and this file
-	 * adds none. push() returns the frames the CodecSource ACCEPTED and pull()
-	 * returns the frames the CodecSink SUPPLIED, so a request of capacity + 1
-	 * on each measures the free space and the depth exactly.
-	 *
-	 * BOTH PROBES MUTATE, so they run LAST -- after every counter assertion
-	 * above. Each also drives one counter off zero, which is the known
-	 * positive for the two counters no other case here can move:
-	 * underflowFrames and overflowFrames.
+	 * Both probes mutate, so they run last, after every counter assertion
+	 * above. Each also drives one counter off zero, which is the known positive
+	 * for the two counters no other case here can move: underflowFrames and
+	 * overflowFrames.
 	 */
 	{
 		std::vector<g2::Frame> out(kCapacity + 1);

@@ -1,51 +1,43 @@
-// Tier T1: this test needs the Clavia firmware artifacts and SKIPS with a
-// reason when NMG2_ARTIFACTS does not resolve.
+// This test needs the Clavia firmware artifacts and skips with a reason when
+// NMG2_ARTIFACTS does not resolve.
 //
-// WHAT THIS TEST IS. attachChainCallbacks decides which HARDWARE PORT carries
-// which CHAIN POSITION. The firmware decides the same thing, and the two must
-// agree: chain position 0's callbacks belong on the DSP the firmware treats as
-// the head of the chain, and chain position N - 1's on the DSP it treats as the
-// tail. The codec edges hang off those two positions, so a disagreement puts
-// the machine's audio input and output on the wrong DSPs.
+// attachChainCallbacks decides which hardware port carries which chain position.
+// The firmware decides the same thing, and the two must agree: chain position 0's
+// callbacks belong on the DSP the firmware treats as the head of the chain, and
+// chain position N - 1's on the DSP it treats as the tail. The codec edges hang
+// off those two positions, so a disagreement puts the machine's audio input and
+// output on the wrong DSPs.
 //
-// THE ORDERING IS DERIVED HERE AND NEVER WRITTEN DOWN AS DATA. This file
-// contains no port sequence. It boots the firmware and reads the ordering out
-// of the booted machine TWICE, by two paths that share no arithmetic, and
-// requires them to agree before it uses either:
+// The ordering is derived here and never written down as data. This file contains
+// no port sequence. It boots the firmware and reads the ordering out of the booted
+// machine twice, by two paths that share no arithmetic, and requires them to agree
+// before it uses either:
 //
-//   DERIVATION A -- THE FIRMWARE'S OWN TABLE, through g2::readChainOrder, which
-//   is the function the Scheduler wires the chain by. chainOrder.h carries the
-//   derivation. Calling the shipped one rather than copying it is what makes
-//   the cross-check below a check OF the shipped code.
+//   Derivation A -- the firmware's own table, through g2::readChainOrder, which
+//   is the function the Scheduler wires the chain by. Calling the shipped one
+//   rather than copying it is what makes the cross-check below a check of the
+//   shipped code.
 //
-//   DERIVATION B -- THE KERNEL'S OWN DMA CONSTANTS. Design section 2.4: the
-//   chain's two ends carry the codec's STEREO PAIR and its interior carries the
-//   eight-slot inter-DSP bus. So the head is the one port whose receive channel
-//   is programmed for two slots and the tail is the one port whose transmit
-//   channel is. This reads registers the emulated kernel wrote and shares
-//   nothing with derivation A but the machine both were taken from.
+//   Derivation B -- the kernel's own DMA constants. The chain's two ends carry
+//   the codec's stereo pair and its interior carries the eight-slot inter-DSP
+//   bus. So the head is the one port whose receive channel is programmed for two
+//   slots and the tail is the one port whose transmit channel is. This reads
+//   registers the emulated kernel wrote and shares nothing with derivation A but
+//   the machine both were taken from.
 //
-// WHY BOTH. Either alone is a single instrument, and plan section 24.6 row
-// W3-399 is the record of an instrument that was believed for weeks while
-// indexing its expectations by the wrong axis. Two derivations that share no
-// arithmetic cannot fail that way together in silence.
+// Either alone is a single instrument. Two derivations that share no arithmetic
+// cannot fail together in silence.
 //
-// WHAT IT THEN ASSERTS, AND ON WHAT. The wiring probe runs on a FRESH DspSet
-// and not on the booted one. The booted set's ESAIs carry the kernel's own
-// frame geometry and a DMA that moves under them, and a probe there would be
-// reading the machine's traffic rather than the wiring. A fresh set has clean
-// ESAIs this file programs for a one-slot frame, which is what lets readRX(0)
-// report slot 0 -- the same technique t0_chain_data_flow uses and for the same
-// reason. The ORDERING still comes from the booted machine; only the ports the
-// probe drives are fresh.
+// The wiring probe runs on a fresh DspSet and not on the booted one. The booted
+// set's ESAIs carry the kernel's own frame geometry and a DMA that moves under
+// them, and a probe there would be reading the machine's traffic rather than the
+// wiring. A fresh set has clean ESAIs this file programs for a one-slot frame,
+// which is what lets readRX(0) report slot 0. The ordering still comes from the
+// booted machine; only the ports the probe drives are fresh.
 //
-// EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). An assert() is deleted by
+// Every verdict is an observable and not an assert(): an assert() is deleted by
 // NDEBUG, so a predicate spelled as one is a predicate a release build does not
 // have.
-//
-// THE MACHINE PLACEMENT IS INT-1's, AND IT IS COPIED RATHER THAN SHARED, for
-// the reason t1_kernel_load.cpp states at the same block: plan section 1.3
-// rule 1 keeps a harness's own configuration at its own site.
 
 #include "gatedFixture.h"
 
@@ -98,8 +90,8 @@ namespace
 
 	// ------------------------------------------------ the ESAI underrun log filter
 	//
-	// INT-1's filter, and its limit is INT-1's limit: the underruns are REAL and
-	// expected in the boot regime. This hides the REPETITION and nothing else.
+	// The underruns are real and expected in the boot regime. This hides the
+	// repetition and nothing else.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
 	constexpr uint64_t g_underrunLinesKept = 4;
@@ -123,7 +115,7 @@ namespace
 		Logging::setLogFunc(&filterLog);
 	}
 
-	// ------------------------------------------------- INT-1's machine placement
+	// ------------------------------------------------------- the machine placement
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
@@ -232,26 +224,23 @@ namespace
 
 	// -------------------------------------------------------- derivation A's site
 	//
-	// THE PRODUCTION DERIVATION AND NOT A COPY OF IT. g2::readChainOrder is the
-	// function the Scheduler wires the chain by, so what this file cross-checks
-	// against derivation B is the very code the machine runs on. A second copy
-	// here would leave the shipped one unchecked.
+	// g2::readChainOrder is called rather than copied here, so what is cross-checked
+	// against derivation B is the code the machine runs on.
 
 	// -------------------------------------------------------- derivation B's site
 	//
-	// Design section 2.4. The DMA count field $001001 gives two slots -- the
-	// codec's stereo pair -- and $007001 gives eight, the inter-DSP bus. The
-	// receive channel is 2 and the transmit channel is 4.
+	// The DMA count field $001001 gives two slots -- the codec's stereo pair --
+	// and $007001 gives eight, the inter-DSP bus. The receive channel is 2 and
+	// the transmit channel is 4.
 	constexpr dsp56k::TWord g_dmaRxChannel  = 2u;
 	constexpr dsp56k::TWord g_dmaTxChannel  = 4u;
 	constexpr dsp56k::TWord g_dcoEndpoint   = 0x001001u;
 
-	// THE VALUE READ IS THE FIRST NON-ZERO ONE AND NOT THE LIVE REGISTER. DCO is
-	// a transfer COUNTER: the emulated DMA runs it down and reloads it, so a
-	// register sampled at an arbitrary instant carries wherever the transfer had
-	// got to and not the count the kernel programmed. Latching the first non-zero
-	// value is what makes this derivation read the kernel's writes -- the same
-	// reason t1_kernel_load latches rather than sampling.
+	// The value read is the first non-zero one and not the live register. DCO is a
+	// transfer counter: the emulated DMA runs it down and reloads it, so a register
+	// sampled at an arbitrary instant carries wherever the transfer had got to and
+	// not the count the kernel programmed. Latching the first non-zero value is what
+	// makes this derivation read the kernel's writes.
 	struct DcoLatch
 	{
 		std::vector<dsp56k::TWord> rx;
@@ -330,10 +319,10 @@ namespace
 
 	// ------------------------------------------------------------- the ESAI probe
 	//
-	// A ONE-SLOT FRAME, which is what lets readRX(0) report slot 0.
+	// A one-slot frame, which is what lets readRX(0) report slot 0.
 	// receiveDspFrame issues getRxWordCount() + 1 calls to execRX and each
 	// latches its own slot into the read registers, so a wider frame would leave
-	// the LAST slot there while the injected sample sits in slot 0.
+	// the last slot there while the injected sample sits in slot 0.
 	void enableTransmitter(dsp56k::Esai& _esai)
 	{
 		_esai.writeTransmitClockControlRegister(0);
@@ -430,10 +419,9 @@ int main()
 
 		const unsigned count = board.dspSet().dspCount();
 
-		// THE DRIVE LEAVES ON THE PROPERTY THE DERIVATIONS READ. Both derivations
-		// need the kernel's own writes, so the loop stops when every slot has
-		// taken its program rather than after a fixed count that would either
-		// cost the bound every run or sample a machine mid-download.
+		// Both derivations need the kernel's own writes, so the loop stops when
+		// every slot has taken its program rather than after a fixed count that
+		// would either cost the bound every run or sample a machine mid-download.
 		bool     converged  = false;
 		uint32_t iterations = 0;
 
@@ -446,7 +434,7 @@ int main()
 
 			scheduler->runFrames(g_framesPerIteration);
 
-			// SAMPLED BEFORE THE EXIT TEST, so the iteration that satisfies the
+			// Sampled before the exit test, so the iteration that satisfies the
 			// predicate still contributes its observation.
 			latchDco(board, dco);
 
@@ -468,14 +456,12 @@ int main()
 		if(!converged)
 			return false;
 
-		/* THE SCHEDULER WIRED ITS OWN CHAIN DURING THAT RUN, AND THIS IS WHY THE
-		 * PROBE BELOW SAYS ANYTHING ABOUT THE SHIPPED MACHINE. The wiring is
-		 * late: the constructor cannot know the order, so it attaches nothing
-		 * and runFrames attaches once the firmware's table can be read. A
-		 * Scheduler that never reached that point would leave every ESAI on the
-		 * library's default callbacks -- silently, with no audio -- and the
-		 * probe below, which drives its own adapter over a fresh set, would
-		 * still pass. */
+		/* The wiring is late: the constructor cannot know the order, so it
+		 * attaches nothing and runFrames attaches once the firmware's table can
+		 * be read. A Scheduler that never reached that point would leave every
+		 * ESAI on the library's default callbacks -- silently, with no audio --
+		 * and the probe below, which drives its own adapter over a fresh set,
+		 * would still pass. */
 		check(scheduler->chainAttached(),
 		      "the Scheduler wired its chain during the boot, so the order derived below is the "
 		      "order the shipped machine is running on");
@@ -499,7 +485,7 @@ int main()
 			std::cout << "chain-order: position -> port = " << order << std::endl;
 		}
 
-		// It must be a PERMUTATION. A table that named the same port twice would
+		// It must be a permutation. A table that named the same port twice would
 		// leave a DSP unwired and another driving two positions.
 		{
 			std::vector<unsigned> seen(count, 0u);
@@ -562,15 +548,15 @@ int main()
 
 		// ------------------------------------------------------- the wiring probe
 		//
-		// A FRESH SET, for the reason the file header states. The adapter is
-		// declared first so it outlives every callback installed on the set.
+		// The adapter is declared first so it outlives every callback installed
+		// on the set.
 		g2::ChainAdapter adapter(count, 1u, g2::ChainTopology::Ring, 4u);
 		g2::DspSet       probe;
 
 		check(g2::attachChainCallbacks(adapter, probe, portOfPosition) == g2::Status::Ok,
 		      "the installer accepted the firmware's own position-to-port order");
 
-		// AFTER THE INSTALL, NEVER BEFORE. Enabling a transmitter drives one
+		// After the install, never before. Enabling a transmitter drives one
 		// execTX out of writeTransmitControlRegister, and the callback that
 		// fires is whichever one is installed at that instant.
 		for(unsigned port = 0; port < count; ++port)
@@ -579,10 +565,10 @@ int main()
 			enableReceiver(probe.peripherals(port).getEsai());
 		}
 
-		// ---- INGRESS. injectCodecSource writes the codec pair into the READ
-		// frame of audio mailbox 0, which is the mailbox chain position 0's
-		// receive callback reads. The port that sees it is therefore the port
-		// carrying chain position 0.
+		// Ingress. injectCodecSource writes the codec pair into the read frame of
+		// audio mailbox 0, which is the mailbox chain position 0's receive
+		// callback reads. The port that sees it is therefore the port carrying
+		// chain position 0.
 		{
 			g2::Frame source{};
 			source.slot[0] = g_ingressSentinel;
@@ -611,7 +597,7 @@ int main()
 			}
 		}
 
-		// ---- EGRESS. Every port transmits a value of its own. Only the port
+		// Egress. Every port transmits a value of its own. Only the port
 		// carrying chain position N - 1 writes the last audio mailbox, and
 		// extractCodecSink reads exactly that one, so the sink's contents name
 		// the port the wiring made the tail.

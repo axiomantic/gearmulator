@@ -1,33 +1,25 @@
-/* t0_codec_regimes.cpp -- the check of SCH-21 step 2 (formerly SCH-22's own
- * Check: line). Design sections 13.5, 13.10 rule 3 and 13.10.5.
+/* The two regimes, and the one sentence that separates them. In the boot regime
+ * a quantum runs the swap and the run phases only -- no ingress, no egress, and
+ * neither codec queue touched. In the play regime all four phases run. The
+ * object knows its phase; the caller does not select it.
  *
- * THE TWO REGIMES, AND THE ONE SENTENCE THAT SEPARATES THEM. In the BOOT
- * regime a quantum runs the swap and the run phases only -- no ingress, no
- * egress, and NEITHER CODEC QUEUE TOUCHED. In the PLAY regime all four phases
- * run. The object knows its phase; the caller does not select it.
+ * The position of the ingress and of the egress in the phase order is
+ * established here or nowhere. A regime gate that never reaches the two calls
+ * leaves a play trace of the boot length, and the count below reports it.
  *
- * WHAT ONLY THIS FILE CAN OBSERVE. SCH-19's t0_order names the five
- * unconditional phases and no more, because a Scheduler it builds has no
- * regime member and is the boot machine by construction -- so THE POSITION OF
- * THE INGRESS AND OF THE EGRESS in design section 13.5's order is established
- * here or nowhere. The two `TracePhase` enumerators SCH-19 declares are emitted
- * by nothing until this task lands, so a regime gate that never reaches the two
- * calls leaves a play trace five records long and the count below reports it.
- *
- * THE ORDERING CLAIM, STATED AS THE MUTATION THAT BREAKS IT: move the ingress
+ * The ordering claim, stated as the mutation that breaks it: move the ingress
  * after the run phase, or the egress before it, and the play-regime comparison
- * fails at the first record that moved. Both mutations were performed and both
- * went red.
+ * fails at the first record that moved.
  *
- * THE NEGATIVE CASE IS THE WHOLE POINT OF THE ROW. With the play regime running
- * during what would be the boot, the sink fills, `CodecSink::push` refuses, and
- * the scheduler stops before the requested quanta are exhausted. That proves
- * the defect the boot regime closes is REAL and not a precaution, and it is
- * also the known positive for `droppedFrames` and `starvedFrames` -- the two
- * counters the boot-regime case requires to be zero.
+ * The negative case: with the play regime running during what would be the boot,
+ * the sink fills, `CodecSink::push` refuses, and the scheduler stops before the
+ * requested quanta are exhausted. That proves the defect the boot regime closes
+ * is real and not a precaution, and it is also the known positive for
+ * `droppedFrames` and `starvedFrames` -- the two counters the boot-regime case
+ * requires to be zero.
  *
- * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION, so
- * this file reports identically under NDEBUG and without it.
+ * No case here is a language assert() and no case catches an exception, so this
+ * file reports identically under NDEBUG and without it.
  */
 
 #include "board.h"
@@ -114,7 +106,6 @@ namespace
 		uint64_t       m_frame[kMax]{};
 	};
 
-	/* THE BOOT QUANTUM: five records, and the run phase is phases 1 .. 4. */
 	constexpr g2::TracePhase kBootQuantum[] =
 	{
 		g2::TracePhase::Swap,
@@ -124,12 +115,10 @@ namespace
 		g2::TracePhase::Dsp
 	};
 
-	/* THE PLAY QUANTUM: seven records. THE INGRESS SITS AT INDEX 1, BEFORE THE
-	 * WHOLE RUN PHASE, AND THE EGRESS AT INDEX 6, AFTER IT. That placement is
-	 * the ordering claim, and comparing the whole sequence position by position
-	 * is what makes it a property of this check rather than a sentence about
-	 * one: a moved record shifts every later tag and the first comparison
-	 * reports it. */
+	/* The ingress sits before the whole run phase and the egress after it. That
+	 * placement is the ordering claim, and the whole sequence is compared
+	 * position by position: a moved record shifts every later tag and the first
+	 * comparison reports it. */
 	constexpr g2::TracePhase kPlayQuantum[] =
 	{
 		g2::TracePhase::Swap,
@@ -148,10 +137,10 @@ namespace
 	constexpr unsigned kMaxHostBlock = 3;   /* B */
 	constexpr unsigned kDspCount     = static_cast<unsigned>(g2::kJobCount);
 
-	/* BOTH QUEUE CAPACITIES ARE L + B, design section 13.6.1, and the boot run
-	 * is TWICE that -- more quanta than either queue could hold, which is what
-	 * makes "neither queue was touched" a claim with teeth. Both are derived
-	 * from the two Config fields and neither is a literal. */
+	/* Both queue capacities are L + B, and the boot run is twice that -- more
+	 * quanta than either queue could hold, which is what makes "neither queue was
+	 * touched" a claim with teeth. Both are derived from the two Config fields
+	 * and neither is a literal. */
 	constexpr size_t   kCapacity  = static_cast<size_t>(kLookahead) + kMaxHostBlock;
 	constexpr unsigned kBootQuanta = static_cast<unsigned>(2 * kCapacity);
 
@@ -252,14 +241,13 @@ int main()
 	g2::Scheduler& s = *scheduler;
 
 	/* -----------------------------------------------------------------
-	 * CASE 1. THE BOOT REGIME. 2 x (L + B) quanta -- more than either queue
-	 * holds -- and every one of them runs to completion.
+	 * The boot regime. 2 x (L + B) quanta -- more than either queue holds -- and
+	 * every one of them runs to completion.
 	 *
-	 * THE FRAME INDEX IS THE FIRST HALF OF THE PROOF. Had the boot regime
-	 * touched the sink, it would have filled after L + B pushes and the
-	 * scheduler would have stopped, exactly as case 4 below shows it does when
-	 * the play regime IS running. So a frame index of 2 x (L + B) is the
-	 * statement "the sink never filled, because the sink was never written". */
+	 * Had the boot regime touched the sink, it would have filled after L + B
+	 * pushes and the scheduler would have stopped, as it does below when the play
+	 * regime is running. So a frame index of 2 x (L + B) is the statement "the
+	 * sink never filled, because the sink was never written". */
 	s.runFrames(kBootQuanta);
 
 	checkEqual(s.frameIndex(), kBootQuanta,
@@ -271,40 +259,35 @@ int main()
 	checkQuanta(trace, 0, kBootQuanta, kBootQuantum, kBootPhases, 0, "boot");
 
 	/* -----------------------------------------------------------------
-	 * CASE 2. NEITHER CODEC QUEUE WAS TOUCHED.
+	 * Neither codec queue was touched.
 	 *
-	 * The two queue DEPTHS are read through the declared surface: push()
-	 * returns the frames the CodecSource accepted and pull() returns the
-	 * frames the CodecSink supplied, so a request of capacity + 1 on each
-	 * measures free space and depth exactly. BOTH PROBES MUTATE, so the four
-	 * counter assertions run FIRST.
+	 * The two queue depths are read through the declared surface: push() returns
+	 * the frames the CodecSource accepted and pull() returns the frames the
+	 * CodecSink supplied, so a request of capacity + 1 on each measures free
+	 * space and depth exactly. Both probes mutate, so the counter assertions run
+	 * first.
 	 *
-	 * ALL FOUR CODEC-QUEUE COUNTERS ARE ZERO, and none of these four is a
-	 * counter nothing can move: case 4 drives starvedFrames and droppedFrames
-	 * off zero on this same object, and the two probes below drive
-	 * overflowFrames and underflowFrames off zero as their last act.
+	 * None of the codec-queue counters asserted zero here is a counter nothing
+	 * can move: the negative case below drives starvedFrames and droppedFrames
+	 * off zero on this same object, and the two probes below drive overflowFrames
+	 * and underflowFrames off zero as their last act.
 	 */
 	checkEqual(s.starvedFrames(),   0u, "the boot regime consumed no source frame");
 	checkEqual(s.overflowFrames(),  0u, "the boot regime pushed nothing at the source");
 	checkEqual(s.droppedFrames(),   0u, "the boot regime pushed no sink frame");
 	checkEqual(s.underflowFrames(), 0u, "the boot regime took nothing from the sink");
 
-	/* THE TWO CHAIN UNDERRUN COUNTERS, AND A SPEC DISAGREEMENT STATED RATHER
-	 * THAN PAPERED OVER. SCH-21 step 2 asks that "both underrun counters" also
-	 * read zero after the boot run. THEY CANNOT IN THIS FIXTURE, and the
+	/* The two chain underrun counters cannot read zero in this fixture, and the
 	 * reason is structural rather than a defect: no firmware is downloaded, so
 	 * every slot's run gate is shut, no transmit callback ever fires, and
-	 * CHN-7's advanceAll counts an audio-bus underrun at EVERY position for
-	 * EVERY quantum by construction. The zero the row asks for belongs to a
-	 * machine whose DSPs are producing -- which is milestone M5's `--impulse`
-	 * row, not this synthetic one.
+	 * advanceAll counts an audio-bus underrun at every position for every quantum
+	 * by construction. A zero here belongs to a machine whose DSPs are producing.
 	 *
-	 * WHAT IS ASSERTED INSTEAD IS AN EQUALITY AND NOT A SHRUG: exactly one
-	 * audio-bus underrun for each quantum, and exactly one second-bus underrun
-	 * for each second-bus WINDOW quantum, at every position. Both expectations
-	 * are derived -- from the boot count and from the Config's own divider --
-	 * and both would move if the boot regime ran a different number of quanta
-	 * than case 1 asserts. */
+	 * What is asserted instead is an equality: exactly one audio-bus underrun for
+	 * each quantum, and exactly one second-bus underrun for each second-bus
+	 * window quantum, at every position. Both expectations are derived -- from
+	 * the boot count and from the Config's own divider -- and both would move if
+	 * the boot regime ran a different number of quanta. */
 	for(unsigned p = 0; p < kDspCount; ++p)
 	{
 		char what[256];
@@ -324,7 +307,7 @@ int main()
 	}
 
 	/* -----------------------------------------------------------------
-	 * CASE 3. THE HAND-OFF, AND THE SCH-21 STATE IT LEAVES.
+	 * The hand-off, and the state it leaves.
 	 */
 	trace.clear();
 
@@ -342,17 +325,16 @@ int main()
 		"the priming run consumed exactly the L frames step 2 primed and starved on none");
 
 	/* -----------------------------------------------------------------
-	 * CASE 4. THE NEGATIVE CASE, AND IT IS THE WHOLE POINT OF THE ROW.
+	 * The negative case.
 	 *
-	 * The play regime is now running. Ask for the SAME 2 x (L + B) quanta the
-	 * boot run completed. The sink holds L, its capacity is L + B, and each
-	 * play quantum pushes one frame into it -- so exactly B pushes succeed, the
-	 * next one is REFUSED, and the scheduler stops. The quantum that was
-	 * refused still ran to completion, so it advances the frame index too:
-	 * B + 1 quanta, and not the 2 x (L + B) that were asked for.
+	 * The play regime is now running. Ask for the same 2 x (L + B) quanta the
+	 * boot run completed. The sink holds L, its capacity is L + B, and each play
+	 * quantum pushes one frame into it -- so exactly B pushes succeed, the next
+	 * one is refused, and the scheduler stops. The quantum that was refused still
+	 * ran to completion, so it advances the frame index too: B + 1 quanta, and
+	 * not the 2 x (L + B) that were asked for.
 	 *
-	 * THAT IS THE DEFECT THE BOOT REGIME CLOSES, DEMONSTRATED RATHER THAN
-	 * DESCRIBED: without the boot regime this is what a boot would have done.
+	 * Without the boot regime, this is what a boot would have done.
 	 */
 	{
 		const uint64_t before = s.frameIndex();
@@ -375,10 +357,10 @@ int main()
 	}
 
 	/* -----------------------------------------------------------------
-	 * CASE 5. THE TWO QUEUE DEPTHS, MEASURED LAST BECAUSE BOTH PROBES MUTATE.
+	 * The two queue depths, measured last because both probes mutate.
 	 *
-	 * The sink is FULL at this point -- that is what case 4 established -- so a
-	 * pull of capacity + 1 takes the whole capacity and falls one short.
+	 * The sink is full at this point, so a pull of capacity + 1 takes the whole
+	 * capacity and falls one short.
 	 */
 	{
 		std::vector<g2::Frame> out(kCapacity + 1);

@@ -1,78 +1,56 @@
-/* t0_scheduler_state.cpp -- the check of SCH-21 step 4 (the absorbed SCH-24).
- * Design sections 13.10 rule 2, 13.10.5.
- *
- * THE ROW, VERBATIM: "Run 100 quanta, save, run 100 more, load, run the same
- * 100 again, and assert identical output. Assert identical cycleDebt(i),
- * identical longDispatchQuanta(i) and identical rational accumulator for every
- * i in 0 .. dspCount, index 0 included. Assert the version word round-trips and
- * that a perturbed version word is a named load failure rather than a silent
- * acceptance."
- *
- * WHY THIS FILE COULD NOT BE WRITTEN BEFORE, AND WHAT CHANGED. Section 24.6 row
- * W3-415 recorded the blocker: the Board's constructor always calls
- * attachHdi08Bridges, no detach existed anywhere in source/nord/g2, and
+/* The Board's constructor always calls attachHdi08Bridges, and
  * DspSet::stateLoad answers Status::BridgesAttached before its first write
- * whenever the set holds bridges -- so a Scheduler::stateLoad that composes the
- * DSP set could never return Ok on any Scheduler built from a real Board. The
- * operator ruled for the detach. DspSet now carries detachHdi08Bridges and its
- * exact inverse reattachHdi08Bridges, and Scheduler::stateLoad brackets the DSP
- * limb with the pair.
+ * whenever the set holds bridges -- so Scheduler::stateLoad brackets the DSP
+ * limb with detachHdi08Bridges and its exact inverse reattachHdi08Bridges.
  *
- * THE PAIR IS A HAZARD AND IT HAS ITS OWN CASE. A detach and a re-attach that
- * are not exactly inverse would hide behind a green round trip: every borrowed
- * programLanded pointer in the Scheduler's own contexts is an address INTO a
- * bridge, so a re-attach that rebuilt the bridges, reordered them or dropped one
- * would leave the run gate reading a dangling or a foreign flag while every
- * state comparison in this file still matched. CASE 2 pins the pair by the
- * bridge IDENTITY at each index -- the pointer value programLanded(i) answers --
- * and not by a count.
+ * That pair is a hazard. A detach and a re-attach that are not exactly inverse
+ * would hide behind a green round trip: every borrowed programLanded pointer in
+ * the Scheduler's own contexts is an address into a bridge, so a re-attach that
+ * rebuilt the bridges, reordered them or dropped one would leave the run gate
+ * reading a dangling or a foreign flag while every state comparison in this
+ * file still matched. Case 1 pins the pair by the bridge identity at each index
+ * -- the pointer value programLanded(i) answers -- and not by a count.
  *
- * THE MIRAGE THIS TARGET IS UNIQUELY EXPOSED TO, AND WHAT IS DONE ABOUT IT. In
- * a T0 fixture no firmware lands, every DSP run gate is shut, and DSP memory
+ * In a T0 fixture no firmware lands, every DSP run gate is shut, and DSP memory
  * never changes -- so a round trip that compared DSP state would be comparing a
  * zero with a zero and would pass against an implementation that saved nothing.
- * Three separate defences, and each one is asserted BEFORE the equality it
+ * Three separate defences, and each one is asserted before the equality it
  * guards:
  *
- *   1. THE STATE MOVES. The digest at the save point and the digest 100 quanta
- *      later must DIFFER, and the two images must differ byte-wise. The MCU
+ *   1. The state moves. The digest at the save point and the digest 100 quanta
+ *      later must differ, and the two images must differ byte-wise. The MCU
  *      context is what moves it: the fixture is a field of one repeated
  *      instruction, the core reports the whole cost of the instruction that
- *      crossed its budget, so the section 13.4.6 debt accrues and the section
- *      13.4.1 accumulator walks its denominator.
- *   2. THE LOAD PUTS THE MACHINE BACK. The digest immediately after the load
- *      must equal the digest AT THE SAVE POINT, which no zero-byte snapshot and
+ *      crossed its budget, so the debt accrues and the accumulator walks its
+ *      denominator.
+ *   2. The load puts the machine back. The digest immediately after the load
+ *      must equal the digest at the save point, which no zero-byte snapshot and
  *      no stateLoad that returns Ok without loading can satisfy -- both leave
  *      the digest where the second hundred quanta left it.
- *   3. THE DSP LIMB IS DRIVEN BY HAND. Case 5 writes a distinct generation into
- *      every slot's registers and into P, X and Y, saves through the SCHEDULER,
+ *   3. The DSP limb is driven by hand. Case 5 writes a distinct generation into
+ *      every slot's registers and into P, X and Y, saves through the Scheduler,
  *      writes a second generation, loads through the Scheduler, and reads the
  *      first generation back. Nothing in that case is a zero.
  *
- * WHAT "IDENTICAL OUTPUT" IS HERE, STATED RATHER THAN ASSUMED, AND IT IS THIS
- * FILE'S ONE DEPARTURE FROM THE ROW'S WORDING. The row's "output" cannot be the
- * frames pull() answers: the codec source injects into audio mailbox 0, the
- * codec sink is extracted from the tail mailbox, and NOTHING carries a frame
- * between them but the eight DSPs -- which cannot run without firmware. Every
- * pulled frame in a T0 fixture is a zero frame whatever the Scheduler does, so
- * an equality over them is the exact 0 == 0 the row exists to forbid. The output
- * asserted here is instead the WHOLE observable state the hundred quanta
- * produce: the section 13.10.5 accessor surface, digest by digest, AND the
- * snapshot image byte for byte. The image is what carries the rational
- * accumulators, which the class exposes through no accessor.
+ * "Identical output" here is not the frames pull() answers: the codec source
+ * injects into audio mailbox 0, the codec sink is extracted from the tail
+ * mailbox, and nothing carries a frame between them but the eight DSPs -- which
+ * cannot run without firmware. Every pulled frame in a T0 fixture is a zero
+ * frame whatever the Scheduler does. The output asserted here is instead the
+ * whole observable state the hundred quanta produce: the accessor surface,
+ * digest by digest, and the snapshot image byte for byte.
  *
- * THE ACCUMULATOR EQUALITY IS THE IMAGE EQUALITY. Scheduler carries no
- * accessor for McuContext::acc or DspContext::acc and this file adds none:
- * scheduler.h's public surface is the thread map's census and a new accessor
- * would move it. The image holds every accumulator, so a byte-identical image
- * is a stronger statement than nine accessor comparisons would be.
+ * The accumulator equality is the image equality. Scheduler carries no accessor
+ * for McuContext::acc or DspContext::acc and this file adds none. The image
+ * holds every accumulator, so a byte-identical image is a stronger statement
+ * than accessor comparisons would be.
  *
- * NOTHING HERE IS A LANGUAGE assert() AND NOTHING CATCHES AN EXCEPTION. Every
+ * Nothing here is a language assert() and nothing catches an exception. Every
  * verdict is the failure counter, which no build type removes; the compile-time
  * half is static_assert, which fires in every build type. The default build is
  * Release and Release defines NDEBUG.
  *
- * NO COUNT IS TYPED. The DSP count comes from the set, the context count from
+ * No count is typed. The DSP count comes from the set, the context count from
  * the set, the image sizes from the objects, and the instruction cost from the
  * linked core.
  */
@@ -129,20 +107,13 @@ namespace
 		return " [index " + std::to_string(_i) + "]";
 	}
 
-	/* ---------------------------------------------------------------------
-	 * THE SURFACE, HELD AT COMPILE TIME.
+	/* stateLoad returns g2::Status and not void: an exception is forbidden, a
+	 * release build removes an assertion, and a void return leaves a named load
+	 * failure with no channel at all.
 	 *
-	 * The three Scheduler methods are `noexcept` and carry the row's return
-	 * types. `stateLoad` returns g2::Status and not void: design section 13.10
-	 * rule 2 forbids an exception, a release build removes an assertion, and a
-	 * void return leaves "a named load failure" with no channel at all.
-	 *
-	 * THE THREE COMPOSED LIMBS ARE PINNED HERE TOO, because the composition can
-	 * only report "the first non-Ok status any of the three produces" if all
-	 * three HAVE a status to produce. Board::stateLoad and
-	 * ChainAdapter::stateLoad returned void until this task reconciled them,
-	 * which is the correction design section 13.10.5 records.
-	 */
+	 * The three composed limbs are pinned here too, because the composition can
+	 * only report the first non-Ok status any of the three produces if all
+	 * three have a status to produce. */
 	static_assert(noexcept(std::declval<const g2::Scheduler&>().stateSize()),
 		"Scheduler::stateSize must be noexcept");
 	static_assert(noexcept(std::declval<const g2::Scheduler&>().stateSave(nullptr)),
@@ -164,7 +135,6 @@ namespace
 	static_assert(std::is_same_v<decltype(std::declval<g2::DspSet&>().stateLoad(nullptr)), g2::Status>,
 		"DspSet::stateLoad already reports through g2::Status");
 
-	/* THE DETACH AND ITS INVERSE, AND THE OBSERVABLE THAT SEPARATES THEM. */
 	static_assert(noexcept(std::declval<g2::DspSet&>().detachHdi08Bridges()),
 		"DspSet::detachHdi08Bridges must be noexcept");
 	static_assert(noexcept(std::declval<g2::DspSet&>().reattachHdi08Bridges()),
@@ -174,13 +144,10 @@ namespace
 	static_assert(std::is_same_v<decltype(std::declval<const g2::DspSet&>().bridgesAttached()), bool>,
 		"DspSet::bridgesAttached answers a bool");
 
-	/* ---------------------------------------------------------------------
-	 * THE FIXTURE. A Board with an SDRAM window full of one repeated
-	 * instruction and a core reset into it -- the machine t0_mcu_debt drives,
-	 * for the same reason: it is the ONE part of a T0 Scheduler whose emulated
-	 * state moves, and a round trip over a machine whose state never moves is
-	 * satisfied by a snapshot of zero bytes.
-	 */
+	/* A Board with an SDRAM window full of one repeated instruction and a core
+	 * reset into it: it is the one part of a T0 Scheduler whose emulated state
+	 * moves, and a round trip over a machine whose state never moves is
+	 * satisfied by a snapshot of zero bytes. */
 	class Ram final : public g2::BusTarget
 	{
 	public:
@@ -246,9 +213,8 @@ namespace
 		std::vector<uint8_t> m_bytes;
 	};
 
-	/* NOP. The one instruction the field holds, so "the cost of one dispatch
-	 * unit" is a figure this file MEASURES from the linked core rather than one
-	 * it writes down. */
+	/* NOP, the one instruction the field holds, so the cost of one dispatch
+	 * unit is measured from the linked core rather than written down. */
 	constexpr uint16_t g_nop = 0x4E71u;
 
 	constexpr uint32_t g_windowBase = g2::g_sdramBase;
@@ -280,11 +246,10 @@ namespace
 		uint32_t pc() const { return board.mcuReg(17); }
 	};
 
-	/* THE WHOLE OBSERVABLE STATE OF ONE Scheduler, read through the design
-	 * section 13.10.5 accessor surface and through nothing else. It is what
-	 * this file means by "the output of a hundred quanta": the codec sink
-	 * cannot carry one in a firmware-less fixture, and the file header states
-	 * why at length. */
+	/* The whole observable state of one Scheduler, read through the accessor
+	 * surface and through nothing else. It is what this file means by the
+	 * output of a hundred quanta: the codec sink cannot carry one in a
+	 * firmware-less fixture. */
 	struct Digest
 	{
 		uint64_t              frameIndex = 0;
@@ -319,8 +284,7 @@ namespace
 		d.dropped   = _s.droppedFrames();
 		d.underflow = _s.underflowFrames();
 
-		/* INDEX 0 IS THE MCU AND 1 .. dspCount ARE THE DSPs, and index 0 is
-		 * INCLUDED, which the row states in as many words. */
+		/* Index 0 is the MCU and 1 .. dspCount are the DSPs. */
 		for(unsigned i = 0; i <= _dspCount; ++i)
 		{
 			d.debt.push_back(_s.cycleDebt(i));
@@ -349,7 +313,7 @@ namespace
 			&& _a.fault          == _b.fault;
 	}
 
-	/* A FAILING COMPARISON MUST SAY WHAT MOVED, or a red run costs a bisect. */
+	/* A failing comparison must say what moved, or a red run costs a bisect. */
 	void reportDigest(const Digest& _d, const char* const _name)
 	{
 		std::printf("t0_scheduler_state: %s -- frame %llu, debt(0) %lld, ldq(0) %llu, "
@@ -361,7 +325,7 @@ namespace
 			unsigned(_d.faulted));
 	}
 
-	/* THE FIRST DIFFERING BYTE, or the size of the block when they agree. */
+	/* The first differing byte, or the size of the block when they agree. */
 	size_t firstDifference(const std::vector<uint8_t>& _a, const std::vector<uint8_t>& _b)
 	{
 		const size_t n = _a.size() < _b.size() ? _a.size() : _b.size();
@@ -411,9 +375,8 @@ namespace
 		return image;
 	}
 
-	/* ONE MACHINE AND ONE Scheduler OVER IT. THE DECLARATION ORDER IS THE
-	 * LIFETIME: scheduler.h requires the Board to outlive the Scheduler, and a
-	 * member declared later is destroyed first. */
+	/* The declaration order is the lifetime: the Board must outlive the
+	 * Scheduler, and a member declared later is destroyed first. */
 	struct Rig
 	{
 		Machine                        machine;
@@ -435,19 +398,14 @@ int main()
 {
 	std::printf("t0_scheduler_state: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
 
-	/* =====================================================================
-	 * CASE 1. THE DETACH IS A REAL DETACH AND THE RE-ATTACH IS ITS EXACT
-	 * INVERSE.
-	 *
-	 * THE HAZARD, STATED BEFORE THE ASSERTIONS. Scheduler's constructor copies
-	 * set.programLanded(i) into each DspContext and the run gate borrows that
-	 * ADDRESS for the life of the object. A re-attach that constructed fresh
-	 * bridges would leave every one of those borrowed pointers dangling; a
-	 * re-attach that reordered them would point each gate at another slot's
-	 * flag; a re-attach that dropped one would leave the last gate reading a
-	 * null. NONE of the three is visible in a state comparison, which is why
-	 * this case exists and why it pins the bridge IDENTITY at each index.
-	 */
+	/* Case 1. Scheduler's constructor copies set.programLanded(i) into each
+	 * DspContext and the run gate borrows that address for the life of the
+	 * object. A re-attach that constructed fresh bridges would leave every one
+	 * of those borrowed pointers dangling; a re-attach that reordered them
+	 * would point each gate at another slot's flag; a re-attach that dropped
+	 * one would leave the last gate reading a null. None of the three is
+	 * visible in a state comparison, so this case pins the bridge identity at
+	 * each index. */
 	{
 		Machine machine;
 		g2::DspSet& set = machine.board.dspSet();
@@ -459,7 +417,7 @@ int main()
 			"case 1: a Board arrives with its HDI08 bridges attached -- board.cpp calls "
 			"attachHdi08Bridges from the constructor body, unconditionally");
 
-		/* THE IDENTITY OF EACH BRIDGE, taken through the one public reader of
+		/* The identity of each bridge, taken through the one public reader of
 		 * it. Nothing else in the tree can tell one bridge from another. */
 		std::vector<const bool*> before(dspCount, nullptr);
 
@@ -480,9 +438,9 @@ int main()
 			}
 		}
 
-		/* THE DETACH REACHES EVERY SLOT. A detach that emptied a count but left
-		 * the flags readable would still let stateLoad refuse, and a detach
-		 * that left one bridge behind would be invisible to a size check. */
+		/* A detach that emptied a count but left the flags readable would still
+		 * let stateLoad refuse, and a detach that left one bridge behind would
+		 * be invisible to a size check. */
 		set.detachHdi08Bridges();
 
 		check(!set.bridgesAttached(), "case 1: the detach leaves the set holding no bridges");
@@ -494,10 +452,8 @@ int main()
 				"reading of NOT LANDED" + atIndex(i));
 		}
 
-		/* THE DETACH IS WHAT UNBLOCKS THE LOAD, and this is where that is
-		 * proven rather than assumed. Before the detach this same call answers
-		 * BridgesAttached -- t0_dsp_boot_consumer pins that -- so an Ok here is
-		 * the detach's own observable. */
+		/* Before the detach this same call answers BridgesAttached, so an Ok
+		 * here is the detach's own observable. */
 		std::vector<uint8_t> dspImage(set.stateSize());
 		set.stateSave(dspImage.data());
 
@@ -505,7 +461,7 @@ int main()
 			"case 1: a DETACHED set takes back the snapshot it wrote, which is the whole "
 			"reason the detach exists");
 
-		/* THE INVERSE. Same object at the same index, for every index. */
+		/* The inverse: the same object at the same index, for every index. */
 		set.reattachHdi08Bridges();
 
 		check(set.bridgesAttached(), "case 1: the re-attach puts the bridges back");
@@ -522,9 +478,9 @@ int main()
 			"case 1: a re-attached set refuses a load again, so the re-attach restored the "
 			"REFUSAL and not merely a container");
 
-		/* THE PAIR IS REPEATABLE. attachHdi08Bridges refuses a second attach by
-		 * throwing, so a re-attach implemented as a re-attach would survive one
-		 * round and die on the second. */
+		/* attachHdi08Bridges refuses a second attach by throwing, so a
+		 * re-attach implemented as a re-attach would survive one round and die
+		 * on the second. */
 		set.detachHdi08Bridges();
 		set.reattachHdi08Bridges();
 
@@ -536,8 +492,8 @@ int main()
 				"case 1: the second round restores the same bridge at the same index" + atIndex(i));
 		}
 
-		/* THE PAIR IS TOTAL AT BOTH ENDS. Neither call is allowed to be a
-		 * one-shot that corrupts the set when it has nothing to do. */
+		/* Neither call is allowed to be a one-shot that corrupts the set when
+		 * it has nothing to do. */
 		set.reattachHdi08Bridges();
 		check(set.bridgesAttached(), "case 1: a re-attach of an attached set changes nothing");
 
@@ -555,16 +511,11 @@ int main()
 	}
 
 
-	/* =====================================================================
-	 * THE FIXTURE MEASUREMENT, AND EVERY LATER CASE RESTS ON IT.
-	 *
-	 * A budget of ONE cycle is offered to the linked core. It cannot abandon an
+	/* A budget of one cycle is offered to the linked core. It cannot abandon an
 	 * instruction it has started, so it retires exactly one and reports that
-	 * instruction's WHOLE cost. t0_mcu_debt carries the same measurement and the
-	 * reason it is a measurement rather than a constant: a core that clamped its
-	 * return would make the section 13.4.6 debt identically zero, and the MCU
-	 * context is the ONE part of a T0 Scheduler whose state moves.
-	 */
+	 * instruction's whole cost. It is measured rather than written down because
+	 * a core that clamped its return would make the debt identically zero, and
+	 * the MCU context is the one part of a T0 Scheduler whose state moves. */
 	int64_t instrCost = 0;
 	{
 		Machine probe;
@@ -585,10 +536,10 @@ int main()
 
 	if(instrCost <= 1 || !dsp56k::g_useJIT)
 	{
-		/* Either the fixture is unusable or no Scheduler can be created at all
-		 * (section 11.4.3). Case 1 above needed neither and has already run.
-		 * Reporting the reason beats running every later case against a machine
-		 * whose failures would all name this one. */
+		/* Either the fixture is unusable or no Scheduler can be created at all.
+		 * Case 1 above needed neither and has already run. Reporting the reason
+		 * beats running every later case against a machine whose failures would
+		 * all name this one. */
 		std::printf("t0_scheduler_state: no Scheduler cases run (cycles/instruction %lld, "
 			"g_useJIT %s)\n", static_cast<long long>(instrCost),
 			dsp56k::g_useJIT ? "true" : "false");
@@ -596,23 +547,21 @@ int main()
 		return g_failures == 0 ? 0 : 1;
 	}
 
-	/* THE MCU RATE, DERIVED FROM THE MEASUREMENT AND NOT WRITTEN DOWN.
-	 *
-	 * THE DENOMINATOR IS WHAT MAKES THE ACCUMULATOR MOVE. alloc() walks acc
+	/* The denominator is what makes the accumulator move. alloc() walks acc
 	 * modulo the denominator, so a rate whose numerator divides its denominator
 	 * leaves acc identically zero and the round trip could not tell an
 	 * implementation that saved the accumulator from one that did not. The
 	 * quantum count below is not a multiple of the denominator either, so the
-	 * accumulator's PHASE at the save point differs from its phase a hundred
-	 * quanta later -- which is what makes dropping it from the image observable.
+	 * accumulator's phase at the save point differs from its phase a hundred
+	 * quanta later -- which is what makes dropping it from the image
+	 * observable.
 	 *
-	 * THE NUMERATOR PUTS THE BUDGET BELOW ONE INSTRUCTION'S COST, so the core
-	 * overruns, the debt accrues, and the rule 4 long-dispatch branch fires --
-	 * both diagnostic counters move rather than one. */
+	 * The numerator puts the budget below one instruction's cost, so the core
+	 * overruns, the debt accrues, and the long-dispatch branch fires -- both
+	 * diagnostic counters move rather than one. */
 	constexpr uint32_t kRateDen = 7u;
 	const ::Rational mcuRate = { static_cast<uint32_t>(4 * instrCost - 1), kRateDen };
 
-	/* THE ROW'S OWN COUNT. */
 	constexpr size_t kQuanta = 100u;
 
 	static_assert(kQuanta % kRateDen != 0u,
@@ -620,18 +569,13 @@ int main()
 		"accumulator holds the same phase at the save point and at the load point and "
 		"dropping it from the image is unobservable");
 
-	/* =====================================================================
-	 * CASE 2. THE IMAGE IS SIZED BY THE STRUCTURE, AND stateSave WRITES
-	 * EXACTLY WHAT stateSize CLAIMS.
-	 *
-	 * AN IMPLEMENTATION THAT SAVES ZERO BYTES MUST FAIL THIS FILE, which the
-	 * row states as its acceptance criterion. This case is the cheapest place
-	 * that becomes red, and the bound is DERIVED from the two composed limbs
-	 * a caller can reach rather than written down: the Scheduler's block holds
-	 * the Board's snapshot, the ChainAdapter's and the DSP set's, plus its own
-	 * accumulators, debts, counters, frame index and version word -- so it is
-	 * STRICTLY larger than the two limbs a test can size from outside.
-	 */
+	/* Case 2. An implementation that saves zero bytes must fail this file, and
+	 * this case is the cheapest place that becomes red. The bound is derived
+	 * from the two composed limbs a caller can reach rather than written down:
+	 * the Scheduler's block holds the Board's snapshot, the ChainAdapter's and
+	 * the DSP set's, plus its own accumulators, debts, counters, frame index
+	 * and version word -- so it is strictly larger than the two limbs a test
+	 * can size from outside. */
 	{
 		Rig rig(mcuRate);
 
@@ -655,7 +599,7 @@ int main()
 				"its own accumulators, debts, counters, frame index and version word too -- "
 				"a zero-byte snapshot fails here");
 
-			/* stateSize() IS THE FIGURE A CALLER ALLOCATES AGAINST. A save that
+			/* stateSize() is the figure a caller allocates against. A save that
 			 * wrote past it corrupts the caller's heap; one that stopped short
 			 * leaves the tail of the image undefined. Both are caught by a
 			 * sentinel-filled buffer with a guard region past the claimed size. */
@@ -682,27 +626,21 @@ int main()
 		}
 	}
 
-	/* =====================================================================
-	 * CASE 3. THE ROUND TRIP, IN THE ROW'S OWN SHAPE.
+	/* Case 3, the round trip. The order of the assertions is load-bearing:
 	 *
-	 *   run 100 quanta, save, run 100 more, load, run the same 100 again,
-	 *   and assert identical output.
-	 *
-	 * FOUR ASSERTIONS IN ORDER, AND THE ORDER IS LOAD-BEARING:
-	 *
-	 *   (a) THE STATE MOVED between the save point and the load point. Asserted
-	 *       FIRST, because every equality after it is vacuous without it.
-	 *   (b) THE LOAD PUT THE MACHINE BACK: the digest and the image immediately
-	 *       after the load equal the digest and the image AT THE SAVE POINT.
-	 *       A stateLoad that returns Ok without loading leaves both where the
-	 *       second hundred quanta left them, and fails here.
-	 *   (c) THE REPLAY REPRODUCES: the same hundred quanta run again reach the
-	 *       same digest and the same image. This is where a member dropped from
-	 *       the image but restored to a plausible value still goes red, because
-	 *       the accumulator it dropped changes the budget sequence of every
-	 *       quantum after it.
-	 *   (d) THE VERSION WORD ROUND-TRIPS, which the image equality at (b) is.
-	 */
+	 *   (a) the state moved between the save point and the load point,
+	 *       asserted first, because every equality after it is vacuous
+	 *       without it.
+	 *   (b) the load put the machine back: the digest and the image
+	 *       immediately after the load equal the digest and the image at the
+	 *       save point. A stateLoad that returns Ok without loading leaves
+	 *       both where the second hundred quanta left them, and fails here.
+	 *       The version word round-trips as part of this image equality.
+	 *   (c) the replay reproduces: the same hundred quanta run again reach the
+	 *       same digest and the same image. This is where a member dropped
+	 *       from the image but restored to a plausible value still goes red,
+	 *       because the accumulator it dropped changes the budget sequence of
+	 *       every quantum after it. */
 	{
 		Rig rig(mcuRate);
 
@@ -726,7 +664,7 @@ int main()
 			reportDigest(digestSave, "digest at the save point");
 			reportDigest(digestRun,  "digest a hundred quanta later");
 
-			/* ---- (a) THE STATE MOVED. */
+			/* (a) the state moved. */
 			check(digestSave.frameIndex == kQuanta,
 				"case 3: a hundred quanta advanced the virtual clock by a hundred");
 			check(digestRun.frameIndex == 2u * kQuanta,
@@ -755,7 +693,7 @@ int main()
 				"case 3: two hundred quanta over the field faulted no context, so no "
 				"equality below is an equality between two halted machines");
 
-			/* ---- (b) THE LOAD PUT THE MACHINE BACK. */
+			/* (b) the load put the machine back. */
 			checkEqualI64(static_cast<int64_t>(s.stateLoad(imageSave.data())),
 				static_cast<int64_t>(g2::Status::Ok),
 				"case 3: stateLoad takes back the image this Scheduler wrote -- which it can "
@@ -785,7 +723,7 @@ int main()
 					"case 3: longDispatchQuanta is restored, index 0 included" + atIndex(i));
 			}
 
-			/* ---- (c) THE REPLAY REPRODUCES. */
+			/* (c) the replay reproduces. */
 			s.runFrames(kQuanta);
 
 			const Digest               digestReplay = digestOf(s, dspCount);
@@ -801,19 +739,11 @@ int main()
 		}
 	}
 
-	/* =====================================================================
-	 * CASE 4. A PERTURBED VERSION WORD IS A NAMED LOAD FAILURE.
-	 *
-	 * The row: "Assert the version word round-trips and that a perturbed
-	 * version word is a named load failure rather than a silent acceptance."
-	 * The round trip is case 3's image equality; the refusal is here.
-	 *
-	 * THE REFUSAL CHANGES NOTHING, and that half matters as much as the status:
-	 * a load that reported BadStateImage after writing half the block would
-	 * leave a machine no run produced. The version word is the FIRST field of
-	 * the block for exactly this reason, so the comparison happens before the
-	 * first write.
-	 */
+	/* Case 4. The refusal changes nothing, and that half matters as much as the
+	 * status: a load that reported BadStateImage after writing half the block
+	 * would leave a machine no run produced. The version word is the first
+	 * field of the block for exactly this reason, so the comparison happens
+	 * before the first write. */
 	{
 		Rig rig(mcuRate);
 
@@ -835,7 +765,7 @@ int main()
 			const Digest               before      = digestOf(s, dspCount);
 			const std::vector<uint8_t> imageBefore = imageOf(s);
 
-			/* THE PERTURBATION IS A BIT FLIP AND NOT A CHOSEN VALUE. Writing a
+			/* The perturbation is a bit flip and not a chosen value. Writing a
 			 * number here would pin the version this build happens to carry,
 			 * and the next revision of the block would have to remember to
 			 * change it. Any flip of the leading word is a version this build
@@ -856,28 +786,22 @@ int main()
 		}
 	}
 
-	/* =====================================================================
-	 * CASE 5. THE DSP LIMB, DRIVEN BY HAND THROUGH THE SCHEDULER.
+	/* Case 5, the DSP limb driven by hand through the Scheduler. No firmware
+	 * lands in a T0 fixture, every run gate is shut, and DSP memory never
+	 * changes by itself, so the DSP half of case 3's image equality is an
+	 * equality between two blocks of zeros: it would pass against a composition
+	 * that dropped the DSP limb entirely.
 	 *
-	 * THIS IS THE CASE THE MIRAGE MAKES NECESSARY. No firmware lands in a T0
-	 * fixture, every run gate is shut, and DSP memory never changes by itself,
-	 * so the DSP half of case 3's image equality is an equality between two
-	 * blocks of zeros. It would pass against a composition that dropped the DSP
-	 * limb entirely -- which is the half section 24.6 row W3-415 says a previous
-	 * pass refused to ship.
+	 * So the state is moved by hand: a distinct generation is written into
+	 * every slot's register block and into P, X and Y at both ends of every
+	 * area, the Scheduler saves, a second generation is written, the Scheduler
+	 * loads, and the first generation is read back. Every word compared here is
+	 * non-zero and every word differs between the two generations.
 	 *
-	 * SO THE STATE IS MOVED BY HAND: a distinct generation is written into every
-	 * slot's register block and into P, X and Y at both ends of every area, the
-	 * SCHEDULER saves, a second generation is written, the SCHEDULER loads, and
-	 * the first generation is read back. Every word compared here is non-zero
-	 * and every word differs between the two generations.
-	 *
-	 * IT ALSO PROVES THE BRACKET. The set is the BOARD'S set and it holds its
+	 * It also proves the bracket. The set is the Board's set and it holds its
 	 * bridges throughout, so a Scheduler::stateLoad that did not detach them
 	 * would answer BridgesAttached and restore nothing -- and a re-attach that
-	 * did not put them back would leave the set unable to refuse afterwards.
-	 * Both are asserted.
-	 */
+	 * did not put them back would leave the set unable to refuse afterwards. */
 	{
 		Rig rig(mcuRate);
 
@@ -892,7 +816,7 @@ int main()
 				"case 5: the Scheduler's DSP set holds its bridges, which is the condition "
 				"DspSet::stateLoad refuses on");
 
-			/* A DISTINCT, NON-ZERO WORD FOR EVERY (generation, slot, cell). */
+			/* A distinct, non-zero word for every (generation, slot, cell). */
 			const auto word = [](const unsigned _gen, const unsigned _slot, const unsigned _cell)
 			{
 				return static_cast<dsp56k::TWord>(
@@ -902,9 +826,9 @@ int main()
 			const dsp56k::EMemArea areas[] =
 				{ dsp56k::MemArea_P, dsp56k::MemArea_X, dsp56k::MemArea_Y };
 
-			/* TWO CELLS PER AREA, BOTH BELOW THE BRIDGED REGION. dspSet.cpp
+			/* Two cells per area, both below the bridged region. dspSet.cpp
 			 * builds every slot's memory with a bridged X/Y address, above
-			 * which a write to X is a write to Y -- so a probe at the TOP of
+			 * which a write to X is a write to Y -- so a probe at the top of
 			 * each area would read another area's word back and this file would
 			 * report a defect of its own fixture. Both offsets are inside P's
 			 * smaller size as well as inside X's and Y's. */

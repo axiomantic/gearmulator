@@ -79,16 +79,8 @@ namespace g2
 		uint64_t   longDispatchQuanta;
 		dsp56k::DSP* dsp;     /* borrowed; the Scheduler owns the DSP set   */
 
-		/* THE INTERLEAVE'S TWO OBSERVABLES. dspJob overwrites both at the top
-		 * of every quantum and no other code reads them.
-		 *
-		 * THEY EXIST BECAUSE THE SUB-BUDGET DIVISOR IS A PREDICATE -- "how many
-		 * times will the interleave's callback fire this quantum" -- AND A
-		 * PREDICATE NOTHING CAN OBSERVE IS A PREDICATE THAT DRIFTS. A literal 8
-		 * stood in that role while the callback fired thirty times, and no
-		 * check could see the disagreement because neither number left the
-		 * function. The divisor must BOUND the dispatch count; these two
-		 * members are what makes that statement testable. */
+		/* dspJob overwrites both at the top of every quantum and no other code
+		 * reads them. The divisor must bound the dispatch count. */
 		uint32_t   slotBudgetDivisor;    /* the divisor the quantum derived */
 		uint32_t   slotDispatches;       /* times the callback actually fired */
 

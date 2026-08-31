@@ -52,15 +52,13 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/dspJob.cpp)
 
-# SCH-29. transportHub.* is the transport hub: the fixed-allocation, fixed-order
-# path between the device and the three attachments of design section 15.1.
+# transportHub.* is the fixed-allocation, fixed-order path between the device
+# and its attachments.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/transportHub.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/transportHub.h)
 
-# SCH-21 step 6 (formerly SCH-30). mcuContext.h declares McuContext -- the four
-# members design section 13.4.6's block reads, for the MCU. It has no compiled
-# part; it is listed so that the file the sched track owns appears in the
-# target, exactly as SCH-4's frame.h and SCH-6's dspContext.h do.
+# mcuContext.h has no compiled part; it is listed so that the file appears in
+# the target, exactly as frame.h and dspContext.h do.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/mcuContext.h)

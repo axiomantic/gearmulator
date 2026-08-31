@@ -40,14 +40,12 @@
  * 5. SCH-19's `runFrames`, the quantum entry point, and the private
  *    constructor that wires the Executor and the Board in.
  *
- * 6. TOOL-13's `McuRunner` and `setMcuRunner`. A null runner means the MCU
- *    phase of a quantum calls `Board::runMcu`, which is what every build that
- *    is not being debugged does, so a production Scheduler pays one further
+ * 6. `McuRunner` and `setMcuRunner`. A null runner means the MCU phase of a
+ *    quantum calls `Board::runMcu`, so a production Scheduler pays one further
  *    null check for each quantum. It exists because a debugger needs a
- *    decision point BETWEEN two MCU instructions and a quantum offers none;
- *    a debugger that carried its own copy of design section 13.5's order
- *    instead would be a second full-advance path that nothing keeps in step
- *    with this one.
+ *    decision point between two MCU instructions and a quantum offers none;
+ *    a debugger that carried its own copy of the quantum order instead would
+ *    be a second full-advance path that nothing keeps in step with this one.
  *
  * THE RULE SCH-17 OWNS, STATED IN ONE SENTENCE.
  *
@@ -128,34 +126,23 @@ namespace g2
 		virtual void onPhase(TracePhase _phase, uint64_t _frameIndex) noexcept = 0;
 	};
 
-	/* THE MCU RUNNER, AND IT IS NULL IN EVERY BUILD THAT IS NOT BEING DEBUGGED.
-	 * Task TOOL-13's amendment.
+	/* The run phase of one quantum asks `g2::runQuantum` for `want` MCU cycles
+	 * and `Board::runMcu` supplies them. An installed runner is asked for the
+	 * same want and must answer with the cycles it actually spent, so the
+	 * cycle-debt block's arithmetic is untouched: a runner that returns less
+	 * than it was asked for is the ordinary short-spend case that block already
+	 * floors at zero, and no credit is banked for either party.
 	 *
-	 * WHAT IT REPLACES AND WHAT IT MUST NOT CHANGE. The run phase of one quantum
-	 * asks `g2::runQuantum` for `want` MCU cycles and `Board::runMcu` supplies
-	 * them. An installed runner is asked for the SAME want and must answer with
-	 * the cycles it actually spent, so the cycle-debt block's arithmetic is
-	 * untouched: a runner that returns less than it was asked for is the ordinary
-	 * short-spend case that block already floors at zero, and no credit is
-	 * banked for either party.
-	 *
-	 * WHY A HOOK AND NOT A SECOND QUANTUM LOOP. Design section 13.5's order is
-	 * stated once, in Scheduler::runFrames, and a debugger that wrote its own
-	 * copy of that order would be a second full-advance path which nothing keeps
-	 * in step with the first. The ONE thing a debugger needs that the quantum
-	 * does not give it is a decision point BETWEEN two MCU instructions, which is
-	 * where a breakpoint compare has to happen; this is that point and it is
-	 * nothing else.
-	 *
-	 * THE COST IN A BUILD WITH NO RUNNER IS ONE NULL TEST FOR EACH QUANTUM, which
-	 * is the arrangement `TraceSink` above already established. */
+	 * The quantum order is stated once, in Scheduler::runFrames. The one thing a
+	 * debugger needs that the quantum does not give it is a decision point
+	 * between two MCU instructions, which is where a breakpoint compare has to
+	 * happen; this is that point and it is nothing else. */
 	class McuRunner
 	{
 	public:
 		virtual ~McuRunner() = default;
 
-		/* Answers the cycles actually spent, which may be fewer than `_want`.
-		 * `noexcept`, matching runFrames and design section 13.10 rule 2. */
+		/* Answers the cycles actually spent, which may be fewer than `_want`. */
 		virtual uint32_t runMcu(uint32_t _want) noexcept = 0;
 	};
 
@@ -199,28 +186,24 @@ namespace g2
 			 * path that records a reference cannot take it. */
 			bool          testOverride          = false;
 
-			/* THE POSITION-TO-PORT ORDER THE CHAIN IS WIRED BY, AND EMPTY IS
-			 * THE DEFAULT AND THE PRODUCTION VALUE.
+			/* The position-to-port order the chain is wired by. Empty is the
+			 * default and the production value.
 			 *
-			 * EMPTY MEANS DERIVE IT FROM THE MACHINE. The firmware chooses which
+			 * Empty means derive it from the machine. The firmware chooses which
 			 * hardware port carries which chain position and it does not choose
 			 * the identity; chainOrder.h carries the derivation and why it can
 			 * only be answered once the firmware has run. A Scheduler built from
-			 * an empty order therefore leaves its ports IDLE and wires the chain
+			 * an empty order therefore leaves its ports idle and wires the chain
 			 * on the first quantum after the first program lands.
 			 * chainAttached() is where a caller reads whether that has happened.
 			 *
-			 * NON-EMPTY IS FOR A MACHINE THAT WILL NEVER BOOT ONE. A harness
-			 * that drives the ESAIs itself has no firmware to ask, and naming
-			 * the order it wants is how it says so -- rather than this field
-			 * carrying an identity default that would silently be the wrong
-			 * order on every real machine. A non-empty order is wired at
-			 * construction and is NOT replaced by a later derivation: an order
-			 * a caller named is the order it gets.
+			 * A harness that drives the ESAIs itself has no firmware to ask and
+			 * names the order it wants. A non-empty order is wired at
+			 * construction and is not replaced by a later derivation.
 			 *
-			 * IT IS REJECTED IN create() LIKE EVERY OTHER FIELD. An order whose
-			 * length is not `dspCount`, or that is not a permutation of the
-			 * slots, answers Status::BadChainOrder and yields no object. */
+			 * An order whose length is not `dspCount`, or that is not a
+			 * permutation of the slots, answers Status::BadChainOrder in
+			 * create() and yields no object. */
 			std::vector<unsigned> chainOrder{};
 
 			/* NULL MEANS NO RECORDING, and it is the default. */
@@ -254,58 +237,46 @@ namespace g2
 		 * use workers inside run(), which returns only when every job has. */
 		void runFrames(size_t _frames) noexcept;
 
-		/* INSTALL OR REMOVE THE MCU RUNNER. A null argument restores
-		 * `Board::runMcu`, which is what every build that is not being debugged
-		 * runs on. The Scheduler BORROWS the runner and never destroys it, so a
-		 * runner must outlive the Scheduler or remove itself first -- GdbStub's
-		 * destructor does the latter. */
+		/* A null argument restores `Board::runMcu`. The Scheduler borrows the
+		 * runner and never destroys it, so a runner must outlive the Scheduler
+		 * or remove itself first -- GdbStub's destructor does the latter. */
 		void setMcuRunner(McuRunner* _runner) noexcept { m_mcuRunner = _runner; }
 
 		McuRunner* mcuRunner() const noexcept { return m_mcuRunner; }
 
-		/* THE BOOT-TO-PLAY TRANSITION, AS ONE CALL, and the boot thread's last
-		 * Scheduler action. Design section 13.10 rule 3 states its five steps
-		 * and scheduler.cpp carries them in order.
-		 *
-		 * IT LEAVES THE PLAY PHASE'S INITIAL CONDITION AND NOTHING ELSE: the
-		 * CodecSource empty, the CodecSink holding exactly `lookaheadFrames`
-		 * frames, all seven chain-health counters zero and the recorded
-		 * owning-thread identity cleared. It touches no emulated machine
-		 * state, clears no fault, and does not reset the frame index -- its own
-		 * `lookaheadFrames` quanta advance it by that much.
-		 *
-		 * `noexcept`, matching runFrames, because design section 13.10 rule 2
-		 * forbids throwing. */
+		/* The boot-to-play transition, and the boot thread's last Scheduler
+		 * action. It leaves the play phase's initial condition and nothing
+		 * else: the CodecSource empty, the CodecSink holding exactly
+		 * `lookaheadFrames` frames, every chain-health counter zero and
+		 * the recorded owning-thread identity cleared. It touches no emulated
+		 * machine state, clears no fault, and does not reset the frame index --
+		 * its own `lookaheadFrames` quanta advance it by that much. */
 		void beginPlayPhase() noexcept;
 
-		/* HOST INPUT. Returns the number of frames the CodecSource ACCEPTED.
-		 * A return below `_frames` means the queue refused the remainder,
-		 * which the capacity rule of design section 13.6.1 makes unreachable
-		 * in a correct build -- so a short return is a DEFECT REPORT and
-		 * overflowFrames() is how it is counted. */
+		/* Host input. Returns the number of frames the CodecSource accepted. A
+		 * return below `_frames` means the queue refused the remainder, which
+		 * the queue capacity makes unreachable in a correct build -- so a short
+		 * return is a defect report and overflowFrames() counts it. */
 		size_t push(const Frame* _in, size_t _frames) noexcept;
 
-		/* HOST OUTPUT. Returns the frames actually taken. The part the sink
-		 * could not supply reads as SILENCE and raises underflowFrames by the
+		/* Host output. Returns the frames actually taken. The part the sink
+		 * could not supply reads as silence and raises underflowFrames by the
 		 * shortfall. */
 		size_t pull(Frame* _out, size_t _frames) noexcept;
 
-		/* THE VIRTUAL CLOCK. It advances once for each quantum and nothing
+		/* The virtual clock. It advances once for each quantum and nothing
 		 * else moves it. */
 		uint64_t frameIndex() const noexcept;
 
-		/* THE SEVEN CHAIN-HEALTH COUNTERS of design section 13.10.5's
-		 * observability block. None of them influences emulation and all
-		 * seven are zeroed by beginPlayPhase.
+		/* The chain-health counters. None of them influences emulation and all
+		 * are zeroed by beginPlayPhase.
 		 *
-		 * THE FIRST THREE READ THROUGH A BASELINE THIS OBJECT KEEPS, and the
-		 * reason is stated rather than hidden: they live on the ChainAdapter,
-		 * which CHN-5, CHN-7 and CHN-8 own and which exposes no way to zero
-		 * them. Zeroing the ADAPTER is not an option either -- its mailboxes
-		 * are emulated state and beginPlayPhase may not touch that. So the
-		 * SCHEDULER's counter, which is the one design section 13.10.5
-		 * declares, is the adapter's reading minus the reading taken at the
-		 * last zeroing. */
+		 * The first three read through a baseline this object keeps: they live
+		 * on the ChainAdapter, which exposes no way to zero them, and zeroing
+		 * the adapter is not an option either -- its mailboxes are emulated
+		 * state and beginPlayPhase may not touch that. So the Scheduler's
+		 * counter is the adapter's reading minus the reading taken at the last
+		 * zeroing. */
 		uint64_t underrunFrames(unsigned _position) const noexcept;
 		uint64_t secondBusUnderrunFrames(unsigned _position) const noexcept;
 		uint64_t phaseErrorFrames(unsigned _position) const noexcept;
@@ -314,90 +285,69 @@ namespace g2
 		uint64_t droppedFrames() const noexcept;
 		uint64_t underflowFrames() const noexcept;
 
-		/* THE TWO DIAGNOSTIC COUNTERS. Both are emulated-cycle quantities and
-		 * NEITHER MEASURES HOST TIME. A non-zero value is a finding, not
-		 * necessarily a failure, which is why these two are not among the
-		 * seven asserted zero.
+		/* Both are emulated-cycle quantities and neither measures host time. A
+		 * non-zero value is a finding, not necessarily a failure.
 		 *
-		 * THE CONTEXT INDEX IS DESIGN SECTION 13.5's: 0 is the MCU and
-		 * 1 .. dspCount are the DSPs, ascending. An index above dspCount
-		 * reads back zero rather than running off the end. */
+		 * Context index: 0 is the MCU and 1 .. dspCount are the DSPs,
+		 * ascending. An index above dspCount reads back zero rather than
+		 * running off the end. */
 		int64_t  cycleDebt(unsigned _contextIndex) const noexcept;
 		uint64_t longDispatchQuanta(unsigned _contextIndex) const noexcept;
 
-		/* THE FAULT SURFACE, design section 13.10.5. A fault is STICKY: once a
-		 * context has faulted, nothing but reset() clears it, and the faulted
-		 * context is never dispatched again.
+		/* A fault is sticky: once a context has faulted, nothing but reset()
+		 * clears it, and the faulted context is never dispatched again.
 		 *
-		 * `faulted()` IS THE DISJUNCTION over every context and is what the
-		 * Device reads AFTER runFrames returns. THE CONTEXT INDEX IS DESIGN
-		 * SECTION 13.5's: 0 is the MCU and 1 .. dspCount are the DSPs,
-		 * ascending -- the same index cycleDebt and longDispatchQuanta take. An
-		 * index above dspCount reads back false and JobFault::None rather than
-		 * running off the end.
+		 * `faulted()` is the disjunction over every context and is what the
+		 * Device reads after runFrames returns. Context index: 0 is the MCU and
+		 * 1 .. dspCount are the DSPs, ascending -- the same index cycleDebt and
+		 * longDispatchQuanta take. An index above dspCount reads back false and
+		 * JobFault::None rather than running off the end.
 		 *
-		 * NO EXCEPTION AND NO ASSERTION IS INVOLVED. Design section 13.10 rule
-		 * 2 forbids throwing and a release build removes an assertion, so a
-		 * fault is observable through these three and through nothing else. */
+		 * Nothing throws and a release build removes an assertion, so a fault
+		 * is observable through these three and through nothing else. */
 		bool     faulted() const noexcept;
 		bool     contextFaulted(unsigned _contextIndex) const noexcept;
 		JobFault contextFault(unsigned _contextIndex) const noexcept;
 
-		/* THE STATE TRIO, design section 13.10.5 and SCH-21 step 4. DECLARED
-		 * HERE AND DEFINED IN scheduler.cpp, which carries the block's layout.
+		/* scheduler.cpp carries the block's layout.
 		 *
-		 * THE SNAPSHOT IS A FLAT BYTE BLOCK AND IT CARRIES A VERSION WORD, and
+		 * The snapshot is a flat byte block and it carries a version word.
 		 * `stateLoad` reports through g2::Status rather than returning void:
-		 * design section 13.10 rule 2 forbids an exception, a release build
-		 * removes an assertion, and a void return would leave the version word
-		 * with nothing to refuse to -- which is the silent acceptance the word
-		 * exists to prevent.
+		 * nothing throws, a release build removes an assertion, and a void
+		 * return would leave the version word with nothing to refuse to --
+		 * which is the silent acceptance the word exists to prevent.
 		 *
-		 * ALL THREE ARE noexcept, matching runFrames and the rule that forbids
-		 * throwing.
-		 *
-		 * CallbackTimer IS NOT PART OF IT. It carries no emulated state, and a
+		 * CallbackTimer is not part of it. It carries no emulated state, and a
 		 * state file recorded on a fast machine must load identically on a slow
 		 * one. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
-		/* THE RESET, design section 13.10.5, and the boot thread's call. It
-		 * returns this object and the machine it drives to the state a freshly
-		 * created Scheduler is in: every fault cleared and every context back
-		 * in the dispatch set, the virtual clock at frame 0, the boot regime,
-		 * both codec queues empty, every counter and every debt zero, the
-		 * recorded owning thread cleared, and the emulated memories the objects
-		 * below own zeroed.
+		/* The boot thread's call. It returns this object and the machine it
+		 * drives to the state a freshly created Scheduler is in: every fault
+		 * cleared and every context back in the dispatch set, the virtual clock
+		 * at frame 0, the boot regime, both codec queues empty, every counter
+		 * and every debt zero, the recorded owning thread cleared, and the
+		 * emulated memories the objects below own zeroed.
 		 *
-		 * WHAT IT DOES NOT ZERO IS STATED IN board.cpp AT Board::reset, because
-		 * the limit is that object's and not this one's. */
+		 * What it does not zero is stated in board.cpp at Board::reset. */
 		void reset() noexcept;
 
-		/* WHETHER THE CHAIN HAS BEEN WIRED YET, AND IT IS EXPOSED FOR THE REASON
-		 * owningThread() IS. With an empty Config::chainOrder the wiring is late
-		 * -- the position-to-port order is read out of the booted machine,
-		 * chainOrder.h carries why -- so "the chain got wired" is a property
-		 * with a moment, and a property with a moment that nothing can read is a
-		 * property nothing can check. An assertion would be deleted by NDEBUG
-		 * and would check the wrong build.
+		/* Whether the chain has been wired yet. With an empty Config::chainOrder
+		 * the wiring is late -- the position-to-port order is read out of the
+		 * booted machine, chainOrder.h carries why.
 		 *
-		 * FALSE MEANS THE PORTS ARE STILL IDLE: every receive answers silence,
+		 * False means the ports are still idle: every receive answers silence,
 		 * every transmit is discarded and no audio reaches the ChainAdapter.
 		 *
-		 * A Scheduler built from a NAMED order reports true from construction. */
+		 * A Scheduler built from a named order reports true from construction. */
 		bool chainAttached() const noexcept;
 
-		/* THE RECORDED OWNING THREAD. runFrames records the calling thread on
-		 * its first call after each clearing, and beginPlayPhase's step 5
-		 * clears the record so the first runFrames of the play phase
-		 * re-establishes it on the audio thread.
-		 *
-		 * IT IS EXPOSED BECAUSE THE PROPERTY MUST BE CHECKABLE IN A RELEASE
-		 * BUILD. A debug assertion is removed by NDEBUG, so a check whose
-		 * predicate was the assertion would check the wrong build. A
-		 * default-constructed id means NO OWNER IS RECORDED. */
+		/* runFrames records the calling thread on its first call after each
+		 * clearing, and beginPlayPhase clears the record so the first runFrames
+		 * of the play phase re-establishes it on the audio thread. A
+		 * default-constructed id means no owner is recorded. */
 		std::thread::id owningThread() const noexcept;
 
 		/* A Scheduler is neither copied nor moved. It installs callbacks that
@@ -435,7 +385,7 @@ namespace g2
 		 * check for each phase of each quantum and nothing else. */
 		TraceSink* m_trace;
 
-		/* NULL MEANS Board::runMcu, so a production Scheduler pays one null
+		/* Null means Board::runMcu, so a production Scheduler pays one null
 		 * check for each quantum and nothing else. */
 		McuRunner* m_mcuRunner = nullptr;
 
@@ -451,84 +401,78 @@ namespace g2
 		 * the next one's install. */
 		ChainAdapter m_chain;
 
-		/* THE MCU CONTEXT, CONTEXT INDEX 0. It carries the rate, the rational
-		 * accumulator, the cycle debt and the rule 4 counter, and the ONE
-		 * block of design section 13.4.6 -- g2::runQuantum -- wraps
-		 * Board::runMcu with it. It is not a JobContext and it does not enter
-		 * the job array, which stays at exactly kJobCount. */
+		/* The MCU context, context index 0. It carries the rate, the rational
+		 * accumulator, the cycle debt and the long-dispatch counter, and
+		 * g2::runQuantum wraps Board::runMcu with it. It is not a JobContext
+		 * and it does not enter the job array, which stays at exactly
+		 * kJobCount. */
 		McuContext m_mcu;
 
 		/* The authoritative virtual frame index. Every phase of one quantum
 		 * reads the SAME value, and it advances once for each quantum. */
 		uint64_t m_frameIndex = 0;
 
-		/* THE CODEC REGIME. The object knows its phase and the CALLER DOES NOT
-		 * SELECT IT: a Scheduler is born in Boot and beginPlayPhase is the one
-		 * thing that moves it to Play. In Boot a quantum runs the swap and the
-		 * run phase only -- no ingress, no egress, neither queue touched. In
-		 * Play all four phases run. Without the boot regime the sink fills
-		 * after L + B boot quanta and the scheduler stops part-way through the
-		 * boot, which is the defect this regime closes. */
+		/* The caller does not select the regime: a Scheduler is born in Boot and
+		 * beginPlayPhase is the one thing that moves it to Play. In Boot a
+		 * quantum runs the swap and the run phase only -- no ingress, no
+		 * egress, neither queue touched. In Play all four phases run. Without
+		 * the boot regime the sink fills after L + B boot quanta and the
+		 * scheduler stops part-way through the boot. */
 		enum class CodecRegime { Boot, Play };
 
 		CodecRegime m_regime = CodecRegime::Boot;
 
-		/* THE TWO CODEC QUEUES, OWNED HERE. Design section 13.10.5 makes the
-		 * Scheduler the owner of both. Both capacities are
-		 * lookaheadFrames + maxHostBlockFrames, and both rings are allocated
-		 * once, here, and never resized by a quantum. */
+		/* Both capacities are lookaheadFrames + maxHostBlockFrames, and both
+		 * rings are allocated once, here, and never resized by a quantum. */
 		CodecSource m_source;
 		CodecSink   m_sink;
 
-		/* L, KEPT BECAUSE beginPlayPhase NEEDS IT TWICE -- once to prime and
+		/* L, kept because beginPlayPhase needs it twice -- once to prime and
 		 * once to count its own quanta -- and the Config is not stored. */
 		unsigned m_lookaheadFrames;
 		size_t   m_codecCapacity;
 
-		/* THE BASELINE OF THE THREE ADAPTER-OWNED COUNTERS, one for each
-		 * position for each of the three. See the accessor comments above:
-		 * the ChainAdapter cannot be zeroed without destroying emulated
-		 * state, so the Scheduler subtracts the reading it took at the last
+		/* The baseline of the adapter-owned counters, one for each position.
+		 * The ChainAdapter cannot be zeroed without destroying emulated state,
+		 * so the Scheduler subtracts the reading it took at the last
 		 * zeroing. */
 		std::vector<uint64_t> m_underrunBase;
 		std::vector<uint64_t> m_secondUnderrunBase;
 		std::vector<uint64_t> m_phaseErrorBase;
 
-		/* THE RECORDED OWNING THREAD. A default-constructed id means no owner
-		 * is recorded, which is the state beginPlayPhase's step 5 leaves and
-		 * the state a fresh Scheduler starts in. */
+		/* A default-constructed id means no owner is recorded, which is the
+		 * state beginPlayPhase leaves and the state a fresh Scheduler starts
+		 * in. */
 		std::thread::id m_owner{};
 
-		/* THE STICKY FAULT LATCH, ONE ENTRY FOR EACH CONTEXT INDEX, in design
-		 * section 13.5's numbering: entry 0 is the MCU and 1 .. kJobCount are
-		 * the DSPs. It is the SCHEDULER's record and not the job's: a job's own
-		 * `base.fault` is overwritten by the next quantum that dispatches it,
-		 * and the MCU has no fault field at all -- Board::faulted() is one bit
-		 * with no code beside it. Latching here is what makes contextFault
-		 * answer for EVERY index rather than for the DSPs only. */
+		/* The sticky fault latch, one entry for each context index: entry 0 is
+		 * the MCU and 1 .. kJobCount are the DSPs. It is the Scheduler's record
+		 * and not the job's: a job's own `base.fault` is overwritten by the
+		 * next quantum that dispatches it, and the MCU has no fault field at
+		 * all -- Board::faulted() is one bit with no code beside it. Latching
+		 * here is what makes contextFault answer for every index rather than
+		 * for the DSPs only. */
 		JobFault m_fault[1u + kJobCount]{};
 
-		/* THE DISJUNCTION OVER THE LATCH, KEPT RATHER THAN COMPUTED. It is what
-		 * the Device reads after every runFrames, and a scan of nine entries on
-		 * that path buys nothing. */
+		/* The disjunction over the latch, kept rather than computed. It is what
+		 * the Device reads after every runFrames. */
 		bool m_faulted = false;
 
-		/* THE JOB ARRAY, BUILT ONCE. `Job::ctx` points at each context's
+		/* The job array, built once. `Job::ctx` points at each context's
 		 * LEADING JobContext, which dspContext.h's two static_asserts are what
 		 * make legal. */
 		DspContext    m_contexts[kJobCount]{};
 		Executor::Job m_jobs[kJobCount]{};
 
-		/* THE DISPATCH SET, AND IT IS A SECOND ARRAY RATHER THAN A COUNT INTO
-		 * THE FIRST. Executor::run takes a CONTIGUOUS array and a count, so a
-		 * faulted context in the middle cannot be skipped by lowering the
-		 * count; the live jobs are compacted into this array instead, and
-		 * m_jobs keeps its position-indexed order so that nothing else has to
-		 * learn about the compaction.
+		/* The dispatch set, a second array rather than a count into the first.
+		 * Executor::run takes a contiguous array and a count, so a faulted
+		 * context in the middle cannot be skipped by lowering the count; the
+		 * live jobs are compacted into this array instead, and m_jobs keeps its
+		 * position-indexed order so that nothing else has to learn about the
+		 * compaction.
 		 *
-		 * A FAULTED CONTEXT IS NEVER DISPATCHED AGAIN, which is the property
-		 * this array exists to deliver, and reset() is the only thing that puts
-		 * one back. */
+		 * A faulted context is never dispatched again, and reset() is the only
+		 * thing that puts one back. */
 		Executor::Job m_liveJobs[kJobCount]{};
 		size_t        m_liveCount = 0;
 
@@ -536,30 +480,29 @@ namespace g2
 		 * fault latches, and by reset(). */
 		void rebuildDispatchSet() noexcept;
 
-		/* ------------- THE LATE CHAIN ATTACH.
+		/* The late chain attach. The position-to-port order the chain is wired
+		 * by is read out of the booted machine -- chainOrder.h carries the
+		 * derivation -- and this object is constructed before the firmware has
+		 * run. A caller that named an order in the Config is wired at
+		 * construction and this never fires; every other caller is wired by
+		 * this, which tries once for each quantum until the machine can answer
+		 * and then never again.
 		 *
-		 * The position-to-port order the chain is wired by is READ OUT OF THE
-		 * BOOTED MACHINE -- chainOrder.h carries the derivation -- and this
-		 * object is constructed before the firmware has run. A caller that named
-		 * an order in the Config is wired at construction and this never fires;
-		 * every other caller is wired by this, which tries once for each quantum
-		 * until the machine can answer and then never again.
-		 *
-		 * m_chainOrder IS SCRATCH, SIZED AT CONSTRUCTION so that the attempt
+		 * m_chainOrder is scratch, sized at construction so that the attempt
 		 * allocates nothing inside a quantum. It carries no meaning between
 		 * calls; readChainOrder overwrites every entry.
 		 *
-		 * m_chainAttached IS NOT PART OF THE STATE SNAPSHOT. It records what
+		 * m_chainAttached is not part of the state snapshot. It records what
 		 * this object has wired and not what the emulated machine holds. */
 		void attachChainIfOrderKnown() noexcept;
 
 		std::vector<unsigned> m_chainOrder;
 		bool                  m_chainAttached = false;
 
-		/* THE ORDER THE CALLER NAMED, KEPT BECAUSE reset() HAS TO TELL THE TWO
-		 * CASES APART. Empty is the production case and means the order was
-		 * derived from the machine, which a reset invalidates; non-empty means
-		 * the caller supplied it, which a reset says nothing about. */
+		/* The order the caller named, kept because reset() has to tell the two
+		 * cases apart. Empty means the order was derived from the machine,
+		 * which a reset invalidates; non-empty means the caller supplied it,
+		 * which a reset says nothing about. */
 		std::vector<unsigned> m_configuredChainOrder;
 
 		/* Reads the fault of every context back after the run phase and latches

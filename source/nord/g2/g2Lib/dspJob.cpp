@@ -25,17 +25,16 @@
  * alloc(ctx.rate, &ctx.acc) - ctx.debt. The debt is reconciled after both
  * halves: ctx.debt = totalSpent - want, floored at zero.
  *
- * THE SUB-BUDGET IS A SHARE OF WHAT REMAINS, AND THE DIVISOR IS DERIVED. Each
+ * The sub-budget is a share of what remains, and the divisor is derived. Each
  * slot asks for its share of want MINUS what the quantum has already spent,
  * divided by the slots the frame has left to run; the slot count comes from
  * frameSlotBound, which reads the enables, the word counts and the second-bus
  * window that decide how many slots the helpers will actually run. Every
  * sub-call overshoots its own sub-budget by up to one dispatch unit, and
  * charging that overshoot to the slots that follow is what keeps the whole
- * quantum inside cycleDebt.h:31's 0 <= debt < maxDispatchCost. A tail flush
- * after step 3 delivers whatever a shorter-than-bounded frame left over, so
- * the quantum spends want plus at most one dispatch unit whatever the divisor
- * says.
+ * quantum inside 0 <= debt < maxDispatchCost. A tail flush after step 3
+ * delivers whatever a shorter-than-bounded frame left over, so the quantum
+ * spends want plus at most one dispatch unit whatever the divisor says.
  *
  * STEPS 1 AND 3 RUN EVEN WHEN STEP 2 RUNS NOTHING. The want <= 0 branch
  * pays a debt down and executes no emulated cycle, and the frame cadence
@@ -97,18 +96,17 @@ namespace g2
 			return base + (_slot < rem ? 1u : 0u);
 		}
 
-		/* THE SLOT COUNT THIS QUANTUM'S FRAME CAN COST, read from the same
+		/* The slot count this quantum's frame can cost, read from the same
 		 * registers the two frame helpers read to decide their own loop
-		 * counts. It is the divisor's ONLY source.
+		 * counts. It is the divisor's only source.
 		 *
-		 * IT IS AN UPPER BOUND AND NOT AN EQUALITY, and esaiFrame.h:44 is why:
-		 * a transmit frame costs getTxWordCount() + 1 slots except in the
-		 * quantum after a transmitter enable, which costs one fewer because the
-		 * guest's own control-register write already spent a slot. Bounding
-		 * from above is the safe direction -- an over-estimate makes the
-		 * interleave finer than the frame needs, while an under-estimate hands
-		 * the leading slots a share computed against a frame that does not
-		 * exist. */
+		 * It is an upper bound and not an equality: a transmit frame costs
+		 * getTxWordCount() + 1 slots except in the quantum after a transmitter
+		 * enable, which costs one fewer because the guest's own control-register
+		 * write already spent a slot. Bounding from above is the safe direction
+		 * -- an over-estimate makes the interleave finer than the frame needs,
+		 * while an under-estimate hands the leading slots a share computed
+		 * against a frame that does not exist. */
 		uint32_t frameSlotBound(const DspContext& _c, const bool _secondBus) noexcept
 		{
 			uint32_t slots = 0;
@@ -154,23 +152,19 @@ namespace g2
 		 * about which ports this quantum touches. */
 		const bool secondBus = c->frameIndex % c->secondBusFrameDivider == 0;
 
-		/* THE DIVISOR IS DERIVED FROM THE FRAME AND IS NEVER A LITERAL. The
+		/* The divisor is derived from the frame and is never a literal. The
 		 * callback fires once per ESAI SLOT across all four frame halves and
 		 * not once per DSP slot, so the count that generates it is whatever the
 		 * enables, the word counts and the second-bus window make the helpers
-		 * run. A LITERAL STANDING WHERE THE GENERATING COUNT BELONGS IS A
-		 * MISSING PREDICATE; frameSlotBound is that predicate, and it reads the
-		 * same registers the helpers read, so a change to any of them moves the
-		 * divisor with it.
+		 * run. frameSlotBound reads the same registers the helpers read, so a
+		 * change to any of them moves the divisor with it.
 		 *
-		 * AND THE DIVISOR IS NO LONGER LOAD-BEARING FOR CORRECTNESS, WHICH IS
-		 * WHAT STOPS THIS DEFECT FROM RECURRING RATHER THAN MERELY CORRECTING
-		 * ITS VALUE. Each sub-budget below is taken from what REMAINS of want
-		 * and the tail flush after step 3 delivers whatever the frame left
-		 * undelivered, so the quantum spends want plus at most ONE dispatch
-		 * unit whatever the divisor says. A wrong divisor can now only make the
-		 * interleave coarser or finer; it cannot make the quantum overspend,
-		 * and it cannot violate cycleDebt.h:31's invariant. */
+		 * The divisor is not load-bearing for correctness. Each sub-budget below
+		 * is taken from what REMAINS of want and the tail flush after step 3
+		 * delivers whatever the frame left undelivered, so the quantum spends
+		 * want plus at most ONE dispatch unit whatever the divisor says. A wrong
+		 * divisor can only make the interleave coarser or finer; it cannot make
+		 * the quantum overspend, and it cannot violate the debt invariant. */
 		c->slotBudgetDivisor = frameSlotBound(*c, secondBus);
 		c->slotDispatches    = 0u;
 
@@ -178,7 +172,7 @@ namespace g2
 		{
 			const uint32_t slot = c->slotDispatches++;
 
-			/* THE SHARE IS OF WHAT REMAINS, NOT OF want. runDspCycles tests the
+			/* The share is of what remains, not of want. runDspCycles tests the
 			 * cycle counter BEFORE each dispatch, so every sub-call returns at
 			 * least its sub-budget and overshoots by up to one dispatch unit.
 			 * Subdividing want itself would let those k overshoots accumulate
@@ -272,14 +266,14 @@ namespace g2
 				transmitDspFrame(*c->secondEsai);
 		}
 
-		/* THE TAIL FLUSH. The slot bound is an upper bound, so a frame that
+		/* The tail flush. The slot bound is an upper bound, so a frame that
 		 * costs fewer slots than it could -- the quantum after a transmitter
-		 * enable is the documented case -- ends the interleave with part of
-		 * want undelivered. Those cycles are spent once, here, rather than
-		 * dropped: an undelivered allocation floors the debt at zero and
-		 * vanishes, which is a slow drift with no counter watching it.
+		 * enable -- ends the interleave with part of want undelivered. Those
+		 * cycles are spent once, here, rather than dropped: an undelivered
+		 * allocation floors the debt at zero and vanishes, which is a slow
+		 * drift with no counter watching it.
 		 *
-		 * IT CANNOT DOUBLE-SPEND. It is guarded on the interleave having run
+		 * It cannot double-spend. It is guarded on the interleave having run
 		 * this quantum and it asks only for the part of want that totalSpent
 		 * does not already cover, so a quantum that delivered want reaches it
 		 * with nothing to do. */

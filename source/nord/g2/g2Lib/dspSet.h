@@ -61,18 +61,13 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
-		/* THE DETACH AND ITS EXACT INVERSE. Task SCH-21 step 4, by operator
-		 * ruling; section 24.6 row W3-415 records the blocker they answer.
-		 *
-		 * WHAT THEY ARE FOR. Board's constructor calls attachHdi08Bridges
-		 * unconditionally, so EVERY set reachable from a Scheduler holds
-		 * bridges, and stateLoad above refuses such a set. Without a detach
-		 * Scheduler::stateLoad could never return Ok on any Scheduler built
-		 * from a real Board and step 4's round trip was unreachable. The
+		/* The detach and its exact inverse. Board's constructor calls
+		 * attachHdi08Bridges unconditionally, so EVERY set reachable from a
+		 * Scheduler holds bridges, and stateLoad above refuses such a set. The
 		 * Scheduler brackets its DSP limb with this pair.
 		 *
-		 * THEY MOVE THE BRIDGES ASIDE AND BACK; THEY DESTROY NOTHING AND THEY
-		 * BUILD NOTHING. That is what makes them EXACTLY inverse rather than
+		 * They move the bridges aside and back; they destroy nothing and they
+		 * build nothing. That is what makes them EXACTLY inverse rather than
 		 * approximately so, and the reason is a borrowed address: Scheduler's
 		 * constructor copies programLanded(i) into each DspContext and the run
 		 * gate reads through that pointer for the life of the object. A
@@ -80,51 +75,46 @@ namespace g2
 		 * those pointers dangling -- with no diagnostic anywhere, because the
 		 * gate would keep reading whatever now occupies the freed storage.
 		 * Moving the same objects back to the same indices is the only shape
-		 * with no such failure, and t0_scheduler_state case 1 pins it by the
-		 * pointer VALUE at each index rather than by a count.
+		 * with no such failure.
 		 *
-		 * BOTH ARE TOTAL. A detach of a detached set and a re-attach of an
+		 * Both are total. A detach of a detached set and a re-attach of an
 		 * attached set each change nothing, so no caller has to test first.
 		 *
-		 * WHILE DETACHED THE SET REPORTS WHAT IT IS: bridgesAttached() is
-		 * false and programLanded() answers NULL for every slot, which is the
-		 * run gate's own reading of NOT LANDED.
+		 * While detached, bridgesAttached() is false and programLanded()
+		 * answers NULL for every slot, which is the run gate's own reading of
+		 * NOT LANDED.
 		 *
-		 * THE LANDED FLAG SURVIVES THE ROUND, and that limit is stated rather
-		 * than left to be found. The flags live ON the bridges and the bridges
-		 * are not touched, so a set whose firmware had landed is still LANDED
-		 * after a detach, a load and a re-attach -- over whatever program
-		 * memory the load restored. That is right for the case this pair
-		 * exists for, a snapshot taken from and returned to the SAME machine,
-		 * and it is wrong for an image taken from a machine that had loaded a
-		 * different program. Nothing here can tell those two apart; the
-		 * version word and the geometry headers guard the SHAPE of an image
-		 * and not its provenance. */
+		 * The landed flag survives the round. The flags live ON the bridges and
+		 * the bridges are not touched, so a set whose firmware had landed is
+		 * still LANDED after a detach, a load and a re-attach -- over whatever
+		 * program memory the load restored. That is right for a snapshot taken
+		 * from and returned to the SAME machine, and it is wrong for an image
+		 * taken from a machine that had loaded a different program. Nothing
+		 * here can tell those two apart; the version word and the geometry
+		 * headers guard the SHAPE of an image and not its provenance. */
 		void detachHdi08Bridges() noexcept;
 		void reattachHdi08Bridges() noexcept;
 
 		/* TRUE when the set holds bridges, which is exactly the condition
-		 * stateLoad refuses on. It is the observable that separates a detach
-		 * that reached the set from one that reported success. */
+		 * stateLoad refuses on. */
 		bool bridgesAttached() const noexcept;
 
-		/* THE RESET. Task SCH-21 step 3, design section 13.10.5's "zeroes
-		 * every emulated memory".
+		/* Zeroes every emulated memory.
 		 *
-		 * IT COVERS EXACTLY WHAT THE SNAPSHOT COVERS AND NOTHING MORE, which is
+		 * It covers exactly what the snapshot covers and nothing more, which is
 		 * a deliberate pairing rather than a coincidence: every slot's P, X and
 		 * Y memory, and that slot's core state through dsp56k::DSP::resetHW.
 		 * The peripherals are outside it for the same reason they are outside
 		 * stateSave -- the DSP library carries no reset member for a peripheral
 		 * set, its ESAIs, its Dma, its Timers or its host port.
 		 *
-		 * IT DOES NOT DETACH THE BRIDGES AND IT DOES NOT CLEAR A LANDED FLAG.
+		 * It does not detach the bridges and it does not clear a landed flag.
 		 * A bridge is a wire and not emulated memory; tearing it down here
 		 * would leave the run gate shut for the life of the program, because
 		 * attachHdi08Bridges refuses the second attach that would rebuild it.
-		 * THE CONSEQUENCE IS STATED RATHER THAN LEFT TO BE FOUND: a reset set
-		 * whose firmware had already landed reports LANDED over zeroed program
-		 * memory until the producer downloads again. */
+		 * A reset set whose firmware had already landed therefore reports
+		 * LANDED over zeroed program memory until the producer downloads
+		 * again. */
 		void reset() noexcept;
 
 	private:
@@ -153,7 +143,7 @@ namespace g2
 		 * holds a reference into its slot's peripherals. */
 		std::vector<std::unique_ptr<Hdi08Bridge>> m_bridges;
 
-		/* WHERE detachHdi08Bridges PARKS THEM, and the only other place a
+		/* Where detachHdi08Bridges parks them, and the only other place a
 		 * bridge this set owns can be. It is declared beside m_bridges and
 		 * after the slots for the same lifetime reason: a parked bridge still
 		 * holds a reference into its slot's peripherals, so it must be
@@ -175,42 +165,40 @@ namespace g2
 	 * Board's own member among them, and a parameter breaks all of them where
 	 * a free function breaks none.
 	 *
-	 * _portOfPosition IS THE CHAIN ORDER AND IT IS REQUIRED. Entry `position`
+	 * _portOfPosition is the chain order and it is required. Entry `position`
 	 * holds the hardware port -- the SLOT INDEX of this set -- that carries that
-	 * chain position. chainOrder.h carries where the order comes from and why it
-	 * is not the identity; the short of it is that the firmware chooses which
-	 * DSP is the head of the audio chain and it does not choose slot 0. A
-	 * position's callbacks installed on the wrong slot put the machine's codec
-	 * input and output on DSPs that are not the chain's ends.
+	 * chain position. The firmware chooses which DSP is the head of the audio
+	 * chain and it does not choose slot 0. A position's callbacks installed on
+	 * the wrong slot put the machine's codec input and output on DSPs that are
+	 * not the chain's ends.
 	 *
-	 * THERE IS NO DEFAULT, AND THAT IS THE POINT. An identity default would be a
-	 * chain order embedded in this signature, silently correct-looking and
-	 * wrong on the real machine; a caller that has not got the order yet must
-	 * say so by not calling this.
+	 * There is no default: an identity default would be a chain order embedded
+	 * in this signature, silently correct-looking and wrong on the real machine;
+	 * a caller that has not got the order yet must say so by not calling this.
 	 *
-	 * IT RETURNS RATHER THAN ASSERTING. Status::BadChainOrder for an order whose
+	 * It returns rather than asserting. Status::BadChainOrder for an order whose
 	 * length is not the slot count, or that is not a permutation of the slots --
 	 * an order that named one slot twice would leave another slot unwired and
-	 * two positions driving one DSP. THE REFUSAL IS BEFORE THE FIRST INSTALL, so
+	 * two positions driving one DSP. The refusal is before the first install, so
 	 * a refused call changes nothing and the set keeps whatever it wore. */
 	Status attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set,
 		const std::vector<unsigned>& _portOfPosition);
 
-	/* WHAT AN ESAI CARRIES BEFORE THE CHAIN ORDER IS KNOWN, AND IT IS NOT
-	 * NOTHING. dsp56k::Audio's constructor installs ring-buffer callbacks whose
-	 * receive half calls waitNotEmpty() -- it BLOCKS until a host supplies a
-	 * frame, and no host does on this machine. A port left wearing them stops
-	 * the thread that runs its DSP for ever, and the caller's own quantum never
-	 * returns to install anything better.
+	/* What an ESAI carries before the chain order is known is not nothing.
+	 * dsp56k::Audio's constructor installs ring-buffer callbacks whose receive
+	 * half calls waitNotEmpty() -- it BLOCKS until a host supplies a frame, and
+	 * no host does on this machine. A port left wearing them stops the thread
+	 * that runs its DSP for ever, and the caller's own quantum never returns to
+	 * install anything better.
 	 *
-	 * SO THE PORTS ARE MADE IDLE RATHER THAN LEFT DEFAULT. A receive answers a
+	 * So the ports are made idle rather than left default. A receive answers a
 	 * CLEARED frame and a transmit is discarded: an unwired chain end reads
 	 * silence and its output goes nowhere, which is what an unwired end is.
 	 *
-	 * BOTH ESAIs OF EVERY SLOT, and the frame index is left alone -- section
-	 * 13.10.2's rule that the scheduler's virtual frame index is the only
-	 * authoritative one holds here as it does for the real wrappers.
+	 * Both ESAIs of every slot, and the frame index is left alone -- the
+	 * scheduler's virtual frame index is the only authoritative one, here as
+	 * for the real wrappers.
 	 *
-	 * IT IS TOTAL AND IT OVERWRITES. Calling it on a wired set unwires it. */
+	 * It is total and it overwrites. Calling it on a wired set unwires it. */
 	void installIdleChainCallbacks(DspSet& _set);
 }

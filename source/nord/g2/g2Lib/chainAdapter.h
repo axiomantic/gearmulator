@@ -156,37 +156,22 @@ namespace g2
 		 * the save-and-load round trip (mailbox contents and counters);
 		 * CHN-5 declares and defines the trio so the surface links.
 		 *
-		 * stateLoad's RETURN TYPE IS RECONCILED, AND THE DEVIATION THAT STOOD
-		 * HERE IS QUOTED RATHER THAN DELETED. It read: "The design declares
-		 * `Status stateLoad(const void*)`, but g2::Status is owned by task
-		 * SCH-18 ... so stateLoad returns void here ... When SCH-18 has created
-		 * status.h, the chain adapter's stateLoad is reconciled to return
-		 * g2::Status." status.h exists, and SCH-21 step 4 -- which absorbed
-		 * SCH-24 -- is the task that owns the correction.
-		 *
-		 * WHAT IT REPORTS. Status::Ok, or Status::BadStateImage for a null
+		 * stateLoad reports Status::Ok, or Status::BadStateImage for a null
 		 * source and for an image whose geometry header describes a
-		 * differently-shaped adapter. BOTH REFUSALS EXISTED ALREADY and both
-		 * were SILENT: the body returned without touching a member and the
-		 * caller could not tell that from a load that ran. The refusal is the
-		 * reason the geometry header is in the image at all, so a channel to
-		 * report it on is what makes the header a guard.
+		 * differently-shaped adapter.
 		 *
-		 * THE REFUSAL IS TOTAL AND IT HAPPENS BEFORE ANY MEMBER MOVES. */
+		 * The refusal is total and it happens before any member moves. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
-		/* ------------- The reset. Task SCH-21 step 3, design section 13.10.5.
+		/* ------------- The reset.
 		 *
-		 * IT ZEROES EVERY EMULATED MEMORY THIS OBJECT OWNS AND EVERY COUNTER
-		 * IT KEEPS: every frame of every mailbox on both buses, every ring
-		 * head, both written-flag arrays, and the three per-position counters.
-		 * THE GEOMETRY IS NOT TOUCHED -- the position count, the hop, the
+		 * The geometry is not touched -- the position count, the hop, the
 		 * topology and the divider are construction parameters and not state,
 		 * so no ring is resized and no vector reallocates.
 		 *
-		 * THE BORROWED Esai POINTERS ARE NOT TOUCHED EITHER. They name the DSP
+		 * The borrowed Esai pointers are not touched either. They name the DSP
 		 * set's ports, the set outlives this object, and clearing them would
 		 * leave the transmit wrappers pointing at nothing while every check
 		 * here stayed green. */

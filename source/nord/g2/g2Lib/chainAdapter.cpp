@@ -396,38 +396,20 @@ namespace g2
 
 	/* ------------- the state trio. --------------------------------------------- */
 
-	/* CHN-9 STEP 2 (the absorbed CHN-14) gives the trio its real save-and-load
-	 * round trip. The image carries EVERY member a later quantum can read:
-	 *
-	 *   a geometry header      audio mailbox count, second-bus mailbox count,
-	 *                          ring depth, position count
-	 *   each mailbox           its head index, then its whole ring
-	 *   the three counters     underrun, second-bus underrun, phase error
-	 *   the two written flags  the audio and the second-bus flag of each
-	 *                          position
-	 *
-	 * THE WRITTEN FLAGS ARE IN THE IMAGE AND THEY ARE NOT AN OVER-SAVE. A flag
+	/* The written flags are in the image and they are not an over-save. A flag
 	 * describes the quantum that has not yet been closed by advanceAll, so a
 	 * snapshot taken mid-quantum that dropped them would resume with every flag
 	 * clear and count an underrun the run never had.
 	 *
-	 * THE GEOMETRY HEADER IS A GUARD AND NOT DECORATION. stateLoad against an
+	 * The geometry header is a guard and not decoration. stateLoad against an
 	 * image of a differently-shaped adapter would otherwise walk the cursor off
 	 * the end of the buffer; the header lets it refuse instead, leaving this
 	 * object exactly as it was.
 	 *
-	 * EVERY FIELD MOVES THROUGH memcpy AND NOTHING IS READ THROUGH A CAST
-	 * POINTER. The destination is a caller-supplied void* with no alignment
+	 * Every field moves through memcpy and nothing is read through a cast
+	 * pointer. The destination is a caller-supplied void* with no alignment
 	 * guarantee, so a typed store into it would be undefined for every field
-	 * wider than a byte.
-	 *
-	 * stateLoad's RETURN TYPE IS NOW g2::Status, reconciled by SCH-21 step 4.
-	 * The sentence that stood here -- "stateLoad's RETURN TYPE IS STILL void,
-	 * which is the shape CHN-5 laid down ... Design section 13.10.2's g2::Status
-	 * return is the reconciliation the header already records as outstanding" --
-	 * described a shape that no longer exists and is quoted rather than
-	 * overwritten. The two refusals below, the null source and the geometry
-	 * mismatch, now have a channel to report on. */
+	 * wider than a byte. */
 	namespace
 	{
 		/* One frame of one ring. Frame is a flat array of int32_t with no
@@ -520,7 +502,7 @@ namespace g2
 		const uint64_t depth       = get(cursor);
 		const uint64_t positions   = get(cursor);
 
-		/* THE REFUSAL IS TOTAL AND IT HAPPENS BEFORE ANY MEMBER MOVES. An image
+		/* The refusal is total and it happens before any member moves. An image
 		 * of a differently-shaped adapter carries a different cursor walk, so a
 		 * partial load would leave this object in a state no run produced. */
 		if(audioCount != m_audio.size()
@@ -561,14 +543,11 @@ namespace g2
 		return Status::Ok;
 	}
 
-	/* THE RESET. Design section 13.10.5's "zeroes every emulated memory",
-	 * applied to the one object that owns the chain's own memory.
-	 *
-	 * A FRAME IS ZEROED IN PLACE RATHER THAN THE RING BEING REASSIGNED, so no
+	/* A frame is zeroed in place rather than the ring being reassigned, so no
 	 * allocation happens here and this call is legal on any thread the boot
 	 * phase owns without a second look at the allocator.
 	 *
-	 * THE HEAD GOES TO 0 AS WELL AS THE FRAMES. A ring whose frames are all
+	 * The head goes to 0 as well as the frames. A ring whose frames are all
 	 * zero still carries a head, and two adapters reset from different heads
 	 * would agree on every read and disagree on the next advance -- which is a
 	 * difference no read of this object could show. */

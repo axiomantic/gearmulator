@@ -1,73 +1,51 @@
-// Task INT-2. Tier T1: this test needs the Clavia firmware artifacts and SKIPS
-// with a reason when NMG2_ARTIFACTS does not resolve.
+// This test needs the Clavia firmware artifacts and skips with a reason when
+// NMG2_ARTIFACTS does not resolve.
 //
-// Plan section 16 (INT-2), section 6 milestone M5, design sections 18.3, 12.3,
-// 13.10.5 and 14.4.
+// Zero is the weakest assertion there is, and this file refuses to make it
+// alone: a machine that never ran satisfies every one of the seven counter
+// equalities. Every zero asserted here is paired with a known positive, a
+// companion case that drives that counter, through that accessor, above zero.
+// The known positives run first and their failure is this file's failure.
 //
-// WHAT THIS TEST IS. INT-2's Check: line requires that "all seven counters are
-// zero across the whole golden run": every underrunFrames(position), every
-// secondBusUnderrunFrames(position), every phaseErrorFrames(position),
-// starvedFrames(), overflowFrames(), droppedFrames() and underflowFrames().
-// "A non-zero count in any of them is a failure, not a warning."
+// Where each known positive comes from, and why it is the one it is:
 //
-// ZERO IS THE WEAKEST ASSERTION THERE IS, AND THIS FILE REFUSES TO MAKE IT
-// ALONE. A machine that never ran satisfies every one of those seven equalities.
-// So EVERY zero asserted here is paired with a KNOWN POSITIVE: a companion case
-// that drives THAT counter, through THAT accessor, above zero. The known
-// positives run FIRST and their failure is this file's failure, because a seven
-// zeros reported by seven counters that cannot move is the green mirage plan
-// section 24.6 rows W3-95, W3-396 and W3-397 record three instances of.
-//
-// WHERE EACH KNOWN POSITIVE COMES FROM, AND WHY IT IS THE ONE IT IS:
-//
-//   underrunFrames(p)            A FIRMWARE-FREE Scheduler. Every run gate is
+//   underrunFrames(p)            A firmware-free Scheduler. Every run gate is
 //   secondBusUnderrunFrames(p)   shut, so no transmit callback ever fires and
 //                                the priming run of beginPlayPhase is L real
 //                                underruns at every position. Read back through
-//                                the SAME Scheduler accessors the golden run
+//                                the same Scheduler accessors the golden run
 //                                asserts zero on.
 //
-//   phaseErrorFrames(p)          A ChainAdapter driven DIRECTLY, with a real
+//   phaseErrorFrames(p)          A ChainAdapter driven directly, with a real
 //                                emulated Esai so the M_TUE condition is real:
 //                                one position's audio transmit wrapper fired
-//                                TWICE inside one quantum. The Scheduler cannot
+//                                twice inside one quantum. The Scheduler cannot
 //                                be made to ask for a second transmit, which is
 //                                the whole point of the counter; the Scheduler's
 //                                own accessor is this adapter reading minus a
-//                                baseline it takes at beginPlayPhase, and that
-//                                subtraction is stated here as the limit of this
-//                                particular known positive rather than claimed
-//                                away.
+//                                baseline it takes at beginPlayPhase, which is
+//                                the limit of this known positive.
 //
 //   underflowFrames              A pull for more than the CodecSink holds.
 //   overflowFrames               A push for more than the CodecSource can take.
 //   starvedFrames                A quantum run against an empty CodecSource.
 //   droppedFrames                Play quanta run past the CodecSink's capacity
 //                                with nothing draining it.
-//                                All four are driven ON THE BOOTED MACHINE, in
+//                                All four are driven on the booted machine, in
 //                                the hand-off run, after every assertion that
 //                                run makes.
 //
-// THE HAND-OFF ASSERTION INT-2 ALSO NAMES: immediately after the boot and
-// before the first host block, the CodecSource holds 0 frames, the CodecSink
-// holds exactly L, and all seven counters are zero. Design section 13.10.5
-// declares no queue-depth accessor and this file adds none; push() returns what
-// the source ACCEPTED and pull() returns what the sink SUPPLIED, so a request of
-// capacity + 1 on each measures the free space and the depth exactly. That is
-// t0_begin_play_phase's own technique and it is used here for the same reason.
+// There is no queue-depth accessor: push() returns what the source accepted and
+// pull() returns what the sink supplied, so a request of capacity + 1 on each
+// measures the free space and the depth exactly.
 //
-// TWO BOOTS, AND THE REASON IS THAT THE PROBES MUTATE. The hand-off depth probes
-// empty the sink and fill the source, so they cannot precede the golden run and
-// the golden run cannot precede them -- beginPlayPhase may not be called twice.
-// Each run therefore boots its own machine.
+// Two boots, because the probes mutate. The hand-off depth probes empty the sink
+// and fill the source, so they cannot precede the golden run and the golden run
+// cannot precede them -- beginPlayPhase may not be called twice. Each run
+// therefore boots its own machine.
 //
-// EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). A release build deletes
-// assert(). Nothing below calls assert().
-//
-// THE MACHINE PLACEMENT IS INT-1's, AND IT IS COPIED RATHER THAN SHARED, for
-// the reason t1_kernel_load.cpp states: plan section 1.3 rule 1 keeps a
-// harness's own configuration at its own site, and this task's Files: line
-// names no header it could share one through.
+// Every verdict is an observable and not an assert(): a release build deletes
+// assert().
 
 #include "gatedFixture.h"
 
@@ -141,7 +119,7 @@ namespace
 		Logging::setLogFunc(&filterLog);
 	}
 
-	// ------------------------------------------------- INT-1's machine placement
+	// ------------------------------------------------------- the machine placement
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
@@ -171,11 +149,8 @@ namespace
 	constexpr uint32_t g_bootQuantumBound   = 500000u;
 	constexpr uint32_t g_bannerSettleQuanta = 20000u;
 
-	// THE GOLDEN RUN'S LENGTH. It is a test parameter and not a derived
-	// expectation, and it is named here so that the report can say what "the
-	// whole golden run" covered: 4096 quanta is about 42.7 ms of 96 kHz audio,
-	// which is long enough that a per-quantum defect appearing once in a
-	// thousand frames has to show.
+	// 4096 quanta is about 42.7 ms of 96 kHz audio, which is long enough that a
+	// per-quantum defect appearing once in a thousand frames has to show.
 	constexpr unsigned g_goldenQuanta = 4096u;
 
 	class Ram final : public g2::BusTarget
@@ -228,9 +203,8 @@ namespace
 				const int shift = int(8u * (count - 1u - i));
 				const uint8_t byte = uint8_t((_value >> shift) & 0xffu);
 
-				// A CONTENT WRITE IS ONE THAT IS NOT THE DISPLAY CLEAR: the
-				// clear writes 0x20 and only 0x20. Plan section 24.6 row W3-397
-				// records what counting 0x20 as content cost.
+				// A content write is one that is not the display clear: the
+				// clear writes 0x20 and only 0x20.
 				if(m_watchLength != 0 && index >= m_watchBase && index < m_watchBase + m_watchLength
 					&& byte != 0x20u && byte != 0x00u)
 					++m_contentWrites;
@@ -288,10 +262,9 @@ namespace
 
 	// ----------------------------------------------------- the seven, as a record
 	//
-	// ONE READING OF ALL SEVEN AT ONE INSTANT. The three per-position counters
-	// are reduced to their MAXIMUM over the positions and the position that
-	// carried it is kept, so a report names WHICH position moved rather than
-	// that one did.
+	// One reading of all seven at one instant. The three per-position counters are
+	// reduced to their maximum over the positions and the position that carried it
+	// is kept, so a report names which position moved rather than that one did.
 	struct Seven
 	{
 		uint64_t underrun            = 0;
@@ -375,7 +348,7 @@ namespace
 	//
 	// Owns the machine for the caller's lambda. Returns false only when the
 	// machine could not be placed; a machine that ran and moved nothing returns
-	// true, because that is a MEASUREMENT the assertions must see.
+	// true, because that is a measurement the assertions must see.
 	struct Machine
 	{
 		g2::Board                            board{makeConfig()};
@@ -495,11 +468,9 @@ namespace
 		return true;
 	}
 
-	// ------------------------------------------- the known positives, cases 1..3
+	// ------------------------------------------------------ the known positives
 	//
-	// One position's two real Esai objects. t0_chain_counters' fixture, copied
-	// for the reason the machine placement is: this task's Files: line names no
-	// header to share one through.
+	// One position's two real Esai objects.
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
 	struct PositionEsai
@@ -516,7 +487,7 @@ namespace
 		}
 	};
 
-	// KNOWN POSITIVE for phaseErrorFrames(position), through the ChainAdapter
+	// Known positive for phaseErrorFrames(position), through the ChainAdapter
 	// accessor the Scheduler's own reading is computed from.
 	void knownPositivePhaseError()
 	{
@@ -533,9 +504,8 @@ namespace
 
 		const g2::EsaiWriteTxCallback tx = adapter.audioTxCallback(0u);
 
-		// M_TUE CLEAR, so the first delivery sets the written flag. Without a
-		// set flag the second delivery could not be told from the first, and
-		// this known positive would be the green mirage it exists to refute.
+		// M_TUE clear, so the first delivery sets the written flag. Without a
+		// set flag the second delivery could not be told from the first.
 		pos[0].audioEsai.writestatusRegister(0u);
 
 		dsp56k::Audio::TxFrame frame;
@@ -558,13 +528,13 @@ namespace
 			"is per position and not shared");
 	}
 
-	// KNOWN POSITIVE for underrunFrames(position) and
-	// secondBusUnderrunFrames(position), through the SCHEDULER accessors the
+	// Known positive for underrunFrames(position) and
+	// secondBusUnderrunFrames(position), through the Scheduler accessors the
 	// golden run asserts zero on.
 	//
-	// A FIRMWARE-FREE Board: every run gate is shut, no transmit callback ever
+	// A firmware-free Board: every run gate is shut, no transmit callback ever
 	// fires, and each of beginPlayPhase's L priming quanta is a real audio-bus
-	// underrun at every position. t0_begin_play_phase pins the same reading.
+	// underrun at every position.
 	void knownPositiveUnderruns()
 	{
 		constexpr unsigned kLookahead    = 4u;
@@ -591,7 +561,7 @@ namespace
 
 		// Enough boot quanta that the priming run's second-bus window is
 		// reached whatever the divider is; the divider itself decides which
-		// quanta are windows, so the count is DERIVED from it and not typed.
+		// quanta are windows, so the count is derived from it and not typed.
 		scheduler->runFrames(config.secondBusFrameDivider * kLookahead);
 
 		scheduler->beginPlayPhase();
@@ -611,9 +581,9 @@ namespace
 			"KNOWN POSITIVE (secondBusUnderrunFrames): the same priming run raises secondBusUnderrunFrames "
 			"above zero, read through Scheduler::secondBusUnderrunFrames");
 
-		// EVERY position, not merely the worst one: a counter that moved at one
+		// Every position, not merely the worst one: a counter that moved at one
 		// position and nowhere else would satisfy the maximum above while
-		// leaving seven of the eight readings unproven.
+		// leaving the other positions' readings unproven.
 		unsigned movedUnderrun = 0;
 		unsigned movedSecond   = 0;
 
@@ -651,17 +621,17 @@ int main()
 		}
 
 		// ---------------------------------------------------------------------
-		// PART A. The known positives that need no firmware. They run FIRST, so
+		// Part A. The known positives that need no firmware. They run first, so
 		// that a run whose seven zeros are reported by counters nothing can move
-		// fails HERE and not on the zeros.
+		// fails here and not on the zeros.
 		std::cout << "--- part A: known positives" << std::endl;
 
 		knownPositivePhaseError();
 		knownPositiveUnderruns();
 
 		// ---------------------------------------------------------------------
-		// PART B. The hand-off, on a booted machine, and the four queue counters'
-		// known positives -- which are taken AFTER every assertion this run makes,
+		// Part B. The hand-off, on a booted machine, and the queue counters' known
+		// positives -- which are taken after every assertion this run makes,
 		// because each of them mutates a queue.
 		std::cout << "--- part B: the hand-off on a booted machine" << std::endl;
 
@@ -682,9 +652,8 @@ int main()
 			reportSeven(handOff, "hand-off");
 			checkSevenZero(handOff, "hand-off");
 
-			// THE TWO QUEUE DEPTHS, THROUGH THE DECLARED SURFACE. Capacity is
-			// L + B and both numbers come off the Config this run handed the
-			// factory, so neither is typed here.
+			// Capacity is L + B and both numbers come off the Config this run
+			// handed the factory, so neither is typed here.
 			const size_t capacity = size_t(m.config.lookaheadFrames) + size_t(m.config.maxHostBlockFrames);
 
 			{
@@ -745,9 +714,9 @@ int main()
 		}
 
 		// ---------------------------------------------------------------------
-		// PART C. THE GOLDEN RUN. One frame in and one frame out for each
-		// quantum, and all seven counters zero across the WHOLE of it -- checked
-		// after every quantum, so the report names the FIRST quantum at which
+		// Part C. The golden run. One frame in and one frame out for each
+		// quantum, and all seven counters zero across the whole of it -- checked
+		// after every quantum, so the report names the first quantum at which
 		// any of them moved rather than only the end state.
 		std::cout << "--- part C: the golden run" << std::endl;
 

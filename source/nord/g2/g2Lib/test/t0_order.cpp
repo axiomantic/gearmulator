@@ -65,20 +65,18 @@
 namespace
 {
 
-	/* THE POSITION-TO-PORT ORDER EVERY Scheduler IN THIS FILE IS BUILT WITH, AND
-	 * NAMING IT IS THE POINT.
+	/* The position-to-port order every Scheduler in this file is built with.
 	 *
-	 * On a real machine the order is the FIRMWARE's and it is not the identity;
+	 * On a real machine the order is the firmware's and it is not the identity;
 	 * a Scheduler built with an empty Config::chainOrder therefore leaves its
 	 * ports idle and wires the chain only once the firmware's own table can be
-	 * read. NO FIRMWARE RUNS IN THIS FILE -- the header above says so -- so such
-	 * a Scheduler would never wire its chain at all and every arrival this file
-	 * asserts would be an arrival of nothing.
+	 * read. No firmware runs in this file, so such a Scheduler would never wire
+	 * its chain at all and every arrival this file asserts would be an arrival
+	 * of nothing.
 	 *
-	 * SO THE ORDER IS SUPPLIED, AND THE IDENTITY IS THE RIGHT ONE HERE: this
+	 * So the order is supplied, and the identity is the right one here: this
 	 * file drives the ESAIs itself and holds every position to the slot of the
-	 * same number, which is what makes its own assertions readable. It is a
-	 * harness's choice and never a claim about the machine.
+	 * same number. It is a harness's choice and never a claim about the machine.
 	 */
 	std::vector<unsigned> identityChainOrder()
 	{

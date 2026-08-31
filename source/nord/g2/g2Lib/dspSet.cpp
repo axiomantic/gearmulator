@@ -209,21 +209,18 @@ namespace g2
 		return Status::Ok;
 	}
 
-	/* THE DETACH. It MOVES the bridges aside and destroys none of them, which
-	 * is what makes reattachHdi08Bridges an exact inverse rather than a rebuild
-	 * that happens to produce the same count. dspSet.h carries the whole reason
-	 * -- the run gate borrows the ADDRESS programLanded answers -- and
-	 * t0_scheduler_state case 1 pins it by that address at every index.
+	/* The detach moves the bridges aside and destroys none of them, which is
+	 * what makes reattachHdi08Bridges an exact inverse rather than a rebuild
+	 * that happens to produce the same count: the run gate borrows the address
+	 * programLanded answers.
 	 *
-	 * A DETACHED SET IS INDISTINGUISHABLE FROM A NEVER-ATTACHED ONE at every
-	 * public reader: bridgesAttached() is false, programLanded() answers NULL
+	 * A detached set is indistinguishable from a never-attached one at every
+	 * public reader: bridgesAttached() is false, programLanded() answers null
 	 * for every slot because m_bridges is empty, and stateLoad no longer
-	 * refuses. That is the point: the guard's condition is m_bridges, so
-	 * emptying m_bridges is the whole of the detach.
+	 * refuses. The guard's condition is m_bridges, so emptying m_bridges is the
+	 * whole of the detach.
 	 *
-	 * TOTAL AT BOTH ENDS. The move-assignment below is well defined on an empty
-	 * source, so a second detach is a no-op rather than a discard: an
-	 * unconditional `m_detachedBridges = std::move(m_bridges)` on an already
+	 * An unconditional `m_detachedBridges = std::move(m_bridges)` on an already
 	 * detached set would overwrite the parked bridges with an empty vector and
 	 * destroy every one of them. The guard is what stops that, and it is the
 	 * one line in this pair whose absence would be silent. */
@@ -236,7 +233,7 @@ namespace g2
 		m_bridges.clear();
 	}
 
-	/* THE INVERSE. The same objects, in the same order, back at the same
+	/* The inverse: the same objects, in the same order, back at the same
 	 * indices. The guard is this call's half of the same no-op rule. */
 	void DspSet::reattachHdi08Bridges() noexcept
 	{
@@ -252,12 +249,12 @@ namespace g2
 		return !m_bridges.empty();
 	}
 
-	/* THE RESET. It walks the SAME slot list and the SAME area list stateSize
-	 * and stateSave walk, so a slot or an area added to the snapshot is added
-	 * to the reset by the same edit rather than by remembering to.
+	/* The reset walks the same slot list and the same area list stateSize and
+	 * stateSave walk, so a slot or an area added to the snapshot is added to
+	 * the reset by the same edit rather than by remembering to.
 	 *
-	 * resetHW IS THE LIBRARY'S OWN CALL AND NOT A ZEROING OF THE REGISTER
-	 * BLOCK. A register file zeroed by memset is not the state a DSP56311
+	 * resetHW is the library's own call and not a zeroing of the register
+	 * block. A register file zeroed by memset is not the state a DSP56311
 	 * holds after reset -- the status register's reset value is not zero -- so
 	 * a hand-written zero would produce a machine no reset ever produces.
 	 */
@@ -305,8 +302,8 @@ namespace g2
 		if(!_set.m_bridges.empty())
 			throw std::logic_error("attachHdi08Bridges: the set already holds bridges");
 
-		/* A DETACHED SET ALREADY HOLDS ITS BRIDGES; IT IS ONLY NOT WEARING
-		 * THEM. Testing m_bridges alone would let this call build a second
+		/* A detached set already holds its bridges; it is only not wearing
+		 * them. Testing m_bridges alone would let this call build a second
 		 * bridge for every host port while the parked ones stayed alive, and
 		 * the two would then drive the same port. reattachHdi08Bridges is the
 		 * only way back from a detach and this refusal is what says so. */
@@ -323,9 +320,8 @@ namespace g2
 		}
 	}
 
-	/* THE IDLE CALLBACKS. dspSet.h carries what they are for; the short of it
-	 * is that dsp56k::Audio's own default receive callback BLOCKS, so "leave the
-	 * ESAIs alone" is not a state a running machine survives. */
+	/* dsp56k::Audio's own default receive callback blocks, so "leave the ESAIs
+	 * alone" is not a state a running machine survives. */
 	void installIdleChainCallbacks(DspSet& _set)
 	{
 		for(unsigned slot = 0; slot < _set.dspCount(); ++slot)
@@ -360,7 +356,7 @@ namespace g2
 		if(_portOfPosition.size() != count)
 			return Status::BadChainOrder;
 
-		/* THE PERMUTATION CHECK IS QUADRATIC AND ALLOCATES NOTHING, and both
+		/* The permutation check is quadratic and allocates nothing, and both
 		 * are deliberate. A seen-set would allocate on a path a caller may
 		 * drive from inside a quantum, and the slot count is the HDI08 port
 		 * count -- eight -- so the pair loop is cheaper than the allocation it
@@ -377,11 +373,11 @@ namespace g2
 			}
 		}
 
-		/* THE LOOP INDEX IS A CHAIN POSITION AND THE SLOT IT REACHES IS A
-		 * HARDWARE PORT, and the two are not the same number. chainOrder.h
-		 * carries the derivation and the reason.
+		/* The loop index is a chain position and the slot it reaches is a
+		 * hardware port, and the two are not the same number. chainOrder.h
+		 * carries the derivation.
 		 *
-		 * EVERY POSITION IS ATTACHED BEFORE THE FIRST FACTORY RUNS, which is
+		 * Every position is attached before the first factory runs, which is
 		 * the order chainAdapter.h states: a position's transmit wrapper reads
 		 * the ESAI it was given from its first fire, and a wrapper produced
 		 * ahead of the attach carries a null one for the whole run. */

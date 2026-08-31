@@ -7,25 +7,25 @@ namespace g2
 {
 	namespace
 	{
-		/* THE ADDRESS IS FIRMWARE GEOMETRY AND IT IS THE ONLY LITERAL HERE. The
-		 * ORDER is read out of the table this names; nothing in this file says
+		/* The address is firmware geometry and it is the only literal here. The
+		 * order is read out of the table this names; nothing in this file says
 		 * which port is which. */
 		constexpr uint32_t g_portTableBase = 0x30116970u;
 
 		/* The table holds 32-bit addresses, and Board::onRead takes a width in
-		 * BYTES -- board.h states that the two callbacks are below the
-		 * MemoryMap's bit unit and take the core's byte unit instead. */
+		 * bytes: the two callbacks are below the MemoryMap's bit unit and take
+		 * the core's byte unit instead. */
 		constexpr uint32_t g_entryBytes = 4u;
 	}
 
 	unsigned readChainOrder(Board& _board, const unsigned _count, std::vector<unsigned>& _portOfPosition)
 	{
-		/* OUT OF RANGE AND NOT ZERO. A caller that ignored the return would then
+		/* Out of range and not zero. A caller that ignored the return would then
 		 * index a port that does not exist rather than reading position zero's
 		 * port for every position the table did not name. */
 		_portOfPosition.assign(_count, _count);
 
-		/* THE EXPANDED SET, because this asks which port an address NAMES and
+		/* The expanded set, because this asks which port an address names and
 		 * not which ports a machine carries. Narrowing to the base machine would
 		 * make an expansion port's entry decode to no port at all and report the
 		 * table as incomplete on a machine whose table is whole. */
@@ -44,12 +44,11 @@ namespace g2
 			if(status != MCF5307_BUS_OK)
 				continue;
 
-			/* THE EMULATOR'S OWN DECODE AND NOT A SECOND SPELLING OF THE RULE.
-			 * A shift-and-invert written here would be a copy of hdi08Decode's
+			/* A shift-and-invert written here would be a copy of hdi08Decode's
 			 * one line that a change to the select field could not move. */
 			const uint8_t ports = decode.decode(entry).ports;
 
-			/* EXACTLY ONE LINE LOW IS A PORT. Zero lines low is 0x7F8, which
+			/* Exactly one line low is a port. Zero lines low is 0x7F8, which
 			 * selects nothing; more than one is the broadcast address, which
 			 * belongs to no position. Both are skipped rather than guessed at,
 			 * and an unbuilt table -- every entry zero -- selects every port and

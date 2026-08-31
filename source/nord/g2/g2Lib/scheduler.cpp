@@ -33,20 +33,14 @@
  *   caller's Config was meant to fail. A caller reading one status back learns
  *   the FIRST defect and not the only one.
  *
- * NO EXCEPTION ANYWHERE IN THIS FILE, AND NO ASSERTION IN `create`. Design
- * section 13.10 rule 2 forbids throwing, and a release build removes an
- * assertion, so every REJECTION has to survive NDEBUG: the return value and
- * the status out-param are the whole observable of the table below.
+ * Nothing in this file throws, and `create` uses no assertion: a release build
+ * removes an assertion, so every rejection has to survive NDEBUG. The return
+ * value and the status out-param are the whole observable of the table below.
  *
- * THE ONE assert() IN THIS FILE IS beginPlayPhase's, AND IT IS THE SPEC'S.
- * Design section 13.10 rule 3 step 1 requires that a debug build assert both
- * codec queues were empty on entry. It is a DEBUG-ONLY CROSS-CHECK OF THE BOOT
- * REGIME and it is the predicate of nothing: every property SCH-21's check
- * reports is read back through the observable surface below, so this file
- * reports identically with and without NDEBUG. An earlier revision of this
- * comment claimed "no assertion ANYWHERE in this file", which stopped being
- * true when beginPlayPhase landed; the claim is narrowed here rather than left
- * standing and false.
+ * beginPlayPhase's assert() is a debug-only cross-check of the boot regime and
+ * it is the predicate of nothing: every property it covers is read back through
+ * the observable surface below, so this file reports identically with and
+ * without NDEBUG.
  */
 
 #include "scheduler.h"
@@ -212,8 +206,7 @@ namespace g2
 			return nullptr;
 		}
 
-		/* THE CHAIN ORDER, WHEN THE CALLER NAMED ONE. Empty is the production
-		 * value and means "derive it from the machine", which nothing here can
+		/* Empty means "derive it from the machine", which nothing here can
 		 * check; a named order is checked in full, because a Scheduler is not
 		 * rejectable after construction and the constructor has no channel to
 		 * report through. attachChainCallbacks applies the same rule at its own
@@ -315,53 +308,46 @@ namespace g2
 			m_jobs[i].ctx = &c.base;
 		}
 
-		/* THE DISPATCH SET STARTS FULL. Nothing has faulted, so this is the
-		 * whole job array -- and building it HERE rather than special-casing
-		 * "no fault yet" in runFrames means the dispatch path has exactly one
-		 * shape from the first quantum onwards. */
+		/* The dispatch set starts full. Building it here rather than
+		 * special-casing "no fault yet" in runFrames means the dispatch path
+		 * has exactly one shape from the first quantum onwards. */
 		rebuildDispatchSet();
 
-		/* THE CHAIN CANNOT BE WIRED HERE FROM THE MACHINE, AND THAT IS WHY THE
-		 * PRODUCTION PATH DOES NOT WIRE IT HERE AT ALL. attachChainCallbacks
+		/* The chain cannot be wired here from the machine. attachChainCallbacks
 		 * needs the position-to-port order, chainOrder.h derives that order from
-		 * a table the FIRMWARE builds at boot, and this constructor runs before
+		 * a table the firmware builds at boot, and this constructor runs before
 		 * the firmware has executed an instruction. The table is zero at this
 		 * point and reads as no order at all.
 		 *
-		 * SO THE ATTACH IS LATE, AND runFrames CARRIES IT. Attaching here with
-		 * an identity order instead would be a chain order guessed at the one
-		 * moment the machine cannot be asked, and it would be the wrong one:
-		 * the firmware does not put the head of the audio chain on slot 0. A
-		 * caller with no firmware to ask names its own order in the Config and
-		 * the block at the end of this constructor wires that one immediately.
+		 * So the attach is late, and runFrames carries it. Attaching here with
+		 * an identity order instead would be the wrong order: the firmware does
+		 * not put the head of the audio chain on slot 0. A caller with no
+		 * firmware to ask names its own order in the Config and the block at the
+		 * end of this constructor wires that one immediately.
 		 *
-		 * UNTIL IT LANDS THE PORTS ARE MADE IDLE, AND THAT IS NOT THE SAME AS
-		 * LEAVING THEM ALONE. dspSet.h carries the reason at
+		 * Until it lands the ports are made idle, which is not the same as
+		 * leaving them alone. dspSet.h carries the reason at
 		 * installIdleChainCallbacks: the library's own default receive callback
-		 * BLOCKS waiting for a host frame, so a port left wearing it stops the
+		 * blocks waiting for a host frame, so a port left wearing it stops the
 		 * thread that runs its DSP and this object never gets another quantum in
 		 * which to wire anything.
 		 *
-		 * THE WINDOW IS ONE QUANTUM WIDE AT MOST. The attach fires on the first
-		 * quantum after the first program lands, and a DSP that has landed no
-		 * program runs nothing.
+		 * The attach fires on the first quantum after the first program lands,
+		 * and a DSP that has landed no program runs nothing.
 		 *
-		 * THE SCRATCH VECTOR IS SIZED HERE so that the late attach allocates
+		 * The scratch vector is sized here so that the late attach allocates
 		 * nothing inside a quantum. */
 		installIdleChainCallbacks(set);
 
 		m_chainOrder.assign(set.dspCount(), set.dspCount());
 
-		/* A CALLER THAT NAMED AN ORDER GETS IT NOW, AND KEEPS IT. create() has
+		/* A caller that named an order gets it now, and keeps it. create() has
 		 * already vetted it, so this attach cannot refuse; the return is read
 		 * rather than discarded so that a future rejection cannot be lost here.
+		 * The flag is what stops the late attach from overwriting it.
 		 *
-		 * THE FLAG IS WHAT STOPS THE LATE ATTACH FROM OVERWRITING IT. A harness
-		 * that names an order is a harness that has no firmware to ask, and one
-		 * that has both gets the one it asked for.
-		 *
-		 * THIS IS THE LAST THING THE CONSTRUCTOR DOES, AND THE ORDER IS
-		 * LOAD-BEARING. It publishes callbacks that capture `this` into ESAIs
+		 * This is the last thing the constructor does, and the order is
+		 * load-bearing. It publishes callbacks that capture `this` into ESAIs
 		 * the Board owns, so every member the callbacks reach must already hold
 		 * its final value. Publishing a half-built object is the one ordering
 		 * error here that no compiler reports. */
@@ -371,20 +357,20 @@ namespace g2
 			m_chainAttached = attachChainCallbacks(m_chain, set, m_configuredChainOrder) == Status::Ok;
 	}
 
-	/* THE LATE ATTACH, AND IT IS SELF-VALIDATING RATHER THAN TIMED. There is no
-	 * "boot has finished" signal to hang this on, and a fixed quantum count
-	 * would be a guess. The condition is the ANSWER ITSELF: readChainOrder names
-	 * every position only once the firmware has built its table, and
+	/* The late attach is self-validating rather than timed. There is no "boot
+	 * has finished" signal to hang this on, and a fixed quantum count would be a
+	 * guess. The condition is the answer itself: readChainOrder names every
+	 * position only once the firmware has built its table, and
 	 * attachChainCallbacks refuses anything that is not a permutation of the
 	 * slots. Both refusals leave the chain unattached and this call tries again
 	 * on the next quantum.
 	 *
-	 * IT FAILS LOUDLY BY CONSTRUCTION. A machine whose table never appears is a
-	 * machine whose ESAIs never reach the ChainAdapter, so every mailbox stays
-	 * empty, every written flag stays clear and the codec sink stays silent --
-	 * rather than a machine that quietly ran the chain in the wrong order.
+	 * A machine whose table never appears is a machine whose ESAIs never reach
+	 * the ChainAdapter, so every mailbox stays empty, every written flag stays
+	 * clear and the codec sink stays silent -- rather than a machine that
+	 * quietly ran the chain in the wrong order.
 	 *
-	 * IT WAITS FOR THE FIRST LANDED PROGRAM BEFORE IT READS ANYTHING. The
+	 * It waits for the first landed program before it reads anything. The
 	 * firmware needs the port base table to download a kernel at all, so a
 	 * landed program is proof the table exists; and a board whose SDRAM has no
 	 * target logs an anomaly for every unmapped read, which an unguarded probe
@@ -435,57 +421,51 @@ namespace g2
 	 *              2  DSP 0 .. DSP 7, ascending
 	 *     egress   ChainAdapter::extractCodecSink(frame)       play regime only
 	 *
-	 * THE TWO PLAY-ONLY PHASES RUN IN THE PLAY REGIME AND IN NO OTHER. The
-	 * object knows its regime and THE CALLER DOES NOT SELECT IT: a Scheduler is
-	 * born in Boot and beginPlayPhase is the one thing that moves it to Play.
-	 * A boot quantum's trace is therefore five records -- Swap, Panel, Sof,
-	 * Mcu, Dsp -- and a play quantum's is seven, with the INGRESS RECORD BEFORE
-	 * THE WHOLE RUN PHASE and the EGRESS RECORD AFTER IT, which is the order
-	 * the diagram above states.
+	 * The two play-only phases run in the play regime and in no other. The
+	 * caller does not select the regime: a Scheduler is born in Boot and
+	 * beginPlayPhase is the one thing that moves it to Play. A boot quantum's
+	 * trace is Swap, Panel, Sof, Mcu, Dsp; a play quantum's adds the ingress
+	 * record before the whole run phase and the egress record after it, which is
+	 * the order the diagram above states.
 	 *
-	 * WITHOUT THE BOOT REGIME THE SINK FILLS after L + B boot quanta and the
-	 * scheduler stops part-way through the boot. That is the defect the regime
-	 * closes, and it is a real one rather than a precaution: CodecSink::push
-	 * REFUSES when full and this loop stops when it does.
+	 * Without the boot regime the sink fills after L + B boot quanta and the
+	 * scheduler stops part-way through the boot: CodecSink::push refuses when
+	 * full and this loop stops when it does.
 	 *
 	 * THE PANEL AND THE MCU RUN SERIALLY HERE, OUTSIDE THE EXECUTOR, which is
 	 * why the job array holds the eight DSP contexts and nothing else.
 	 *
-	 * NO ALLOCATION HAPPENS IN THIS FUNCTION. The adapter, the contexts, the
+	 * No allocation happens in this function. The adapter, the contexts, the
 	 * job array and both codec queues are all built once, at construction, and
 	 * the one Frame the two codec phases need is a local. */
 	void Scheduler::runFrames(const size_t _frames) noexcept
 	{
-		/* THE OWNING THREAD IS RECORDED ON THE FIRST CALL AFTER EACH CLEARING,
-		 * and beginPlayPhase's step 5 is what clears it -- so the first
-		 * runFrames of the play phase re-establishes it on the audio thread
-		 * instead of tripping on the boot thread's identity. */
+		/* The owning thread is recorded on the first call after each clearing,
+		 * and beginPlayPhase is what clears it -- so the first runFrames of the
+		 * play phase re-establishes it on the audio thread instead of tripping
+		 * on the boot thread's identity. */
 		if(m_owner == std::thread::id{})
 		{
 			m_owner = std::this_thread::get_id();
 		}
 		else
 		{
-			/* THE DEBUG-ONLY CROSS-CHECK OF THE THREAD MAP, and it is the
-			 * PREDICATE OF NOTHING. docs/threading.md gives runFrames to one
-			 * thread at a time and design section 13.10.5 has ownership move
+			/* A debug-only cross-check, and it is the predicate of nothing.
+			 * runFrames belongs to one thread at a time and ownership moves
 			 * exactly once, at beginPlayPhase; a second thread calling in is a
 			 * data race on every member below, and this is where it is loudest.
 			 *
-			 * A RELEASE BUILD REMOVES IT, WHICH IS WHY owningThread() EXISTS.
-			 * The property that stops the race in the SHIPPED build has to be
-			 * checkable in the shipped build, so t0_thread_map reads the
-			 * recorded identity back through the accessor and never through
-			 * this line. */
+			 * A release build removes it, which is why owningThread() exists:
+			 * the recorded identity is read back through the accessor and never
+			 * through this line. */
 			assert(m_owner == std::this_thread::get_id()
 				&& "runFrames was called from a thread that does not own this Scheduler");
 		}
 
 		for(size_t f = 0; f < _frames; ++f)
 		{
-			/* BEFORE THE SWAP AND BEFORE THE RUN PHASE, so the quantum that
-			 * wires the chain also runs its DSPs through it. After the attach
-			 * this is one predicted branch. */
+			/* Before the swap and before the run phase, so the quantum that
+			 * wires the chain also runs its DSPs through it. */
 			if(!m_chainAttached)
 				attachChainIfOrderKnown();
 
@@ -500,10 +480,10 @@ namespace g2
 			mark(TracePhase::Swap, frameIndex);
 			m_chain.advanceAll(frameIndex);
 
-			/* THE INGRESS, AND IT PRECEDES THE WHOLE RUN PHASE. front()
-			 * answers a ZERO frame when the queue is empty, never stale data,
-			 * and pop() is where a starve is counted -- exactly once for each
-			 * quantum that consumed one. */
+			/* The ingress precedes the whole run phase. front() answers a zero
+			 * frame when the queue is empty, never stale data, and pop() is
+			 * where a starve is counted -- exactly once for each quantum that
+			 * consumed one. */
 			if(m_regime == CodecRegime::Play)
 			{
 				mark(TracePhase::Ingress, frameIndex);
@@ -519,27 +499,23 @@ namespace g2
 			mark(TracePhase::Sof, frameIndex);
 			m_board.tickSofIfDue(frameIndex);
 
-			/* THE SAME BLOCK OF DESIGN SECTION 13.4.6 THAT THE DSP JOB USES,
-			 * INSTANTIATED AGAINST THE MCU CONTEXT. It is one block used
-			 * twice and not two blocks that resemble each other: the budget,
-			 * the want, the `want <= 0` branch and the floor at zero are all
-			 * g2::runQuantum's, and the only thing this site supplies is the
-			 * role-filler. Design section 13.4.6 states that the MCU context
-			 * has no receive/transmit bracket and that this block is the whole
-			 * of its quantum, which is why there is nothing around this call.
+			/* The same block the DSP job uses, instantiated against the MCU
+			 * context. It is one block used twice and not two blocks that
+			 * resemble each other: the budget, the want, the `want <= 0` branch
+			 * and the floor at zero are all g2::runQuantum's, and the only
+			 * thing this site supplies is the role-filler. The MCU context has
+			 * no receive/transmit bracket and this block is the whole of its
+			 * quantum, which is why there is nothing around this call.
 			 *
-			 * THE RETURN IS A MEASUREMENT AND NOT STATE. What decides the next
+			 * The return is a measurement and not state. What decides the next
 			 * quantum is carried in m_mcu.debt and m_mcu.acc, which the block
 			 * mutates. */
 			mark(TracePhase::Mcu, frameIndex);
 			(void) runQuantum(m_mcu, [this](const uint32_t _want) noexcept
 			{
-				/* THE RUNNER IS NULL IN EVERY BUILD THAT IS NOT BEING
-				 * DEBUGGED, and the branch is the one TraceSink already
-				 * established. An installed runner is asked for the SAME want
-				 * and answers with the cycles it actually spent, so this line
-				 * is the only thing TOOL-13's amendment changes about the
-				 * quantum. */
+				/* An installed runner is asked for the same want and answers
+				 * with the cycles it actually spent, so this line is the only
+				 * thing a debugger changes about the quantum. */
 				if(m_mcuRunner != nullptr)
 					return m_mcuRunner->runMcu(_want);
 
@@ -549,19 +525,19 @@ namespace g2
 			mark(TracePhase::Dsp, frameIndex);
 			m_executor.run(m_liveJobs, m_liveCount);
 
-			/* THE FAULT IS READ AFTER run() RETURNS, design section 13.10.5,
-			 * and it covers the MCU's bit as well as the eight job contexts --
-			 * the MCU ran earlier in this same quantum. A NEW fault takes the
-			 * faulted context out of the dispatch set from the NEXT quantum
-			 * onwards; the quantum that produced it already ran. */
+			/* The fault is read after run() returns, and it covers the MCU's
+			 * bit as well as the job contexts -- the MCU ran earlier in this
+			 * same quantum. A new fault takes the faulted context out of the
+			 * dispatch set from the next quantum onwards; the quantum that
+			 * produced it already ran. */
 			if(latchFaults())
 				rebuildDispatchSet();
 
-			/* THE EGRESS, AND IT FOLLOWS THE WHOLE RUN PHASE. A refused push
-			 * is a DEFECT REPORT and not a condition to handle: the capacity
-			 * L + B makes it unreachable in a correct build, CodecSink counts
-			 * it in droppedFrames, and this loop STOPS rather than overwriting
-			 * a frame the host has already been told to expect. The quantum
+			/* The egress follows the whole run phase. A refused push is a defect
+			 * report and not a condition to handle: the capacity L + B makes it
+			 * unreachable in a correct build, CodecSink counts it in
+			 * droppedFrames, and this loop stops rather than overwriting a
+			 * frame the host has already been told to expect. The quantum
 			 * itself ran to completion, so the frame index advances first. */
 			if(m_regime == CodecRegime::Play)
 			{
@@ -581,47 +557,44 @@ namespace g2
 		}
 	}
 
-	/* THE BOOT-TO-PLAY TRANSITION. Design section 13.10 rule 3's five steps,
-	 * in its order, and the order is load-bearing at step 3.
+	/* The boot-to-play transition, and the order below is load-bearing where it
+	 * zeroes the baselines.
 	 *
-	 * WHAT IT DOES NOT TOUCH: emulated machine state, any fault -- which is
+	 * What it does not touch: emulated machine state, any fault -- which is
 	 * sticky and which only reset() clears -- and the virtual frame index,
 	 * which its own priming quanta advance by exactly L. */
 	void Scheduler::beginPlayPhase() noexcept
 	{
-		/* STEP 1. Whatever the boot left is discarded. IN A CORRECT BUILD BOTH
-		 * ARE ALREADY EMPTY, because the boot regime kept the boot out of
-		 * them, and this assertion is what makes that a checkable property
-		 * rather than an assumption. It is the predicate of no check: SCH-21's
-		 * check reads the hand-off state back through the observable surface,
-		 * so it reports identically under NDEBUG. */
+		/* In a correct build both are already empty, because the boot regime
+		 * kept the boot out of them. This assertion is the predicate of no
+		 * check: the hand-off state is read back through the observable
+		 * surface, so this reports identically under NDEBUG. */
 		assert(m_source.size() == 0 && "the boot regime left the CodecSource untouched");
 		assert(m_sink.size()   == 0 && "the boot regime left the CodecSink untouched");
 
-		/* RECONSTRUCTION IS WHAT CLEARS THEM, and it clears the four counters
-		 * they own at the same time -- which is half of step 3. SCH-15's two
-		 * queues expose neither a clear nor a counter reset, and each ring is
-		 * already the right size, so neither assignment reallocates. This runs
-		 * on the boot thread and never inside a quantum. */
+		/* Reconstruction is what clears them, and it clears the counters they
+		 * own at the same time. The queues expose neither a clear nor a counter
+		 * reset, and each ring is already the right size, so neither assignment
+		 * reallocates. This runs on the boot thread and never inside a
+		 * quantum. */
 		m_source = CodecSource(m_codecCapacity);
 		m_sink   = CodecSink  (m_codecCapacity);
 
-		/* STEP 2. Exactly `lookaheadFrames` zero frames. The push cannot
-		 * refuse: the capacity is L + B and the queue was just emptied. */
+		/* Exactly `lookaheadFrames` zero frames. The push cannot refuse: the
+		 * capacity is L + B and the queue was just emptied. */
 		const Frame zero{};
 
 		for(unsigned i = 0; i < m_lookaheadFrames; ++i)
 			(void) m_source.push(zero);
 
-		/* STEP 3, AND IT HAPPENS BEFORE THE PRIMING RUN OF STEP 4 rather than
-		 * after it, so the priming run's OWN counters stay visible. A DSP that
-		 * underruns during priming is a real finding and clearing afterwards
-		 * would hide it.
+		/* This happens before the priming run below rather than after it, so
+		 * the priming run's own counters stay visible. A DSP that underruns
+		 * during priming is a real finding and clearing afterwards would hide
+		 * it.
 		 *
-		 * THE THREE ADAPTER-OWNED COUNTERS ARE ZEROED BY MOVING THIS OBJECT'S
-		 * BASELINE, not by touching the ChainAdapter: its mailboxes are
-		 * emulated state and this call may not touch that. scheduler.h's
-		 * accessor comment carries the whole reasoning. */
+		 * The adapter-owned counters are zeroed by moving this object's
+		 * baseline, not by touching the ChainAdapter: its mailboxes are
+		 * emulated state and this call may not touch that. */
 		for(unsigned p = 0; p < static_cast<unsigned>(m_underrunBase.size()); ++p)
 		{
 			m_underrunBase[p]       = m_chain.underrunFrames(p);
@@ -629,9 +602,8 @@ namespace g2
 			m_phaseErrorBase[p]     = m_chain.phaseErrorFrames(p);
 		}
 
-		/* THE TWO DIAGNOSTIC COUNTERS, AT EVERY CONTEXT INDEX. The rational
-		 * accumulators are NOT reset: they are emulated timebase state, not
-		 * observability. */
+		/* The rational accumulators are not reset: they are emulated timebase
+		 * state, not observability. */
 		m_mcu.debt               = 0;
 		m_mcu.longDispatchQuanta = 0;
 
@@ -641,18 +613,17 @@ namespace g2
 			c.longDispatchQuanta = 0;
 		}
 
-		/* STEP 4. Exactly `lookaheadFrames` quanta, in the PLAY regime. They
-		 * consume the L primed zero frames, so starvedFrames stays zero, and
-		 * they produce L real frames into the CodecSink -- which is where
-		 * design section 13.6 needs the lookahead to sit. The push-only
-		 * priming an earlier draft used leaves the sink empty and the
-		 * scheduler ahead of nothing. */
+		/* Exactly `lookaheadFrames` quanta, in the play regime. They consume the
+		 * L primed zero frames, so starvedFrames stays zero, and they produce L
+		 * real frames into the CodecSink -- which is where the lookahead has to
+		 * sit. Push-only priming leaves the sink empty and the scheduler ahead
+		 * of nothing. */
 		m_regime = CodecRegime::Play;
 
 		runFrames(m_lookaheadFrames);
 
-		/* STEP 5. The first runFrames of the play phase re-establishes the
-		 * owner on the audio thread. Without this the owner stays the boot
+		/* The first runFrames of the play phase re-establishes the owner on the
+		 * audio thread. Without this the owner stays the boot
 		 * thread's and the first real audio callback of every session trips
 		 * on it. */
 		m_owner = std::thread::id{};
@@ -665,8 +636,8 @@ namespace g2
 
 		size_t accepted = 0;
 
-		/* STOPS AT THE FIRST REFUSAL rather than skipping past it, so the
-		 * frames that were accepted are a PREFIX of the block and the caller's
+		/* Stops at the first refusal rather than skipping past it, so the frames
+		 * that were accepted are a prefix of the block and the caller's
 		 * shortfall names a contiguous tail. */
 		while(accepted < _frames && m_source.push(_in[accepted]))
 			++accepted;
@@ -716,10 +687,10 @@ namespace g2
 	uint64_t Scheduler::droppedFrames()   const noexcept { return m_sink.droppedFrames();    }
 	uint64_t Scheduler::underflowFrames() const noexcept { return m_sink.underflowFrames();  }
 
-	/* INDEX 0 IS THE MCU AND 1 .. dspCount ARE THE DSPs, design section 13.5's
-	 * CONTEXT INDEX column and not its ORDER column. The two differ, and an
-	 * implementation that read the order column would answer for the panel at
-	 * index 0 and be off by one everywhere above it. */
+	/* Index 0 is the MCU and 1 .. dspCount are the DSPs. This is the context
+	 * index and not the run order: the two differ, and an implementation that
+	 * used the run order would answer for the panel at index 0 and be off by
+	 * one everywhere above it. */
 	int64_t Scheduler::cycleDebt(const unsigned _contextIndex) const noexcept
 	{
 		if(_contextIndex == 0)
@@ -742,10 +713,9 @@ namespace g2
 		return m_contexts[_contextIndex - 1].longDispatchQuanta;
 	}
 
-	/* THE FAULT SURFACE. Design section 13.10.5, and the SAME context index
-	 * cycleDebt and longDispatchQuanta take: 0 is the MCU, 1 .. dspCount are
-	 * the DSPs. An index above dspCount reads back the no-fault answer rather
-	 * than running off the end of the latch. */
+	/* The same context index cycleDebt and longDispatchQuanta take: 0 is the
+	 * MCU, 1 .. dspCount are the DSPs. An index above dspCount reads back the
+	 * no-fault answer rather than running off the end of the latch. */
 	bool Scheduler::faulted() const noexcept
 	{
 		return m_faulted;
@@ -764,19 +734,15 @@ namespace g2
 		return m_fault[_contextIndex];
 	}
 
-	/* THE RESET. Design section 13.10.5, and the boot thread's call.
+	/* The order is load-bearing in one place: the adapter-owned counter
+	 * baselines are taken after m_chain.reset(), because a baseline read before
+	 * the adapter was zeroed would record the old reading and every
+	 * observability accessor would then answer a negative difference through an
+	 * unsigned type.
 	 *
-	 * THE ORDER IS LOAD-BEARING IN ONE PLACE AND NOWHERE ELSE: the three
-	 * adapter-owned counter baselines are taken AFTER m_chain.reset(), because
-	 * a baseline read before the adapter was zeroed would record the old
-	 * reading and every observability accessor would then answer a negative
-	 * difference through an unsigned type.
-	 *
-	 * THE RATIONAL ACCUMULATORS ARE ZEROED HERE AND beginPlayPhase DOES NOT
-	 * ZERO THEM, and the two are right for the same reason rather than
-	 * inconsistent: an accumulator is emulated timebase state, which a
-	 * boot-to-play hand-off may not touch and which a reset of the whole
-	 * machine must. */
+	 * The rational accumulators are zeroed here and beginPlayPhase does not zero
+	 * them: an accumulator is emulated timebase state, which a boot-to-play
+	 * hand-off may not touch and which a reset of the whole machine must. */
 	void Scheduler::reset() noexcept
 	{
 		for(auto& f : m_fault)
@@ -809,14 +775,13 @@ namespace g2
 		m_board.reset();
 		m_chain.reset();
 
-		/* A DERIVED ORDER IS RE-DERIVED RATHER THAN KEPT. Board::reset returns
+		/* A derived order is re-derived rather than kept. Board::reset returns
 		 * the machine to its pre-boot state, and an order read from it before
 		 * that is an answer about a machine that no longer exists. The ESAIs
 		 * keep the callbacks they were last given until the next attach
-		 * replaces them, which is the same state a Scheduler that has not
-		 * attached yet leaves behind.
+		 * replaces them.
 		 *
-		 * AN ORDER THE CALLER NAMED SURVIVES, because it was never read from
+		 * An order the caller named survives, because it was never read from
 		 * the machine and the reset says nothing about it. */
 		if(m_configuredChainOrder.empty())
 			m_chainAttached = false;
@@ -831,74 +796,64 @@ namespace g2
 		m_owner = std::thread::id{};
 	}
 
-	/* THE STATE TRIO. SCH-21 STEP 4, THE ABSORBED SCH-24. Design sections
-	 * 13.10 rule 2 and 13.10.5.
+	/* The block is flat and it is a composition, in this fixed order:
 	 *
-	 * THE BLOCK IS FLAT AND IT IS A COMPOSITION OF FOUR. In this fixed order:
-	 *
-	 *   1. THIS OBJECT'S OWN STATE -- the version word first, then the regime,
+	 *   1. This object's own state -- the version word first, then the regime,
 	 *      the virtual frame index, the MCU context's rational accumulator,
-	 *      cycle debt and rule 4 counter, the same three for every DSP context,
-	 *      the sticky fault latch and its disjunction, and the three
+	 *      cycle debt and long-dispatch counter, the same three for every DSP
+	 *      context, the sticky fault latch and its disjunction, and the
 	 *      adapter-owned counter baselines.
 	 *   2. Board::stateSave
 	 *   3. ChainAdapter::stateSave
 	 *   4. DspSet::stateSave
 	 *
-	 * stateLoad READS THEM BACK IN THE SAME ORDER AND RETURNS THE FIRST NON-Ok
-	 * STATUS ANY OF THE THREE LIMBS PRODUCES.
+	 * stateLoad reads them back in the same order and returns the first non-Ok
+	 * status any of the limbs produces.
 	 *
-	 * THE VERSION WORD IS THE FIRST FIELD AND IT IS COMPARED BEFORE THE FIRST
-	 * WRITE. A version word that nothing compares is decoration; one compared
-	 * after a partial apply leaves a machine no run produced. Design section
-	 * 13.10 rule 2 forbids an exception and a release build removes an
-	 * assertion, so the returned Status is the whole channel a refusal has --
-	 * which is why stateLoad returns g2::Status and not void, and why
-	 * Board::stateLoad and ChainAdapter::stateLoad were reconciled to the same
-	 * shape by this task.
+	 * The version word is the first field and it is compared before the first
+	 * write. A version word that nothing compares is decoration; one compared
+	 * after a partial apply leaves a machine no run produced. Nothing throws and
+	 * a release build removes an assertion, so the returned Status is the whole
+	 * channel a refusal has -- which is why stateLoad returns g2::Status and not
+	 * void.
 	 *
-	 * WHAT A REFUSAL FROM ONE OF THE THREE LIMBS LEAVES BEHIND, STATED RATHER
-	 * THAN HIDDEN. Each limb guards before its own first write, so a limb that
-	 * refuses changes nothing OF ITS OWN; the limbs BEFORE it in the order
-	 * above have already been applied. Only the version-word refusal is total,
-	 * because it happens before anything is applied at all. A total rollback
-	 * would need a self-snapshot, and taking one inside a noexcept method means
-	 * an allocation whose failure terminates the process -- a worse trade than
-	 * the partial apply, and one no caller has asked for.
+	 * What a refusal from one of the limbs leaves behind: each limb guards
+	 * before its own first write, so a limb that refuses changes nothing of its
+	 * own; the limbs before it in the order above have already been applied.
+	 * Only the version-word refusal is total, because it happens before anything
+	 * is applied at all. A total rollback would need a self-snapshot, and taking
+	 * one inside a noexcept method means an allocation whose failure terminates
+	 * the process.
 	 *
-	 * THE DSP LIMB IS BRACKETED BY THE DETACH AND ITS INVERSE, and that bracket
-	 * is the whole reason section 24.6 row W3-415's blocker is gone.
-	 * DspSet::stateLoad refuses a set holding bridges -- and the Board's
-	 * constructor attaches them unconditionally, so EVERY set reachable from a
-	 * Scheduler holds them. The pair moves the same bridge objects aside and
-	 * back, which is what keeps the programLanded pointers this class borrowed
-	 * at construction valid across the load; dspSet.h carries the full reason
-	 * and t0_scheduler_state case 1 pins it by address at every index.
+	 * The DSP limb is bracketed by the detach and its inverse. DspSet::stateLoad
+	 * refuses a set holding bridges -- and the Board's constructor attaches them
+	 * unconditionally, so every set reachable from a Scheduler holds them. The
+	 * pair moves the same bridge objects aside and back, which is what keeps the
+	 * programLanded pointers this class borrowed at construction valid across
+	 * the load; dspSet.h carries the full reason.
 	 *
-	 * THE RE-ATTACH RUNS ON EVERY PATH OUT OF THE BRACKET, refusal included. A
+	 * The re-attach runs on every path out of the bracket, refusal included. A
 	 * Scheduler left holding a detached set would have every run gate shut for
 	 * the life of the object with no diagnostic anywhere.
 	 *
-	 * WHAT THE BLOCK DOES NOT COVER, AND WHY. CallbackTimer, because it carries
-	 * no emulated state and a state file recorded on a fast machine must load
-	 * identically on a slow one -- the row states that one. The RECORDED OWNING
-	 * THREAD, for the same reason: it is a property of the process that took the
-	 * snapshot and not of the machine. And BOTH CODEC QUEUES, which is the one
-	 * omission a reader could mistake for an oversight: SCH-15's two queues
-	 * expose no way to read a ring without consuming it and no way to restore a
-	 * counter, so covering them needs new surface on codecQueues.h, which is
-	 * SCH-15's file and not this task's. THE CONSEQUENCE IS STATED: a snapshot
-	 * taken in the PLAY regime restores a machine whose queues hold whatever the
-	 * load left in them. The boot regime is unaffected, because a boot quantum
+	 * What the block does not cover: CallbackTimer, because it carries no
+	 * emulated state and a state file recorded on a fast machine must load
+	 * identically on a slow one. The recorded owning thread, for the same
+	 * reason: it is a property of the process that took the snapshot and not of
+	 * the machine. And both codec queues, which expose no way to read a ring
+	 * without consuming it and no way to restore a counter, so covering them
+	 * needs new surface on codecQueues.h. The consequence: a snapshot taken in
+	 * the play regime restores a machine whose queues hold whatever the load
+	 * left in them. The boot regime is unaffected, because a boot quantum
 	 * touches neither queue.
 	 *
-	 * EVERY FIELD MOVES THROUGH memcpy. The destination is a caller-supplied
+	 * Every field moves through memcpy. The destination is a caller-supplied
 	 * void* with no alignment guarantee, so a typed store into it would be
 	 * undefined for every field wider than a byte.
 	 */
 	namespace
 	{
-		/* The version of THIS class's own block. It is not the Board's and not
+		/* The version of this class's own block. It is not the Board's and not
 		 * the chain's; each limb versions or guards itself. */
 		constexpr uint32_t g_schedulerStateVersion = 1u;
 
@@ -945,11 +900,9 @@ namespace g2
 			return static_cast<int64_t>(get64(_cursor));
 		}
 
-		/* THE FIELD COUNT OF THIS CLASS'S OWN BLOCK, DERIVED FROM THE WALK
-		 * BELOW RATHER THAN COUNTED BY HAND. ownBlockSize() and both walks read
-		 * the SAME three expressions, so a field added to the walk without a
-		 * matching term here is a size that no longer matches the cursor -- and
-		 * the guard-region case of t0_scheduler_state reports it. */
+		/* The size of this class's own block, derived from the walk below rather
+		 * than counted by hand. A field added to the walk without a matching
+		 * term here is a size that no longer matches the cursor. */
 		size_t ownBlockSize(const size_t _dspCount) noexcept
 		{
 			return sizeof(uint32_t)                       /* the version word   */
@@ -1021,7 +974,7 @@ namespace g2
 
 		const auto* cursor = static_cast<const uint8_t*>(_src);
 
-		/* BEFORE THE FIRST WRITE. */
+		/* Before the first write. */
 		if(get32(cursor) != g_schedulerStateVersion)
 			return Status::BadStateImage;
 
@@ -1051,7 +1004,7 @@ namespace g2
 		for(auto& v : m_phaseErrorBase)
 			v = get64(cursor);
 
-		/* THE DISPATCH SET IS REBUILT FROM THE RESTORED LATCH AND NOT SAVED.
+		/* The dispatch set is rebuilt from the restored latch and not saved.
 		 * m_liveJobs holds pointers into m_contexts, which a snapshot cannot
 		 * carry across a process; rebuildDispatchSet is the one function that
 		 * derives it, and deriving it here means a loaded fault takes its
@@ -1070,8 +1023,8 @@ namespace g2
 		if(chainStatus != Status::Ok)
 			return chainStatus;
 
-		/* THE BRACKET. The re-attach runs on the refusal path as well as on the
-		 * success path, so no exit from here leaves the set detached. */
+		/* The re-attach runs on the refusal path as well as on the success path,
+		 * so no exit from here leaves the set detached. */
 		DspSet& set = m_board.dspSet();
 
 		set.detachHdi08Bridges();
@@ -1095,13 +1048,12 @@ namespace g2
 		}
 	}
 
-	/* THE FAULT IS READ BACK AFTER THE PHASE THAT COULD HAVE PRODUCED IT, and
-	 * the first latch of an index WINS. A context that faulted is not
+	/* The fault is read back after the phase that could have produced it, and
+	 * the first latch of an index wins. A context that faulted is not
 	 * dispatched again, so its `base.fault` cannot be overwritten -- but the
 	 * MCU's bit can be, because Board::runMcu rewrites it on every call, and a
 	 * later clear must not silently retract a fault the Device may already have
-	 * acted on. Design section 13.10.5 calls the fault sticky and this is where
-	 * that word is implemented. */
+	 * acted on. This is where the fault becomes sticky. */
 	bool Scheduler::latchFaults() noexcept
 	{
 		bool latched = false;

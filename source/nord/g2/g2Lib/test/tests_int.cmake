@@ -19,36 +19,29 @@ add_executable(t1_boot t1_boot.cpp)
 target_link_libraries(t1_boot PRIVATE g2Lib)
 set_property(TARGET t1_boot PROPERTY FOLDER "G2/test")
 
-# ----------------- INT-2, audio through the chain: the egress arrival
+# ----------------- t1_egress, audio through the chain: the egress arrival
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_egress$
-#
-# TIER T1, gated exactly as t1_boot is. It boots the firmware, enters the play
-# phase and measures the frame at which a pattern injected at the codec source
-# reappears at the codec sink, against the delay the chain's own geometry
-# predicts. Plan section 6's M5 row and INT-2's Check: line.
+# Gated exactly as t1_boot is. It boots the firmware, enters the play phase and
+# measures the frame at which a pattern injected at the codec source reappears
+# at the codec sink, against the delay the chain's own geometry predicts.
 
 add_executable(t1_egress t1_egress.cpp)
 target_link_libraries(t1_egress PRIVATE g2Lib)
 set_property(TARGET t1_egress PROPERTY FOLDER "G2/test")
 
-# ----------------- INT-2, audio through the chain: the seven chain-health counters
+# ----------------- t1_chain_health, the chain-health counters
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_chain_health$
-#
-# TIER T1, gated exactly as t1_boot is. It asserts INT-2's seven-zero clause
-# across a golden run and INT-2's hand-off state, and it pairs EVERY zero it
-# asserts with a known positive that drives that counter above zero.
+# Gated exactly as t1_boot is. It asserts the counters are zero across a golden
+# run, and it pairs every zero it asserts with a known positive that drives that
+# counter above zero.
 
 add_executable(t1_chain_health t1_chain_health.cpp)
 target_link_libraries(t1_chain_health PRIVATE g2Lib)
 set_property(TARGET t1_chain_health PROPERTY FOLDER "G2/test")
 
-# ----------------- the chain order: which hardware port carries which position
+# ----------------- t1_chain_order: which hardware port carries which position
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_chain_order$
-#
-# TIER T1, gated exactly as t1_boot is. It boots the firmware, derives the
+# Gated exactly as t1_boot is. It boots the firmware, derives the
 # firmware's own port ordering twice by paths that share no arithmetic -- the
 # base table at 0x30116970 and the kernel's own DMA slot counts -- and asserts
 # that attachChainCallbacks puts chain position 0 on the head DSP and chain

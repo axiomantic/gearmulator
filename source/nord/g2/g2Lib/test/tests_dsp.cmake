@@ -80,28 +80,19 @@ add_test(NAME t0_dynamic_fast_interrupts COMMAND t0_dynamic_fast_interrupts
 	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/bit_test_spin.asm)
 set_tests_properties(t0_dynamic_fast_interrupts PROPERTIES LABELS "UnitTest")
 
-# ----------------- DSP-14, the kernel download and the DMA constants
+# ----------------- t1_kernel_load, the kernel download and the DMA constants
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_kernel_load$
+# Gated. The test boots the real firmware out of CODE_30000400.bin and reads the
+# DMA registers the downloaded kernel programmed, so it needs the Clavia
+# artifacts. A machine without them reaches ctest as SKIP_RETURN_CODE rather
+# than as a silent pass.
 #
-# TIER T1 AND GATED. The test boots the real firmware out of
-# CODE_30000400.bin and reads the DMA registers the downloaded kernel
-# programmed, so it needs the Clavia artifacts. It resolves them through
-# ArtifactResolver exactly as t1_boot and t1_dsp_handshake do, so a machine
-# without artifacts prints the design section 18.5 skip line, reports NOT
-# VERIFIED and reaches ctest as SKIP_RETURN_CODE rather than as a silent pass.
-#
-# THE GATE VARIABLES ARE COMPUTED HERE UNDER NAMES OF THEIR OWN, on the reason
-# BRD-18's block above already states: a variable borrowed across blocks is how
-# one task's edit silently changes another task's registration. The skip code is
-# READ OUT OF gatedFixture.h by the same regex every other gated site uses, so
-# the spellings cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever
-# include site sets it first wins and every later set is a no-op with the same
-# value.
-#
-# IT LINKS g2Lib AND NOTHING ELSE, the arrangement every other g2 test uses:
-# the Board, the DspSet, the Scheduler and the dsp56300 core all have to arrive
-# through g2Lib's own PUBLIC link.
+# The gate variables are computed here under names of their own: a variable
+# borrowed across blocks is how one edit silently changes another block's
+# registration. The skip code is read out of gatedFixture.h by the same regex
+# every other gated site uses, so the spellings cannot drift; NMG2_ARTIFACTS is
+# a cache variable, so whichever include site sets it first wins and every later
+# set is a no-op with the same value.
 
 add_executable(t1_kernel_load t1_kernel_load.cpp)
 target_link_libraries(t1_kernel_load PRIVATE g2Lib)
@@ -125,7 +116,7 @@ endif()
 
 set(NMG2_ARTIFACTS "${g2_kernelLoadArtifactsDefault}" CACHE PATH "Directory holding the Clavia-derived G2 artifacts. Gated tests skip when it names no directory.")
 
-# THE TIMEOUT IS PART OF THE ASSERTION AND IS NOT HOUSEKEEPING. The drive leaves
+# The timeout is part of the assertion and is not housekeeping. The drive leaves
 # early on its convergence predicate; a machine that never converges walks the
 # whole iteration bound, and a machine that hangs inside a peripheral callback
 # returns neither pass nor fail. The timeout is what turns the second into a

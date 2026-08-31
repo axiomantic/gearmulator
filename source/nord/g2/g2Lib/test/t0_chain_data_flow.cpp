@@ -101,12 +101,12 @@ int main()
 		{kPositions, 3u, g2::ChainTopology::Ring, kSecondBusFrameDivider},
 	};
 
-	/* THE POSITION-TO-PORT ORDER, ONE FOR EACH ROUND, AND ONLY THE FIRST IS THE
-	 * IDENTITY. attachChainCallbacks takes the order the firmware chooses, and
+	/* The position-to-port order, one for each round, and only the first is the
+	 * identity. attachChainCallbacks takes the order the firmware chooses, and
 	 * on the real machine it is not the identity -- chainOrder.h carries why. A
 	 * test that only ever handed it the identity would stay green against an
-	 * installer that ignored the argument, so the two other rounds hand it
-	 * permutations and every slot below is reached THROUGH the round's order. */
+	 * installer that ignored the argument, so the other rounds hand it
+	 * permutations and every slot below is reached through the round's order. */
 	static const unsigned kOrders[][kPositions] =
 	{
 		{0, 1, 2, 3, 4, 5, 6, 7},
@@ -143,8 +143,8 @@ int main()
 
 		for(unsigned i = 0; i + 1u < kPositions; ++i)
 		{
-			/* THE INDEX IS A CHAIN POSITION AND THE SLOT IT REACHES IS A
-			 * HARDWARE PORT. Adjacency is a property of POSITIONS, so the
+			/* The index is a chain position and the slot it reaches is a
+			 * hardware port. Adjacency is a property of positions, so the
 			 * arrival this loop asserts is position i's frame at position
 			 * i + 1 -- whichever slots this round's order put them on. */
 			dsp56k::Esai& source     = set.peripherals(order[i]).getEsai();

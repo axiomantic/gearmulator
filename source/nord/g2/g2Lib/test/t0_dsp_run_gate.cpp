@@ -313,10 +313,8 @@ namespace
 		checkEqual(f.dsp.getInstructionCounter() - instructions, 0u,
 			"a slot whose program has not landed executes no instruction");
 
-		/* THE ACCUMULATOR IS PINNED TO OBSERVED BEHAVIOUR AND THE ASSERTION
-		 * SAYS SO ITSELF, IN THE STRING A READER MEETS WHEN IT GOES RED. The
-		 * expected value is not a literal: it is one allocation taken from this
-		 * context's own rate, so the pin follows the timebase rather than
+		/* The expected value is not a literal: it is one allocation taken from
+		 * this context's own rate, so the pin follows the timebase rather than
 		 * restating a number measured once. */
 		uint32_t oneAllocation = 0u;
 		(void) alloc(ctx.rate, &oneAllocation);
@@ -411,17 +409,13 @@ int main()
 			++failures;
 		}
 
-		/* THE UPPER HALF IS PER SUB-CALL AND NOT PER QUANTUM. Step 2 stopped
-		 * being one call at SCH-34: the interleave subdivides want across the
-		 * frame's ESAI slots and every sub-call rounds up to its own dispatch
-		 * unit independently, so the honest bound is want + k * maxDispatchCost
-		 * for the k sub-calls the quantum made.
+		/* The upper half is per sub-call and not per quantum: the interleave
+		 * subdivides want across the frame's ESAI slots and every sub-call
+		 * rounds up to its own dispatch unit independently, so the honest bound
+		 * is want + k * maxDispatchCost for the k sub-calls the quantum made.
 		 *
-		 * k IS MEASURED AND NEVER WRITTEN DOWN. It is the dispatch count the
-		 * job itself reports for the quantum that just ran. A literal k here
-		 * would be the same defect this file's subject was repaired for -- a
-		 * roster standing where the generating count belongs -- one file
-		 * further out. */
+		 * k is measured and never written down. It is the dispatch count the
+		 * job itself reports for the quantum that just ran. */
 		const uint64_t k = ctx.slotDispatches;
 		const uint64_t upperHalf =
 			static_cast<uint64_t>(want) + k * maxDispatchCost;
@@ -439,11 +433,9 @@ int main()
 			++failures;
 		}
 
-		/* THE DIVISOR MUST BOUND THE COUNT THAT GENERATES IT, and this is the
-		 * clause that fails when it does not. A divisor BELOW the dispatch
-		 * count hands the leading slots a share of want computed against too
-		 * few slots, which is how a hardcoded 8 delivered 3.75x its want across
-		 * a thirty-slot frame. */
+		/* The divisor must bound the count that generates it. A divisor below
+		 * the dispatch count hands the leading slots a share of want computed
+		 * against too few slots. */
 		if(ctx.slotBudgetDivisor < ctx.slotDispatches)
 		{
 			printf("FAIL the sub-budget divisor was %u while the interleave's "
@@ -477,10 +469,10 @@ int main()
 			++failures;
 		}
 
-		/* THE INVARIANT, AND IT IS THE REAL CHECK THAT THE BAND ONLY
-		 * APPROXIMATES. cycleDebt.h states 0 <= debt < maxDispatchCost at every
+		/* The invariant, and it is the real check that the band only
+		 * approximates. cycleDebt.h states 0 <= debt < maxDispatchCost at every
 		 * quantum boundary, and it holds under the interleave only because each
-		 * sub-budget is taken from what REMAINS of want: the overshoot of one
+		 * sub-budget is taken from what remains of want: the overshoot of one
 		 * sub-call shrinks the next one, so the whole quantum overshoots by the
 		 * single crossing dispatch and no more. A quantum that satisfied the
 		 * band above and violated this line would be delivering k dispatch

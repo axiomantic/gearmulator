@@ -1,61 +1,32 @@
-/* t0_scheduler_faults.cpp -- the check of SCH-21 step 3 (formerly SCH-23's own
- * Check: line). Design sections 13.10, 13.10.5 and 13.5.
+/* The check of the Scheduler's fault surface.
  *
- * WHAT THE STEP REQUIRES, CLAUSE BY CLAUSE, AND WHERE EACH ONE IS ASSERTED:
+ * How a fault is forced, and why the seam is the Executor: dspJob writes no
+ * fault today, and the three DSP values name conditions of the dsp56300
+ * backend that a T0 fixture cannot produce on demand. The Executor is injected
+ * into the factory, so a check-owned Executor that dispatches the real job and
+ * then writes the fault field of one context reproduces exactly the state the
+ * Scheduler must read: the fault lives in the job's own context and the
+ * Scheduler reads it after run() returns. Every other object below is the real
+ * one: a real Board, its real DSP set, the real ChainAdapter and both real
+ * codec queues.
  *
- *   "Each of the three DSP JobFault values is forced in one DSP job."
- *       -- case group A, run once for each of the three values.
- *   "The faulted context stops and is never dispatched again."
- *       -- A4: the faulted position's dispatch count STOPS while every other
- *          position's rises by exactly the number of quanta run.
- *   "Scheduler::faulted() is true and sticky until reset()."
- *       -- A3 and A4.
- *   "contextFaulted and contextFault name the context and the value."
- *       -- A3, at EVERY context index 0 .. dspCount, not at the faulted one.
- *   "pull still returns the full request."
- *       -- case group B, in the play regime, where the sink has frames.
- *   "reset() clears all of it."
- *       -- A5, and the dispatch set is proven RESTORED rather than merely
- *          reported clear.
- *   "A fourth case forces Board::faulted() and asserts
- *    contextFault(0) == JobFault::CoreHalted."
- *       -- case group C.
- *   "The context index is asserted explicitly in every case."
- *       -- every group walks 0 .. dspCount and asserts each index.
+ * The MCU fault is not forced through a seam at all. A default-constructed
+ * Board carries a MemoryMapConfig whose every window has size 0, and an absent
+ * window answers at no address at all, including address zero, so the first
+ * instruction fetch of the first runMcu is a bus error and the core faults.
+ * The rate 0/1 used by groups A and B keeps that from happening there: the
+ * budget is zero at every quantum, so the role filler is never invoked.
  *
- * HOW A FAULT IS FORCED, AND WHY THE SEAM IS THE EXECUTOR. dspJob writes no
- * fault today: the three DSP values name conditions of the dsp56300 backend
- * that a T0 fixture cannot produce on demand. The Executor is INJECTED into the
- * factory, so a check-owned Executor that dispatches the real job and then
- * writes the fault field of one context reproduces exactly the state the
- * Scheduler must read -- design section 13.10.5 puts the fault in the job's own
- * context and has the Scheduler read it AFTER run() returns, which is the
- * contract this fixture drives and not a mock of it. Every other object below
- * is the real one: a real Board, its real DSP set, the real ChainAdapter and
- * both real codec queues.
+ * underrunFrames is deliberately not asserted. In this fixture it rises for
+ * every position whether it faulted or not: no firmware is downloaded, every
+ * slot's run gate is shut, no transmit callback ever fires, and advanceAll
+ * counts an audio-bus underrun at every position for every quantum by
+ * construction. An assertion on it would pass identically against a Scheduler
+ * that kept dispatching the faulted context. The dispatch-count assertion is
+ * the one that separates those two implementations.
  *
- * THE MCU FAULT IS NOT FORCED THROUGH A SEAM AT ALL, and case group C says why:
- * a default-constructed Board carries a MemoryMapConfig whose every window has
- * size 0, and memoryMap.h states that an absent window "answers at no address
- * at all, including address zero". So the first instruction fetch of the first
- * runMcu is a bus error and the core faults. The rate 0/1 used by groups A and
- * B keeps that from happening there: the section 13.4.6 block's budget is zero
- * at every quantum, so the role filler is never invoked at all.
- *
- * ONE CLAUSE OF THE STEP IS DELIBERATELY NOT ASSERTED HERE, AND THE OMISSION IS
- * STATED RATHER THAN LEFT TO BE FOUND. The step says "the chain carries the
- * stale frame, so underrunFrames for that position rises by one for each later
- * quantum". IN THIS FIXTURE THAT IS TRUE OF EVERY POSITION WHETHER IT FAULTED
- * OR NOT: no firmware is downloaded, every slot's run gate is shut, no transmit
- * callback ever fires, and CHN-7's advanceAll counts an audio-bus underrun at
- * every position for every quantum by construction. An assertion on it would
- * pass identically against a Scheduler that kept dispatching the faulted
- * context, so it would report nothing about the clause it appears to check.
- * A4's dispatch-count assertion is the one that separates those two
- * implementations, and it is asserted instead.
- *
- * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION, so this
- * file reports identically under NDEBUG and without it.
+ * No case here is a language assert() and no case catches an exception, so
+ * this file reports identically under NDEBUG and without it.
  */
 
 #include "board.h"
@@ -120,18 +91,19 @@ namespace
 		return "?";
 	}
 
-	/* THE EXECUTOR THIS CHECK OWNS. It runs every job the Scheduler hands it,
+	/* The Executor this check owns. It runs every job the Scheduler hands it,
 	 * in order, on the calling thread -- which is what SerialExecutor does --
 	 * and it does two things beyond that:
 	 *
-	 *   1. It COUNTS the dispatches for each chain position. That count is the
-	 *      only observable of "never dispatched again": the Scheduler declares
-	 *      no accessor for its dispatch set and this file adds none to it.
-	 *   2. When armed, it writes one JobFault into one context AFTER that
-	 *      context's job has returned, which is where a real fault would land.
+	 *   It counts the dispatches for each chain position. That count is the
+	 *   only observable of "never dispatched again": the Scheduler declares no
+	 *   accessor for its dispatch set and this file adds none to it.
 	 *
-	 * THE POSITION IS READ BACK THROUGH THE JobContext HEAD, which dspContext.h's
-	 * two static_asserts are what make legal. */
+	 *   When armed, it writes one JobFault into one context after that
+	 *   context's job has returned, which is where a real fault would land.
+	 *
+	 * The position is read back through the JobContext head, which
+	 * dspContext.h's two static_asserts are what make legal. */
 	class CountingFaultExecutor final : public g2::Executor
 	{
 	public:
@@ -180,11 +152,11 @@ namespace
 		bool         m_armed     = false;
 	};
 
-	/* Asserts the WHOLE fault surface at EVERY context index 0 .. dspCount.
+	/* Asserts the whole fault surface at every context index 0 .. dspCount.
 	 * `_faultedIndex` is the one index expected to carry `_expected`; passing
 	 * an index above dspCount asserts that no index carries a fault at all.
 	 *
-	 * WALKING EVERY INDEX IS THE POINT. A latch that set the whole array, or
+	 * Walking every index is the point. A latch that set the whole array, or
 	 * that was off by one between the MCU's index 0 and the DSPs' 1 .. dspCount,
 	 * passes an assertion that reads only the index it expects to be set. */
 	void checkFaultSurface(const g2::Scheduler& _s, const unsigned _faultedIndex,
@@ -207,13 +179,13 @@ namespace
 		}
 	}
 
-	/* One whole run of case groups A and B for one JobFault value. Every object
-	 * is built fresh so that no case inherits another's latch. */
+	/* One whole run for one JobFault value. Every object is built fresh so
+	 * that no case inherits another's latch. */
 	void runFaultCase(const g2::JobFault _fault, const unsigned _position)
 	{
 		char what[256];
 
-		/* THE BOARD IS DECLARED FIRST: every context borrows a core, two ESAI
+		/* The Board is declared first: every context borrows a core, two ESAI
 		 * ports and a landed flag owned by a slot of the Board's DSP set. */
 		g2::Board               board;
 		CountingFaultExecutor   executor;
@@ -237,12 +209,10 @@ namespace
 
 		g2::Scheduler& s = *scheduler;
 
-		/* ---------------------------------------------------------------
-		 * A1. THE KNOWN POSITIVE, AND IT RUNS BEFORE ANY "IS ZERO" READ. Six
-		 * boot quanta with nothing armed must dispatch EVERY position exactly
-		 * six times. Without this, A4's "the faulted position stopped" is a
-		 * comparison of a count that was never able to move.
-		 */
+		/* The known positive, and it runs before any "is zero" read. Boot
+		 * quanta with nothing armed must dispatch every position once each.
+		 * Without this, "the faulted position stopped" is a comparison of a
+		 * count that was never able to move. */
 		constexpr uint64_t kArmingQuanta = 6;
 
 		s.runFrames(kArmingQuanta);
@@ -260,9 +230,6 @@ namespace
 			faultName(_fault));
 		checkEqual(executor.lastCount(), g2::kJobCount, what);
 
-		/* ---------------------------------------------------------------
-		 * A2. NOTHING HAS FAULTED YET, at any index.
-		 */
 		std::snprintf(what, sizeof(what), "%s: faulted() is false before the fault is forced",
 			faultName(_fault));
 		check(!s.faulted(), what);
@@ -270,10 +237,6 @@ namespace
 		std::snprintf(what, sizeof(what), "%s before the fault", faultName(_fault));
 		checkFaultSurface(s, kDspCount + 1u, g2::JobFault::None, what);
 
-		/* ---------------------------------------------------------------
-		 * A3. THE FAULT IS FORCED IN ONE JOB, and the surface names the
-		 * context and the value.
-		 */
 		executor.arm(_position, _fault);
 		s.runFrames(1);
 
@@ -284,16 +247,11 @@ namespace
 		std::snprintf(what, sizeof(what), "%s after the fault", faultName(_fault));
 		checkFaultSurface(s, _position + 1u, _fault, what);
 
-		/* ---------------------------------------------------------------
-		 * A4. THE FAULTED CONTEXT IS NEVER DISPATCHED AGAIN, and the fault is
-		 * STICKY across every one of those quanta.
-		 *
-		 * The faulting quantum itself DID dispatch the faulted position -- the
+		/* The faulting quantum itself did dispatch the faulted position -- the
 		 * fault is written when its job returns -- so its count stands at
 		 * kArmingQuanta + 1 and every other position's rises by the later
-		 * quanta as well. Both expected values are DERIVED from the two quanta
-		 * counts and neither is written as a literal.
-		 */
+		 * quanta as well. Both expected values are derived from the two quanta
+		 * counts and neither is written as a literal. */
 		constexpr uint64_t kLaterQuanta = 5;
 
 		s.runFrames(kLaterQuanta);
@@ -322,12 +280,10 @@ namespace
 		std::snprintf(what, sizeof(what), "%s, still sticky", faultName(_fault));
 		checkFaultSurface(s, _position + 1u, _fault, what);
 
-		/* ---------------------------------------------------------------
-		 * A5. reset() CLEARS ALL OF IT, and the dispatch set is proven
-		 * RESTORED rather than merely reported clear. A reset that cleared the
-		 * surface and left the faulted context out of the job array would pass
-		 * the surface assertions and fail the count below.
-		 */
+		/* The dispatch set is proven restored rather than merely reported
+		 * clear. A reset that cleared the surface and left the faulted context
+		 * out of the job array would pass the surface assertions and fail the
+		 * count below. */
 		s.reset();
 
 		std::snprintf(what, sizeof(what), "%s: reset() clears faulted()", faultName(_fault));
@@ -358,15 +314,11 @@ namespace
 			"%s: the whole job array is dispatched again after reset()", faultName(_fault));
 		checkEqual(executor.lastCount(), g2::kJobCount, what);
 
-		/* ---------------------------------------------------------------
-		 * B. pull STILL RETURNS THE FULL REQUEST while a context is faulted.
-		 *
-		 * reset() left the object in the boot regime, so beginPlayPhase runs
+		/* reset() left the object in the boot regime, so beginPlayPhase runs
 		 * its own L priming quanta and leaves exactly L frames in the sink.
-		 * Three further play quanta fill it to its capacity L + B, which is
-		 * DERIVED from the two Config fields and never written as a literal.
-		 * The request is that whole capacity.
-		 */
+		 * Further play quanta fill it to its capacity L + B, which is derived
+		 * from the two Config fields and never written as a literal. The
+		 * request is that whole capacity. */
 		scheduler->beginPlayPhase();
 
 		executor.arm(_position, _fault);
@@ -401,9 +353,8 @@ int main()
 
 	if(!dsp56k::g_useJIT)
 	{
-		/* In an interpreter build no Scheduler can be created at all
-		 * (section 11.4.3), so the refusal is the only claim this file may
-		 * make. */
+		/* In an interpreter build no Scheduler can be created at all, so the
+		 * refusal is the only claim this file may make. */
 		g2::Board             board;
 		CountingFaultExecutor executor;
 
@@ -423,23 +374,17 @@ int main()
 		return g_failures == 0 ? 0 : 1;
 	}
 
-	/* -----------------------------------------------------------------
-	 * CASE GROUPS A AND B. Each of the THREE DSP JobFault values, each forced
-	 * at a DIFFERENT chain position, so that a latch which happened to work at
-	 * one index is not the whole evidence.
-	 */
+	/* Each DSP JobFault value is forced at a different chain position, so that
+	 * a latch which happened to work at one index is not the whole evidence. */
 	runFaultCase(g2::JobFault::IllegalInstruction, 0);
 	runFaultCase(g2::JobFault::MemoryFault,        3);
 	runFaultCase(g2::JobFault::BackendFault,       kDspCount - 1);
 
-	/* -----------------------------------------------------------------
-	 * CASE GROUP C. THE FOURTH CASE: Board::faulted() drives context index 0.
-	 *
-	 * The rate is 1/1 rather than 0/1, so the section 13.4.6 block's budget is
-	 * one cycle at every quantum and the role filler IS invoked -- which is
-	 * what the other groups deliberately avoid. The Board's every memory window
-	 * has size 0, so the first instruction fetch is a bus error.
-	 */
+	/* Board::faulted() drives context index 0. The rate is 1/1 rather than
+	 * 0/1, so the budget is one cycle at every quantum and the role filler is
+	 * invoked -- which is what the other groups deliberately avoid. The
+	 * Board's every memory window has size 0, so the first instruction fetch
+	 * is a bus error. */
 	{
 		g2::Board             board;
 		CountingFaultExecutor executor;
@@ -463,9 +408,9 @@ int main()
 
 		g2::Scheduler& s = *scheduler;
 
-		/* THE KNOWN NEGATIVE. The bit must be observed FALSE on this very Board
-		 * before it is observed true, or "it is true afterwards" says nothing
-		 * about whether this quantum set it. */
+		/* The bit must be observed false on this very Board before it is
+		 * observed true, or "it is true afterwards" says nothing about whether
+		 * this quantum set it. */
 		check(!board.faulted(), "KNOWN NEGATIVE: the Board has not faulted before the first quantum");
 		check(!s.faulted(),     "the Scheduler reports no fault before the first quantum");
 		checkFaultSurface(s, kDspCount + 1u, g2::JobFault::None, "MCU, before the first quantum");
@@ -476,19 +421,17 @@ int main()
 			"KNOWN POSITIVE: the first instruction fetch of an unmapped Board is a bus error");
 		check(s.faulted(), "the Scheduler reports the MCU fault");
 
-		/* THE WHOLE SURFACE, INDEX BY INDEX. Index 0 carries CoreHalted and no
-		 * DSP index carries anything. */
+		/* Index 0 carries CoreHalted and no DSP index carries anything. */
 		checkFaultSurface(s, 0, g2::JobFault::CoreHalted, "MCU, after the faulting quantum");
 
-		/* STICKY, AND STILL AT INDEX 0 ONLY. */
 		s.runFrames(3);
 
 		check(s.faulted(), "the MCU fault is STICKY");
 		checkFaultSurface(s, 0, g2::JobFault::CoreHalted, "MCU, three quanta later");
 
-		/* reset() CLEARS IT, AND IT CLEARS THE BOARD'S OWN BIT TOO -- otherwise
-		 * the very next quantum would re-latch from a machine reset() claimed
-		 * to have cleared. */
+		/* reset() clears the Board's own bit too -- otherwise the very next
+		 * quantum would re-latch from a machine reset() claimed to have
+		 * cleared. */
 		s.reset();
 
 		check(!s.faulted(), "reset() clears the MCU fault");

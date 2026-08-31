@@ -31,22 +31,16 @@ namespace g2
 		BadMaxHostBlock,
 		BridgesAttached,
 
-		/* A STATE IMAGE THIS OBJECT WILL NOT TAKE BACK. The version word does
+		/* A state image this object will not take back: the version word does
 		 * not match the one this build writes, or the image's own geometry
 		 * header describes a differently-shaped object. Both are refused
-		 * BEFORE the first write, so a refused load changes nothing.
-		 *
-		 * IT IS ONE VALUE AND NOT TWO because a caller can act on neither
-		 * differently: an image this build cannot read is an image this build
-		 * cannot read. The refusing object's own comment carries which of the
-		 * two conditions it tested. */
+		 * before the first write, so a refused load changes nothing. */
 		BadStateImage,
 
-		/* A CHAIN ORDER THAT IS NOT ONE. attachChainCallbacks takes the
-		 * position-to-port map and refuses a map whose length is not the slot
-		 * count, or that names a slot twice or names one that does not exist.
-		 * Such a map would leave a DSP unwired while two chain positions drove
-		 * another, which nothing downstream reports. */
+		/* attachChainCallbacks refuses a position-to-port map whose length is
+		 * not the slot count, or that names a slot twice or names one that
+		 * does not exist. Such a map would leave a DSP unwired while two chain
+		 * positions drove another, which nothing downstream reports. */
 		BadChainOrder,
 
 		Count

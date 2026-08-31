@@ -51,16 +51,14 @@ namespace g2
 		 * that halted, which is what a debugger can act on. */
 		constexpr uint64_t g_continueBound = 100000000ull;
 
-		/* THE SAME STOP, COUNTED IN QUANTA, for a session that drives the whole
-		 * machine. It is a STOP AND NOT A FIGURE for the same reason the one
-		 * above is, and no authority publishes it either. Its size is chosen so
-		 * that it is not reached by anything the machine legitimately does:
-		 * `g2TestConsole --boot` drives 500000 quanta to reach a settled patch
-		 * browser, and this is twice that. A `c` that leaves through it answers
-		 * the same stop reply as one that halted. */
+		/* The same stop, counted in quanta, for a session that drives the whole
+		 * machine. Its size is chosen so that it is not reached by anything the
+		 * machine legitimately does: `g2TestConsole --boot` drives 500000 quanta
+		 * to reach a settled patch browser, and this is twice that. A `c` that
+		 * leaves through it answers the same stop reply as one that halted. */
 		constexpr uint64_t g_continueQuantumBound = 1000000ull;
 
-		/* THE QUANTA ONE `s` MAY TURN. A step needs ONE quantum in which the MCU
+		/* The quanta one `s` may turn. A step needs one quantum in which the MCU
 		 * actually runs; it needs more than one only when the quanta before it
 		 * take `g2::runQuantum`'s long-dispatch branch, which runs no MCU cycles
 		 * and pays the carried debt down by one whole allocation each time. That
@@ -237,10 +235,9 @@ namespace g2
 
 	GdbStub::~GdbStub()
 	{
-		/* THE RUNNER IS REMOVED BEFORE THIS OBJECT DIES, so a Scheduler that
+		/* The runner is removed before this object dies, so a Scheduler that
 		 * outlives the stub goes back to `Board::runMcu` rather than calling
-		 * into a destroyed McuDriver. It is the same restoration the watchpoint
-		 * wrappers get, for the same reason. */
+		 * into a destroyed McuDriver. */
 		if(m_scheduler != nullptr)
 		{
 			m_scheduler->setMcuRunner(nullptr);
@@ -250,8 +247,6 @@ namespace g2
 		close();
 	}
 
-	/* IT INSTALLS AND DOES NOT RUN. Nothing here turns a quantum: the debugger's
-	 * own `s` and `c` are still the only things that advance the machine. */
 	void GdbStub::attachScheduler(Scheduler& _scheduler)
 	{
 		if(m_scheduler == &_scheduler)
@@ -635,14 +630,12 @@ namespace g2
 			return stopReply();
 		}
 
-		/* WITH A SCHEDULER, A STEP IS ONE MCU INSTRUCTION AND ONE WHOLE QUANTUM.
-		 * The allowance of one is what keeps the MCU to a single instruction;
-		 * the quantum around it is what lets the rest of the machine answer,
-		 * which is the only reason a stepped session can cross a host-command
-		 * handshake at all. gdbStub.h's amendment block carries the justification
-		 * and states the rate distortion this accepts.
+		/* With a Scheduler, a step is one MCU instruction and one whole quantum.
+		 * The allowance of one keeps the MCU to a single instruction; the quantum
+		 * around it lets the rest of the machine answer, which is the only reason
+		 * a stepped session can cross a host-command handshake at all.
 		 *
-		 * THE BOUND IS NOT ONE FRAME. A quantum whose cycle budget was already
+		 * The bound is not one frame. A quantum whose cycle budget was already
 		 * overrun by the previous one runs no MCU cycles at all -- the
 		 * long-dispatch branch of `g2::runQuantum` -- so a step that insisted on
 		 * exactly one frame would sometimes retire nothing and report a machine
@@ -686,28 +679,27 @@ namespace g2
 			return stopReply();
 		}
 
-		/* WITH A SCHEDULER, A CONTINUE TURNS WHOLE QUANTA and the breakpoint
+		/* With a Scheduler, a continue turns whole quanta and the breakpoint
 		 * compare happens inside each one, in runMcuBudget, after every single
-		 * instruction. THE DSP ADVANCE THEREFORE CANNOT SWALLOW A HIT: the
+		 * instruction. The DSP advance therefore cannot swallow a hit: the
 		 * quantum's MCU phase returns the moment the compare fires, before the
 		 * DSPs of that quantum run.
 		 *
-		 * WHAT IT COSTS IS ONE QUANTUM OF SKEW, AND IT IS THE HONEST SIDE OF THE
-		 * TRADE. The quantum that produced the stop runs its remaining phases to
-		 * completion, so the DSP set can be one block ahead of the MCU at the
-		 * stop. Returning from the middle of a quantum would leave the machine
-		 * in a state design section 13.5's order never produces. */
+		 * What it costs is one quantum of skew. The quantum that produced the
+		 * stop runs its remaining phases to completion, so the DSP set can be one
+		 * block ahead of the MCU at the stop. Returning from the middle of a
+		 * quantum would leave the machine in a state the phase order never
+		 * produces. */
 		m_allowance = g_unbounded;
 		driveQuanta(g_continueQuantumBound);
 
 		return stopReply();
 	}
 
-	/* THE ONE SITE THAT TURNS THE SCHEDULER. Both `s` and `c` reach the machine
-	 * through here, so the two differ in their allowance and their bound and in
-	 * nothing else.
+	/* The one site that turns the Scheduler: `s` and `c` differ in their
+	 * allowance and their bound and in nothing else.
 	 *
-	 * `m_stop` IS HOW A DECISION TAKEN MID-QUANTUM GETS OUT. runFrames answers
+	 * `m_stop` is how a decision taken mid-quantum gets out. runFrames answers
 	 * void and a quantum has no other return path, so the runner records the
 	 * stop and this loop reads it after the quantum it happened in. */
 	void GdbStub::driveQuanta(const uint64_t _bound)
@@ -727,22 +719,22 @@ namespace g2
 		}
 	}
 
-	/* THE MCU HALF OF ONE QUANTUM, AND THE ONLY THING IT ADDS TO
-	 * `Board::runMcu(_want)` IS A DECISION POINT BETWEEN TWO INSTRUCTIONS.
+	/* The MCU half of one quantum. The only thing it adds to
+	 * `Board::runMcu(_want)` is a decision point between two instructions.
 	 *
-	 * THE RETURN IS THE CYCLES ACTUALLY SPENT and it may be fewer than `_want`.
+	 * The return is the cycles actually spent and it may be fewer than `_want`.
 	 * That is the ordinary short-spend case `g2::runQuantum` already handles: it
 	 * floors the debt at zero and banks no credit, so a quantum cut short by a
 	 * breakpoint costs the MCU those cycles and distorts nothing else.
 	 *
-	 * A ZERO-COST INSTRUCTION IS COUNTED AS ONE CYCLE, AND THAT IS A TERMINATION
-	 * GUARANTEE AND NOT AN ESTIMATE. The loop's exit condition is a cycle total;
-	 * a core that answered zero for an instruction would leave it turning
-	 * forever. The retired-instruction count below is exact either way. */
+	 * A zero-cost instruction is counted as one cycle as a termination guarantee
+	 * and not as an estimate. The loop's exit condition is a cycle total; a core
+	 * that answered zero for an instruction would leave it turning forever. The
+	 * retired-instruction count below is exact either way. */
 	uint32_t GdbStub::runMcuBudget(const uint32_t _want) noexcept
 	{
-		/* THE WATCHPOINT RECORD IS CLEARED AT THE TOP OF EACH QUANTUM'S MCU
-		 * PHASE, so that what a stop reply names is an access THIS phase made.
+		/* The watchpoint record is cleared at the top of each quantum's MCU
+		 * phase, so that what a stop reply names is an access this phase made.
 		 * The bus wrapper reports whoever calls the target it wraps, and the
 		 * phases either side of this one -- the panel, the chain, the DSP set --
 		 * are not the MCU. Without this, an access made by one of them would be
@@ -789,8 +781,8 @@ namespace g2
 		return spent;
 	}
 
-	/* THE COMPARE IS AN EQUALITY AND NOT A `>=`. A breakpoint stops the machine
-	 * when the machine is AT it, and an address the machine merely passes is not
+	/* The compare is an equality and not a `>=`. A breakpoint stops the machine
+	 * when the machine is at it, and an address the machine merely passes is not
 	 * a stop; a `>=` would stop at the first instruction past any armed address,
 	 * including addresses no program counter can ever equal. */
 	bool GdbStub::atBreakpoint() const

@@ -519,35 +519,26 @@ namespace
 		return buf;
 	}
 
-	/* DDR2 IS A MOVING POINTER AND A TERMINAL READ OF IT ANSWERS THE WRONG
-	 * QUESTION. M4's own row, clause (b), states what this check is for: "THE
-	 * DMA CHECK READS REGISTERS AND NOT TRAFFIC: it establishes that the kernel
-	 * PROGRAMMED each position's DMA block correctly, and nothing about whether
-	 * any sample has ever moved through it." DDR is the DESTINATION pointer of
-	 * a receive channel and `DmaChannel::execTransfer` advances it on every
-	 * transfer -- the `increment(m_ddr)`, `++m_ddr` and `m_ddr += m_dco + 1`
-	 * sites in `dma.cpp` -- and the emulator saves no base beside it. After
-	 * 500,000 frames it holds wherever the traversal has reached.
+	/* DDR2 is a moving pointer and a terminal read of it answers the wrong
+	 * question. This check establishes that the kernel PROGRAMMED each
+	 * position's DMA block correctly, and nothing about whether any sample has
+	 * ever moved through it. DDR is the DESTINATION pointer of a receive channel
+	 * and `DmaChannel::execTransfer` advances it on every transfer -- the
+	 * `increment(m_ddr)`, `++m_ddr` and `m_ddr += m_dco + 1` sites in `dma.cpp`
+	 * -- and the emulator saves no base beside it. After 500,000 frames it holds
+	 * wherever the traversal has reached: $001D10 at the interior-or-tail
+	 * positions and $001D08 at the head, against the $001C00 and $001C04 the
+	 * kernel programmed. DCO does not move, so DCO2 and DCO4 stay correct.
 	 *
-	 * MEASURED, 2026-08-26, BEFORE THIS LATCH EXISTED: all eight positions read
-	 * FAIL on DDR2 alone, $001D10 at the seven interior-or-tail positions and
-	 * $001D08 at the head, against the $001C00 and $001C04 design section 2.3
-	 * records. EVERY DCO2 AND DCO4 MATCHED. Nothing regressed: DCO does not
-	 * move, so the two registers that stayed put stayed correct.
+	 * So DDR2 is latched at its first non-zero value, which is the value the
+	 * kernel programmed. `t1_kernel_load` latches the same register the same
+	 * way, at the same one-frame granularity this loop drives.
 	 *
-	 * SO DDR2 IS LATCHED AT ITS FIRST NON-ZERO VALUE, WHICH IS THE VALUE THE
-	 * KERNEL PROGRAMMED. This is `t1_kernel_load`'s own mechanism, not a new
-	 * one: that file latches the same register the same way, at the same
-	 * one-frame granularity this loop drives, and its latched channel-2 DDR
-	 * reads $001C00 and $001C04 while its own terminal read is what the block
-	 * beside its `latchFirst` records as having been mistaken for a defect.
-	 *
-	 * WHAT THIS DOES NOT CLAIM: the sample is taken once per scheduler
+	 * What this does not claim: the sample is taken once per scheduler
 	 * iteration, so it is the first iteration boundary at or after the write
 	 * and not the writing instruction. A register written twice inside one
 	 * iteration would be latched at the second value. `g_framesPerIteration` is
-	 * 1, so that bound is the frame and is the same bound `t1_kernel_load`
-	 * states for itself. */
+	 * 1, so that bound is the frame. */
 	bool latchDdr2(g2::Board& _board, std::vector<dsp56k::TWord>& _latched)
 	{
 		bool complete = true;
@@ -586,9 +577,9 @@ namespace
 			// the harness maintained beside it.
 			dsp56k::Dma& dma = _board.dspSet().peripherals(position).getDMA();
 
-			/* DDR2 COMES FROM THE LATCH AND NOT FROM `dma`, for the reason the
+			/* DDR2 comes from the latch and not from `dma`, for the reason the
 			 * block above latchDdr2 states. A position that never latched
-			 * carries zero, which no section 2.3 row expects, so it reports
+			 * carries zero, which no expected value matches, so it reports
 			 * FAIL rather than passing on an unwritten register. */
 			const dsp56k::TWord ddr2 = position < _ddr2Latched.size()
 			                         ? _ddr2Latched[position]
@@ -625,8 +616,8 @@ namespace
 		if(count == 0)
 			all = false;
 
-		// WHICH SAMPLE EACH REGISTER IS, said in the output rather than left to
-		// a reader who knows this file: DDR2 moves and the other two do not.
+		// The output says which sample each register is: DDR2 moves and the
+		// other two do not.
 		std::cout << "dsp-dma=" << (all ? "PASS" : "FAIL")
 		          << " (measured/expected, expectations from design section 2.3;"
 		             " DDR2 is LATCHED at its first written value and DCO2/DCO4"
@@ -740,9 +731,9 @@ namespace
 		std::string line0;
 		std::string line1;
 
-		/* THE DDR2 LATCH, SIZED FROM THE DSP SET'S OWN COUNT so it cannot
+		/* The DDR2 latch, sized from the DSP set's own count so it cannot
 		 * disagree with the loop that reads it back. It is armed only under the
-		 * flag: `--boot` alone must drive exactly the machine it drove before. */
+		 * flag, so `--boot` alone drives exactly the machine it drove before. */
 		std::vector<dsp56k::TWord> ddr2Latched;
 		bool                       ddr2Complete = false;
 
@@ -860,14 +851,12 @@ namespace
 		return 0;
 	}
 
-	/* TASK INT-2, AND IT IS MILESTONE M5's OWN ACCEPTANCE COMMAND.
-	 *
-	 * It places the machine `--boot` places, drives it until the firmware has
+	/* Places the machine `--boot` places, drives it until the firmware has
 	 * booted and every DSP has taken its program, enters the play phase, and
 	 * then injects a known pattern at the CODEC SOURCE and reports the frame at
 	 * which it reappears at the CODEC SINK.
 	 *
-	 * THE EXPECTED DELAY IS DERIVED AND NEVER TYPED. The audio bus is a Line of
+	 * The expected delay is derived and never typed. The audio bus is a Line of
 	 * dspCount + 1 mailboxes; the ingress phase writes mailbox 0's READ frame
 	 * and the egress phase reads the last mailbox's WRITE frame, so neither
 	 * codec edge carries a delay of its own and D_codec is 0. Each DSP-to-DSP
@@ -879,10 +868,8 @@ namespace
 	 * dspCount is read off the booted machine and hopFrames off the
 	 * Scheduler::Config this program hands the factory.
 	 *
-	 * A REPORT IS NOT A VERDICT. This function exits NON-ZERO unless the pattern
-	 * arrived, arrived at exactly that frame, and arrived unchanged -- plan
-	 * section 24.6 row W3-406 names a milestone command that could not fail as
-	 * this project's fourth instance of one defect. */
+	 * A report is not a verdict: this function exits NON-ZERO unless the pattern
+	 * arrived, arrived at exactly that frame, and arrived unchanged. */
 	constexpr int32_t g_impulseLeft  = 0x0055AA33;
 	constexpr int32_t g_impulseRight = 0x00337799;
 
@@ -964,7 +951,7 @@ namespace
 
 		const unsigned dspCount = board.dspSet().dspCount();
 
-		/* THE DRIVE LEAVES ON THE PROPERTIES THE PLAY PHASE NEEDS: display
+		/* The drive leaves on the properties the play phase needs: display
 		 * content composed, the settle window served, and every DSP position's
 		 * program landed. A fixed count would either cost the full bound every
 		 * run or hand beginPlayPhase a machine still downloading kernels. */
@@ -1008,7 +995,7 @@ namespace
 
 		scheduler->beginPlayPhase();
 
-		/* THE PRIMED FRAMES COME OFF THE SINK BEFORE THE WALK STARTS, so the
+		/* The primed frames come off the sink before the walk starts, so the
 		 * walk's own index is measured from the injection quantum and not from
 		 * the lookahead. */
 		std::vector<g2::Frame> primed(config.lookaheadFrames);
@@ -1058,10 +1045,9 @@ namespace
 		          << " arrival=" << arrival
 		          << " arrivalExact=" << (arrivalExact ? 1 : 0) << std::endl;
 
-		/* THE SEVEN CHAIN-HEALTH COUNTERS, REPORTED BY THIS COMMAND BECAUSE M5's
-		 * OWN ROW ASKS FOR THEM HERE. The three per-position figures are
-		 * reported as their maximum over the positions, with the position that
-		 * carried it, so a reader is told WHICH one moved. */
+		/* The chain-health counters. The per-position figures are reported as
+		 * their maximum over the positions, with the position that carried it,
+		 * so a reader is told WHICH one moved. */
 		uint64_t underrun = 0, secondUnderrun = 0, phaseError = 0;
 		unsigned underrunAt = 0, secondUnderrunAt = 0, phaseErrorAt = 0;
 
@@ -1100,10 +1086,9 @@ namespace
 
 		reportSuppressedLogLines();
 
-		/* THE VERDICT, AND IT IS THE WORST OF ITS CLAUSES. A machine that never
-		 * booted read its arrival off a chain that was not running, and a
-		 * pattern that arrived at the wrong frame or changed on the way is a
-		 * failure of the row and not a note beside it. */
+		/* The verdict is the worst of its clauses. A machine that never booted
+		 * read its arrival off a chain that was not running, and a pattern that
+		 * arrived at the wrong frame or changed on the way is a failure. */
 		const bool ok = booted && landed && !halted && !faulted
 			&& primedPulled == size_t(config.lookaheadFrames)
 			&& arrival == int(expected) && arrivalExact && countersZero;
@@ -1118,18 +1103,17 @@ namespace
 	 * MACHINE HERE: the debugger's own `continue` and `stepi` are what run it, so
 	 * a session that never attaches leaves a machine that has executed nothing.
 	 *
-	 * IT DRIVES THE WHOLE MACHINE THROUGH THE SCHEDULER, which is what `--boot`
+	 * It drives the whole machine through the Scheduler, which is what `--boot`
 	 * drives it with. The stub installs itself as that Scheduler's `McuRunner`,
-	 * so design section 13.5's quantum order is turned by its one owning site
-	 * and the stub adds only the decision point between two MCU instructions
-	 * where a breakpoint compare has to happen. WITHOUT THIS the session steps
-	 * `Board::runMcu` alone and stalls forever the first time the MCU waits on a
-	 * DSP -- and reports a clean, plausible MISS rather than stalling visibly.
+	 * so the quantum order is turned by its one owning site and the stub adds
+	 * only the decision point between two MCU instructions where a breakpoint
+	 * compare has to happen. Without this the session steps `Board::runMcu`
+	 * alone and stalls forever the first time the MCU waits on a DSP -- and
+	 * reports a clean, plausible MISS rather than stalling visibly.
 	 *
-	 * THERE IS STILL NO DSP56300 STUB. The DSPs RUN; they are not INSTRUMENTED.
+	 * There is still no DSP56300 stub. The DSPs run; they are not instrumented.
 	 * A breakpoint on a DSP program counter, a DSP register read or a DSP memory
-	 * watchpoint is not available here and a question about DSP state still
-	 * needs the older method. */
+	 * watchpoint is not available here. */
 	int gdb(const uint16_t _port)
 	{
 		installLogFilter();
@@ -1191,12 +1175,11 @@ namespace
 			return 2;
 		}
 
-		/* THE SCHEDULER, DECLARED AFTER THE BOARD so that it is destroyed BEFORE
-		 * it, exactly as `--boot` declares it and for the same reason: it borrows
-		 * the Board's DSP set and installs chain callbacks into ESAIs the Board
-		 * owns. The Executor is declared before the Scheduler for the same
-		 * reason. NOTHING HERE RUNS A FRAME -- the debugger's own `s` and `c`
-		 * are still the only things that advance the machine. */
+		/* The Scheduler is declared after the Board so that it is destroyed
+		 * BEFORE it: it borrows the Board's DSP set and installs chain callbacks
+		 * into ESAIs the Board owns. The Executor is declared before the
+		 * Scheduler for the same reason. Nothing here runs a frame -- the
+		 * debugger's own `s` and `c` advance the machine. */
 		g2::SerialExecutor executor;
 		g2::Status         schedulerStatus{};
 
@@ -1216,9 +1199,9 @@ namespace
 		 * rather than behind it and its accesses would be invisible. */
 		g2::GdbStub stub(board);
 
-		/* AND THE SCHEDULER IS HANDED OVER BEFORE THE SOCKET OPENS, so no packet
-		 * can be answered by an MCU-only session. The stub is destroyed before
-		 * the Scheduler, which is what lets it remove its runner. */
+		/* The Scheduler is handed over before the socket opens, so no packet can
+		 * be answered by an MCU-only session. The stub is destroyed before the
+		 * Scheduler, which is what lets it remove its runner. */
 		stub.attachScheduler(*scheduler);
 
 		const uint16_t bound = stub.listenOn(_port);
@@ -1369,9 +1352,8 @@ int main(int _argc, char** _argv)
 		return named("--gdb", gdb(uint16_t(value)));
 	}
 
-	/* TASK INT-2. MILESTONE M5's OWN ACCEPTANCE COMMAND. It takes no option and
-	 * an option handed to it is an error rather than a shrug, for the reason
-	 * `--boot`'s modifier loop states. */
+	/* It takes no option, and an option handed to it is an error rather than a
+	 * shrug, for the reason `--boot`'s modifier loop states. */
 	if(command == "--impulse")
 	{
 		if(_argc != 2)

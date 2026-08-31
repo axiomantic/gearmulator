@@ -1,40 +1,26 @@
-// Task INT-2. Tier T1: this test needs the Clavia firmware artifacts and SKIPS
-// with a reason when NMG2_ARTIFACTS does not resolve.
+// This test needs the Clavia firmware artifacts and skips with a reason when
+// NMG2_ARTIFACTS does not resolve.
 //
-// Plan section 16 (INT-2), section 6 milestone M5, design sections 18.3, 12.3
-// and 14.4.
+// A known pattern is injected at the codec source of a machine that has really
+// booted, and the frame index at which it reappears at the codec sink is compared
+// against the delay the chain's own geometry predicts.
 //
-// WHAT THIS TEST IS. M5's own acceptance says "audio moves through the chain",
-// and this file is the registered half of it: a known pattern is injected at
-// the CODEC SOURCE of a machine that has really booted, and the frame index at
-// which it reappears at the CODEC SINK is compared against the delay the
-// chain's OWN GEOMETRY predicts. INT-2's Check: line requires the same
-// assertion "as a registered test and not only through the console", because a
-// milestone whose only instrument is a console invocation is a milestone
-// nothing can fail -- plan section 24.6 rows W3-396, W3-397 and W3-406.
-//
-// WHERE THE EXPECTED DELAY COMES FROM, AND WHY IT IS NOT A LITERAL. The audio
-// bus is a Line of dspCount + 1 mailboxes. The ingress phase writes mailbox 0's
-// READ frame and the egress phase reads the last mailbox's WRITE frame, so
-// neither codec edge carries a delay of its own: D_codec is 0. Every DSP-to-DSP
-// hand-off costs one mailbox hop of `hopFrames` quanta, and a chain of dspCount
-// positions has dspCount - 1 of them. So
+// Where the expected delay comes from, and why it is not a literal. The audio bus
+// is a Line of dspCount + 1 mailboxes. The ingress phase writes mailbox 0's read
+// frame and the egress phase reads the last mailbox's write frame, so neither
+// codec edge carries a delay of its own: D_codec is 0. Every DSP-to-DSP hand-off
+// costs one mailbox hop of `hopFrames` quanta, and a chain of dspCount positions
+// has dspCount - 1 of them. So
 //
 //     D_chain = (dspCount - 1) * hopFrames
 //
-// with dspCount READ OFF THE BOOTED MACHINE (Board::dspSet().dspCount()) and
+// with dspCount read off the booted machine (Board::dspSet().dspCount()) and
 // hopFrames read off the Scheduler::Config this file hands to the factory.
-// Neither number is typed here. Plan section 24.6 row W3-404 records what a
-// typed count costs: a job count spelled 8 where the machine's was 30.
+// Neither number is typed here.
 //
-// EVERY VERDICT IS AN OBSERVABLE AND NOT AN assert(). A release build deletes
+// Every verdict is an observable and not an assert(): a release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
-// not have. Nothing below calls assert().
-//
-// THE MACHINE PLACEMENT IS INT-1's, AND IT IS COPIED RATHER THAN SHARED, for
-// the reason t1_kernel_load.cpp states: plan section 1.3 rule 1 keeps a
-// harness's own configuration at its own site, and this task's Files: line
-// names no header it could share one through.
+// not have.
 
 #include "gatedFixture.h"
 
@@ -81,10 +67,9 @@ namespace
 
 	// ------------------------------------------------ the ESAI underrun log filter
 	//
-	// INT-1's filter, and its limit is INT-1's limit: the underruns are REAL and
-	// expected in the boot regime, because nothing drains the ESAIs until the
-	// codec queues arrive. This hides the REPETITION and nothing else. Set
-	// G2_LOG_ESAI_UNDERRUN to install no filter at all.
+	// The underruns are real and expected in the boot regime, because nothing
+	// drains the ESAIs until the codec queues arrive. This hides the repetition
+	// and nothing else. Set G2_LOG_ESAI_UNDERRUN to install no filter at all.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
 	constexpr uint64_t g_underrunLinesKept = 4;
@@ -108,7 +93,7 @@ namespace
 		Logging::setLogFunc(&filterLog);
 	}
 
-	// ------------------------------------------------- INT-1's machine placement
+	// ------------------------------------------------------- the machine placement
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
@@ -132,18 +117,17 @@ namespace
 	constexpr uint32_t g_cs1Size = 0x00010000u;
 	constexpr uint32_t g_cs5Size = 0x00000010u;
 
-	// The display cells INT-1 watches. Reaching them is what says the firmware
-	// booted far enough to be running its own code rather than sitting in reset;
-	// the drive below leaves on that plus every DSP program having landed.
+	// The watched display cells. Reaching them is what says the firmware booted
+	// far enough to be running its own code rather than sitting in reset; the
+	// drive below leaves on that plus every DSP program having landed.
 	constexpr uint32_t g_displayBase = 0x302A0DB8u;
 	constexpr uint32_t g_lineWidth   = 16u;
 
-	// The bound the drive gives itself, in quanta. It is INT-1's, for the same
-	// reason: the boot needs hundreds of thousands of frames and this is what
-	// t1_boot measured as sufficient.
+	// The bound the drive gives itself, in quanta. The boot needs hundreds of
+	// thousands of frames.
 	constexpr uint32_t g_bootQuantumBound = 500000u;
 
-	// The settle window INT-1 uses: the banner is composed a character at a
+	// The settle window: the banner is composed a character at a
 	// time, so leaving on the first content byte samples a machine mid-write.
 	constexpr uint32_t g_bannerSettleQuanta = 20000u;
 
@@ -194,11 +178,9 @@ namespace
 				if(index >= m_bytes.size())
 					continue;
 
-				// A CONTENT WRITE IS ONE THAT IS NOT THE DISPLAY CLEAR. The
+				// A content write is one that is not the display clear. The
 				// clear writes 0x20 and only 0x20, so a byte other than 0x20
 				// inside the watched run is the firmware composing something.
-				// Plan section 24.6 row W3-397 records what counting 0x20 as
-				// content cost: a blank screen exiting 0.
 				const int shift = int(8u * (count - 1u - i));
 				const uint8_t byte = uint8_t((_value >> shift) & 0xffu);
 
@@ -259,21 +241,20 @@ namespace
 
 	// ------------------------------------------------------ the impulse pattern
 	//
-	// TWO DIFFERENT NON-ZERO Q23 VALUES, one for each codec slot. They differ
+	// Two different non-zero Q23 values, one for each codec slot. They differ
 	// from each other so that a chain that carried slot 0 into both slots is a
 	// failure here rather than a pass, and neither is a power of two, so a
 	// value the chain shifted or masked does not land back on itself.
 	constexpr int32_t g_impulseLeft  = 0x0055AA33;
 	constexpr int32_t g_impulseRight = 0x00337799;
 
-	// How far past the predicted arrival the walk keeps looking. "ARRIVED LATE"
-	// AND "NEVER ARRIVED" ARE DIFFERENT FINDINGS and a walk that stopped at the
+	// How far past the predicted arrival the walk keeps looking. "Arrived late"
+	// and "never arrived" are different findings and a walk that stopped at the
 	// prediction could not tell them apart, so the walk runs far past it: 1024
-	// quanta is about 10.7 ms at 96 kHz and more than a hundred times the
-	// predicted delay.
+	// quanta is about 10.7 ms at 96 kHz.
 	constexpr unsigned g_overrunQuanta = 1024u;
 
-	// THE SUSTAINED PROBE. It runs only when the impulse never arrived, and it
+	// The sustained probe. It runs only when the impulse never arrived, and it
 	// asserts nothing: its job is to separate "the chain delays by more than the
 	// walk" from "the chain carries no codec audio at all", which are different
 	// findings about the machine and must not be reported as one.
@@ -318,7 +299,7 @@ namespace
 	// Runs the whole thing on one booted machine. Returns false only when the
 	// machine could not be placed at all; a machine that ran and moved nothing
 	// returns true with a result that says so, because "the chain is silent" is
-	// a MEASUREMENT and must reach the assertions rather than a bail-out.
+	// a measurement and must reach the assertions rather than a bail-out.
 	bool runEgress(const std::string& _directory, EgressResult& _result)
 	{
 		const std::vector<uint8_t> code = readFile(_directory + "/CODE_30000400.bin");
@@ -338,7 +319,7 @@ namespace
 			return false;
 		}
 
-		// INT-8's vector table: big-endian, 256 identical longwords.
+		// The vector table: big-endian, 256 identical longwords.
 		{
 			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
 
@@ -358,7 +339,7 @@ namespace
 
 		board.memory().attach(g2::Region::Sdram, &ram);
 
-		// Installed before the core runs, so every count is the FIRMWARE's.
+		// Installed before the core runs, so every count is the firmware's.
 		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
 
 		board.resetMcu(g_entrySp, g_entryPc);
@@ -392,8 +373,8 @@ namespace
 
 		// ---------------------------------------------------------- the boot
 		//
-		// THE DRIVE LEAVES ON THE PROPERTIES THE PLAY PHASE NEEDS, and not on a
-		// fixed count: every DSP program has landed AND the firmware has
+		// The drive leaves on the properties the play phase needs, and not on a
+		// fixed count: every DSP program has landed and the firmware has
 		// composed display content and been given the settle window to finish
 		// it. A fixed count would either cost the full bound every run or hand
 		// beginPlayPhase a machine that had not finished downloading its
@@ -438,12 +419,11 @@ namespace
 		// ------------------------------------------------- the play transition
 		scheduler->beginPlayPhase();
 
-		// THE PRIMED FRAMES ARE TAKEN OFF THE SINK BEFORE THE WALK BEGINS, so
+		// The primed frames are taken off the sink before the walk begins, so
 		// that the walk's own index is measured from the injection quantum and
-		// not from the lookahead. beginPlayPhase leaves EXACTLY L frames there
+		// not from the lookahead. beginPlayPhase leaves exactly L frames there
 		// and the pull is for exactly L, so a sink holding fewer would raise
-		// underflowFrames and a sink holding more would shift every arrival --
-		// t1_chain_health asserts the hand-off count itself.
+		// underflowFrames and a sink holding more would shift every arrival.
 		{
 			std::vector<g2::Frame> primed(_result.lookaheadFrames);
 			_result.primedPulled = scheduler->pull(primed.data(), primed.size());
@@ -451,9 +431,9 @@ namespace
 
 		// ------------------------------------------------------------ the walk
 		//
-		// ONE FRAME IN AND ONE FRAME OUT FOR EACH QUANTUM. The pattern goes in
-		// on the FIRST quantum of the walk and silence on every one after it, so
-		// the index of the pulled frame that carries the pattern IS the delay in
+		// One frame in and one frame out for each quantum. The pattern goes in
+		// on the first quantum of the walk and silence on every one after it, so
+		// the index of the pulled frame that carries the pattern is the delay in
 		// frames, measured from the injection.
 		const unsigned expected = (_result.dspCount > 0 ? _result.dspCount - 1u : 0u) * _result.hopFrames;
 		const unsigned walk     = expected + g_overrunQuanta;
@@ -478,7 +458,7 @@ namespace
 			if(scheduler->pull(&out, 1) != 1)
 				++_result.pulledShort;
 
-			// ONLY THE FIRST FEW FRAMES ARE KEPT FOR THE REPORT. The walk is
+			// Only the first few frames are kept for the report. The walk is
 			// long and a full dump would bury the line a reader needs.
 			if(_result.pulled.size() < size_t(expected) + 8u)
 				_result.pulled.push_back(out);
@@ -570,7 +550,7 @@ int main()
 		if(!runEgress(directory, result))
 			return false;
 
-		// D_chain, DERIVED. dspCount is read off the booted machine and
+		// D_chain, derived. dspCount is read off the booted machine and
 		// hopFrames off the Config the factory accepted; no arrival figure is
 		// typed into this file.
 		const unsigned expected =
@@ -594,13 +574,12 @@ int main()
 			+ std::to_string(result.primedPulled) + ", lookaheadFrames is "
 			+ std::to_string(result.lookaheadFrames));
 
-		// THE ROW ITSELF. Three separate assertions, because "never arrived",
-		// "arrived at the wrong frame" and "arrived changed" are three different
-		// findings and one combined predicate would report them as one.
-		// EVERY FRAME THE WALK FED IN REALLY ENTERED THE INGRESS PHASE. Without
-		// these three, "the pattern never arrived" could not be told from "the
-		// pattern was never injected", and the row would report the harness's
-		// own defect as the machine's.
+		// Separate assertions, because "never arrived", "arrived at the wrong
+		// frame" and "arrived changed" are different findings and one combined
+		// predicate would report them as one. The push and pull checks say every
+		// frame the walk fed in really entered the ingress phase; without them,
+		// "the pattern never arrived" could not be told from "the pattern was
+		// never injected".
 		checkEqual(result.pushedShort, 0u,
 			"every walk frame was accepted by the CodecSource");
 		checkEqual(result.pulledShort, 0u,

@@ -1,10 +1,9 @@
-/* transportHub.cpp -- g2::TransportHub. Task SCH-29.
- * Design sections 13.10.6, 15.1 and 18.2.
+/* g2::TransportHub.
  *
- * THE WHOLE ALLOCATION IS THE TWO VECTORS IN THE CONSTRUCTOR'S INITIALISER
- * LIST AND THERE IS NO OTHER ONE IN THIS FILE. Nothing below resizes, pushes
- * back, news or copies a container; the endpoint table is a fixed member array
- * and every queue is a ring index over storage that already exists.
+ * The whole allocation is the two vectors in the constructor's initialiser
+ * list. Nothing below resizes, pushes back, news or copies a container; the
+ * endpoint table is a fixed member array and every queue is a ring index over
+ * storage that already exists.
  */
 
 #include "transportHub.h"
@@ -43,7 +42,7 @@ namespace g2
 			if(m_endpoints[e].handle != nullptr)
 				continue;
 
-			/* THE POSITION IS THE ATTACHMENT ORDER and it is fixed from here
+			/* The position is the attachment order and it is fixed from here
 			 * on. The counters are reset so that a position reused after a
 			 * detach starts empty rather than inheriting the previous
 			 * occupant's ring state. */
@@ -61,7 +60,7 @@ namespace g2
 		if(e == kMaxEndpoints)
 			return;
 
-		/* NO OTHER ENDPOINT MOVES. Compacting the table here would silently
+		/* No other endpoint moves. Compacting the table here would silently
 		 * change the drain order of every endpoint after this one, which is
 		 * the one property the fixed order exists to hold still. */
 		m_endpoints[e].handle = nullptr;
@@ -88,8 +87,8 @@ namespace g2
 
 		Endpoint& q = m_endpoints[e];
 
-		/* THE PRODUCER'S OCCUPANCY IS MEASURED AGAINST `release`, NOT `head`.
-		 * The slots between release and head are drained but still BORROWED by
+		/* The producer's occupancy is measured against `release`, not `head`.
+		 * The slots between release and head are drained but still borrowed by
 		 * the last drainToDevice's caller, and overwriting one of them is
 		 * exactly the borrow-lifetime defect this hub must not have. */
 		const uint64_t tail    = q.tail.load(std::memory_order_relaxed);
@@ -104,7 +103,7 @@ namespace g2
 		if(frame.size != 0 && frame.data != nullptr)
 			std::memcpy(dst, frame.data, frame.size);
 
-		/* The stamp is written by the DRAIN, not here: the frame index a frame
+		/* The stamp is written by the drain, not here: the frame index a frame
 		 * carries is the quantum it crossed the boundary in, and it has not
 		 * crossed yet. */
 		m_stamped[index].frameIndex = 0;
@@ -117,11 +116,9 @@ namespace g2
 	size_t TransportHub::drainToDevice(StampedFrame* const out,
 		const size_t max) noexcept
 	{
-		/* STEP 1: RELEASE WHAT THE PREVIOUS DRAIN LENT OUT. This is what makes
-		 * "valid until the NEXT drainToDevice" true rather than aspirational.
-		 * It happens BEFORE this drain reads anything, so a caller that reads
-		 * the previous pointers up to the instant of this call sees intact
-		 * bytes. */
+		/* Release what the previous drain lent out. This happens before this
+		 * drain reads anything, so a caller that reads the previous pointers
+		 * up to the instant of this call sees intact bytes. */
 		for(size_t e = 0; e < kMaxEndpoints; ++e)
 		{
 			Endpoint& q = m_endpoints[e];
@@ -129,10 +126,9 @@ namespace g2
 				std::memory_order_release);
 		}
 
-		/* STEP 2: DRAIN IN ATTACHMENT ORDER. The outer loop is the endpoint
-		 * table in index order, and an endpoint's index IS its attachment
-		 * order, so two attachments delivering into the same quantum reach the
-		 * device in the same order on every run. */
+		/* An endpoint's index is its attachment order, so two attachments
+		 * delivering into the same quantum reach the device in the same order
+		 * on every run. */
 		size_t written = 0;
 		for(size_t e = 0; e < kMaxEndpoints && written < max; ++e)
 		{

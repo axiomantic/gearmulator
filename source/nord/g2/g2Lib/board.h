@@ -118,7 +118,7 @@ namespace g2
 		 * int64_t: it returns exactly what the core returned, and the Scheduler
 		 * widens at the call site.
 		 *
-		 * THE RETURN MAY EXCEED `wantCycles`, by up to the cost of one
+		 * The return may exceed `wantCycles`, by up to the cost of one
 		 * instruction, because mcf5307_exec finishes the instruction it
 		 * started. That overrun is not a defect to absorb here: it is what
 		 * g2::runQuantum's cycle debt exists to carry, and clamping it in this
@@ -170,51 +170,28 @@ namespace g2
 		 * pinned core commit exports no Nim mcf5307_state_* or isp1181_state_*
 		 * block, and those are appended once it does.
 		 *
-		 * stateLoad's RETURN TYPE IS RECONCILED, AND THE DEVIATION THAT STOOD
-		 * HERE IS QUOTED RATHER THAN DELETED. It read: "the plan's Check line
-		 * for this task lists stateLoad among the six methods without pinning
-		 * its return type, and g2::Status is owned by task SCH-18 ... so
-		 * stateLoad returns void here ... The reconciliation happens there,
-		 * once SCH-18 has created status.h." status.h exists, and SCH-21 step 4
-		 * -- which absorbed SCH-24 -- is the task that owns the correction.
-		 * stateLoad now returns g2::Status, which is design section 13.10.5's
-		 * POST-correction declaration.
+		 * stateLoad reports Status::Ok, or Status::BadStateImage for an image
+		 * whose version word is not the one this build writes. An exception is
+		 * forbidden and a release build removes an assertion, so the return
+		 * value is the whole channel.
 		 *
-		 * WHAT IT REPORTS. Status::Ok, or Status::BadStateImage for an image
-		 * whose version word is not the one this build writes. The version word
-		 * was WRITTEN by stateSave and READ BY NOTHING before this pass, which
-		 * made it a guard that could not fire: the only thing a version word is
-		 * for is refusing, and a void return had nowhere to refuse to. Design
-		 * section 13.10 rule 2 forbids an exception and a release build removes
-		 * an assertion, so the return value is the whole channel.
-		 *
-		 * THE GUARD IS BEFORE THE FIRST WRITE, so a refused load changes
+		 * The guard is before the first write, so a refused load changes
 		 * nothing. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
-		/* THE RESET. Task SCH-21 step 3, design section 13.10.5.
-		 *
-		 * WHAT IT COVERS: the MCF5307 core, through the same mcf5307_reset the
+		/* The reset covers the MCF5307 core, through the same mcf5307_reset the
 		 * resetMcu above drives; this class's own snapshot state -- the fault
-		 * bit and the last frame index; and the DSP set, through
-		 * DspSet::reset.
+		 * bit and the last frame index; and the DSP set, through DspSet::reset.
 		 *
-		 * WHAT IT DOES NOT COVER, STATED HERE RATHER THAN LEFT TO BE FOUND.
-		 * Design section 13.10.5 says a reset "zeroes every emulated memory",
-		 * AND THE BUS TARGETS ATTACHED TO THIS BOARD ARE NOT ZEROED BY THIS
-		 * CALL: the flash images, the SDRAM window, the latches, the panel
-		 * surface, the MBAR block and the USB device all keep what they held.
-		 * The reason is structural and is not a decision taken here: BusTarget
-		 * declares read and write and NOTHING ELSE, MemoryMap hands out a
+		 * The bus targets attached to this board are not zeroed by this call:
+		 * the flash images, the SDRAM window, the latches, the panel surface,
+		 * the MBAR block and the USB device all keep what they held. BusTarget
+		 * declares read and write and nothing else, MemoryMap hands out a
 		 * BusTarget* and offers no walk over the attached set, and no unit in
-		 * this tree carries a reset of its own. Covering them needs a reset on
-		 * the BusTarget interface and one implementation for each unit, which
-		 * is an edit across seven owners rather than inside this file. A
-		 * CALLER THAT NEEDS A CLEARED SDRAM MUST STILL RECONSTRUCT THE BOARD.
-		 *
-		 * NO EXCEPTION. Design section 13.10 rule 2. */
+		 * this tree carries a reset of its own. A caller that needs a cleared
+		 * SDRAM must still reconstruct the board. */
 		void reset() noexcept;
 
 		/* THE BUS, AS THE MEMORY MAP SEES IT. onRead and onWrite forward here,

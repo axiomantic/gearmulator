@@ -371,19 +371,8 @@ int main()
 
 		// ---------------- a name that is not implemented never exits 0
 		//
-		// --render is named here because PLG-14's own REQUIRED-RED names it and
-		// because it belongs to another block, PERF-1. It may not exist here and
-		// it may not be quiet.
-		//
-		// --impulse LEFT THIS LIST WHEN INT-2 IMPLEMENTED IT, and the removal is
-		// recorded here rather than made silently. PLG-14's rule is that `--help`
-		// names EXACTLY what the binary implements; a name this binary now
-		// dispatches cannot also be asserted absent, and the set-equality case
-		// above is what holds --impulse to the rule from that day on. The
-		// listed-name sweep above already asserts what this list asserted of it:
-		// a non-zero exit and a diagnostic that names itself when the artifacts
-		// are not there. NOTHING IS WEAKENED -- the two assertions moved from a
-		// hard-coded roster to the rule that derives it.
+		// --render is named here because it belongs to another block. It may not
+		// exist here and it may not be quiet.
 
 		for(const std::string& absent : {std::string("--render"), std::string("--nmg2-no-such-subcommand")})
 		{

@@ -1,66 +1,43 @@
-/* t0_mcu_debt.cpp -- the check of SCH-21 step 6 (formerly SCH-30). Design
- * sections 13.4.1, 13.4.6, 13.10.5.
+/* The cycle-debt block carries `spent - want` forward. A core that clamped its
+ * return to its budget would make `spent <= want` hold on every call, the
+ * difference would never be positive, the floor at zero would swallow it, and
+ * `cycleDebt(0)` would be identically zero for every implementation, correct or
+ * pinned. `mcf5307_exec` reports the whole cost of the instruction that crossed
+ * the budget, so the overshoot is real and the debt accrues. Case 1 below
+ * re-establishes that property from the linked library rather than trusting it,
+ * because every later case is vacuous without it.
  *
- * WHAT THIS FILE ASSERTS, AND WHY IT COULD NOT BE WRITTEN BEFORE. Design
- * section 13.4.6's cycle-debt block carries `spent - want` forward. Until
- * `mcf5307_exec` stopped clamping its return to its budget, `spent <= want`
- * held on every call, the difference was never positive, the floor at zero
- * turned it into zero, and `cycleDebt(0)` was identically zero for every
- * implementation -- correct or pinned. Section 24.6 row W3-410 records that,
- * and records that this target was WITHDRAWN rather than shipped green over a
- * clause it could not test. The core now reports the whole cost of the
- * instruction that crossed the budget, so the overshoot is real and the debt
- * accrues. CASE 1 BELOW RE-ESTABLISHES THAT PROPERTY FROM THE LINKED LIBRARY
- * RATHER THAN TRUSTING IT, because every later case is vacuous without it.
+ * No cycle cost is typed anywhere in this file. The cost of the one instruction
+ * the fixture runs is measured from the linked core in case 1, and every rate,
+ * every expected spend and the rule 2 bound are derived from that measurement.
  *
- * NO CYCLE COST IS TYPED ANYWHERE IN THIS FILE. The cost of the one
- * instruction the fixture runs is MEASURED from the linked core in case 1, and
- * every rate, every expected spend and the rule 2 bound are DERIVED from that
- * measurement. Section 24.6 records what a typed count costs: `dspJob`
- * hardcoded 8 where the real count was 30.
+ * The independent observable is the program counter, which is why the fixture
+ * is a field of one repeated instruction. `Board::runMcu` returns the cycles it
+ * spent and the Scheduler swallows that return, so a check that read the debt
+ * alone would be reading the accounting against itself. The pc advance is
+ * machine progress that no accounting produces: the number of instructions
+ * retired is `(pc after - pc before) / bytesPerInstr`, and the cycles they cost
+ * is that count times the measured cost.
  *
- * THE INDEPENDENT OBSERVABLE IS THE PROGRAM COUNTER, AND THAT IS THE WHOLE
- * REASON THE FIXTURE IS A FIELD OF ONE REPEATED INSTRUCTION. `Board::runMcu`
- * returns the cycles it spent, and the Scheduler swallows that return -- so a
- * check that read the debt alone would be reading the accounting against
- * itself. The pc advance is machine progress that no accounting produces: the
- * number of instructions retired is `(pc after - pc before) / bytesPerInstr`,
- * and the cycles they cost is that count times the MEASURED cost. Every
- * per-quantum assertion below holds the Scheduler's `cycleDebt(0)` against
- * that figure.
+ * The two drift workloads are both derived from the measured cost `c`.
  *
- * THE TWO DRIFT WORKLOADS ARE SECTION 13.4.6's AND BOTH ARE DERIVED FROM THE
- * MEASURED COST `c`.
- *
- *   NEVER-IDLE, at rate (4c - 1)/1. Four instructions cost 4c and the budget
+ *   Never-idle, at rate (4c - 1)/1. Four instructions cost 4c and the budget
  *   is one cycle short of it, so every quantum overruns by a little and the
  *   `want <= 0` branch never fires. The debt walks 0, 1, 2, ... c-1 and
  *   returns to zero, for ever, with no drift.
  *
- *   FORCED-IDLE, at rate 1/1. One instruction costs c and the budget is 1, so
- *   the first quantum overruns by c-1 and the next c-1 quanta run NOTHING and
+ *   Forced-idle, at rate 1/1. One instruction costs c and the budget is 1, so
+ *   the first quantum overruns by c-1 and the next c-1 quanta run nothing and
  *   pay the debt down by one whole allocation each. That is rule 4's long
  *   dispatch, driven by the real core.
  *
- * A SPEC DISAGREEMENT IS RECORDED HERE RATHER THAN RESOLVED SILENTLY. Step
- * 6's check 2 reads "`cycleDebt(0)` and `longDispatchQuanta(0)` move under
- * BOTH drift workloads". `longDispatchQuanta` counts the `want <= 0` branch,
- * and "never-idle" is section 13.4.6's name for the workload in which that
- * branch never fires -- so the two clauses contradict each other for the
- * never-idle half. THIS FILE ASSERTS THE STRONGER READING AND NOT THE WEAKER:
- * under the never-idle workload `cycleDebt(0)` moves and `longDispatchQuanta(0)`
- * is asserted EXACTLY ZERO, which is a falsifiable claim about that branch
- * rather than a clause dropped; under the forced-idle workload both move.
+ * Under the never-idle workload `longDispatchQuanta(0)` is asserted exactly
+ * zero rather than merely "moves": a never-idle context takes the `want <= 0`
+ * branch no times, so the stronger claim is the falsifiable one.
  *
- * EVERY "IT MOVED" CLAIM IS GUARDED BEFORE ANY EQUALITY IS COMPARED. Case 2
- * requires the debt to take at least two distinct values and to reach a
- * non-zero one before case 4 compares the Scheduler's sequence against the
- * shared block's; otherwise "identical" would be a comparison of zero against
- * zero, which is the shape section 92 names.
- *
- * NOTHING HERE IS A LANGUAGE assert() AND NOTHING CATCHES AN EXCEPTION. Every
- * verdict is the failure counter, which no build type removes. The compile-time
- * half is `static_assert`, which the default build keeps.
+ * Every "it moved" claim is guarded before any equality is compared: the debt
+ * must take at least two distinct values and reach a non-zero one, otherwise
+ * "identical" would be a comparison of zero against zero.
  */
 
 #include "board.h"
@@ -107,11 +84,11 @@ namespace
 		++g_failures;
 	}
 
-	/* THE FOUR MEMBERS THE SHARED BLOCK READS, HELD AT COMPILE TIME. The one
-	 * block of design section 13.4.6 is a template and instantiates against
-	 * `McuContext` and `DspContext` alike only because both carry these four
-	 * names with these four types. A rename or a re-type here is a compile
-	 * error at this line rather than a second block nobody can diff. */
+	/* The members the shared block reads, held at compile time. The block is a
+	 * template and instantiates against `McuContext` and `DspContext` alike
+	 * only because both carry these names with these types. A rename or a
+	 * re-type is a compile error at this line rather than a second block nobody
+	 * can diff. */
 	static_assert(std::is_same<decltype(g2::McuContext::rate),               ::Rational>::value,
 		"McuContext::rate is the section 13.4.1 rational the shared block reads");
 	static_assert(std::is_same<decltype(g2::McuContext::acc),                uint32_t>::value,
@@ -189,12 +166,10 @@ namespace
 		std::vector<uint8_t> m_bytes;
 	};
 
-	/* NOP. It is the instruction CPU-12's own tests use for a field the core
-	 * runs through without halting and without faulting, and it is the ONE
-	 * instruction this fixture contains -- which is what makes "the cost of the
-	 * longest single dispatch unit this context's backend can issue" a figure
-	 * this file can MEASURE rather than one section 1.3 rule 1 forbids it to
-	 * invent. */
+	/* NOP: a field the core runs through without halting and without faulting,
+	 * and the only instruction this fixture contains, which is what makes the
+	 * cost of the longest single dispatch unit a figure this file can measure
+	 * rather than invent. */
 	constexpr uint16_t g_nop = 0x4E71u;
 
 	constexpr uint32_t g_windowBase = g2::g_sdramBase;
@@ -215,9 +190,9 @@ namespace
 			_ram.pokeWord(offset, g_nop);
 	}
 
-	/* ONE MACHINE: a Board with an SDRAM window full of NOPs and a core reset
-	 * into it. The Ram must outlive the Board's use of it, so both live here
-	 * and the declaration order is the lifetime. */
+	/* A Board with an SDRAM window full of NOPs and a core reset into it. The
+	 * Ram must outlive the Board's use of it, so both live here and the
+	 * declaration order is the lifetime. */
 	struct Machine
 	{
 		Ram      ram{ g_windowSize };
@@ -234,8 +209,8 @@ namespace
 	};
 
 	/* One quantum's observation. Everything here is read from outside the
-	 * Scheduler: the pc from the Board, the two counters through the section
-	 * 13.10.5 accessors at index 0. */
+	 * Scheduler: the pc from the Board, the two counters through the accessors
+	 * at index 0. */
 	struct Observation
 	{
 		int64_t  budget      = 0;
@@ -251,17 +226,13 @@ int main()
 {
 	std::printf("t0_mcu_debt: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
 
-	/* ---------------------------------------------------------------------
-	 * CASE 1. THE MEASUREMENT, AND THE PROPERTY EVERY LATER CASE RESTS ON.
+	/* The measurement, and the property every later case rests on.
 	 *
-	 * A budget of ONE cycle is offered to the linked core. It cannot abandon
-	 * an instruction it has started, so it retires exactly one instruction and
-	 * reports that instruction's WHOLE cost. A core that clamped its return to
+	 * A budget of one cycle is offered to the linked core. It cannot abandon an
+	 * instruction it has started, so it retires exactly one instruction and
+	 * reports that instruction's whole cost. A core that clamped its return to
 	 * its budget would answer 1, `spent <= want` would hold on every call for
-	 * ever, and design section 13.4.6's floor at zero would make `cycleDebt(0)`
-	 * identically zero -- which is section 24.6 row W3-410's finding and the
-	 * reason this target was withdrawn. THIS CASE IS THE PROOF THAT THE
-	 * LIBRARY THIS BINARY LINKS IS THE ONE THAT REPORTS THE OVERSHOOT.
+	 * ever, and the floor at zero would make `cycleDebt(0)` identically zero.
 	 */
 	Machine probe;
 
@@ -299,9 +270,9 @@ int main()
 
 	if(!dsp56k::g_useJIT)
 	{
-		/* In an interpreter build no Scheduler can be created at all (section
-		 * 11.4.3), so the refusal is the only claim the rest of this file may
-		 * make. Case 1 above needs no Scheduler and has already run. */
+		/* In an interpreter build no Scheduler can be created at all, so the
+		 * refusal is the only claim the rest of this file may make. Case 1
+		 * above needs no Scheduler and has already run. */
 		g2::Board          board;
 		g2::SerialExecutor executor;
 
@@ -321,16 +292,15 @@ int main()
 		return g_failures == 0 ? 0 : 1;
 	}
 
-	/* THE TWO WORKLOADS' RATES, DERIVED. Neither numerator is written down as a
-	 * figure: both are functions of the cost case 1 measured. */
+	/* Neither numerator is written down as a figure: both are functions of the
+	 * cost case 1 measured. */
 	const ::Rational neverIdleRate  = { static_cast<uint32_t>(4 * instrCost - 1), 1u };
 	const ::Rational forcedIdleRate = { 1u, 1u };
 
-	/* Runs `_quanta` quanta ONE AT A TIME against a fresh machine at `_rate`,
-	 * recording the section 13.10.5 accessors and the pc advance around each.
-	 * Returns false when the fixture stopped being a NOP field, which is a
-	 * failure of the fixture rather than of the code under test and is reported
-	 * as its own case. */
+	/* Runs `_quanta` quanta one at a time against a fresh machine at `_rate`,
+	 * recording the accessors and the pc advance around each. Returns false
+	 * when the fixture stopped being a NOP field, which is a failure of the
+	 * fixture rather than of the code under test. */
 	const auto drive = [&](const ::Rational _rate, const size_t _quanta, const char* const _name,
 		std::vector<Observation>& _out) -> bool
 	{
@@ -355,11 +325,10 @@ int main()
 
 		g2::Scheduler& s = *scheduler;
 
-		/* The MIRROR accumulator. The budget of each quantum is taken from the
-		 * SAME `alloc()` the block uses, against a private accumulator seeded
+		/* The mirror accumulator. The budget of each quantum is taken from the
+		 * same `alloc()` the block uses, against a private accumulator seeded
 		 * exactly as `McuContext::acc` is at construction, so the expected
-		 * budget is computed by design section 13.4.1's own function rather
-		 * than written here as a figure. */
+		 * budget is computed rather than written here as a figure. */
 		uint32_t mirrorAcc = 0;
 
 		for(size_t q = 0; q < _quanta; ++q)
@@ -403,15 +372,9 @@ int main()
 		return true;
 	};
 
-	/* Holds every observation of one workload against design section 13.4.6's
-	 * block, quantum by quantum. THE EXPECTED VALUES ARE THE BLOCK'S OWN
-	 * ARITHMETIC APPLIED TO THE MEASURED SPEND, so a Scheduler that pinned
-	 * either accessor, dropped the carry, forgot the floor at zero or paid the
-	 * idle branch down twice reports here. */
-	/* REPORTED, NOT ASSERTED. The four figures of each quantum, so that a
-	 * reader of a passing run can see the debt walk rather than take it on
-	 * trust, and so that a failing run carries its own context. Nothing here is
-	 * a verdict; every verdict is the failure counter. */
+	/* Reported, not asserted: the figures of each quantum, so that a reader of
+	 * a passing run can see the debt walk and a failing run carries its own
+	 * context. Every verdict is the failure counter. */
 	const auto report = [&](const std::vector<Observation>& _obs, const char* const _name)
 	{
 		std::printf("t0_mcu_debt: %s -- quantum: budget want spent debt ldq\n", _name);
@@ -427,6 +390,11 @@ int main()
 		}
 	};
 
+	/* Holds every observation of one workload against the block, quantum by
+	 * quantum. The expected values are the block's own arithmetic applied to
+	 * the measured spend, so a Scheduler that pinned either accessor, dropped
+	 * the carry, forgot the floor at zero or paid the idle branch down twice
+	 * reports here. */
 	const auto holdAgainstTheBlock = [&](const std::vector<Observation>& _obs, const char* const _name)
 	{
 		for(size_t q = 0; q < _obs.size(); ++q)
@@ -436,11 +404,9 @@ int main()
 
 			char what[256];
 
-			/* RULE 2's BOUND, AT EVERY QUANTUM BOUNDARY, AGAINST THE FINITE CAP
-			 * THIS FIXTURE SUPPLIES. `instrCost` is the cost of the longest --
-			 * and only -- dispatch unit the NOP field can issue, so it is the
-			 * `maxDispatchCost` of design section 13.4.6's invariant for THIS
-			 * context, measured rather than invented. */
+			/* `instrCost` is the cost of the longest, and only, dispatch unit
+			 * the NOP field can issue, so it is the `maxDispatchCost` of the
+			 * invariant for this context, measured rather than invented. */
 			std::snprintf(what, sizeof(what),
 				"%s quantum %zu: 0 <= debt (%lld) < one dispatch unit (%lld) at the boundary",
 				_name, q, static_cast<long long>(o.debtAfter), static_cast<long long>(instrCost));
@@ -448,8 +414,8 @@ int main()
 
 			if(want <= 0)
 			{
-				/* Rule 4's branch: nothing runs, the debt is paid down by ONE
-				 * whole allocation and the counter rises by EXACTLY one. */
+				/* Rule 4's branch: nothing runs, the debt is paid down by one
+				 * whole allocation and the counter rises by exactly one. */
 				std::snprintf(what, sizeof(what),
 					"%s quantum %zu: the want <= 0 branch ran no instruction", _name, q);
 				checkEqual(o.spent, 0, what);
@@ -485,13 +451,12 @@ int main()
 		}
 	};
 
-	/* Replays the SHARED BLOCK ITSELF -- g2::runQuantum from cycleDebt.h,
+	/* Replays the shared block itself -- g2::runQuantum from cycleDebt.h,
 	 * against a real McuContext -- driven by the spends the Board actually
 	 * produced, and asserts the resulting sequence equals the Scheduler's,
-	 * quantum by quantum. THAT IS WHAT "ONE BLOCK USED TWICE" MEANS AS AN
-	 * OBSERVABLE: a second block that resembled the first would have to agree
-	 * with it on every quantum of a sequence that moves, and this file requires
-	 * the sequence to move before it compares. */
+	 * quantum by quantum. A second block that resembled the first would have to
+	 * agree with it on every quantum of a sequence that moves, and this file
+	 * requires the sequence to move before it compares. */
 	const auto holdAgainstTheSharedBlock = [&](const std::vector<Observation>& _obs,
 		const ::Rational _rate, const char* const _name)
 	{
@@ -533,7 +498,7 @@ int main()
 			checkEqual(returned, o.spent, what);
 		}
 
-		/* The role-filler is invoked exactly once per RUNNING quantum and never
+		/* The role-filler is invoked exactly once per running quantum and never
 		 * in the want <= 0 branch. A mirror that never invoked it at all would
 		 * otherwise agree with a Scheduler that never ran anything. */
 		size_t running = 0;
@@ -551,17 +516,14 @@ int main()
 		checkEqual(static_cast<int64_t>(runs), static_cast<int64_t>(running), what);
 	};
 
-	/* ---------------------------------------------------------------------
-	 * CASE 2. THE NEVER-IDLE DRIFT WORKLOAD.
-	 *
-	 * The budget is one cycle short of four dispatch units, so every quantum
-	 * overruns and the debt walks up to one unit and falls back. THE QUANTUM
-	 * COUNT IS DERIVED, not chosen. The walk's period is one dispatch unit's
-	 * worth of quanta and the debt after quantum q is (q + 1) mod that period,
-	 * so THREE WHOLE PERIODS PLUS ONE runs several periods and ends on a debt
-	 * of exactly one -- non-zero for EVERY measured cost, not merely for the
-	 * one this machine happens to report. The non-zero ending is what makes
-	 * case 5's conservation law able to see an accessor pinned to zero.
+	/* The never-idle drift workload. The budget is one cycle short of four
+	 * dispatch units, so every quantum overruns and the debt walks up to one
+	 * unit and falls back. The quantum count is derived, not chosen: the walk's
+	 * period is one dispatch unit's worth of quanta and the debt after quantum
+	 * q is (q + 1) mod that period, so three whole periods plus one ends on a
+	 * debt of exactly one, non-zero for every measured cost rather than for the
+	 * one this machine happens to report. The non-zero ending is what lets the
+	 * conservation law below see an accessor pinned to zero.
 	 */
 	const size_t neverIdleQuanta = static_cast<size_t>(instrCost) * 3u + 1u;
 
@@ -583,7 +545,7 @@ int main()
 			totalSpent += neverIdle[q].spent;
 		}
 
-		/* THE ANTI-MIRAGE GUARDS, BEFORE ANY EQUALITY IS COMPARED. */
+		/* The guards, before any equality is compared. */
 		check(totalSpent > 0, "never-idle: the core actually ran");
 		check(maxDebt > 0,
 			"never-idle: cycleDebt(0) reached a NON-ZERO value -- the clause section 24.6 row "
@@ -601,9 +563,8 @@ int main()
 		holdAgainstTheBlock(neverIdle, "never-idle");
 		holdAgainstTheSharedBlock(neverIdle, neverIdleRate, "never-idle");
 
-		/* ---------------------------------------------------------------
-		 * CASE 5, on this workload. THE CONSERVATION LAW, WHICH IS
-		 * INDEPENDENT OF EVERY PER-QUANTUM ASSERTION ABOVE.
+		/* The conservation law, which is independent of every per-quantum
+		 * assertion above.
 		 *
 		 * In the running branch the block gives debt' = spent - budget + debt,
 		 * so summing over a run that never took the want <= 0 branch and
@@ -629,12 +590,10 @@ int main()
 			"still carried");
 	}
 
-	/* ---------------------------------------------------------------------
-	 * CASE 3. THE FORCED-IDLE DRIFT WORKLOAD, AND RULE 4's COUNTER.
-	 *
-	 * The budget is one cycle and one dispatch unit costs `instrCost`, so one
-	 * running quantum is followed by exactly `instrCost - 1` quanta that run
-	 * NOTHING. Both accessors move here.
+	/* The forced-idle drift workload, and rule 4's counter. The budget is one
+	 * cycle and one dispatch unit costs `instrCost`, so one running quantum is
+	 * followed by exactly `instrCost - 1` quanta that run nothing. Both
+	 * accessors move here.
 	 */
 	const size_t forcedIdleQuanta = static_cast<size_t>(instrCost) * 3u;
 
@@ -668,10 +627,9 @@ int main()
 			"forced-idle: longDispatchQuanta(0) rose above zero -- rule 4's branch fired, driven "
 			"by the real core's overshoot");
 
-		/* STEP 6's CHECK 3, ASSERTED AS AN EXACT EQUALITY AND NOT AS A BOUND:
-		 * every quantum that took the branch raised the counter by exactly one,
-		 * which `holdAgainstTheBlock` asserts individually, and the total is the
-		 * number of such quanta. */
+		/* An exact equality and not a bound: every quantum that took the branch
+		 * raised the counter by exactly one, which `holdAgainstTheBlock`
+		 * asserts individually, and the total is the number of such quanta. */
 		checkEqual(static_cast<int64_t>(forcedIdle.back().ldqAfter),
 			static_cast<int64_t>(idleQuanta),
 			"forced-idle: longDispatchQuanta(0) counts exactly the quanta that took the "
@@ -683,9 +641,8 @@ int main()
 		holdAgainstTheBlock(forcedIdle, "forced-idle");
 		holdAgainstTheSharedBlock(forcedIdle, forcedIdleRate, "forced-idle");
 
-		/* CASE 4. THE DRIFT DIRECTION. Design section 13.4.6 says a forced-idle
-		 * context drifts SLOW and never fast, bounded by one full allocation
-		 * for each idle quantum. Slow means the machine ran no MORE than it was
+		/* A forced-idle context drifts slow and never fast, bounded by one full
+		 * allocation for each idle quantum: the machine ran no more than it was
 		 * allocated, and the bound is what the idle quanta gave back. */
 		int64_t totalAllocated = 0;
 

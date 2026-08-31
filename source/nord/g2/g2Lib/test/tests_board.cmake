@@ -779,30 +779,25 @@ else()
 endif()
 
 
-# ----------------- TOOL-13 AMENDED, the GDB stub advancing the whole machine
+# ----------------- t1_gdb_dsp, the GDB stub advancing the whole machine
 #
-# Check: ctest --test-dir build --no-tests=error -R ^t1_gdb_dsp$
+# Gated: the test reads CODE_30000400.bin. The defect it exists for only shows
+# against the real firmware, because it is the real firmware's HDI08 handshake
+# that a stub stepping Board::runMcu alone can never cross. A machine without
+# artifacts skips rather than passing in silence.
 #
-# TIER T1 AND GATED, and here the usual reason applies: the test READS
-# CODE_30000400.bin. The defect it exists for only shows against the real
-# firmware, because it is the real firmware's HDI08 handshake that a stub
-# stepping Board::runMcu alone can never cross. A machine without artifacts
-# prints the section 18.5 skip line and reports NOT VERIFIED rather than
-# passing in silence.
+# The gate variables are this block's own rather than borrowed from a
+# neighbouring block: a variable borrowed across blocks is how one edit silently
+# changes another block's registration. The skip code is read out of
+# gatedFixture.h by the same regex the other sites use, so the spellings cannot
+# drift.
 #
-# THE GATE VARIABLES ARE THIS BLOCK'S OWN, under names of their own rather than
-# borrowed from a neighbouring block, for the reason those blocks already give:
-# a variable borrowed across blocks is how one task's edit silently changes
-# another task's registration. The skip code is READ OUT OF gatedFixture.h by
-# the same regex the other sites use, so the spellings cannot drift.
-#
-# IT LINKS g2Lib AND Threads. gdbStub.cpp and scheduler.cpp are both inside
-# g2Lib through sources_board.cmake and sources_sched.cmake, so the test drives
-# the same two translation units `g2TestConsole --gdb` drives and not a copy of
+# gdbStub.cpp and scheduler.cpp are both inside g2Lib, so the test drives the
+# same two translation units `g2TestConsole --gdb` drives and not a copy of
 # either. Threads is the test client, which lives on its own thread.
 #
-# THE TIMEOUT IS THE SUITE'S OUTER BOUND AND NOT THE TEST'S. The test carries
-# its own watchdog, which prints a NAMED reason and exits 1; this property is
+# The timeout is the suite's outer bound and not the test's. The test carries
+# its own watchdog, which prints a named reason and exits 1; this property is
 # the backstop for a process that could not even reach that thread.
 
 add_executable(t1_gdb_dsp t1_gdb_dsp.cpp)

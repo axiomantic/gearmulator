@@ -1,36 +1,32 @@
-// Task TOOL-13, amended. THE GDB STUB DRIVES THE WHOLE MACHINE AND NOT THE MCU
-// ALONE. Tier T1: it boots the real CODE_30000400.bin, so it is gated on
-// NMG2_ARTIFACTS and reports NOT VERIFIED rather than passing when the artifact
-// is absent.
+// The GDB stub drives the whole machine and not the MCU alone. This test boots
+// the real CODE_30000400.bin, so it is gated on NMG2_ARTIFACTS and reports NOT
+// VERIFIED rather than passing when the artifact is absent.
 //
-// WHAT DEFECT THIS EXISTS FOR, WRITTEN OUT BECAUSE THE DEFECT'S SIGNATURE IS AN
-// ABSENCE AND NOT A CRASH. The stub used to step `Board::runMcu` alone. The
-// moment the MCU issued a host command and busy-waited for a DSP to answer, no
-// DSP ever ran, so the wait never ended and the `c` ran out its own bound with
-// the machine still spinning. THE DEBUGGER THEN REPORTED A CLEAN, QUIET,
-// PLAUSIBLE MISS -- a stop reply, no error, and a breakpoint that simply "was
-// not reached". A pass of 2026-08-26 took exactly that reading against
-// `0x30038D1E`, recognised it as unsound and threw it away; the next reader
-// would not have.
+// The defect's signature is an absence and not a crash. A stub that steps
+// `Board::runMcu` alone runs no DSP, so the moment the MCU issues a host command
+// and busy-waits for a DSP to answer the wait never ends and the `c` runs out its
+// own bound with the machine still spinning. The debugger then reports a clean,
+// quiet, plausible miss -- a stop reply, no error, and a breakpoint that simply
+// "was not reached".
 //
-// THE TWO CASES ARE A PAIR AND NEITHER MEANS ANYTHING ALONE.
+// The two cases are a pair and neither means anything alone.
 //
-//   THE KNOWN POSITIVE, `0x300391E8`. It is reached BEFORE the first handshake
+//   The known positive, `0x300391E8`. It is reached before the first handshake
 //   stall, so it is hit by an MCU-only session too. It is what makes the second
-//   case's absence an absence: a run in which BOTH are missed says the fixture
+//   case's absence an absence: a run in which both are missed says the fixture
 //   or the socket is broken and says nothing about the DSPs.
 //
-//   THE CASE THIS FILE IS FOR, `0x30038D1E`. The patch-compiler prologue
-//   download, reached once per DSP on every ordinary boot, and reachable ONLY
+//   The case this file is for, `0x30038D1E`. The patch-compiler prologue
+//   download, reached once per DSP on every ordinary boot, and reachable only
 //   past the HDI08 handshake at `CVR=0xD6` that the MCU spins on at
 //   `0x300505D4`. An MCU-only session cannot reach it at all.
 //
-// THE BOUND IS A FAILURE AND NEVER A SKIP. A stub that cannot cross the
+// The bound is a failure and never a skip. A stub that cannot cross the
 // handshake does not crash -- it spins. A test that merely waited would hang the
 // suite, and a test that gave up quietly would pass. The watchdog below prints a
-// NAMED reason and exits non-zero, so the expiry is a verdict.
+// named reason and exits non-zero, so the expiry is a verdict.
 //
-// NO `assert()` ANYWHERE. Every verdict here is a return value, a printed line
+// No `assert()` anywhere: every verdict here is a return value, a printed line
 // and an exit code, so the check is the same check in every build type.
 
 #include "gatedFixture.h"
@@ -115,10 +111,10 @@ namespace
 
 	// ------------------------------------------------------------- the watchdog
 	//
-	// THE EXPIRY IS A FAILURE WITH A NAMED REASON. It calls _Exit rather than
+	// The expiry is a failure with a named reason. It calls _Exit rather than
 	// returning, because the thread it is bounding is inside the emulator and
 	// cannot be asked to stop; ctest reads the exit status and 1 is a failure.
-	// The name is printed BEFORE the exit so the reason survives the process.
+	// The name is printed before the exit so the reason survives the process.
 
 	std::atomic<bool>        g_finished{false};
 	std::atomic<const char*> g_stage{"before the session opened"};
@@ -145,7 +141,7 @@ namespace
 		std::_Exit(1);
 	}
 
-	// --------------------------------------------------------- INT-1's placement
+	// ------------------------------------------------------------- the placement
 	//
 	// The same machine `g2TestConsole --gdb` places: the same image at the same
 	// entry, the same vector table, the same reset, the same VBR.
@@ -172,21 +168,20 @@ namespace
 	constexpr uint32_t g_cs5Size   = 0x00000010u;
 	constexpr uint32_t g_sdramSize = 0x00800000u;
 
-	/* THE KNOWN POSITIVE. Reached before the first handshake stall, so an
+	/* The known positive. Reached before the first handshake stall, so an
 	 * MCU-only session hits it too. */
 	constexpr uint32_t g_bpBeforeHandshake = 0x300391E8u;
 
-	/* THE CASE THIS FILE IS FOR. The patch-compiler prologue download, past the
+	/* The case this file is for. The patch-compiler prologue download, past the
 	 * handshake. */
 	constexpr uint32_t g_bpPastHandshake = 0x30038D1Eu;
 
-	// The MCU spin site the unsound negative was actually stalled at. It is not
-	// asserted on -- it is REPORTED when the second case misses, because "where
-	// did it stop instead" is the whole diagnosis.
+	// The MCU spin site. It is not asserted on -- it is reported when the second
+	// case misses, because "where did it stop instead" is the whole diagnosis.
 	constexpr uint32_t g_knownStallPc = 0x300505D4u;
 
-	// INT-1's log filter. The boot regime produces one real underrun line per
-	// frame and hundreds of thousands of frames turn here.
+	// The boot regime produces one real underrun line per frame and hundreds of
+	// thousands of frames turn here.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
 	constexpr uint64_t g_underrunLinesKept = 4;
@@ -294,9 +289,8 @@ namespace
 
 	// ---------------------------------------------------------------- the client
 	//
-	// The same arrangement t0_gdb_stub uses and for the same reason: the client
-	// owns the socket and nothing else, and every Board read happens on the main
-	// thread between two answered packets.
+	// The client owns the socket and nothing else, and every Board read happens on
+	// the main thread between two answered packets.
 
 	std::string framed(const std::string& _payload)
 	{
@@ -510,8 +504,8 @@ namespace
 			return false;
 		}
 
-		/* THE SCHEDULER IS DECLARED AFTER THE BOARD so that it is destroyed
-		 * before it, which is the rule the Board's own units follow. */
+		/* The Scheduler is declared after the Board so that it is destroyed
+		 * before it. */
 		g2::SerialExecutor executor;
 		g2::Status         schedulerStatus{};
 
@@ -525,17 +519,16 @@ namespace
 			return false;
 		}
 
-		/* THE STUB IS CONSTRUCTED AFTER EVERY UNIT IS ATTACHED, because it
+		/* The stub is constructed after every unit is attached, because it
 		 * interposes its watchpoint wrapper on the targets the map holds at that
 		 * moment. */
 		g2::GdbStub stub(board);
 		g_stub = &stub;
 
-		/* THE ONE LINE THAT GIVES THE SESSION THE WHOLE MACHINE, AND THE ONE THIS
-		 * FILE'S REQUIRED-RED REMOVES. Without it the stub steps
-		 * `Board::runMcu` alone and cases two, three and four all go red while
-		 * case one -- the known positive -- stays green, which is the exact
-		 * signature of the defect. */
+		/* This is the one line that gives the session the whole machine. Without
+		 * it the stub steps `Board::runMcu` alone and the later cases all go red
+		 * while the known positive stays green, which is the signature of the
+		 * defect. */
 		stub.attachScheduler(*scheduler);
 
 		const uint16_t port = stub.listenOn(0);
@@ -568,18 +561,16 @@ namespace
 		checkEqual(board.mcuReg(g_regPc), g_entryPc,
 		           "the machine starts at the entry point and has executed nothing");
 
-		/* THE BASELINE IS TAKEN BEFORE ANY CONTINUE, so case three compares
-		 * against the state this session started from and not against a figure
-		 * written down here. */
+		/* The baseline is taken before any continue, so the instruction-counter
+		 * case compares against the state this session started from and not
+		 * against a figure written down here. */
 		std::vector<uint64_t> dspBaseline;
 		for(unsigned port = 0; port < board.dspSet().dspCount(); ++port)
 			dspBaseline.push_back(board.dspSet().dsp(port).getInstructionCounter());
 
-		// ==============================================================
-		// CASE ONE -- THE KNOWN POSITIVE. `0x300391E8` sits before the first
-		// handshake stall, so this case passes with the DSPs advancing and
-		// without them. It is what makes case two's absence an absence.
-		// ==============================================================
+		// The known positive. `0x300391E8` sits before the first handshake stall,
+		// so this case passes with the DSPs advancing and without them. It is
+		// what makes the next case's absence an absence.
 		g_stage = "case one, the known positive at 0x300391E8";
 		{
 			checkText(ask("Z0," + hexAddr(g_bpBeforeHandshake) + ",2"), "OK",
@@ -592,12 +583,10 @@ namespace
 			          "case one: z0 removes it again");
 		}
 
-		// ==============================================================
-		// CASE TWO -- THE CASE THIS FILE IS FOR. `0x30038D1E` is reachable only
-		// past the HDI08 handshake the MCU spins on. A stub that steps the MCU
-		// alone runs out its continue bound with the machine still spinning and
-		// reports a plausible miss.
-		// ==============================================================
+		// The case this file is for. `0x30038D1E` is reachable only past the
+		// HDI08 handshake the MCU spins on. A stub that steps the MCU alone runs
+		// out its continue bound with the machine still spinning and reports a
+		// plausible miss.
 		g_stage = "case two, the post-handshake routine at 0x30038D1E";
 		{
 			checkText(ask("Z0," + hexAddr(g_bpPastHandshake) + ",2"), "OK",
@@ -631,25 +620,19 @@ namespace
 			          "case two: z0 is accepted");
 		}
 
-		// ==============================================================
-		// CASE THREE -- THE DSPs REALLY RAN, read off the DSPs and not inferred
-		// from the fact that a breakpoint was hit.
+		// The DSPs really ran, read off the DSPs and not inferred from the fact
+		// that a breakpoint was hit.
 		//
-		// THE INSTRUCTION COUNTER IS THE DISCRIMINATOR AND `programLanded` IS
-		// NOT. The landed flag is the host-side bridge's, set by the download,
-		// and a run of this file against the unamended stub SET IT ANYWAY -- the
-		// MCU performs the download on its own. A check resting on it would have
-		// been green over the very defect this file exists for. `DSP::exec` is
-		// the only thing that moves the instruction counter, and only the
-		// Scheduler's DSP phase calls it.
-		// ==============================================================
+		// The instruction counter is the discriminator and `programLanded` is
+		// not: the landed flag is the host-side bridge's, set by the download,
+		// and the MCU performs the download on its own, so the flag is set even
+		// when no DSP ran. `DSP::exec` is the only thing that moves the
+		// instruction counter, and only the Scheduler's DSP phase calls it.
 		g_stage = "case three, the DSPs' own instruction counters";
 		{
-			/* THE QUANTA THE SESSION TURNED ARE PRINTED, not asserted against a
-			 * literal. The figure is what tells a later reader whether the
-			 * stub's continue bound still has room over what a boot actually
-			 * costs; a number written into an assertion here would be a
-			 * measurement nothing re-derives. */
+			/* The quanta the session turned are printed, not asserted against a
+			 * literal. The figure tells a later reader whether the stub's
+			 * continue bound still has room over what a boot actually costs. */
 			std::cout << "     measured: the session turned " << scheduler->frameIndex()
 			          << " quanta to reach the post-handshake breakpoint" << std::endl;
 
@@ -671,7 +654,7 @@ namespace
 
 		g_stage = "case four, the step model";
 		{
-			/* ONE `s` RETIRES ONE MCU INSTRUCTION AND TURNS ONE QUANTUM. Both
+			/* One `s` retires one MCU instruction and turns one quantum. Both
 			 * halves are asserted, because either alone is satisfied by a stub
 			 * with the wrong model: a step that ran a whole quantum's worth of
 			 * MCU would move the PC much further, and a step that froze the rest

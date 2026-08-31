@@ -360,22 +360,12 @@ set_property(TARGET t0_esai_idle_core PROPERTY FOLDER "G2/test")
 add_test(NAME t0_esai_idle_core COMMAND t0_esai_idle_core)
 set_tests_properties(t0_esai_idle_core PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-29 - t0_transport_hub
+# ---------------- t0_transport_hub
 #
-# An ordinary executable. A BUILD of the target sees none of the six properties
-# this check owns: the allocation total, that nothing allocates after
-# construction, the two refusals, the fixed attachment order, the stamp and the
-# borrow lifetime. All six report through the test's own failure counter, so
-# NDEBUG changes no case in it -- nothing in the source is an assert() and
-# nothing catches an exception. The compile-time half is the member-function
-# pointers and the static_asserts, which the compiler and the linker carry.
-#
-# THE HEADER PATH IS PASSED ON THE COMMAND LINE, the way t0_clock_guard and
-# t0_block_table_harness pass theirs. The declaration-order property -- that
-# ProtocolFrame and StampedFrame are declared BEFORE TransportHub -- is a
-# property of the header's source text that no C++ expression can read, so the
-# check reads the file. A path the test had to guess would be a path the test
-# could get wrong in silence.
+# The header path is passed on the command line. The declaration-order property
+# -- that ProtocolFrame and StampedFrame are declared before TransportHub -- is
+# a property of the header's source text that no C++ expression can read, so the
+# check reads the file.
 
 add_executable(t0_transport_hub
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_transport_hub.cpp)
@@ -386,19 +376,7 @@ add_test(NAME t0_transport_hub COMMAND t0_transport_hub
 	${CMAKE_CURRENT_SOURCE_DIR}/../transportHub.h)
 set_tests_properties(t0_transport_hub PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-21 step 1 - t0_begin_play_phase
-#
-# An ordinary executable. It drives a real Board, a real DSP set, the real
-# ChainAdapter and both real codec queues through Scheduler::runFrames and
-# Scheduler::beginPlayPhase; the check supplies only the two objects the
-# factory already takes by injection -- an Executor and, through Config::trace,
-# a TraceSink.
-#
-# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and
-# nothing catches an exception, so the failure counter is the whole observable
-# in either build type. WHAT THIS REGISTRATION DOES NOT COVER: the generator
-# here is single-config and the tree is configured Debug, so this add_test
-# names one build type and can name no other.
+# ---------------- t0_begin_play_phase
 
 add_executable(t0_begin_play_phase
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_begin_play_phase.cpp)
@@ -408,20 +386,7 @@ set_property(TARGET t0_begin_play_phase PROPERTY FOLDER "G2/test")
 add_test(NAME t0_begin_play_phase COMMAND t0_begin_play_phase)
 set_tests_properties(t0_begin_play_phase PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-21 step 2 - t0_codec_regimes
-#
-# An ordinary executable. It drives a real Board, a real DSP set, the real
-# ChainAdapter and both real codec queues through Scheduler::runFrames and
-# Scheduler::beginPlayPhase, and observes the two play-only phases through the
-# same Config::trace sink SCH-19 declares. A BUILD of the target sees none of
-# the four properties this check owns: the boot regime's five records, the play
-# regime's seven, the POSITION of the ingress and the egress within design
-# section 13.5's order, and the negative case in which a play regime run during
-# what would be the boot fills the sink and stops the scheduler.
-#
-# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and
-# nothing catches an exception, so the failure counter is the whole observable
-# in either build type.
+# ---------------- t0_codec_regimes
 
 add_executable(t0_codec_regimes
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_codec_regimes.cpp)
@@ -431,22 +396,7 @@ set_property(TARGET t0_codec_regimes PROPERTY FOLDER "G2/test")
 add_test(NAME t0_codec_regimes COMMAND t0_codec_regimes)
 set_tests_properties(t0_codec_regimes PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-21 step 3 - t0_scheduler_faults
-#
-# An ordinary executable. It drives a real Board, its real DSP set, the real
-# ChainAdapter and both real codec queues; the ONE object it supplies is the
-# Executor, which the factory already takes by injection. That Executor
-# dispatches every real job and then writes one JobFault into one context,
-# which is where design section 13.10.5 puts a fault and where the Scheduler
-# reads it -- so the fault path under test is the production one.
-#
-# A BUILD OF THE TARGET SEES NONE OF THE FIVE PROPERTIES THIS CHECK OWNS: the
-# latch, its stickiness, the context index it names, the removal of the faulted
-# context from the dispatch set, and reset() restoring that set.
-#
-# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and
-# nothing catches an exception, so the failure counter is the whole observable
-# in either build type.
+# ---------------- t0_scheduler_faults
 
 add_executable(t0_scheduler_faults
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_scheduler_faults.cpp)
@@ -456,27 +406,7 @@ set_property(TARGET t0_scheduler_faults PROPERTY FOLDER "G2/test")
 add_test(NAME t0_scheduler_faults COMMAND t0_scheduler_faults)
 set_tests_properties(t0_scheduler_faults PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-21 step 5 - t0_thread_map
-#
-# An ordinary executable. It drives a real Board, its real DSP set, the real
-# ChainAdapter and both real codec queues through the two phases of the thread
-# map, and it runs the AUDIO phase on a real second thread -- which is the half
-# no single-threaded fixture can distinguish from "records the first thread it
-# ever saw".
-#
-# THE ASSERTION IN scheduler.cpp IS NOT THIS CHECK'S PREDICATE. Every case here
-# reads the recorded identity back through Scheduler::owningThread, which is
-# present in every build type, so the property that stops the data race in the
-# SHIPPED build is the property this check reads. No case in the source is an
-# assert() and no case catches an exception.
-#
-# WHAT THIS REGISTRATION DOES NOT COVER: the generator here is single-config
-# and the tree is configured Debug, so this add_test names one build type and
-# can name no other. The source carries no build-type-dependent case, which is
-# what makes the single registration sufficient rather than merely convenient.
-#
-# NOTHING IN THE SOURCE READS docs/threading.md. That document is the map; a
-# test that grepped it would assert the prose and pass while the code was wrong.
+# ---------------- t0_thread_map
 
 add_executable(t0_thread_map
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_thread_map.cpp)
@@ -486,35 +416,11 @@ set_property(TARGET t0_thread_map PROPERTY FOLDER "G2/test")
 add_test(NAME t0_thread_map COMMAND t0_thread_map)
 set_tests_properties(t0_thread_map PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-21 step 6 - t0_mcu_debt
+# ---------------- t0_mcu_debt
 #
-# An ordinary executable. It drives a real Board whose SDRAM window holds a
-# field of one repeated instruction, its real MCF5307 core and the real
-# Scheduler; the ONE object it supplies is the Executor, which the factory
-# already takes by injection.
-#
-# IT LINKS g2Lib AND THEREFORE THE REAL mcf5307 CORE, AND ITS FIRST CASE IS
-# ABOUT THAT LIBRARY RATHER THAN ABOUT THE SCHEDULER. A core that clamped
-# mcf5307_exec's return to its budget makes design section 13.4.6's cycle debt
-# identically zero -- section 24.6 row W3-410 -- so case 1 offers the linked
-# core a budget of one cycle and asserts it reports more. Every later case in
-# the file is vacuous without that property, and the file stops rather than
-# reporting them if the measurement is unusable.
-#
-# NO CYCLE COST IS COMPILED IN. The cost and the byte length of one dispatch
-# unit are measured at run time from the linked core, and both workload rates,
-# every expected spend and design section 13.4.6's rule 2 bound are derived
-# from them.
-#
-# A BUILD OF THE TARGET SEES ONLY THE COMPILE-TIME HALF: the four static_asserts
-# that hold McuContext's members to the types the shared block reads. The seven
-# run-time properties -- the overshoot, the debt walk, the floor at zero, rule
-# 4's counter, the rule 2 bound, the conservation law and the agreement with
-# g2::runQuantum itself -- all report through the failure counter.
-#
-# NDEBUG CHANGES NO CASE IN IT. Nothing in the source is an assert() and nothing
-# catches an exception, so the failure counter is the whole observable in either
-# build type.
+# No cycle cost is compiled in. The cost and the byte length of one dispatch
+# unit are measured at run time from the linked core, and both workload rates
+# and every expected spend are derived from them.
 
 add_executable(t0_mcu_debt
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_mcu_debt.cpp)
@@ -524,21 +430,11 @@ set_property(TARGET t0_mcu_debt PROPERTY FOLDER "G2/test")
 add_test(NAME t0_mcu_debt COMMAND t0_mcu_debt)
 set_tests_properties(t0_mcu_debt PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-21 step 4 - t0_scheduler_state
+# ---------------- t0_scheduler_state
 #
-# An ordinary executable. It drives a real Board, its real bridged DSP set, the
-# real ChainAdapter and the real MCU core through Scheduler::stateSize,
-# stateSave and stateLoad.
-#
-# THE FIXTURE IS A FIELD OF ONE REPEATED INSTRUCTION, for the reason t0_mcu_debt
-# gives: the MCU context is the one part of a T0 Scheduler whose emulated state
-# moves, and a state round trip over a machine whose state never moves is
-# satisfied by a snapshot of zero bytes. The source asserts that the state MOVED
-# before it asserts that anything about it matched.
-#
-# NO CASE IN THE SOURCE IS AN assert() AND NO CASE CATCHES AN EXCEPTION. Every
-# verdict is the failure counter and the process exit status; the compile-time
-# half is static_assert, which fires in every build type.
+# The fixture is a field of one repeated instruction: the MCU context is the one
+# part of a T0 Scheduler whose emulated state moves, and a state round trip over
+# a machine whose state never moves is satisfied by a snapshot of zero bytes.
 
 add_executable(t0_scheduler_state
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_scheduler_state.cpp)

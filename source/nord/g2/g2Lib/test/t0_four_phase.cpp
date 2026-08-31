@@ -1,54 +1,24 @@
-/* t0_four_phase.cpp -- STEP 1 of task CHN-9. Design sections 12.3 and 13.10.2.
+/* The row's own order, for each virtual frame:
  *
- * THE ROW'S OWN ORDER, FOR EACH VIRTUAL FRAME:
- *
- *   1. SWAP     advance() every audio-bus mailbox on every quantum; every
+ *   1. Swap     advance() every audio-bus mailbox on every quantum; every
  *               second-bus mailbox only when frameIndex % secondBusFrameDivider
- *               == 0. THIS IS THE SINGLE SWAP POINT FOR THE QUANTUM, and
- *               nothing else in the design moves a mailbox head.
- *   2. INGRESS  write the codec source stereo pair into slots 0 and 1 of
- *               mailbox 0's READ frame, through ingressFrame() and not through
+ *               == 0. This is the single swap point for the quantum, and
+ *               nothing else moves a mailbox head.
+ *   2. Ingress  write the codec source stereo pair into slots 0 and 1 of
+ *               mailbox 0's read frame, through ingressFrame() and not through
  *               read(), which is const.
- *   3. RUN      the MCU context, then DSP 0 to DSP 7, in the fixed order.
- *   4. EGRESS   read slots 0 and 1 of the tail mailbox's WRITE frame, through
+ *   3. Run      the MCU context, then DSP 0 to DSP 7, in the fixed order.
+ *   4. Egress   read slots 0 and 1 of the tail mailbox's write frame, through
  *               egressFrame() and not through write().
  *
  * Steps 2 and 4 are the only accesses that break the run-phase invariant, and
  * they break it in a defined way. Both belong to the chain adapter, both are
  * codec-facing, and both are strictly ordered against the run phase. Their
- * effect is that the two codec edges carry NO DELAY OF THEIR OWN, which is
+ * effect is that the two codec edges carry no delay of their own, which is
  * what the hardware does.
  *
  * A Ring has no ingress and no egress phase, so steps 2 and 4 do not run for
- * it. Case 8 is that assertion.
- *
- * THE FILE IS IN TWO PARTS, AND THE SPLIT IS FORCED BY WHAT HAS LANDED.
- *
- *   PART A drives a real Scheduler over a real Board and reads the phase order
- *   out of the SCH-19 trace. That is where steps 1 and 3 are observable: the
- *   Scheduler owns its ChainAdapter privately, so the trace and the injected
- *   Executor are the only seams into one quantum.
- *
- *   PART B drives the codec edges directly against a ChainAdapter. It was
- *   written that way because a Scheduler ran NEITHER edge at the time; SCH-21
- *   step 2 (formerly SCH-22) has since landed the regime and both calls, and
- *   t0_codec_regimes is where the PLAY regime's seven records and the position
- *   of the ingress and the egress inside them are asserted. PART B keeps the
- *   adapter-level edges, which are a different claim and still its own. Case 3
- *   is no longer pinned to the tree: this fixture never calls beginPlayPhase,
- *   so it stays in the BOOT regime, and a boot quantum emitting neither edge is
- *   design section 13.10 rule 3's property rather than a statement about what
- *   had not yet been written.
- *
- * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION. Every
- * observable is a returned value, a delivered frame or a counter, so this file
- * reports identically with and without NDEBUG, and the verdict is main's exit
- * status.
- *
- * NO COUNT BELOW IS A LITERAL WHERE A GENERATING COUNT EXISTS. The DSP
- * dispatch count is g2::kJobCount, the hop is read back from the adapter, the
- * slot count is g2::Frame::kSlots and the records of one quantum are counted
- * from the expected-phase array itself.
+ * it.
  */
 
 #include "board.h"
@@ -109,7 +79,7 @@ namespace
 	}
 
 	/* ==================================================================
-	 * PART A -- the order of one quantum, through a Scheduler.
+	 * Part A -- the order of one quantum, through a Scheduler.
 	 * ================================================================== */
 
 	class RecordingTrace final : public g2::TraceSink
@@ -139,8 +109,7 @@ namespace
 	};
 
 	/* Records the position member of every job the Scheduler dispatches, in
-	 * dispatch order, and then RUNS every job -- an Executor that did not run
-	 * them would not be one. */
+	 * dispatch order, and then runs every job. */
 	class RecordingExecutor final : public g2::Executor
 	{
 	public:
@@ -191,8 +160,8 @@ namespace
 		return "?";
 	}
 
-	/* THE BOOT QUANTUM'S RECORDS, IN ORDER. Steps 1 and 3 of the row: the swap
-	 * FIRST, then the run phase, whose MCU context precedes the DSPs. */
+	/* The boot quantum's records, in order: the swap first, then the run phase,
+	 * whose MCU context precedes the DSPs. */
 	constexpr g2::TracePhase kBootQuantum[] =
 	{
 		g2::TracePhase::Swap,
@@ -204,7 +173,6 @@ namespace
 
 	constexpr size_t kRecordsPerQuantum = sizeof(kBootQuantum) / sizeof(kBootQuantum[0]);
 
-	/* ------------- Case 1 and Case 2 and Case 3. */
 	void casesThroughScheduler(g2::Board& _board)
 	{
 		RecordingExecutor executor;
@@ -231,8 +199,8 @@ namespace
 
 		scheduler->runFrames(kQuanta);
 
-		/* ------------- CASE 1: the swap is FIRST and the run phase follows,
-		 * on every quantum, each record carrying that quantum's frame index. */
+		/* The swap is first and the run phase follows, on every quantum, each
+		 * record carrying that quantum's frame index. */
 		checkEqual(trace.count(), kQuanta * kRecordsPerQuantum,
 			"one quantum emits exactly the records of the boot-regime order");
 
@@ -258,8 +226,8 @@ namespace
 			}
 		}
 
-		/* THE SWAP-BEFORE-RUN AND MCU-BEFORE-DSP RELATIONS ARE DERIVED FROM THE
-		 * EXPECTED ARRAY, not written down a second time. */
+		/* The swap-before-run and MCU-before-DSP relations are derived from the
+		 * expected array, not written down a second time. */
 		{
 			size_t swapIndex = kRecordsPerQuantum;
 			size_t mcuIndex  = kRecordsPerQuantum;
@@ -278,8 +246,6 @@ namespace
 				"step 3 runs the MCU context BEFORE DSP 0 to DSP 7");
 		}
 
-		/* ------------- CASE 2: step 3's DSP order is DSP 0 to DSP 7 ascending,
-		 * and the count is g2::kJobCount rather than a literal. */
 		checkEqual(executor.runs(), kQuanta,
 			"the Executor is entered exactly once for each quantum");
 
@@ -300,25 +266,9 @@ namespace
 			}
 		}
 
-		/* ------------- CASE 3: a BOOT-REGIME quantum runs NEITHER codec edge.
-		 *
-		 * THE PIN IS DISCHARGED AND THIS IS NO LONGER PINNED TO THE TREE.
-		 * SCH-21 step 2 (formerly SCH-22) has landed: the Scheduler now carries
-		 * a regime member and runs both codec edges IN THE PLAY REGIME. This
-		 * fixture never calls beginPlayPhase, so it stays in the BOOT regime
-		 * for its whole life -- and a boot quantum running the swap and the run
-		 * phase alone is now a stated property of design section 13.10 rule 3
-		 * rather than a statement about what had not yet been written.
-		 *
-		 * WHAT CHANGED HERE AND WHAT DID NOT. Only the rationale changed: the
-		 * assertion, the fixture and the counted records are untouched. The
-		 * earlier text claimed the Scheduler "carries no regime member", which
-		 * became FALSE the moment SCH-21 step 2 landed while this case went on
-		 * passing -- a true assertion carrying a false reason. THE CODEC EDGES
-		 * IN THE PLAY REGIME ARE NOT THIS FILE'S TO ASSERT: t0_codec_regimes
-		 * owns the play trace, its seven records and the position of the
-		 * ingress and the egress within them, and PART B below keeps the direct
-		 * adapter-level edges it always had. */
+		/* This fixture never calls beginPlayPhase, so the Scheduler stays in the
+		 * boot regime for its whole life, and a boot quantum runs the swap and
+		 * the run phase alone. */
 		{
 			size_t codecRecords = 0;
 
@@ -337,7 +287,7 @@ namespace
 	}
 
 	/* ==================================================================
-	 * PART B -- the codec edges, against the adapter that owns them.
+	 * Part B -- the codec edges, against the adapter that owns them.
 	 * ================================================================== */
 
 	constexpr unsigned kPositions = 8u;
@@ -421,20 +371,14 @@ namespace
 		_adapter.extractCodecSink(_out);
 	}
 
-	/* ------------- CASE 4: STEP 2. The ingress writes mailbox 0's READ frame,
-	 * slots 0 and 1 ONLY, and it carries NO DELAY OF ITS OWN.
-	 *
-	 * Position 0's receive callback reads mailbox 0's read() frame, which is
+	/* Position 0's receive callback reads mailbox 0's read() frame, which is
 	 * the very cell ingressFrame() returns. The injected pair is therefore
-	 * visible to the head in the SAME quantum, with no advance in between --
-	 * "the codec edges carry no delay of their own".
+	 * visible to the head in the same quantum, with no advance in between.
 	 *
-	 * THE MUTATION EACH ASSERTION CATCHES:
-	 *   - an ingress written through write() instead of ingressFrame() puts the
-	 *     pair in the head's WRITE cell, which position 0's receive does not
-	 *     read, and slots 0 and 1 come back 0;
-	 *   - an ingress that copied all eight slots leaves sourceSlot(2) where
-	 *     silence belongs. */
+	 * An ingress written through write() instead of ingressFrame() puts the
+	 * pair in the head's write cell, which position 0's receive does not read,
+	 * and slots 0 and 1 come back 0. An ingress that copied all eight slots
+	 * leaves sourceSlot(2) where silence belongs. */
 	void caseIngress()
 	{
 		g2::ChainAdapter adapter(kPositions, kHopFrames, g2::ChainTopology::Ring, kDivider);
@@ -462,17 +406,11 @@ namespace
 		}
 	}
 
-	/* ------------- CASE 5: the SWAP comes before the INGRESS, and the order is
-	 * load-bearing rather than cosmetic.
-	 *
-	 * advance() copies the head cell forward into the read cell BEFORE stepping
+	/* advance() copies the head cell forward into the read cell before stepping
 	 * the head (mailbox.cpp). An ingress performed before the swap therefore
 	 * lands in the cell the swap is about to overwrite, and the pair is
-	 * destroyed. Running the two in the row's order preserves it -- case 4.
-	 *
-	 * THIS IS THE ASSERTION THAT MAKES "IN THIS EXACT ORDER" MEAN SOMETHING.
-	 * Without it, steps 1 and 2 could be transposed and every other case here
-	 * would stay green. */
+	 * destroyed. Without this assertion, steps 1 and 2 could be transposed and
+	 * every other case here would stay green. */
 	void caseSwapPrecedesIngress()
 	{
 		g2::ChainAdapter adapter(kPositions, kHopFrames, g2::ChainTopology::Ring, kDivider);
@@ -490,20 +428,15 @@ namespace
 			"an ingress performed BEFORE the swap is destroyed by it (right slot)");
 	}
 
-	/* ------------- CASE 6: STEP 4. The egress reads the TAIL mailbox's WRITE
-	 * frame, slots 0 and 1 ONLY, and it carries no delay of its own.
-	 *
-	 * The tail position writes mailbox N through its transmit callback, and
+	/* The tail position writes mailbox N through its transmit callback, and
 	 * egressFrame() is that mailbox's write cell, so the tail's frame reaches
-	 * the codec sink in the SAME quantum.
+	 * the codec sink in the same quantum.
 	 *
-	 * THE MUTATION EACH ASSERTION CATCHES:
-	 *   - an egress read through read() instead of egressFrame() reads the cell
-	 *     one past the head, which the tail has not written, and reports 0;
-	 *   - an egress read from m_audio.front() instead of back() reads mailbox 0,
-	 *     which no transmit callback ever writes, and reports 0;
-	 *   - an egress that copied all eight slots overwrites the destination's
-	 *     slots 2..7. */
+	 * An egress read through read() instead of egressFrame() reads the cell one
+	 * past the head, which the tail has not written, and reports 0. An egress
+	 * read from m_audio.front() instead of back() reads mailbox 0, which no
+	 * transmit callback ever writes, and reports 0. An egress that copied all
+	 * eight slots overwrites the destination's slots 2..7. */
 	void caseEgress()
 	{
 		g2::ChainAdapter adapter(kPositions, kHopFrames, g2::ChainTopology::Ring, kDivider);
@@ -531,34 +464,27 @@ namespace
 		}
 	}
 
-	/* ------------- CASE 7: the EGRESS comes after the RUN phase.
-	 *
-	 * An egress taken before the run phase reports the PREVIOUS quantum's
-	 * frame. The case drives two quanta whose tail frames differ and asserts
-	 * both halves: the pre-run reading is the stale one and the post-run
-	 * reading is the current one. A pair that were equal would prove nothing,
-	 * so their inequality is asserted too. */
+	/* An egress taken before the run phase reports the previous quantum's
+	 * frame. A pair of tail frames that were equal would prove nothing, so
+	 * their inequality is asserted too. */
 	void caseEgressFollowsRun()
 	{
 		g2::ChainAdapter adapter(kPositions, kHopFrames, g2::ChainTopology::Ring, kDivider);
 
-		/* Quantum 0: a tail frame of zeroes is what a fresh adapter already
-		 * holds, so the first quantum's tail frame is the sentinel-bearing one
-		 * and the second quantum's is silence. The two must differ, and that
-		 * is asserted rather than assumed. */
+		/* A tail frame of zeroes is what a fresh adapter already holds, so the
+		 * first quantum's tail frame is the sentinel-bearing one and the second
+		 * quantum's is silence. */
 		adapter.advanceAll(0u);
 		fireTailTransmit(adapter, 0u);
 
 		g2::Frame first;
 		extract(adapter, first);
 
-		/* Quantum 1: swap, then read the sink BEFORE the run phase. */
 		adapter.advanceAll(1u);
 
 		g2::Frame beforeRun;
 		extract(adapter, beforeRun);
 
-		/* The run phase of quantum 1: the tail transmits SILENCE this time. */
 		{
 			uint64_t frameIndex = 1u;
 			dsp56k::Audio::TxFrame silence;
@@ -583,12 +509,8 @@ namespace
 			"an egress taken AFTER the run phase reports THIS quantum's tail frame");
 	}
 
-	/* ------------- CASE 8: a Ring has no ingress and no egress phase.
-	 *
-	 * The second bus is the only bus whose topology can be a Ring, and the two
-	 * codec edges are audio-bus-only. Both halves are asserted: the ingress
-	 * does not reach any second-bus mailbox, and the egress does not report a
-	 * second-bus transmit. */
+	/* The second bus is the only bus whose topology can be a Ring, and the two
+	 * codec edges are audio-bus-only. */
 	void caseRingHasNoCodecEdge()
 	{
 		{
@@ -639,18 +561,12 @@ namespace
 		}
 	}
 
-	/* ------------- CASE 9: STEP 1 is the SINGLE swap point of a quantum.
-	 *
-	 * A frame written into a mailbox's write cell reaches its read cell after
+	/* A frame written into a mailbox's write cell reaches its read cell after
 	 * exactly hopFrames advances (mailbox.cpp's index relation). One quantum
-	 * performs exactly ONE advance, so the frame arrives on the hopFrames-th
-	 * quantum after the one it was written in -- not earlier.
-	 *
-	 * THE HOP IS READ BACK FROM THE ADAPTER, never written down here, and the
-	 * loop asserts BOTH halves: silence on every quantum before the arrival and
-	 * the sentinel on the arrival quantum. An advanceAll that swapped the audio
-	 * bus twice, or a second swap point anywhere else in the adapter, delivers
-	 * the frame early and the "not yet" half goes red. */
+	 * performs exactly one advance, so the frame arrives on the hopFrames-th
+	 * quantum after the one it was written in, not earlier. An advanceAll that
+	 * swapped the audio bus twice, or a second swap point anywhere else in the
+	 * adapter, delivers the frame early and the "not yet" half goes red. */
 	void caseSingleSwapPoint()
 	{
 		g2::ChainAdapter adapter(kPositions, kHopFrames, g2::ChainTopology::Ring, kDivider);
@@ -696,15 +612,11 @@ namespace
 		}
 	}
 
-	/* ------------- CASE 10: STEP 1's second half. The swap advances a
-	 * second-bus mailbox ONLY when frameIndex % secondBusFrameDivider == 0.
-	 *
-	 * A frame written into a second-bus mailbox at a window quantum therefore
-	 * reaches its read cell after hopFrames WINDOW advances, which is
-	 * hopFrames * secondBusFrameDivider quanta and not hopFrames quanta. Both
-	 * the hop and the divider are read back from the adapter, and the arrival
-	 * quantum is their product rather than a literal -- the product is exactly
-	 * where a literal went wrong once in this tree already.
+	/* The swap advances a second-bus mailbox only when
+	 * frameIndex % secondBusFrameDivider == 0. A frame written into a
+	 * second-bus mailbox at a window quantum therefore reaches its read cell
+	 * after hopFrames window advances, which is hopFrames *
+	 * secondBusFrameDivider quanta and not hopFrames quanta.
 	 *
 	 * A swap that advanced the second bus on every quantum delivers the frame
 	 * at quantum hopFrames and every "not yet" assertion before it goes red. */
@@ -765,8 +677,8 @@ int main()
 {
 	std::printf("t0_four_phase: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
 
-	/* PART B needs no Scheduler, no Board and no backend: the chain adapter is
-	 * a plain object and the codec edges are its own members. It runs in every
+	/* These need no Scheduler, no Board and no backend: the chain adapter is a
+	 * plain object and the codec edges are its own members. They run in every
 	 * build. */
 	caseIngress();
 	caseSwapPrecedesIngress();
@@ -776,12 +688,11 @@ int main()
 	caseSingleSwapPoint();
 	caseSecondBusAdvancesOnlyInItsWindow();
 
-	/* PART A needs a Scheduler, and SCH-17's rule is that an interpreter build
-	 * yields none at all. Asserting the refusal is the only claim this file may
-	 * make in such a build.
+	/* An interpreter build yields no Scheduler at all, so asserting the refusal
+	 * is the only claim this file may make in such a build.
 	 *
-	 * THE BOARD IS DECLARED BEFORE EVERY Scheduler, because SCH-19's rule is
-	 * that the Board OUTLIVES the Scheduler. */
+	 * The Board is declared before every Scheduler: the Board outlives the
+	 * Scheduler. */
 	{
 		g2::Board board;
 

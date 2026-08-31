@@ -543,11 +543,11 @@ namespace g2
 		std::memcpy(dst, &s, sizeof s);
 	}
 
-	/* THE RESET. It reuses resetMcu rather than calling mcf5307_reset itself,
-	 * so the core's reset and the clearing of this class's fault bit stay ONE
-	 * decision in ONE place; a second call site here could drift from that one.
+	/* The reset reuses resetMcu rather than calling mcf5307_reset itself, so
+	 * the core's reset and the clearing of this class's fault bit stay one
+	 * decision in one place; a second call site here could drift from that one.
 	 *
-	 * THE VECTORS ARE ZERO BECAUSE THERE IS NO OTHER DEFENSIBLE VALUE. A reset
+	 * The vectors are zero because there is no other defensible value. A reset
 	 * that is not handed an initial stack pointer and an initial program
 	 * counter has no source for either: the firmware's reset vector lives in a
 	 * flash image this call is explicitly not reading, and a plausible-looking
@@ -555,7 +555,7 @@ namespace g2
 	 * costume of a measurement. A caller that knows the vectors calls resetMcu
 	 * with them.
 	 *
-	 * board.h states in full what this call does NOT zero, and why. */
+	 * board.h states in full what this call does not zero, and why. */
 	void Board::reset() noexcept
 	{
 		resetMcu(0u, 0u);
@@ -565,13 +565,9 @@ namespace g2
 		m_dspSet.reset();
 	}
 
-	/* THE LOAD, AND THE VERSION WORD IS NOW READ. stateSave has written it
-	 * since BRD-21; nothing read it, because a void return had nowhere to
-	 * report a refusal to. SCH-21 step 4's reconciliation gives it one, and the
-	 * comparison is what turns the word from decoration into a guard.
-	 *
-	 * THE COMPARISON IS BEFORE THE FIRST WRITE, so a refused load leaves this
-	 * object exactly as it was -- the same rule ChainAdapter::stateLoad's
+	/* The comparison against the version word is what turns it from decoration
+	 * into a guard, and it is before the first write, so a refused load leaves
+	 * this object exactly as it was -- the same rule ChainAdapter::stateLoad's
 	 * geometry header and DspSet::stateLoad's bridge test already follow. */
 	Status Board::stateLoad(const void* const src) noexcept
 	{
