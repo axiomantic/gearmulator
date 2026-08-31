@@ -25,9 +25,8 @@
 // mcf5307_state_* and isp1181_state_* blocks of section 5.2". The pinned core
 // commit exports none of those C symbols. This task therefore serialises the
 // Board's own determinism-relevant state and documents the deviation rather
-// than stubbing a call to a symbol that would not link -- the same
-// documented-deviation route BRD-23 took for mcf5307_exec earlier in this
-// track. The Nim blocks are appended here the day a cpu task exports them.
+// than stubbing a call to a symbol that would not link. The Nim blocks are
+// appended here the day a cpu task exports them.
 //
 // THE MCU CLOCK PLACEHOLDER LINE. The Board logs one line at construction that
 // names G2_MCU_CORE_CLOCK_HZ, states that the value 45,000,000 is a
