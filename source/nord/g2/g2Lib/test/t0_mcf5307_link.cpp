@@ -29,27 +29,18 @@
 // putting the header on the include path with the option OFF -- is the one
 // change that would make the negative case stop testing anything.
 //
-// -------------------------------------------------------------------------
-// A DEVIATION FROM THE Check: LINE OF BRD-23, STATED HERE RATHER THAN HIDDEN.
-//
-// BRD-23's Check: line says the test "calls mcf5307_runtime_init() and takes
-// the address of mcf5307_exec". THE SECOND HALF CANNOT BE SATISFIED at the
-// commit this build pins. src/mcf5307.nim exports mcf5307_runtime_init;
-// mcf5307_exec is DECLARED in include/mcf5307.h and is DEFINED nowhere in the
-// library. To confirm against libmcf5307.a built from the pinned commit:
+// BRD-23's Check: line asks the test to call mcf5307_runtime_init() and take
+// the address of mcf5307_exec. Both halves are satisfied below. An earlier pin
+// exported only mcf5307_runtime_init, so taking the second address would have
+// failed to link and the deviation was written down here; the pin this build
+// carries defines both, so the case is written rather than deferred. To
+// confirm against libmcf5307.a built from the pinned commit:
 //
 //   $ nm -g libmcf5307.a | grep mcf5307_
-//   $ c++ probe.o libmcf5307.a -o probe
 //
-// So a test that took that address would fail to LINK, and BRD-23's positive
-// case could not pass at all. The address is NOT taken here and NO stub is
-// supplied for it: a stub would make the link succeed against a definition
-// that is not the core, which is the one outcome this test exists to refuse.
-// mcf5307_exec belongs in this test the day a cpu task defines it.
-//
-// Plan section 1.3 rule 5 is why this is written down instead of worked
-// around quietly.
-// -------------------------------------------------------------------------
+// NO STUB is supplied for either symbol. A stub would make the link succeed
+// against a definition that is not the core, which is the one outcome this
+// test exists to refuse.
 
 #include <mcf5307.h>
 
@@ -84,12 +75,13 @@ namespace
 // It CATCHES: a runtime entry point that does not return -- an aborting Nim
 // runtime, or an idempotence latch that recursed.
 //
-// It DOES NOT CATCH a wrong ANSWER from the core, because at the pinned commit
-// the core computes no answer: mcf5307_runtime_init returns void and is the
-// only symbol the library exports. Every behavioural assertion about the core
-// belongs to the cpu track's own conformance tests, in the cpu track's own
-// repository. Two honest cases are written here rather than a longer list
-// padded with assertions that no defect could turn red.
+// It DOES NOT CATCH a wrong ANSWER from the core. Nothing below executes a
+// program: mcf5307_runtime_init returns void, and mcf5307_exec has its address
+// taken but is never called, because calling it needs a context and a program
+// and would be a behavioural assertion. Every behavioural assertion about the
+// core belongs to the cpu track's own conformance tests, in the cpu track's
+// own repository. The cases here are the ones a link defect can turn red,
+// rather than a longer list padded with assertions no defect could.
 
 int main()
 {
@@ -105,6 +97,23 @@ int main()
 
 	check(runtimeInit != nullptr,
 		"mcf5307_runtime_init resolved to a non-null address through g2Lib");
+
+	// Case 1b. The execution entry point resolved too, and through the same
+	// link line.
+	//
+	// This is the second half of BRD-23's Check: line. The pointer is volatile
+	// for the reason above: the address must be materialised, so that a g2Lib
+	// which does not carry the core is red at the link step naming
+	// _mcf5307_exec. It is the symbol Board::runMcu forwards to, so this case
+	// covers the one mcf5307 entry point g2Lib itself calls.
+	//
+	// The address is taken and NOT called. Calling it needs a context and a
+	// program, and what it returned would be a statement about the core rather
+	// than about the link.
+	uint32_t (*volatile exec)(mcf5307_ctx*, uint32_t) = &mcf5307_exec;
+
+	check(exec != nullptr,
+		"mcf5307_exec resolved to a non-null address through g2Lib");
 
 	// Case 2. The runtime entry point runs, and it runs repeatedly.
 	//
