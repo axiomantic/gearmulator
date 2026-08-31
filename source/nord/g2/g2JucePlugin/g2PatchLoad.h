@@ -68,7 +68,9 @@ namespace g2
 		UnknownObjectType,
 		LengthPastEnd,
 		TruncatedObject,
-		SendRefused
+		SendRefused,
+		NameTooLong,
+		BufferTooSmall
 	};
 
 	/* The name, as `MANIFEST.tsv` spells it. Never null. */
@@ -90,4 +92,66 @@ namespace g2
 	 * rather than swallowed, because a swallowed refusal tells the plugin that
 	 * a patch message it never delivered was sent. */
 	Pch2LoadResult pch2Load(const uint8_t* _file, std::size_t _size, InternalClient& _client) noexcept;
+
+	/* The 16-character entry-name field the patch-load header carries. A name
+	 * of fewer than 16 characters is followed by one 0x00 terminator; a name of
+	 * exactly 16 carries none. A longer name is refused rather than truncated:
+	 * a short field slides every byte of the object chain behind it. */
+	constexpr std::size_t g_entryNameLength = 16;
+
+	/* The largest patch-load message this composer will build.
+	 *
+	 * A `.pch2` grows on its way to the wire -- a 0x65 object gains a whole
+	 * tenth variation and a 0x4D gains one byte -- so a buffer sized to the
+	 * file is too small. The measured corpus file composes to 3,818 bytes and
+	 * the largest object the synthesized corpus drives is 65,469 bytes; this
+	 * ceiling holds both with room for the expansion, and a composition that
+	 * would exceed it returns BufferTooSmall rather than writing past the end. */
+	constexpr std::size_t g_maxPatchLoadMessageBytes = 128u * 1024u;
+
+	/* Composes the patch-load MESSAGE frame for `_file` into `_out`.
+	 *
+	 * The frame is
+	 *
+	 *   [2-byte BE total][0x01][0x28+slot][0x53][0x37][0x00 0x00 0x00]
+	 *   [entry name][object chain][2-byte BE CRC-16/XMODEM over the body]
+	 *
+	 * where the total counts the WHOLE frame including its own two prefix
+	 * bytes and the CRC sits DIRECTLY after the body -- there is no pad. A
+	 * pad-to-64 rule was an artifact of a synthetic 4096-byte chunking that
+	 * never produced a short USB packet; the real wire terminates on the short
+	 * last packet, and totals of 865 and 14,664 bytes were measured there.
+	 *
+	 * THE OBJECT CHAIN CARRIES NO PER-OBJECT CHECKSUM. One CRC covers the whole
+	 * body, so a checksum after each object would be bytes the firmware's chain
+	 * walk reads as payload.
+	 *
+	 * TWO PAYLOADS ARE TRANSFORMED ON THE WAY OUT, and both are the variation
+	 * count that reads 9 in a file and 10 on the wire. A 0x65 payload that
+	 * decodes through the nine-variation bit layout gains a FULL tenth
+	 * variation -- a copy of the last, 297 bytes for the measured file. A
+	 * single filler byte does not work: the firmware's reader walks a
+	 * continuous bit stream whose per-variation footprint is an 8-bit index,
+	 * MorphCount 7-bit fields, an 8-bit parameter count and that many 29-bit
+	 * parameters, so a short tenth leaves it reading the FOLLOWING chunk's
+	 * bytes as a parameter count and overshooting the section by 37 bytes. A
+	 * 0x4D payload, and any 0x65 the layout does not fully describe, take the
+	 * count rewrite and one zero filler byte.
+	 *
+	 * Returns the number of bytes written and sets `_result` to Loaded, or
+	 * returns 0 with `_result` naming the refusal. Nothing is allocated: the
+	 * whole composition is written into the caller's buffer. */
+	std::size_t pch2ComposePatchLoad(const uint8_t* _file, std::size_t _size, const char* _name, uint8_t _slot,
+		uint8_t* _out, std::size_t _outCapacity, Pch2LoadResult& _result) noexcept;
+
+	/* Validates `_file`, composes its patch-load message and originates it as
+	 * ONE transfer through `_client`.
+	 *
+	 * `_scratch` holds the message at offset 2 so that InternalClient can write
+	 * the transfer envelope around it in place, which is why the buffer must
+	 * hold the message plus four bytes. `_scratchSize` below
+	 * g_maxPatchLoadMessageBytes + 4 is accepted -- a composition that outgrows
+	 * it returns BufferTooSmall. */
+	Pch2LoadResult pch2LoadFramed(const uint8_t* _file, std::size_t _size, const char* _name, uint8_t _slot,
+		InternalClient& _client, uint8_t* _scratch, std::size_t _scratchSize) noexcept;
 }

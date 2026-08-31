@@ -93,6 +93,26 @@ namespace g2
 		 * delivered was sent. It never blocks and it never allocates. */
 		bool send(ProtocolFrame _frame) noexcept;
 
+		/* Plugin thread -> device, at the TRANSFER level.
+		 *
+		 * The transfer envelope is the same shape as the message inside it --
+		 * [2-byte BE total][body][2-byte BE CRC-16/XMODEM over body] -- with
+		 * the message frame as the body, so a patch load carries its own total
+		 * and CRC once at the message level and once again around the whole
+		 * transfer. The total counts the WHOLE transfer including its own two
+		 * prefix bytes, and the CRC sits DIRECTLY after the body: there is no
+		 * pad, because the real wire terminates on the short last USB packet.
+		 *
+		 * THE ENVELOPE IS WRITTEN IN PLACE AND NOTHING IS COPIED. `_buffer`
+		 * holds the message at offset 2 and must have room for `_messageSize`
+		 * plus four bytes; this call writes the two prefix bytes at the front
+		 * and the two CRC bytes behind the message, then originates the whole
+		 * of it as ONE frame.
+		 *
+		 * Returns the hub's verdict unchanged, and false without touching the
+		 * buffer when the transfer would not fit a 16-bit total. */
+		bool sendTransfer(uint8_t* _buffer, std::size_t _messageSize) noexcept;
+
 		/* Device -> plugin. Scheduler thread, inside a quantum boundary. The
 		 * argument is valid only until this call returns, so the frame is
 		 * COPIED. A frame larger than _maxFrameBytes, or one arriving at a

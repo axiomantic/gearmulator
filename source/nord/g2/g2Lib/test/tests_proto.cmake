@@ -257,3 +257,54 @@ set_tests_properties(t1_usb_isr PROPERTIES
 if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_usb_isr APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
+
+
+# ----------------- The 0x01/0x37 patch-load framing repair
+#
+# TIER T1, gated exactly as t1_patch_running is: it reads one file out of the
+# artifact corpus, so it SKIPS with a reason when NMG2_ARTIFACTS names no
+# directory. It boots no firmware, which is why it carries no TIMEOUT of the
+# size the booting targets above need.
+#
+# IT COMPILES ONE SOURCE DIRECTLY, for the reason stated above:
+# g2PatchLoad.cpp lives in g2JucePlugin and is not a g2Lib source. crc16 and
+# InternalClient arrive THROUGH the library, because sources_proto.cmake
+# appends both.
+#
+# THE PATCH IS NAMED RELATIVE TO NMG2_ARTIFACTS AND NEVER COPIED INTO THIS
+# TREE, exactly as t1_patch_running names it and for the same reason: it is
+# Clavia-derived and a copy under source/ would put those bytes in the
+# repository. THE ENTRY NAME IS DERIVED FROM THIS PATH BY THE TEST and is not
+# defined a second time here.
+#
+# IT NEEDS THE PYTHON ORACLE, because the composed stream is compared against
+# nmg2-tools' own composer byte for byte. The three definitions below are the
+# same ones tests_board.cmake hands t0_extract_matches_python, and they are in
+# scope because that file is included before this one. AN ORACLE THAT IS NOT
+# THERE IS A FAILURE OF THE CHECK AND NEVER A SKIP: only a missing artifact
+# directory skips, and an oracle-less machine that scored Passed would report a
+# framing this run never compared.
+
+add_executable(t1_patch_load_accepted
+	${CMAKE_CURRENT_SOURCE_DIR}/t1_patch_load_accepted.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2PatchLoad.cpp)
+target_link_libraries(t1_patch_load_accepted PRIVATE g2Lib)
+set_property(TARGET t1_patch_load_accepted PROPERTY FOLDER "G2/test")
+target_compile_definitions(t1_patch_load_accepted PRIVATE
+	G2_PATCH_RELATIVE_PATH="corpus/pch2/BackTo72 demo.pch2"
+	G2_ORACLE_PYTHON="${Python3_EXECUTABLE}"
+	G2_ORACLE_TOOLS_DIR="${G2_ORACLE_TOOLS_DIR}"
+	G2_ORACLE_WORK_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+
+# The skip code is the one g2_protoGatedSkipExitCode above already read out of
+# gatedFixture.h. It is not read a second time: two derivations of one number
+# can drift, and the variable is in scope here.
+
+add_test(NAME t1_patch_load_accepted COMMAND t1_patch_load_accepted)
+set_tests_properties(t1_patch_load_accepted PROPERTIES
+	LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_protoGatedSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_patch_load_accepted APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
+
