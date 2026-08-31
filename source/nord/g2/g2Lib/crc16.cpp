@@ -1,9 +1,5 @@
-/* crc16.cpp -- see crc16.h for the parameters and for the two coverages.
- *
- * The loop is bit-by-bit rather than table-driven. The protocol checksums a
- * few kilobytes at a time, so a 512-byte table would buy nothing measurable
- * and would put the parameter set in generated data instead of in a line a
- * reader can hold against design section 15.3.
+/* The loop is bit-by-bit rather than table-driven. The protocol checksums a
+ * few kilobytes at a time, so a 512-byte table would buy nothing measurable.
  */
 
 #include "crc16.h"

@@ -1,22 +1,17 @@
 #pragma once
 
-/* THE OUTCOME OF A TRANSPORT PROBE, AS ONE WORD.
+/* The outcome of a transport probe, as one word.
  *
  * `--impulse` injects a known, non-silent sample at the codec source and
- * observes whether and where it propagates. IT IS A TRANSPORT PROBE AND NOT AN
- * AUDIO CLAIM: it answers "does the path carry data", never "does the machine
- * make music". The default state of a Nord Modular is to not play sound and
- * sound comes from loading patches -- plan section 24.6 row W3-418 carries the
- * operator's ruling -- so a chain that carries nothing on an UNPATCHED machine
- * is the emulator agreeing with the hardware and is not a defect in the
- * transport.
+ * observes whether and where it propagates. It is a transport probe and not an
+ * audio claim: it answers "does the path carry data", never "does the machine
+ * make music". The default state of a Nord Modular is to not play sound, and
+ * sound comes from loading patches, so a chain that carries nothing on an
+ * unpatched machine is the emulator agreeing with the hardware and is not a
+ * defect in the transport.
  *
- * WHY A WORD AND NOT A FIGURE. Before this, three different answers printed the
- * same shape and differed only in digits: a machine that never reached the play
- * phase, a chain that reached it and carried nothing, and an observer that never
- * received a frame at all. The third is the one that hides: an unobserved
- * impulse and a blind observer both print `arrival=-1`. A mechanism whose
- * silence is indistinguishable from its success is not a mechanism.
+ * A word rather than a figure, because an unobserved impulse and a blind
+ * observer both print `arrival=-1`.
  *
  * The classification is a free function over a plain record so that every arm
  * is reachable from a test without booting a machine. The console fills the
@@ -27,8 +22,8 @@ namespace g2console
 	enum class ImpulseOutcome
 	{
 		// The play phase was never reached: no artifact, an image that did not
-		// place, a halted or faulted MCU, or kernels that never landed. NOTHING
-		// ABOUT THE CHAIN WAS MEASURED, and the word says so rather than
+		// place, a halted or faulted MCU, or kernels that never landed. Nothing
+		// about the chain was measured, and the word says so rather than
 		// reporting a chain that carried nothing.
 		DidNotRun,
 
@@ -36,8 +31,8 @@ namespace g2console
 		// something. This one says it did not, so no arm below is available.
 		InstrumentBlind,
 
-		// The observer received frames and none carried the pattern. THE CHAIN
-		// DID NOT CARRY IT TO THE SINK. Expected on a machine with no patch
+		// The observer received frames and none carried the pattern: the chain
+		// did not carry it to the sink. Expected on a machine with no patch
 		// loaded.
 		Stopped,
 
@@ -60,9 +55,8 @@ namespace g2console
 		 * about the chain. */
 		bool     observerSelfTest = false;
 
-		/* Frames the sink actually delivered across the walk. ZERO IS THE
-		 * BLINDNESS CASE: the detector examined a frame it was handed by
-		 * nothing, and a zero-filled buffer that was never written looks
+		/* Frames the sink actually delivered across the walk. Zero is the
+		 * blindness case: a zero-filled buffer that was never written looks
 		 * exactly like silence that was. */
 		unsigned framesPulled     = 0;
 
@@ -80,12 +74,11 @@ namespace g2console
 		bool     countersZero     = false;
 	};
 
-	/* THE ORDER OF THESE CLAUSES IS THE WHOLE DESIGN, AND IT RUNS FROM THE
-	 * WEAKEST PREMISE OUTWARDS. Each clause below rests on the one above it
-	 * having held: a chain verdict rests on the observer having seen something,
-	 * and the observer's report rests on the machine having run. Reversing any
-	 * two would let a later clause read a field the earlier one has just said
-	 * is meaningless. */
+	/* The order of these clauses runs from the weakest premise outwards. Each
+	 * clause rests on the one above it having held: a chain verdict rests on
+	 * the observer having seen something, and the observer's report rests on
+	 * the machine having run. Reversing any two would let a later clause read
+	 * a field the earlier one has just said is meaningless. */
 	constexpr ImpulseOutcome classify(const ImpulseObservation& _o)
 	{
 		// Nothing ran, so every field below it describes a machine that was
@@ -93,17 +86,16 @@ namespace g2console
 		if(!_o.reachedPlayPhase)
 			return ImpulseOutcome::DidNotRun;
 
-		/* THE ZERO IS NOT ALLOWED TO PASS UNPAIRED. An absence reported by an
-		 * instrument that cannot observe is not an absence, so both halves of
-		 * "the observer worked" are required before an arrival or its lack is
-		 * given any meaning: the detector proved on a known positive and a
-		 * known negative, and the sink having delivered at least one frame for
-		 * it to look at. A buffer nothing wrote reads exactly like silence. */
+		/* An absence reported by an instrument that cannot observe is not an
+		 * absence, so both halves of "the observer worked" are required before
+		 * an arrival or its lack is given any meaning: the detector proved on
+		 * a known positive and a known negative, and the sink having delivered
+		 * at least one frame for it to look at. */
 		if(!_o.observerSelfTest || _o.framesPulled == 0)
 			return ImpulseOutcome::InstrumentBlind;
 
 		// The observer worked and saw no pattern: the chain did not carry it.
-		// On an unpatched machine this is the CORRECT answer.
+		// On an unpatched machine this is the correct answer.
 		if(_o.arrival < 0)
 			return ImpulseOutcome::Stopped;
 
@@ -127,8 +119,7 @@ namespace g2console
 		return "UNCLASSIFIED";
 	}
 
-	/* THE EXIT STATUS SEPARATES "THE ANSWER IS NO" FROM "THERE IS NO ANSWER".
-	 * A caller that reads only the status still learns which of the two it got:
+	/* The exit status separates "the answer is no" from "there is no answer":
 	 * 1 is a chain that did not carry the pattern, 2 is a machine that never
 	 * ran, and 3 is an instrument that could not see. */
 	constexpr int exitStatus(const ImpulseOutcome _outcome)

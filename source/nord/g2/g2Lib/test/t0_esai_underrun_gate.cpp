@@ -1,55 +1,22 @@
-/* t0_esai_underrun_gate.cpp -- the underrun gate is driven by a REAL transmit
- * underrun, planted through the emulated ESAI, and it rises.
+/* The underrun gate is driven by a real transmit underrun, planted through the
+ * emulated ESAI, and it rises.
  *
- * WHAT THIS ROW OWNS, AND WHY IT IS A SEPARATE FILE FROM t0_written_flag.
+ * On a running machine the ESAI's M_TUE status bit is always clear at the
+ * callback instant: Esai::writeSlotToFrame raises M_TUE for the stale slot and
+ * then triggers the transmit DMA, and the DMA answers by writing TX, which
+ * makes Esai::writeTX clear M_TUE again -- all before the frame containing the
+ * stale slot reaches the callback at the frame boundary. A wrapper that read
+ * M_TUE would therefore never see it set.
  *
- * t0_written_flag proves the transmit wrappers can READ a stale-frame signal
- * and discriminate on it. It never proved the SIGNAL CAN OCCUR: it put the
- * ESAI into "underrun" by writing the status register by hand. Those two are
- * different claims, and only the second one is the gate. This row plants the
- * CONDITION -- a real transmit underrun, produced by the peripheral's own
- * transmit path from a TX register that was not written in time -- and asserts
- * that ChainAdapter::underrunFrames and secondBusUnderrunFrames rise from it.
+ * Case 1 records the status register at the delivery instant and asserts M_TUE
+ * is clear there -- and asserts the counter rose anyway. Those two assertions
+ * together are the discriminator: against a build whose wrappers read M_TUE,
+ * the first passes and the second fails.
  *
- * THE DEFECT THIS ROW WAS WRITTEN AGAINST, STATED NO WIDER THAN IT IS.
- * underrunFrames was NEVER SILENT. A written flag can be clear by three
- * routes, and two of them work:
- *
- *   1. the position's transmit wrapper never ran this quantum. REACHABLE, and
- *      it is the route EVERY pre-existing non-zero assertion on this counter
- *      uses -- t0_advance_all and t0_chain_counters attach real ESAIs and then
- *      simply do not fire a wrapper.
- *   2. the position has no Esai attached. Reachable in principle.
- *   3. a frame WAS delivered and it carried a transmit underrun. UNREACHABLE
- *      before the change this row guards.
- *
- * So the counter counted what it was built to count -- "this position
- * delivered no frame this quantum" -- and the ONE refinement it was also meant
- * to catch could not reach it. Route 3 was unreachable because the wrappers
- * read the ESAI's M_TUE status bit, and on a running machine that bit is
- * always clear at the callback instant: Esai::writeSlotToFrame raises M_TUE
- * for the stale SLOT and then triggers the transmit DMA, and the DMA answers
- * by writing TX, which makes Esai::writeTX clear M_TUE again -- all before the
- * FRAME containing the stale slot reaches the callback at the frame boundary.
- * Measured over one --impulse run of the booted machine with every slot forced
- * to underrun: 2,080,110 raises of M_TUE, of which 2,079,950 were cleared
- * inside writeSlotToFrame itself, and the audio wrapper observed the bit set 7
- * times in 224,495 callbacks. underrun=0 throughout.
- *
- * THIS ROW IS ROUTE 3 AND NOTHING ELSE, which is what distinguishes it from
- * every assertion that came before: those fire NO wrapper, this one fires a
- * wrapper whose ESAI genuinely underran. That is why the gap survived -- the
- * counter had assertions, and none of them reached this input.
- *
- * THE CHECK THAT PINS IT. Case 1 records the status register AT THE DELIVERY
- * INSTANT and asserts M_TUE is CLEAR there -- and asserts the counter rose
- * anyway. Those two assertions together are the discriminator: against a build
- * whose wrappers read M_TUE, the first passes and the second fails.
- *
- * CASE 5 AND CASE 6 ARE phaseErrorFrames' KNOWN POSITIVE. That counter reads
- * the same written flags, and it needs "a delivery happened" while the underrun
+ * Cases 5 and 6 are phaseErrorFrames' known positive. That counter reads the
+ * same written flags, and it needs "a delivery happened" while the underrun
  * gate needs "the delivery was good". Case 5 shows a second delivery inside one
- * quantum raises it; case 6 shows it still rises when the FIRST delivery of the
+ * quantum raises it; case 6 shows it still rises when the first delivery of the
  * quantum was a stale one, which is the case a gate built out of the underrun
  * flag alone would go blind on.
  */
@@ -140,7 +107,7 @@ int main()
 		"the driver reaches the transmit callback at all (an instrument that "
 		"never delivers would make every counter below vacuously right)");
 
-	/* ------------- Case 1: a REAL underrun raises the audio gate, and M_TUE
+	/* ------------- Case 1: a real underrun raises the audio gate, and M_TUE
 	 * is already clear when the frame carrying it is delivered. */
 	{
 		audio.staleFrame(0x222222u);
@@ -166,7 +133,7 @@ int main()
 
 	/* ------------- Case 2: no plant, no alarm.
 	 *
-	 * A quantum whose delivered frame had every slot written in time must NOT
+	 * A quantum whose delivered frame had every slot written in time must not
 	 * raise the counter. Without this the gate could be a constant. */
 	{
 		const uint64_t before = adapter.underrunFrames(0u);
@@ -196,7 +163,7 @@ int main()
 			"a second planted underrun raises underrunFrames(0) again");
 	}
 
-	/* ------------- Case 4: the SECOND bus's own gate, driven the same way.
+	/* ------------- Case 4: the second bus's own gate, driven the same way.
 	 *
 	 * The second bus is fed by a different Esai and a different flag array, so
 	 * a fix that reached only the audio wrapper would leave this dead. The
@@ -231,7 +198,7 @@ int main()
 
 	/* ------------- Case 5: phaseErrorFrames' known positive.
 	 *
-	 * TWO audio deliveries inside ONE quantum is a delivery the scheduler did
+	 * Two audio deliveries inside one quantum is a delivery the scheduler did
 	 * not ask for. Without this case the counter has never been shown able to
 	 * leave zero -- and a counter that cannot is indistinguishable from a
 	 * broken one. */
@@ -253,8 +220,8 @@ int main()
 
 	/* ------------- Case 6: a stale first delivery must not blind phaseError.
 	 *
-	 * The phase-error rule asks "has this position ALREADY delivered in this
-	 * quantum", which is a question about ARRIVAL. The underrun rule asks
+	 * The phase-error rule asks "has this position already delivered in this
+	 * quantum", which is a question about arrival. The underrun rule asks
 	 * whether the delivery was good. If the two shared one predicate, a
 	 * quantum that underran would report no phase error however many extra
 	 * callbacks it carried -- the underrun gate would blind the phase gate in

@@ -45,15 +45,10 @@ if(EXISTS "${g2_parentOfG2Lib}/g2TestConsole/CMakeLists.txt")
 
 	# ----------------- `--impulse` reports an outcome word
 	#
-	# Check: ctest --test-dir build --no-tests=error -R ^t0_impulse_outcome$
+	# Tier T0. Its child runs with NMG2_ARTIFACTS unset, so it boots no firmware.
 	#
-	# TIER T0. Its child runs with NMG2_ARTIFACTS UNSET, so it boots no firmware.
-	#
-	# NO PLAN BLOCK OWNS THIS REGISTRATION YET. It is written here rather than
-	# left out because the behaviour it holds -- that a machine which never ran,
-	# a chain that carried nothing, and an observer that saw nothing must not
-	# print the same thing -- has no other mechanism, and a behaviour with no
-	# registered test is a behaviour nothing re-checks. The owning block is OWED.
+	# It holds that a machine which never ran, a chain that carried nothing, and
+	# an observer that saw nothing must not print the same thing.
 	add_executable(t0_impulse_outcome t0_impulse_outcome.cpp)
 	set_property(TARGET t0_impulse_outcome PROPERTY FOLDER "G2/test")
 	target_compile_definitions(t0_impulse_outcome PRIVATE

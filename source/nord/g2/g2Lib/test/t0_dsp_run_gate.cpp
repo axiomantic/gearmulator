@@ -82,8 +82,8 @@ namespace
 		}
 	}
 
-	/* SIGNED, because the debt is an int64_t and the failure this reports is a
-	 * debt paid down BELOW zero. Rendering that through the unsigned form above
+	/* Signed, because the debt is an int64_t and the failure this reports is a
+	 * debt paid down below zero. Rendering that through the unsigned form above
 	 * would print it as a number near 2^64 and hide which side of zero it fell. */
 	void checkEqualSigned(const int64_t observed, const int64_t expected,
 		const char* const what)
@@ -362,28 +362,24 @@ namespace
 			"the second transmit still happens behind a closed gate");
 	}
 
-	/* One quantum whose carried debt has ALREADY consumed this quantum's whole
-	 * allocation -- design section 13.4.6 rule 4, the long-dispatch quantum,
-	 * driven here on the DSP side. `_extraAllocations` says how many whole
-	 * allocations the carried debt stands ABOVE the budget: 0 puts want at
-	 * exactly zero, 1 puts it one whole allocation below.
+	/* One quantum whose carried debt has already consumed this quantum's whole
+	 * allocation -- the long-dispatch quantum, driven here on the DSP side.
+	 * `_extraAllocations` says how many whole allocations the carried debt
+	 * stands above the budget: 0 puts want at exactly zero, 1 puts it one whole
+	 * allocation below.
 	 *
-	 * WHY THIS CASE EXISTS AND WHY IT IS SEPARATE FROM THE TWO ABOVE. Every
-	 * other case in this file drives want > 0, so none of them enters the
-	 * `want <= 0` branch at all -- plan row W3-407 records that as the reason
-	 * its Finding 5 survived a repair pass that used this very file as its
-	 * check. The equivalent case on the MCU side is t0_mcu_debt's forced-idle
-	 * workload, and this one copies its shape deliberately.
+	 * Every other case in this file drives want > 0, so none of them enters the
+	 * `want <= 0` branch at all.
 	 *
-	 * THE EXPECTATION IS ARITHMETIC AND NOT A SECOND OPINION. The debt after
-	 * an idle quantum is asserted against `debtBefore - budget`, where
-	 * `debtBefore` is a value THIS FUNCTION wrote into the context and `budget`
-	 * comes from design section 13.4.1's own `alloc()` against a PRIVATE copy
-	 * of the accumulator. Neither figure is read back from the job, and
-	 * `runQuantum` is not called: t0_mcu_debt's mutation M4 -- "the idle branch
-	 * pays down 2x budget" -- is invisible to a check that mirrors one
-	 * implementation against the other, because both sides move together.
-	 * Independent per-quantum arithmetic is the only shape that sees it. */
+	 * The expectation is arithmetic and not a second opinion. The debt after an
+	 * idle quantum is asserted against `debtBefore - budget`, where `debtBefore`
+	 * is a value this function wrote into the context and `budget` comes from
+	 * `alloc()` against a private copy of the accumulator. Neither figure is
+	 * read back from the job, and `runQuantum` is not called: an idle branch
+	 * that paid down twice the budget would be invisible to a check that
+	 * mirrors one implementation against the other, because both sides move
+	 * together. Independent per-quantum arithmetic is the only shape that sees
+	 * it. */
 	void driveIdle(const int64_t extraAllocations, const char* const name)
 	{
 		Fixture f;
@@ -429,10 +425,9 @@ namespace
 
 		g2::dspJob(&ctx.base);
 
-		/* THE COUNTER IS ASSERTED BEFORE THE DEBT, AND THAT ORDER IS THE
-		 * ANTI-MIRAGE GUARD. A counter still at zero means the branch was
-		 * never entered, and every equality below would then be comparing a
-		 * quantum this case never drove. */
+		/* The counter is asserted before the debt. A counter still at zero
+		 * means the branch was never entered, and every equality below would
+		 * then be comparing a quantum this case never drove. */
 		snprintf(what, sizeof(what),
 			"%s: an idle quantum is counted as EXACTLY one long dispatch", name);
 		checkEqual(ctx.longDispatchQuanta, 1u, what);
@@ -445,9 +440,8 @@ namespace
 			"%s: an idle quantum executes no instruction", name);
 		checkEqual(f.dsp.getInstructionCounter() - instructions, 0u, what);
 
-		/* THE PAY-DOWN, ONCE. g2::runQuantum's want <= 0 branch subtracts one
-		 * whole allocation and no more, and this job reconciles the same debt
-		 * under the same rule. */
+		/* g2::runQuantum's want <= 0 branch subtracts one whole allocation and
+		 * no more, and this job reconciles the same debt under the same rule. */
 		snprintf(what, sizeof(what),
 			"%s: an idle quantum pays the debt down by ONE whole allocation "
 			"(from %lld, by a budget of %lld)", name,
@@ -455,14 +449,14 @@ namespace
 			static_cast<long long>(budget));
 		checkEqualSigned(ctx.debt, debtBefore - budget, what);
 
-		/* cycleDebt.h:31's lower half, which the double pay-down breaks
-		 * outright whenever the carried debt equals the budget exactly. */
+		/* cycleDebt.h's lower half, which a double pay-down breaks outright
+		 * whenever the carried debt equals the budget exactly. */
 		snprintf(what, sizeof(what),
 			"%s: an idle quantum leaves the debt at or above zero", name);
 		check(ctx.debt >= 0, what);
 
-		/* The frame cadence does not depend on the branch: dspJob.cpp:40-43
-		 * states that steps 1 and 3 run even when step 2 runs nothing. */
+		/* The frame cadence does not depend on the branch: steps 1 and 3 run
+		 * even when step 2 runs nothing. */
 		checkOrder(f.order, { "a_rx", "s_rx", "a_tx", "s_tx" });
 	}
 }
@@ -621,7 +615,7 @@ int main()
 			"the second transmit happens behind an open gate");
 	}
 
-	/* ---------------- CASE 3, the gate OPEN and the quantum IDLE, in both
+	/* ---------------- Case 3, the gate open and the quantum idle, in both
 	 * spellings of the want <= 0 condition. */
 	driveIdle(0, "case 3a, a carried debt equal to one whole allocation "
 		"(want == 0)");

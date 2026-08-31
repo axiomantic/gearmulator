@@ -878,10 +878,9 @@ namespace
 
 	constexpr unsigned g_impulseOverrunQuanta = 1024u;
 
-	/* THE OUTCOME IS PRINTED ON EVERY EXIT PATH, INCLUDING THE ONES THAT LEAVE
-	 * BEFORE A BOARD EXISTS. A path that returned a bare status printed figures
-	 * that a reader had to reconstruct an answer from, and the reconstruction
-	 * of "no artifact" and "the chain carried nothing" produced the same one. */
+	/* The outcome is printed on every exit path, including the ones that leave
+	 * before a board exists. Reconstructing an answer from the figures alone
+	 * gives "no artifact" and "the chain carried nothing" the same one. */
 	void reportOutcome(const g2console::ImpulseOutcome _outcome, const std::string& _detail)
 	{
 		std::cout << "impulse: OUTCOME=" << g2console::name(_outcome) << std::endl;
@@ -892,7 +891,7 @@ namespace
 		             " and not a broken instrument" << std::endl;
 	}
 
-	/* THE DETAIL LINE SAYS WHAT THE WORD MEANS FOR THIS RUN, and it is derived
+	/* The detail line says what the word means for this run, and it is derived
 	 * from the record rather than typed beside it, so a figure cannot drift from
 	 * the outcome it explains. */
 	std::string detailFor(const g2console::ImpulseOutcome _outcome,
@@ -1079,12 +1078,12 @@ namespace
 
 			g2::Frame out{};
 
-			/* THE PULL COUNT IS THE PAIR FOR THE ZERO, AND DISCARDING IT WAS THE
-			 * DEFECT. `out` is zero-initialised every quantum, so a sink that
-			 * delivered NOTHING leaves exactly the bytes a sink that delivered
-			 * SILENCE leaves. Without this count `arrival=-1` reports "the chain
-			 * did not carry it" and "the observer never saw a frame" in one
-			 * value, and the second says nothing about the chain at all. */
+			/* The pull count is the pair for the zero. `out` is zero-initialised
+			 * every quantum, so a sink that delivered nothing leaves exactly the
+			 * bytes a sink that delivered silence leaves. Without this count
+			 * `arrival=-1` reports "the chain did not carry it" and "the observer
+			 * never saw a frame" in one value, and the second says nothing about
+			 * the chain at all. */
 			framesPulled += unsigned(scheduler->pull(&out, 1));
 
 			if(arrival < 0 && (out.slot[0] != 0 || out.slot[1] != 0))
@@ -1094,10 +1093,10 @@ namespace
 			}
 		}
 
-		/* THE OBSERVER'S OWN KNOWN POSITIVE AND KNOWN NEGATIVE, RUN ON THE
-		 * DETECTOR AND NOT ON THE CHAIN. The loop above reports an absence, and
+		/* The observer's own known positive and known negative, run on the
+		 * detector and not on the chain. The loop above reports an absence, and
 		 * an absence reported by a detector that cannot detect is not evidence.
-		 * This drives the SAME two predicates over a frame this program built,
+		 * This drives the same two predicates over a frame this program built,
 		 * whose answers are known before the run: the injected pattern must be
 		 * seen and must compare equal, and a zero frame must not be seen. */
 		bool observerSelfTest = false;
@@ -1175,12 +1174,9 @@ namespace
 		 * booted read its arrival off a chain that was not running, and a
 		 * pattern that arrived at the wrong frame or changed on the way is a
 		 * failure of the row and not a note beside it. */
-		/* THE VERDICT IS THE CLASSIFIER'S, AND IT IS ONE WORD BEFORE IT IS A
-		 * STATUS. The clauses that used to be AND-ed into a single bool are the
-		 * classifier's fields now, so a reader is told WHICH answer this was
-		 * rather than handed the conjunction's false and left to reconstruct it.
-		 * The success clause is unchanged: the same five conditions still have
-		 * to hold for a zero status. */
+		/* The verdict is the classifier's, and it is one word before it is a
+		 * status: a reader is told which answer this was rather than handed a
+		 * conjunction's false and left to reconstruct it. */
 		g2console::ImpulseObservation observation;
 		observation.reachedPlayPhase = booted && landed && !halted && !faulted
 			&& primedPulled == size_t(config.lookaheadFrames);

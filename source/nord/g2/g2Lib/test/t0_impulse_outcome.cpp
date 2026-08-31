@@ -1,20 +1,15 @@
-// `--impulse` REPORTS AN OUTCOME WORD, AND THE OUTCOMES DO NOT LOOK ALIKE.
+// `--impulse` reports an outcome word, and the outcomes do not look alike.
 //
-// Tier T0: the child this test spawns runs with NMG2_ARTIFACTS UNSET, so it
+// Tier T0: the child this test spawns runs with NMG2_ARTIFACTS unset, so it
 // boots no firmware and needs no artifact.
 //
-// ---------------------------------------------------------------------------
-// WHY THIS TEST EXISTS
-//
-// `--impulse` is a TRANSPORT probe. It answers "does the path carry data", and
+// `--impulse` is a transport probe. It answers "does the path carry data", and
 // it never answers "does the machine make music" -- the default state of a Nord
 // Modular is to not play sound, and sound comes from loading patches, so a
-// silent chain on an unpatched machine is the emulator AGREEING with the
-// hardware. Plan section 24.6 row W3-418 carries that ruling; row W3-422
-// restates milestone M5 as a transport claim on it.
+// silent chain on an unpatched machine is the emulator agreeing with the
+// hardware.
 //
-// Before this test the command printed five lines of key=value figures and
-// nothing else. THREE DIFFERENT ANSWERS WORE THE SAME SHAPE:
+// Three different answers otherwise wear the same shape:
 //
 //   - the machine never reached the play phase,
 //   - the chain reached the play phase and carried nothing,
@@ -22,14 +17,12 @@
 //     reported an arrival whatever the chain did.
 //
 // The third is the dangerous one: an unobserved impulse and a blind observer
-// print the same `arrival=-1`. A mechanism whose silence is indistinguishable
-// from its success is not a mechanism, so this test requires the command to
-// name which of the outcomes it reached, in one word, on one line.
+// print the same `arrival=-1`. So this test requires the command to name which
+// of the outcomes it reached, in one word, on one line.
 //
-// Everything asserted here is a process EXIT STATUS or bytes on a standard
+// Everything asserted here is a process exit status or bytes on a standard
 // stream. No assert() carries a predicate: the default build is Release with
 // NDEBUG and would delete it.
-// ---------------------------------------------------------------------------
 
 #include <cstdio>
 #include <cstdlib>
@@ -125,7 +118,7 @@ namespace
 		return result;
 	}
 
-	// The outcome is a WHOLE LINE and not a substring anywhere in the output.
+	// The outcome is a whole line and not a substring anywhere in the output.
 	// A substring search would be satisfied by the usage text, by a comment
 	// echoed back, or by a longer word that merely contains this one.
 	bool carriesLine(const std::string& _output, const std::string& _line)
@@ -170,7 +163,7 @@ int main()
 		// ---------------- the machine that never ran says so in one word
 		//
 		// With no artifact there is no image, so no board is placed and no play
-		// phase is entered. THE COMMAND MUST NOT REPORT THIS AS A SILENT CHAIN:
+		// phase is entered. The command must not report this as a silent chain:
 		// nothing was measured at all, and the word has to say that.
 
 		const CommandResult run = runConsole({"--impulse"});
@@ -186,22 +179,22 @@ int main()
 		check(run.exitCode == 2,
 			"--impulse with no artifact exits 2; got " + std::to_string(run.exitCode));
 
-		// A KNOWN-POSITIVE CONTROL ON THIS TEST'S OWN LINE MATCHER. The three
+		// A known-positive control on this test's own line matcher. The three
 		// assertions above are all negative-shaped -- each would pass on an
 		// empty capture if `carriesLine` were broken or the pipe returned
-		// nothing. This one names a line the command has printed since INT-2
-		// built it, so a matcher that can never match anything is red here
-		// before it is quietly red above.
+		// nothing. This one names a line the command always prints, so a matcher
+		// that can never match anything is red here before it is quietly red
+		// above.
 		check(carriesLine(run.output, "g2TestConsole: --impulse: failed with exit status 2"),
 			"the capture is real and the line matcher matches: the refusal line INT-2 already printed is found whole");
 
 		// ---------------- the arms a machine on this desk cannot reach
 		//
-		// An UNPATCHED Nord Modular is silent by design, so the arm this
+		// An unpatched Nord Modular is silent by design, so the arm this
 		// hardware reaches with an artifact present is STOPPED and no run on
 		// this desk can exercise PROPAGATED. The classification is therefore a
 		// free function over a plain record, and every arm is driven here
-		// directly. THE POINT OF THE SWEEP IS THE PAIR: `blind` and `stopped`
+		// directly. The point of the sweep is the pair: `blind` and `stopped`
 		// differ in exactly one field, and they must not produce one answer.
 
 		using g2console::ImpulseObservation;
@@ -230,10 +223,9 @@ int main()
 		check(std::string(name(classify(neverRan))) == "DID-NOT-RUN",
 			"a machine that never reached the play phase is DID-NOT-RUN even when every other field reads healthy");
 
-		// THE PAIR. `blind` and `stopped` are the same record but for
-		// framesPulled, and both carry arrival=-1. Before the outcome word they
-		// printed the same thing, and a report of "no arrival" from an observer
-		// that received nothing says nothing at all about the chain.
+		// `blind` and `stopped` are the same record but for framesPulled, and
+		// both carry arrival=-1. A report of "no arrival" from an observer that
+		// received nothing says nothing at all about the chain.
 		ImpulseObservation blind = good;
 		blind.framesPulled       = 0;
 		blind.arrival            = -1;
@@ -288,7 +280,7 @@ int main()
 
 		// ---------------- the status a caller reads separates the answers
 		//
-		// A caller that reads only the exit status still learns WHICH of the
+		// A caller that reads only the exit status still learns which of the
 		// three non-success answers it got. Every one of these would collapse
 		// if exitStatus() returned a constant.
 

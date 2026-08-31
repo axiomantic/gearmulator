@@ -1,31 +1,23 @@
-/* esaiUnderrunPlant.h -- drive a REAL transmit underrun through a REAL
- * dsp56k::Esai, using nothing but the peripheral's public register surface.
+/* Drive a real transmit underrun through a real dsp56k::Esai, using nothing
+ * but the peripheral's public register surface.
  *
- * WHY THIS EXISTS. The chain tests used to put the ESAI into "underrun" by
- * calling writestatusRegister() and setting the M_TUE bit by hand. That poke
- * proves a READ discriminates; it never proves the CONDITION can occur, and it
- * cannot, because the transmit wrappers do not read the bit any more -- the
- * bit does not survive to the instant they run. A fixture that pokes the
- * register passes whichever way the production code is wired, which is how a
- * dead gate survived.
- *
- * WHAT A REAL UNDERRUN IS. Esai::writeSlotToFrame folds the TX registers into
- * the frame being assembled. If the enabled transmitters were not all written
- * since the previous slot, that slot carries stale data: the peripheral logs
+ * Esai::writeSlotToFrame folds the TX registers into the frame being
+ * assembled. If the enabled transmitters were not all written since the
+ * previous slot, that slot carries stale data: the peripheral logs
  * "ESAI transmit underrun" and raises M_TUE. The frame is not delivered then --
  * it is delivered later, at the frame boundary, from execTX.
  *
- * AND WHY THE BIT IS GONE BY THEN. writeSlotToFrame ends by triggering the
- * transmit DMA, and the DSP (or the DMA on its behalf) answers by writing TX.
+ * The bit is gone by then. writeSlotToFrame ends by triggering the transmit
+ * DMA, and the DSP (or the DMA on its behalf) answers by writing TX.
  * Esai::writeTX clears M_TUE as soon as every enabled transmitter has been
  * written. So on a running machine the raise and the clear both happen inside
  * one slot, several slots before the frame that carries the stale slot reaches
- * the transmit callback. staleFrame() below reproduces exactly that sequence
- * with a real writeTX rather than a simulated DMA: skip the write for slot 0,
- * then write TX before slot 1, then let the frame complete.
+ * the transmit callback. staleFrame() below reproduces that sequence with a
+ * real writeTX rather than a simulated DMA: skip the write for slot 0, then
+ * write TX before slot 1, then let the frame complete.
  *
- * THE DRIVER TOUCHES NO PRIVATE STATE. TCCR, TCR, TX and execTX are the
- * peripheral's public surface and are what the firmware uses.
+ * Setting M_TUE by hand instead would prove only that a read discriminates,
+ * never that the condition can occur.
  */
 
 #pragma once
@@ -70,7 +62,7 @@ namespace g2test
 		/* TCCR first: writeTransmitClockControlRegister resets the slot
 		 * counter when the word count changes, so enabling the transmitter
 		 * afterwards leaves the section at a known slot. TDC = 1 gives
-		 * getTxWordCount() == 1 and therefore TWO slots per frame. */
+		 * getTxWordCount() == 1 and therefore two slots per frame. */
 		void enable()
 		{
 			m_esai.writeTransmitClockControlRegister(1u << dsp56k::Esai::M_TDC0);
@@ -105,15 +97,15 @@ namespace g2test
 			m_esai.execTX();
 		}
 
-		/* A frame whose FIRST slot underruns for real, and whose second slot
+		/* A frame whose first slot underruns for real, and whose second slot
 		 * is written in time -- so writeTX clears M_TUE before the frame is
-		 * delivered, exactly as the running firmware's DMA does. The frame
-		 * that reaches the transmit callback still carries the stale slot. */
+		 * delivered, as the running firmware's DMA does. The frame that
+		 * reaches the transmit callback still carries the stale slot. */
 		void staleFrame(const dsp56k::TWord _value)
 		{
 			m_esai.execTX();          /* slot 0: TX not written -> underrun */
 			feed(_value);             /* the late refill, which clears M_TUE */
-			m_esai.execTX();          /* slot 1 completes and DELIVERS       */
+			m_esai.execTX();          /* slot 1 completes and delivers       */
 		}
 
 	private:

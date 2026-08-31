@@ -22,16 +22,12 @@
  * emulated ESAI's transmit-underrun latch) and assert the counters, the
  * clearing, and the mailbox-advance cadence.
  *
- * WHICH ROUTE INTO underrunFrames THIS FILE EXERCISES, AND WHICH IT DOES NOT.
  * A flag is not kGoodDelivery for two reasons: no wrapper fired in the quantum,
- * or a wrapper fired and the frame it carried had underrun. EVERY non-zero
- * assertion below is the FIRST route -- the cases attach real ESAIs and then
- * simply do not fire a wrapper. That route is real and this file guards it.
- * The second route is not reachable from here at all, because these cases fire
- * the wrappers by hand with a bare frame rather than driving the peripheral's
- * transmit path, and it is t0_esai_underrun_gate that owns it. Keeping the two
- * apart is the point: for a long time the second route could not occur, and a
- * file asserting the first passed regardless.
+ * or a wrapper fired and the frame it carried had underrun. Every non-zero
+ * assertion below is the first route -- the cases attach real ESAIs and then
+ * simply do not fire a wrapper. The second route is not reachable from here at
+ * all, because these cases fire the wrappers by hand with a bare frame rather
+ * than driving the peripheral's transmit path; t0_esai_underrun_gate owns it.
  *
  * The flags are per-position and per-bus, so a divider of 2 makes the two
  * buses' cadences differ inside one run: window quanta are even frame
@@ -181,7 +177,7 @@ int main()
 	 *
 	 * Firing position 0's audio and second wrappers with no underrun
 	 * outstanding sets exactly audioWritten[0] and secondWritten[0];
-	 * position 1's flags stay clear because NO WRAPPER FIRES for it, which
+	 * position 1's flags stay clear because no wrapper fires for it, which
 	 * is the route into the counter this file owns. */
 	{
 		auto audioTx0 = adapter.audioTxCallback(0u);

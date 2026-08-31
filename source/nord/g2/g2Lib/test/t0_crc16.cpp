@@ -1,34 +1,30 @@
-/* t0_crc16.cpp -- CRC-16/CCITT (XMODEM) against known vectors. Task PROTO-1.
+/* CRC-16/CCITT (XMODEM) against known vectors.
  * Tier T0: no artifact, no firmware, no file outside this repository.
  *
- * Plan section 18, PROTO-1. Design sections 15.3 and 18.2.
+ * The coverage differs between the wire and the file and the two are tested
+ * separately, which is the whole reason this file exists rather than one
+ * vector list:
  *
- * THE COVERAGE DIFFERS BETWEEN THE WIRE AND THE FILE AND THE TWO ARE TESTED
- * SEPARATELY, which is the whole reason this file exists rather than one
- * vector list. Design section 15.3:
- *
- *   - on the wire the CRC covers bytes 2 to n-1 and EXCLUDES the 2-byte
- *     length prefix -- an exclusion at the FRONT;
+ *   - on the wire the CRC covers bytes 2 to n-1 and excludes the 2-byte
+ *     length prefix -- an exclusion at the front;
  *   - in a .pch2 file the same routine covers the version and type bytes and
  *     every chunk and excludes only the trailing CRC -- an exclusion at the
- *     BACK.
+ *     back.
  *
  * A single routine that silently applied one range to both cases would pass a
  * vector list and be wrong. The case named "wire and file over one buffer"
- * below feeds ONE array to both entry points and pins BOTH results, so that
+ * below feeds one array to both entry points and pins both results, so that
  * mistake is a red test and not a matter of reading.
  *
- * WHERE EVERY EXPECTED VALUE COMES FROM, because a test that derives its
- * expectation from the code under test asserts only that the code equals
- * itself. 0x31C3 is the PUBLISHED catalogue check value of CRC-16/XMODEM for
- * the ASCII string "123456789". Every other constant here was computed by a
- * bit-by-bit implementation in another language that reproduces that published
- * value, and is written out as a literal.
+ * 0x31C3 is the published catalogue check value of CRC-16/XMODEM for the ASCII
+ * string "123456789". Every other constant here was computed by a bit-by-bit
+ * implementation in another language that reproduces that published value, and
+ * is written out as a literal.
  *
  * The vectors are built so that the covered range is exactly "123456789" in
- * the wire case AND in the file case. A routine that included the length
+ * the wire case and in the file case. A routine that included the length
  * prefix, or the ASCII header, or the trailing CRC, would not land on 0x31C3
- * -- so the expected value tests the RANGE and not only the polynomial.
+ * -- so the expected value tests the range and not only the polynomial.
  */
 
 #include "../crc16.h"
@@ -121,7 +117,7 @@ namespace
 
 		checkCrc(g2::crc16Wire(m.data(), m.size()), 0x31C3, "wire: covers bytes 2 to n-1, excluding the 2-byte length prefix");
 
-		/* The same buffer with the prefix INCLUDED, which is the defect this
+		/* The same buffer with the prefix included, which is the defect this
 		 * case exists to catch. The two values are different, so the
 		 * assertion above cannot pass by accident. */
 		checkCrc(g2::crc16(m.data(), m.size()), 0x14CD, "wire: including the length prefix gives a different value");
@@ -158,7 +154,7 @@ namespace
 
 	void testWireAndFileOverOneBuffer()
 	{
-		/* ONE array, both entry points, both results pinned. The wire form
+		/* One array, both entry points, both results pinned. The wire form
 		 * drops the first two bytes and keeps the last two; the file form
 		 * drops the last two and keeps whatever precedes them from the given
 		 * offset. Neither value may be produced by the other's range. */

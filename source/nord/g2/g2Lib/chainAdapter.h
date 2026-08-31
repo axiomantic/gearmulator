@@ -194,11 +194,11 @@ namespace g2
 		 * and each bus, so 2 x dspCount flags and never dspCount. That is what
 		 * lets the two buses be counted on different cadences.
 		 *
-		 * EACH FLAG HAS THREE VALUES, NOT TWO, and chainAdapter.cpp names
+		 * Each flag has three values, not two, and chainAdapter.cpp names
 		 * them kNoDelivery / kGoodDelivery / kStaleDelivery. Two readers ask
-		 * different questions of the same byte: CHN-7's underrun count asks
-		 * whether the delivery was GOOD, and CHN-8's phase-error check asks
-		 * whether there was a delivery AT ALL. A two-valued flag can answer
+		 * different questions of the same byte: the underrun count asks
+		 * whether the delivery was good, and the phase-error check asks
+		 * whether there was a delivery at all. A two-valued flag can answer
 		 * only one of them, and encoding a stale delivery as "no delivery"
 		 * would blind the phase-error rule on exactly the quanta the underrun
 		 * rule fires on.
