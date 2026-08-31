@@ -16,39 +16,28 @@
 //                                the same Scheduler accessors the golden run
 //                                asserts zero on.
 //
-//   phaseErrorFrames(p)          TWO known positives, and the second one is what
-//                                makes the golden run's phase-error zero mean
-//                                anything.
+//   phaseErrorFrames(p)          Two known positives. The first drives a
+//                                ChainAdapter directly, with a real emulated
+//                                Esai so the written-flag condition is real:
+//                                one position's audio transmit wrapper fired
+//                                TWICE inside one quantum.
 //
-//                                THE FIRST drives a ChainAdapter DIRECTLY, with
-//                                a real emulated Esai so the written-flag
-//                                condition is real: one position's audio
-//                                transmit wrapper fired TWICE inside one
-//                                quantum. It pins the RULE, at the site that
-//                                implements it.
-//
-//                                THE SECOND drives the SAME condition on a
+//                                The second drives the same condition on a
 //                                Scheduler and reads it back through
-//                                Scheduler::phaseErrorFrames, the accessor the
-//                                golden run asserts zero on. It is needed
-//                                because that accessor is the adapter reading
-//                                MINUS a baseline taken at beginPlayPhase, and
-//                                the first known positive says nothing about the
-//                                subtraction: with the first alone, an accessor
-//                                that answered a constant zero left this file
-//                                and every other file naming the counter GREEN.
+//                                Scheduler::phaseErrorFrames. That accessor is
+//                                the adapter reading MINUS a baseline taken at
+//                                beginPlayPhase, and the first known positive
+//                                says nothing about the subtraction.
 //
-//                                THE SCHEDULER CANNOT BE MADE TO ASK FOR A
-//                                SECOND TRANSMIT -- that is the whole point of
+//                                The Scheduler cannot be made to ask for a
+//                                second transmit -- that is the whole point of
 //                                the counter -- so the second delivery is
 //                                injected the way a harness with no firmware
 //                                drives any ESAI: Config::chainOrder names the
 //                                position-to-port order, which wires the chain
 //                                at construction, and transmitDspFrame runs two
 //                                whole transmit frames on one position's ESAI
-//                                inside one quantum. The scheduler asked for
-//                                neither, and the counter it did not ask for is
-//                                exactly what the accessor must report.
+//                                inside one quantum.
 //
 //   underflowFrames              A pull for more than the CodecSink holds.
 //   overflowFrames               A push for more than the CodecSource can take.
@@ -553,19 +542,15 @@ namespace
 			"is per position and not shared");
 	}
 
-	// KNOWN POSITIVE for phaseErrorFrames(position), through the SCHEDULER
-	// accessor the golden run asserts zero on.
+	// Known positive for phaseErrorFrames(position), through the Scheduler
+	// accessor the golden run asserts zero on. What it covers that
+	// knownPositivePhaseError does not is the baseline subtraction:
+	// Scheduler::phaseErrorFrames is the adapter reading minus
+	// m_phaseErrorBase, captured at beginPlayPhase.
 	//
-	// WHAT THIS ONE COVERS THAT knownPositivePhaseError DOES NOT: the BASELINE
-	// SUBTRACTION. Scheduler::phaseErrorFrames is the adapter reading minus
-	// m_phaseErrorBase, captured at beginPlayPhase, and an accessor that
-	// answered a constant zero satisfied every assertion in this file until this
-	// case existed.
-	//
-	// THE ORDER OF THE THREE STEPS IS LOAD-BEARING. The baseline is taken by
+	// The order of the three steps is load-bearing. The baseline is taken by
 	// beginPlayPhase, so the two transmits are driven AFTER it -- a delivery
-	// before it would be absorbed into the baseline and read back as zero, which
-	// is the very shape this case exists to detect.
+	// before it would be absorbed into the baseline and read back as zero.
 	void knownPositiveSchedulerPhaseError()
 	{
 		constexpr unsigned kLookahead    = 4u;
@@ -578,10 +563,10 @@ namespace
 		config.lookaheadFrames    = kLookahead;
 		config.maxHostBlockFrames = kMaxHostBlock;
 
-		// THE ORDER IS NAMED RATHER THAN DERIVED, which is what Config::chainOrder
-		// is for: this harness has no firmware to ask and drives the ESAIs itself.
-		// The identity is legal HERE for that reason and for no other -- on a real
-		// machine the firmware chooses the order and it is not the identity.
+		// The order is named rather than derived: this harness has no firmware to
+		// ask and drives the ESAIs itself. The identity is legal here for that
+		// reason and for no other -- on a real machine the firmware chooses the
+		// order and it is not the identity.
 		config.chainOrder.resize(config.dspCount);
 		for(unsigned p = 0; p < config.dspCount; ++p)
 			config.chainOrder[p] = p;
@@ -605,10 +590,9 @@ namespace
 			"KNOWN POSITIVE (scheduler phaseErrorFrames): a named order wires the chain at construction, so a "
 			"transmit driven below reaches the adapter the Scheduler reads");
 
-		// THE ENABLE COMES BEFORE THE PLAY PHASE. An enabled transmitter is what
-		// makes dspJob's step 3 deliver on this position every quantum, which is
-		// the delivery THE SCHEDULER ASKS FOR -- and the zero asserted below is
-		// the statement that those deliveries are not counted.
+		// The enable comes before the play phase. An enabled transmitter is what
+		// makes dspJob's step 3 deliver on this position every quantum, and those
+		// are the deliveries the scheduler asks for.
 		dsp56k::Esai& esai = board.dspSet().peripherals(config.chainOrder[0]).getEsai();
 
 		esai.writeTransmitClockControlRegister(0);
@@ -621,23 +605,14 @@ namespace
 			"KNOWN POSITIVE (scheduler phaseErrorFrames): every delivery the scheduler asked for during the "
 			"boot run and the priming run is uncounted, so the reading is zero once the baseline is taken");
 
-		// EACH TRANSMIT BELOW IS ONE THE SCHEDULER DID NOT ASK FOR, AND THE FIRST
-		// OF THEM ALREADY COUNTS. The scheduler's own step-3 delivery for the
-		// current quantum has already happened -- runFrames returns between
-		// quanta and advanceAll clears the written flags at the head of a
-		// quantum, not at its tail -- so the flag is standing when the first call
-		// below fires. That is what "a transmit the scheduler did not ask for"
-		// MEANS on this bus, and asserting a zero here instead would be asserting
-		// the opposite of the rule.
+		// The first transmit below already counts. The scheduler's own step-3
+		// delivery for the current quantum has already happened -- runFrames
+		// returns between quanta and advanceAll clears the written flags at the
+		// head of a quantum, not at its tail -- so the flag is standing when the
+		// first call below fires.
 		//
-		// THE STEP OF ONE IS THE ASSERTION AND A NON-ZERO READING IS NOT. A
-		// counter that saturated, or that counted the whole quantum rather than
-		// the callback, would satisfy "greater than zero" at both readings.
-		//
-		// THE RETURN OF transmitDspFrame IS THE OBSERVABLE THAT THE FRAME RAN. It
-		// answers 0 when no transmitter is enabled, and a pair of no-ops would
-		// otherwise leave the counter unmoved for a reason that has nothing to do
-		// with the accessor under test.
+		// transmitDspFrame answers 0 when no transmitter is enabled, so its
+		// return is the observable that the frame really ran.
 		const uint32_t firstSlots = g2::transmitDspFrame(esai);
 
 		checkEqual(firstSlots, esai.getTxWordCount() + 1u,
@@ -660,10 +635,8 @@ namespace
 			"KNOWN POSITIVE (scheduler phaseErrorFrames): the neighbouring position is untouched, so the "
 			"Scheduler's reading is per position and not shared");
 
-		// THE MAXIMUM READSEVEN TAKES IS THE SHAPE THE GOLDEN RUN ASSERTS ON, so
-		// the raised counter is read back through it too. A readSeven that dropped
-		// the phase-error reduction would leave the golden run's phase-error
-		// assertion unreachable while every reading above still moved.
+		// The maximum readSeven takes is the shape the golden run asserts on, so
+		// the raised counter is read back through it too.
 		const Seven seven = readSeven(*scheduler, board.dspSet().dspCount());
 		reportSeven(seven, "known-positive scheduler phase error");
 
