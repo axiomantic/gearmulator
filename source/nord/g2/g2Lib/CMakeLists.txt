@@ -69,9 +69,10 @@ target_include_directories(g2Lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ----------------- the MCF5307 core
 #
-# The link is BEHIND AN OPTION and the option defaults to OFF, because the
-# target mcf5307::mcf5307 is exported by task CPU-1 in wave 3a while this file
-# is created in wave 2. Task BRD-23 turns the option ON once the target exists.
+# The link is BEHIND AN OPTION and the option defaults to ON, because the target
+# mcf5307::mcf5307 now exists. The option stays, rather than becoming an
+# unconditional link, so a build that only wants the DSP side of g2Lib can turn
+# the core off and skip fetching a second repository.
 # The root CMakeLists.txt declares where the sources come from.
 
 option(G2_LINK_MCF5307 "Link the MCF5307 core" ON)
