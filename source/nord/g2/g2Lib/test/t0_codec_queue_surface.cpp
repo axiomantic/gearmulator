@@ -1,7 +1,7 @@
 /* t0_codec_queue_surface.cpp -- the check of task SCH-15.
  * Design sections 13.10.4 and 13.6.
  *
- * THE THINGS BELOW FAIL IN DIFFERENT WAYS ON PURPOSE.
+ * The things below fail in different ways on purpose.
  *
  * THE SURFACE. The check takes the address of every declared method on both
  * queues, THROUGH ITS FULLY QUALIFIED MEMBER-FUNCTION-POINTER TYPE. That

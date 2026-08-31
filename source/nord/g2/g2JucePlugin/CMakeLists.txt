@@ -3,13 +3,13 @@ cmake_minimum_required(VERSION 3.15)
 project(g2JucePlugin VERSION ${CMAKE_PROJECT_VERSION})
 
 # This directory belongs to the PLUGIN track. Every file under it is written by
-# a plugin-track task, with PROTO-8 and PROTO-9 as the declared exceptions.
+# a plugin-track task.
 # See plan section 7.4.2.
 #
-# THE TARGET IS NOT YET A JUCE PLUGIN. The createJucePlugin() macro that every
-# other product in this tree uses takes a product name, a four-character plugin
-# code, a binary-data target and a skin. No task in the plan states those
-# values, and plan section 1.3 rule 1 forbids inventing a value.
+# The target is not yet a JUCE plugin. The createJucePlugin() macro that
+# every other product in this tree uses takes a product name, a
+# four-character plugin code, a binary-data target and a skin, and none of
+# those four values is stated anywhere.
 
 add_library(g2JucePlugin STATIC)
 

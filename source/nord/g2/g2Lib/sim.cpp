@@ -291,13 +291,9 @@ namespace g2
 		// holds is a bit a write cannot reach. Narrowing either arm breaks the
 		// build here instead of going quiet.
 		//
-		// WHY THIS GUARD AND NOT A CASE IN t0_sim.cpp. Applying strapBits on
-		// every row rather than only on a ReadWrite row is THE SAME FUNCTION.
-		// Access::ReadOnly already sets every bit of the mask, so `0xff | strap`
-		// is `0xff` for every strap, and the read/write arm is `strap` in both
-		// forms. Applying it on every row makes the field REACHABLE, not
-		// COVERED, and no runtime case can be red on it because it changes no
-		// behaviour at all.
+		// Applying strapBits on every row rather than only on a ReadWrite row is
+		// the same function - Access::ReadOnly already sets every bit of the mask -
+		// so no runtime case can be red on it.
 		//
 		// So the honest guard is a guard on the invariant the field exists
 		// for, and it lives here where it can see the arms. t0_sim.cpp case

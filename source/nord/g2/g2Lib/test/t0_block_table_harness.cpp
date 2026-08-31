@@ -13,10 +13,9 @@
  * WHERE THE CAP COMES FROM, AND WHY IT IS NOT THE BUILD'S.
  *
  * The bound cannot be "the maxInstructionsPerBlock cap". Measurement register
- * row 2 records that field at the upstream default of 0, which means UNCAPPED,
- * and DSP-12 ships that configuration until SPK-6 reports. A BOUND OF "NO
- * BLOCK EXCEEDS UNCAPPED" HAS NO THRESHOLD AND PASSES FOR EVERY POSSIBLE
- * MEASUREMENT, FOR EVER.
+ * row 2 records that field at the upstream default of 0, which means uncapped,
+ * and that configuration ships. A bound of "no block exceeds uncapped" has no
+ * threshold and passes for every possible measurement.
  *
  * So the cap this row asserts against is kLongestBlockCap, supplied by this
  * fixture. The scratch configuration the harness walks under carries a FINITE

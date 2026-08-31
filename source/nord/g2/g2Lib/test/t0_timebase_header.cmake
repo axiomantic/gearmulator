@@ -92,10 +92,8 @@ endif()
 #
 # THE NEEDLES ARE ASSEMBLED FROM HALVES, and that is load-bearing rather than
 # cosmetic. This driver is a tracked file inside the tree the scan covers, and
-# nothing below excludes it. A driver that spelled either needle out in full
-# would match ITSELF, the case could never pass, and the usual repair --
-# excluding the driver from its own scan -- would open exactly the hole the case
-# exists to close.
+# nothing below excludes it, so a driver that spelled either needle out in full
+# would match itself.
 string(CONCAT g2RefutedMcuClock "540" "00000")
 string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 
@@ -117,50 +115,35 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 #
 # -I skips binary files. --fixed-strings makes the needle a literal.
 #
-# ---------------- WHAT IS NOT SOURCE, AND HOW IT IS FOUND
+# Build output must not be read, and a directory name is not a reliable way to
+# tell it apart. `--untracked` covers untracked, non-ignored files, and
+# `.gitignore` ignores /build/ and nothing else, so a build tree at any other
+# path is in scope. A CTest log quotes the output of the tests it ran, and the
+# failure message below prints the refuted value in full, so a second build tree
+# under any name but `build` puts the literal into
+# <tree>/Testing/Temporary/LastTest.log and this case reports it as present: the
+# check's own output becomes its input.
 #
-# THE SCAN MUST NOT READ BUILD OUTPUT, AND A DIRECTORY NAME IS NOT A RELIABLE
-# WAY TO TELL.
+# The scope is therefore stated by a property of the directory and never by its
+# name: a directory that holds a CMakeCache.txt is a CMake build tree, and a
+# build tree is output rather than source. The set is computed at run time, so a
+# build tree created after this file was written is excluded too.
 #
-# `--untracked` covers untracked, non-ignored files. `.gitignore` ignores
-# /build/ and nothing else, so a build tree at that ONE path is out of scope and
-# a build tree at ANY OTHER PATH is not. A CTest log quotes the output of the
-# tests it ran, and the failure message below PRINTS the refuted value in full.
-# So a second build tree, under any name but `build`, puts the literal into
-# <tree>/Testing/Temporary/LastTest.log and this case reports it as present:
-# THE CHECK'S OWN OUTPUT BECOMES ITS INPUT. With an untracked build tree on
-# disk under any name but `build`, the case reports matches that are all log
-# lines -- one of them a log of a run that had quoted another tree's log.
+# The excluded set is printed with the result, on the passing path and in every
+# failure message, because an exclusion nobody can see is indistinguishable from
+# a check that stopped working.
 #
-# A check that passes because of what somebody called a directory is an
-# accident, not a check. The scope is therefore stated by a PROPERTY of the
-# directory and never by its name: A DIRECTORY THAT HOLDS A CMakeCache.txt IS A
-# CMake BUILD TREE, and a build tree is output rather than source. The set is
-# computed at run time, so a build tree created after this file was written is
-# excluded too, and a directory that merely LOOKS like build output is not.
-#
-# THE EXCLUDED SET IS PRINTED WITH THE RESULT -- on the passing path and in
-# every failure message -- so the scope is never invisible to whoever reads the
-# verdict. An exclusion nobody can see is indistinguishable from a check that
-# stopped working.
-#
-# WHAT THIS DOES NOT COVER, stated rather than implied: a build tree that is not
-# a wholly untracked directory -- an IN-SOURCE configure at the repository root
-# is the real instance. That tree has no untracked directory to exclude, and
-# excluding the root would exclude the whole scan. Such a tree makes this case
-# report a FALSE POSITIVE, which is loud, rather than a false pass, which is
-# silent. That is the correct direction for the failure to point.
+# Not covered: an in-source configure at the repository root has no untracked
+# directory to exclude, and excluding the root would exclude the whole scan.
+# Such a tree makes this case report a false positive, which is loud, rather
+# than a false pass, which is silent.
 
-# THE SCAN IS A FUNCTION BECAUSE IT IS RUN TWICE -- once for the verdict, and
-# once more by the negative case below, which must be able to move the verdict
-# if the exclusion above ever stops working.
-#
-# IT RETURNS ITS VERDICT INSTEAD OF RAISING IT. That is load-bearing rather than
-# stylistic: the negative case creates a directory inside the working tree and
-# has to delete it again on the failing path exactly as on the passing one. A
-# CMake -P script has no `finally`, so a message(FATAL_ERROR) raised inside the
-# scan would abort the script with that directory still on disk. Every caller
-# therefore deletes what it made FIRST and raises the verdict afterwards.
+# The scan returns its verdict instead of raising it. The negative case creates
+# a directory inside the working tree and has to delete it again on the failing
+# path exactly as on the passing one; a CMake -P script has no `finally`, so a
+# message(FATAL_ERROR) raised inside the scan would abort the script with that
+# directory still on disk. Every caller therefore deletes what it made FIRST and
+# raises the verdict afterwards.
 #
 # g2OutVerdict receives the string PASS, or the text of the failure.
 # g2OutReport receives the scope line. g2OutExcluded receives the excluded set

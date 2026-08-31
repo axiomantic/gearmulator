@@ -11,7 +11,7 @@
 # steps run in every one of them, and a step with no file to live in runs
 # nowhere.
 #
-# EACH STEP CLOSES A DIFFERENT HOLE AND NONE SUBSTITUTES FOR ANOTHER.
+# Each step closes a different hole and none substitutes for another.
 #   no-private-submodule    stops the private repository's URL and commit
 #                           hashes being published.
 #   no-clavia-payload       stops a Clavia byte reaching a public tree as a

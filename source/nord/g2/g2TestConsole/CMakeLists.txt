@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(g2TestConsole)
 
-# This directory is SHARED BY ORDER and not by ownership. See plan section
-# 7.4.2.
+# This directory is shared by order and not by ownership.
 
 add_executable(g2TestConsole)
 
@@ -14,7 +13,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 endif()
 
 # An executable with no source at all cannot link. Until main.cpp exists, the
-# target carries one translation unit GENERATED INTO THE BUILD TREE, not a
+# target carries one translation unit generated into the build tree, not a
 # committed source file. The placeholder disappears by itself as soon as
 # main.cpp exists.
 if(NOT SOURCES)

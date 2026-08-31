@@ -115,7 +115,7 @@ add_test(NAME t0_advance_all COMMAND t0_advance_all)
 set_tests_properties(t0_advance_all PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- CHN-8, the counters
+# ----------------- the counters
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_chain_counters$
 #

@@ -57,13 +57,11 @@ namespace g2
 		// is the cheap way to make either outcome a change of body and not a
 		// change of two interfaces at once.
 		//
-		// THE SEAM IS THE MEMBERS SECTION 23.1.1 NAMES AND NOTHING MORE, ALL
-		// PRESENT NOW WITH AN EMPTY BODY AND A ZERO-BYTE STATE. Section 13.5's
-		// order table lists the panel at position 0, before the MCU (the MCU
-		// reads what the panel produced), and section 23.1.1's seam row
-		// requires it to carry `tick(uint64_t frameIndex)` plus `stateSize`,
-		// `stateSave` and `stateLoad` today. The MVP panel computes nothing, so
-		// `tick` is an empty body and the state is zero bytes. A formally correct save or
+		// The seam is present now with an empty body and a zero-byte state. The
+		// panel runs at position 0, before the MCU, which reads what the panel
+		// produced. It carries `tick(uint64_t frameIndex)` plus `stateSize`,
+		// `stateSave` and `stateLoad`. The MVP panel computes nothing, so `tick` is
+		// an empty body and the state is zero bytes. A formally correct save or
 		// load of a zero-byte block writes nothing and reads nothing, which is
 		// what the bodies below do.
 		//

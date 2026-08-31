@@ -20,7 +20,7 @@ list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/esaiFrame.h)
 
-# SCH-15. codecQueues.* are the bounded queues between the Device and the
+# codecQueues.* are the bounded queues between the Device and the
 # chain. Both carry the capacity lookaheadFrames + B.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/codecQueues.cpp
@@ -28,7 +28,7 @@ list(APPEND G2LIB_SOURCES
 
 # SCH-7. executor.h declares the Executor interface and the serial executor;
 # serialExecutor.cpp defines the serial one. It runs the jobs in order ON THE
-# CALLING THREAD and creates no thread.
+# calling thread and creates no thread.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/executor.h
 	${CMAKE_CURRENT_SOURCE_DIR}/serialExecutor.cpp)

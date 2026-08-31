@@ -1,7 +1,7 @@
 /* executor.h -- the Executor interface and the serial executor. Task SCH-7.
  * Design sections 13.3 and 13.10.3.
  *
- * ONE METHOD: run these jobs and return when all of them have returned.
+ * One method: run these jobs and return when all of them have returned.
  * What that sentence left out is here -- an error channel, a statement
  * about re-entry, and a guarantee that no allocation happens for each quantum.
  *
@@ -16,8 +16,8 @@
  * The Executor itself neither reads nor reports a fault -- it has no state to
  * report one from.
  *
- * NO THREAD IS CREATED ANYWHERE IN THIS FILE OR IN serialExecutor.cpp. The
- * serial executor runs the jobs in order ON THE CALLING THREAD. An Executor
+ * No thread is created anywhere in this file or in serialExecutor.cpp. The
+ * serial executor runs the jobs in order on the calling thread. An Executor
  * that owned a thread, or a submit() that threw, would contradict the
  * bit-exactness claim this design makes at the 96 kHz Q23 integer boundary,
  * and both are refused here. A parallel implementation is a SEPARATE class

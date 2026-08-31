@@ -1,6 +1,6 @@
 /* t0_chain_counters.cpp -- the check of task CHN-8. Design 12.3, 13.10.2.
  *
- * THE PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
+ * The properties this row owns, and that a target build cannot see:
  *
  *   1. underrunFrames and secondBusUnderrunFrames are SEPARATE storage.
  *      Section 13.10.2 keeps two counters and not one because the two buses

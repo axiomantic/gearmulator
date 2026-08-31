@@ -16,11 +16,11 @@
 //   * The transmitter buffer is the source for readMidiOut in the Device
 //     subclass (design section 14.5): a byte the firmware writes to UTB
 //     leaves the machine on the MIDI-out callback.
-//   * THE DIVIDER 0x36 IS OBSERVED AND IT STANDS. The divider is a
+//   * The divider 0x36 is observed and it stands. The divider is a
 //     baud-rate-generator preload value and nothing more. This file names no
 //     clock-rate quantity and derives no clock from the divider, because the
 //     MCF5307 has two clock domains that can never be equal and no rate is
-//     established. AGENTS.md section 2.2 owns that record.
+//     established.
 //
 // CLEAN-ROOM. The register map and every access rule below are read from the
 // MCF5307 User's Manual, section 14. The same manual copy BRD-2's sim.cpp

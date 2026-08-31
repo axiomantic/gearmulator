@@ -11,7 +11,6 @@
  *
  *   advanceAll's count-then-clear-then-advance accounting ... CHN-7
  *   the transmit wrappers' written-flag rule ................. CHN-6
- *   the counters' real storage and cadence ................... CHN-7, CHN-8
  *   the save-and-load round trip ............................. CHN-14
  *   the head/tail slot mappings and the Scheduler-driven four phase ... CHN-9
  *

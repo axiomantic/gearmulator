@@ -1,6 +1,6 @@
 /* t0_clock_guard.cpp -- the check of task SCH-3. Design sections 13.4.3, 23.1.
  *
- * THE CASES BELOW GUARD DIFFERENT THINGS.
+ * The cases below guard different things.
  *
  * CASE 1, the refuted MCU clock. The value 54 million is REFUTED on five
  * independent grounds, not merely unverified: an unverified value may turn out

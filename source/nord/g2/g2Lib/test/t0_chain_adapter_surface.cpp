@@ -1,7 +1,7 @@
 /* t0_chain_adapter_surface.cpp -- the check of task CHN-5. Design 12.3,
  * 13.10.2.
  *
- * THE PROPERTIES THIS ROW OWNS, AND THAT A TARGET BUILD CANNOT SEE:
+ * The properties this row owns, and that a target build cannot see:
  *
  *  1. The constructor arguments are FORWARDED and READABLE. The test
  *     constructs one adapter with each argument set to a distinct value and

@@ -9,8 +9,8 @@
  *     struct DspContext { JobContext base; };
  *
  * PASSES EVERY ONE OF THOSE, and dspJob cannot be written at all against that
- * struct. So this check asserts the members design section 13.10.3 declares
- * beside `base`, BY NAME AND BY TYPE, with a static_assert on each.
+ * struct. So this check asserts the members beside `base`, by name and by
+ * type, with a static_assert on each.
  *
  * A check that a bare one-member struct satisfies is not a weak check; it is a
  * check that cannot fail.

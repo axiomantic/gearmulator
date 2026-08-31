@@ -2,7 +2,7 @@
 //
 // Plan section 9.2, BRD-7. Design section 7.4.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
+// No assertion in this file is a language assert(). The default build is
 // Release and it defines NDEBUG, so a bare assert() is removed and a check
 // built on one can never fail. Every case below reports through a counter and
 // the process exit status.

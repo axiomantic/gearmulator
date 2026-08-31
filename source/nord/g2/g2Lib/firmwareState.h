@@ -13,10 +13,8 @@
 //
 // The mq, virus and xt targets set the user-flow precedent, and this follows it.
 //
-// THIS FILE DECLARES THE SURFACE AND WIRES NOTHING. The wiring into
-// g2Device.cpp belongs to the plugin track, because plan section 7.4.2 gives
-// g2JucePlugin/ to that track. Nothing here opens a window, holds plugin state
-// or names a JUCE type.
+// This file declares the surface and wires nothing. Nothing here opens a
+// window, holds plugin state or names a JUCE type.
 //
 // REQUIREMENT 4 IS A PROPERTY OF THE SHAPE AND NOT OF A COMMENT. This surface
 // asks the resolver EXACTLY ONCE for each call it is given. It does not wait, it

@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.15)
 
 project(g2Lib)
 
-# THIS FILE HAS ONE OWNER: task BRD-0. See plan section 7.4.2.
 #
 # NO OTHER TASK EDITS THIS FILE. A track that needs a change here -- a new link
 # library, a new compile option -- reports it to the BRD-0 owner.
@@ -30,8 +29,8 @@ include(sources_perf.cmake)
 include(sources_int.cmake)
 
 # A CMake target with no source at all fails at generate time. While every list
-# is still empty the target carries one translation unit GENERATED INTO THE
-# BUILD TREE, not a committed source file. The placeholder disappears by itself
+# is still empty the target carries one translation unit generated into the
+# build tree, not a committed source file. The placeholder disappears by itself
 # as soon as the first track adds a name to its own list.
 if(NOT G2LIB_SOURCES)
 	set(G2LIB_PLACEHOLDER ${CMAKE_CURRENT_BINARY_DIR}/g2LibPlaceholder.cpp)

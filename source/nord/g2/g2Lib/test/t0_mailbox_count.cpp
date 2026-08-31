@@ -22,7 +22,7 @@
 
 #include <cstdio>
 
-/* ---- THE CHECK: LINE's OWN ASSERTIONS, AT N = 8. ------------------------ */
+/* ---- The assertions, at N = 8. ----------------------------------------- */
 static_assert(g2::ChainAdapter::mailboxCount(g2::ChainTopology::Line, 8u)
 	== 9u,
 	"a Line of 8 positions has 8 + 1 = 9 mailboxes (both ends open)");

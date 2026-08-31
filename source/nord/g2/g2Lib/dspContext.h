@@ -1,10 +1,8 @@
 /* dspContext.h -- JobFault, JobContext and DspContext. Task SCH-6.
  * Design section 13.10.3.
  *
- * THE ERROR CHANNEL, AS A TYPE. A fault sets the fault field of that job's own
- * context. Without a context type, a fault field and an accessor, the path
- * after Executor::run cannot be written at all. The declarations below close
- * it.
+ * The error channel is a type: a fault sets the fault field of that job's
+ * own context.
  *
  * The eight DspContext objects are the whole job array. They are declared here
  * because Job points at one, and because a `void* user` gave the fault field
@@ -99,7 +97,7 @@ namespace g2
 		uint64_t   longDispatchQuanta;   /* the rule 4 counter, 13.4.6      */
 		dsp56k::DSP* dsp;     /* borrowed; the Scheduler owns the DSP set   */
 
-		/* THE MEMBERS BELOW EXIST BECAUSE THE SCHEDULER DRIVES THE ESAI
+		/* The members below exist because the scheduler drives the ESAI
 		 * FRAME. Without them the job body cannot name the port it must
 		 * advance, and it cannot decide whether this quantum is inside the
 		 * second bus's advance window. */
@@ -122,7 +120,7 @@ namespace g2
 		unsigned   secondBusFrameDivider;
 	};
 
-	/* THE ASSERTIONS THAT MAKE THE RECOVERY LEGAL. They live here, at the
+	/* The assertions that make the recovery legal. They live here, at the
 	 * declaration site, so every consumer of this header carries them and not
 	 * the test alone. A release build removes an assert(); it does not remove
 	 * these. */

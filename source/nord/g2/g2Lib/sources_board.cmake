@@ -4,7 +4,7 @@
 # G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
 # file in this tree. See plan section 7.4.2.
 
-# ----------------- BRD-1, the memory decode and the bus callbacks
+# ----------------- the memory decode and the bus callbacks
 list(APPEND G2LIB_SOURCES memoryMap.cpp)
 
 # ----------------- BRD-2, the SIM registers
@@ -69,14 +69,14 @@ list(APPEND G2LIB_SOURCES
 	uart0.cpp
 )
 
-# ----------------- BRD-21, the Board class
+# ----------------- the Board class
 #
 # board.h declares the surface the Scheduler uses and carries the static_asserts
-# that make "concrete, not copyable, not movable" a COMPILE-TIME property.
+# that make "concrete, not copyable, not movable" a compile-time property.
 # board.cpp carries the lifetime and the bodies.
 #
-# THE TRANSLATION UNIT IS LISTED HERE AND NOT ONLY THE HEADER. A build that
-# compiles the test without compiling this source fails at the LINK step on
+# The translation unit is listed here and not only the header: a build that
+# compiles the test without compiling this source fails at the link step on
 # g2::Board.
 
 list(APPEND G2LIB_SOURCES

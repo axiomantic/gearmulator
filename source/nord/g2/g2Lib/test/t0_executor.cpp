@@ -1,7 +1,7 @@
 /* t0_executor.cpp -- the check of task SCH-7.
  * Design sections 13.3 and 13.10.3.
  *
- * THE THINGS BELOW FAIL IN DIFFERENT WAYS ON PURPOSE.
+ * The things below fail in different ways on purpose.
  *
  * THE SURFACE. The declarations SCH-7 names are held by their fully
  * qualified types: JobFn, Job, run and isSerial. A renamed method, a dropped
