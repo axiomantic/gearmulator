@@ -1,27 +1,17 @@
-// Task BRD-1. Tier T0: this test needs no firmware artifact of any kind.
+// The memory decode and the two bus callbacks. Tier T0: this test needs no
+// firmware artifact.
 //
-// Plan section 13.1, BRD-1. Design sections 5.2.1, 6.4, 17 row 7.24.
-// Logbook: AGENTS.md section 2.2.
+// It drives the board's address decode and the two bus callbacks the MCF5307
+// core installs, mcf5307_read_fn and mcf5307_write_fn.
 //
-// WHAT THIS TEST IS FOR. It drives the board's address decode and the two bus
-// callbacks the MCF5307 core installs, mcf5307_read_fn and mcf5307_write_fn.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail. Every case below reports through a counter and
-// the process exit status.
-//
-// THE THREE UNRECORDED BASES ARE SUPPLIED BY THIS FIXTURE. AGENTS.md section
-// 2.2 records CS1 at 0x11000000, CS3 at 0x13000000 and the CS5 latch at
-// 0x15000000, and it records NO address for CS0, CS2 or CS4. Open question 21
-// carries all three and SPK-13 reads them from CSAR0 to CSAR5. So this test
-// drives TWO DISTINCT BASES for each of the three and asserts the decode
+// The recorded bases are CS1 at 0x11000000, CS3 at 0x13000000 and the CS5 latch
+// at 0x15000000. No authority records an address for CS0, CS2 or CS4, so this
+// test drives two distinct bases for each of the three and asserts the decode
 // follows the configuration, which is what makes each parameter known to be
-// live rather than decorative. No shipped header carries a number for them.
+// live rather than decorative.
 //
-// THE WINDOW SIZES ARE CONFIGURATION FOR THE SAME REASON. No authority
-// records the size of any chip-select window, so every size below is a value
-// this test chose.
+// No authority records the size of any chip-select window either, so every size
+// below is a value this test chose.
 
 #include "memoryMap.h"
 
@@ -74,7 +64,7 @@ namespace
 	}
 
 	// A target that records every access it answers. It is the observable that
-	// says WHICH region a decoded access reached and with WHICH width, so a
+	// says which region a decoded access reached and with which width, so a
 	// decode that sends an address to the wrong window fails here rather than
 	// passing silently.
 	class RecordingTarget final : public g2::BusTarget
@@ -112,8 +102,8 @@ namespace
 		}
 	};
 
-	// Index helpers that never throw. A mutation run must report EVERY case it
-	// fails, and an out-of-range .at() would end the process at the first one.
+	// Index helpers that never throw. A run must report every case it fails, and
+	// an out-of-range .at() would end the process at the first one.
 	std::string logLine(const g2::MemoryMap& _map, const size_t _index)
 	{
 		if(_index >= _map.log().size())
@@ -154,7 +144,7 @@ namespace
 		return config;
 	}
 
-	// The SAME layout with the three unrecorded bases moved somewhere else and
+	// The same layout with the three unrecorded bases moved somewhere else and
 	// nothing else changed. Every assertion that pairs this with layoutA() is
 	// what proves the three parameters are read rather than ignored.
 	g2::MemoryMapConfig layoutB()
@@ -211,9 +201,9 @@ int main()
 				std::string("the byte above ") + e.name + " decodes to nothing");
 		}
 
-		// The recorded bases are the ones AGENTS.md section 2.2 carries, and
-		// they are asserted as literals here so that a header that renamed or
-		// moved one is caught by this test and not by a later boot.
+		// The recorded bases are asserted as literals here so that a header
+		// that renamed or moved one is caught by this test and not by a later
+		// boot.
 		checkEqual(map.decode(0x11000000u), g2::Region::Cs1, "0x11000000 is CS1");
 		checkEqual(map.decode(0x13000000u), g2::Region::Cs3, "0x13000000 is CS3");
 		checkEqual(map.decode(0x15000000u), g2::Region::Cs5, "0x15000000 is the CS5 latch");
@@ -221,11 +211,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE THREE UNRECORDED BASES ARE LIVE.
+	// Case group 3. The three unrecorded bases are live.
 	//
 	// One layout puts CS0, CS2 and CS4 at one set of bases and the other puts
 	// them somewhere else. Each base is asserted to decode in the layout that
-	// carries it AND to decode to nothing in the layout that does not. A decode
+	// carries it and to decode to nothing in the layout that does not. A decode
 	// that ignores the configuration and hardcodes a base fails one half of
 	// every pair below.
 	{
@@ -249,7 +239,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. THE SIZES ARE LIVE TOO.
+	// Case group 4. The sizes are live too.
 	//
 	// A decode that read the base and ignored the size would pass every case
 	// above. Two maps that differ only in one window's size are compared at one
@@ -266,11 +256,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4b. THE TIE-BREAK IS A TESTED CLAIM AND NOT A COMMENT.
+	// Case group 4b. The tie-break is a tested claim and not a comment.
 	//
 	// Two chip selects cannot share one base on real hardware, so an
 	// overlapping layout is a caller error and not a machine. The decode still
-	// has to give ONE answer for it, memoryMap.cpp states which, and this case
+	// has to give one answer for it, memoryMap.cpp states which, and this case
 	// is what holds that statement to account: the windows are examined in the
 	// order of the Region enumeration and the first match wins.
 	{
@@ -285,11 +275,10 @@ int main()
 
 	// -----------------------------------------------------------------------
 	// Case group 5. An unmapped read reports MCF5307_BUS_UNMAPPED through the
-	// out-parameter, returns zero, and writes ONE log line that carries the
-	// address, the width and the direction.
-	//
-	// Design section 5.2.1 rule 2 ties the report and the trace together, so
-	// the log line is asserted in full rather than by a substring.
+	// out-parameter, returns zero, and writes one log line that carries the
+	// address, the width and the direction. The report and the trace are tied
+	// together, so the log line is asserted in full rather than by a
+	// substring.
 	{
 		g2::MemoryMap map(layoutA());
 
@@ -321,7 +310,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. A decoded window with NO target attached answers nothing.
+	// Case group 7. A decoded window with no target attached answers nothing.
 	// "No device answers at this address" is the status the header defines and
 	// an empty socket is that case.
 	{
@@ -371,7 +360,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 9. All three widths are carried by ONE callback pair, and the
+	// Case group 9. All three widths are carried by one callback pair, and the
 	// 32-bit case is NATIVE.
 	//
 	// The ColdFire issues 32-bit bus accesses, so a board that decomposed one

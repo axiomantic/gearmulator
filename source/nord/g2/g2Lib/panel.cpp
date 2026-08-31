@@ -1,20 +1,9 @@
-// Task BRD-12. The panel.
+// The panel.
 //
-// Plan section 13.3, BRD-12. Design sections 8.1, 8.2, 8.3.
-// Logbook: AGENTS.md sections 2.2, 2.3, 4.1.
-//
-// THIS FILE CARRIES NO ADDRESS. The display window sits on CS4, no authority
-// records CS4's base or its size, and both arrive as configuration.
-//
-// WHY THE BUFFER STARTS AT ZERO. A boot loop polls the panel until it answers.
-// Every offset of this window answers at every legal width, so no poll can
-// spin for ever, and a freshly built panel reads zero everywhere, which is the
+// Why the buffer starts at zero: a boot loop polls the panel until it answers.
+// Every offset of this window answers at every legal width, so no poll can spin
+// for ever, and a freshly built panel reads zero everywhere, which is the
 // quiescent report: no key down, no encoder moving, no button pressed.
-//
-// WHAT THIS MODEL DOES NOT DO. It reads no banner and writes none. The banner
-// is produced by Clavia's OS image running, so INT-1's t1_boot is what reads
-// this buffer for it, and BRD-14's t1_rejected_config is what proves the panel
-// model is not permissive. Both are T1 and gated.
 
 #include "panel.h"
 

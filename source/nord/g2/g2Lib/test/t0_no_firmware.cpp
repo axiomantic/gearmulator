@@ -1,9 +1,7 @@
-// Task BRD-10. Tier T0: this test needs no firmware artifact of any kind.
+// The no-firmware path. Tier T0: this test needs no firmware artifact.
 //
-// Plan section 13.2, BRD-10. Design sections 7.7 and 17 row 7.7.
-//
-// WHAT THIS TEST IS FOR. Design section 7.7 gives four requirements for the
-// case where the plugin loads in the host and finds no OS update file:
+// Four requirements for the case where the plugin loads in the host and finds
+// no OS update file:
 //
 //   1. The plugin loads. It does not crash.
 //   2. It produces silence, and it reports its state clearly.
@@ -11,20 +9,14 @@
 //      it expects, and says where to get it.
 //   4. It does not retry silently and it does not fail quietly.
 //
-// THE FOURTH IS THE ONE A TEST USUALLY MISSES. "Does not retry silently" is a
+// The fourth is the one a test usually misses. "Does not retry silently" is a
 // statement about how many times the surface asks, so case group 5 counts the
-// calls a COUNTING RESOLVER receives. A surface that looped inside itself would
+// calls a counting resolver receives. A surface that looped inside itself would
 // answer the same and be caught by nothing else in this file.
 //
-// THE TEST OWNS THE ENVIRONMENT VARIABLE RATHER THAN ASSUMING IT. BRD-10's
-// Check: line says "with NMG2_ARTIFACTS unset", and a developer who has it set
-// would otherwise drive the opposite case and see a green run. Every case sets
-// or clears the variable itself.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so an assert() is removed and a check built on
-// one could never fire. Every case reports through the counters below and the
-// process exit status.
+// The test owns the environment variable rather than assuming it: a developer
+// who has NMG2_ARTIFACTS set would otherwise drive the opposite case and see a
+// green run. Every case sets or clears the variable itself.
 
 #include "firmwareState.h"
 
@@ -76,9 +68,8 @@ namespace
 #endif
 	}
 
-	// Counts what it is asked. Design section 4.2 makes ArtifactResolver the
-	// seam, and REPO-5's own header says a fixture owns the resolver, so this is
-	// the resolver a fixture owns rather than a mock of one.
+	// Counts what it is asked. ArtifactResolver is the seam and a fixture owns
+	// the resolver, so this is a real resolver rather than a mock of one.
 	class CountingResolver final : public g2::ArtifactResolver
 	{
 	public:
@@ -102,11 +93,9 @@ namespace
 		std::string m_directory;
 	};
 
-	// THE EXPECTED MESSAGE IS WRITTEN OUT IN FULL ON PURPOSE. Design section 7.7
-	// item 3 asks for a message that names three things, and a test that built
+	// The expected message is written out in full on purpose. A test that built
 	// the expected text with the same pieces the header uses would pass for a
-	// message that named none of them. Task REPO-5's own test carries the same
-	// reasoning for the same reason.
+	// message that named none of the three things.
 	const char* g_expectedMessage =
 		"firmware artifact not available (NMG2_ARTIFACTS unset). "
 		"This plugin needs Clavia's own Nord Modular G2 OS update file: "
@@ -121,10 +110,8 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 0. WITH NMG2_ARTIFACTS UNSET THE SURFACE REPORTS ABSENT.
-	//
-	// This is BRD-10's own Check: line, driven through the resolver design
-	// section 4.2 declares and not through getenv directly.
+	// Case group 0. With NMG2_ARTIFACTS unset the surface reports Absent,
+	// driven through the resolver and not through getenv directly.
 	{
 		setArtifacts(nullptr);
 
@@ -142,19 +129,18 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE MESSAGE CARRIES EACH OF THE THREE THINGS SECTION 7.7
-	// ITEM 3 NAMES.
+	// Case group 1. The message carries each of the three things requirement 3
+	// names.
 	//
 	// Case group 0 compares the whole text, which is the stronger assertion.
-	// These four restate the requirement itself, so that a later edit which
-	// dropped one of the three fails against the sentence that asked for it
-	// rather than against a diff.
+	// These restate the requirement itself, so that a later edit which dropped
+	// one of the three fails against the requirement rather than against a
+	// diff.
 	//
-	// THE TEXT COMES FROM THE SURFACE AND NOT FROM THE LITERAL ABOVE. A case
+	// The text comes from the surface and not from the literal above. A case
 	// group that searched its own expected string would report the same result
 	// for every possible implementation, including one that produced no message
-	// at all. That is a check that cannot fail, and it is not one this file
-	// carries.
+	// at all.
 	{
 		setArtifacts(nullptr);
 
@@ -173,8 +159,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. NMG2_ARTIFACTS NAMING A DIRECTORY THAT IS THERE REPORTS
-	// PRESENT.
+	// Case group 2. NMG2_ARTIFACTS naming a directory that is there reports
+	// Present.
 	//
 	// Without this case the state could be hardwired to Absent and every other
 	// case in this file would still pass.
@@ -199,15 +185,15 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. NMG2_ARTIFACTS NAMING A DIRECTORY THAT IS NOT THERE GETS A
-	// DISTINCT MESSAGE FROM UNSET.
+	// Case group 3. NMG2_ARTIFACTS naming a directory that is not there gets a
+	// distinct message from unset.
 	//
-	// Design section 4.2 names THREE failure messages -- one for unset, one
-	// for a path that is not a directory, and one for a directory that lacks
-	// the named artifact. The unset case and the missing-directory case are
-	// DIFFERENT inputs and get DIFFERENT messages so that an operator with a
-	// wrong path sees the path they typed rather than a message that sends
-	// them to look at the wrong file.
+	// There are three failure messages: one for unset, one for a path that is
+	// not a directory, and one for a directory that lacks the named artifact.
+	// The unset case and the missing-directory case are different inputs and
+	// get different messages, so that an operator with a wrong path sees the
+	// path they typed rather than a message that sends them to look at the
+	// wrong file.
 	{
 		const std::string missingDir = "/this/directory/does/not/exist/nmg2";
 		setArtifacts(missingDir.c_str());
@@ -230,7 +216,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. IT DOES NOT FAIL QUIETLY.
+	// Case group 4. It does not FAIL QUIETLY.
 	//
 	// Neither state may leave the caller with nothing to show. The absent state
 	// carries both a report and a message; the present state carries a report.
@@ -250,7 +236,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. IT DOES NOT RETRY IN SILENCE.
+	// Case group 5. It does not RETRY in SILENCE.
 	//
 	// The surface asks the resolver ONCE for each call it is given, and never
 	// more. A surface that looped inside itself -- waiting, polling, or trying
@@ -277,10 +263,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. IT PRODUCES SILENCE.
-	//
-	// Design section 7.7 item 2. The buffer is filled with a pattern that is not
-	// silence FIRST, so that a fill which wrote nothing at all fails here.
+	// Case group 6. It produces silence. The buffer is filled with a pattern
+	// that is not silence first, so that a fill which wrote nothing at all
+	// fails here.
 	{
 		std::vector<int32_t> samples(64, 0x0055AA33);
 
@@ -298,7 +283,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. A COUNT OF ZERO WRITES NOTHING.
+	// Case group 7. A COUNT of ZERO WRITES NOTHING.
 	//
 	// The bytes on either side of the range are left alone, so a fill that ran
 	// off its own end is caught rather than tolerated.
@@ -313,7 +298,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. A FILL WRITES ONLY THE RANGE IT WAS GIVEN.
+	// Case group 8. A FILL WRITES only the RANGE it was GIVEN.
 	{
 		std::vector<int32_t> samples(6, 0x0055AA33);
 

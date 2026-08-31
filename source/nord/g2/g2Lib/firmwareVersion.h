@@ -1,36 +1,21 @@
-// Task BRD-11. The firmware version and the mismatch policy.
-//
-// Plan section 13.2, BRD-11. Design sections 7.3 step 6 and 15.8.
-//
-// WHAT THIS FILE IS. Design section 15.8 answers what happens when a project
+// The firmware version and the mismatch policy: what happens when a project
 // was authored against one OS version and is restored on a machine that runs
-// another. Its decision is: WARN AND REQUIRE EXPLICIT CONFIRMATION, NEVER
-// REINTERPRET SILENTLY.
+// another. Warn and require explicit confirmation; never reinterpret silently.
 //
 //   | Versions match      | Load normally.                                    |
 //   | Versions differ     | Load the machine. Do not load the patch data.     |
 //   |                     | Show a message that names both versions. Offer to |
 //   |                     | load anyway.                                      |
-//   | No firmware present | Design section 7.7.                               |
+//   | No firmware present | firmwareState.h answers.                          |
 //
-// The reason is that patch data portability across OS versions is UNPROVED. A
-// silent reinterpretation of a bit-packed structure produces a wrong sound with
-// no warning, which is the worst of the three outcomes: the machine does not
-// stop, the user is not told, and the fault reaches the ear rather than the
-// log.
+// Patch data portability across OS versions is unproved. A silent
+// reinterpretation of a bit-packed structure produces a wrong sound with no
+// warning, which is the worst of the three outcomes: the machine does not stop,
+// the user is not told, and the fault reaches the ear rather than the log.
 //
-// THIS TASK DECLARES THE POLICY AND WIRES NOTHING. Task PLG-5 wires it into
-// g2State.cpp, because plan section 7.4.2 gives g2JucePlugin/ to the plugin
-// track. Nothing here reads plugin state, opens a file or shows a window: the
-// decision is a value, and the caller acts on it.
-//
-// THE THIRD ROW ANSWERS NOTHING HERE. Design section 7.7 owns the no-firmware
-// state and task BRD-10 declares its surface, so this file reports NoFirmware
-// and carries no message for it. Two texts for one state are two texts that can
-// drift, and the one an implementer copies is the one that goes stale.
-//
-// HEADER-ONLY ON PURPOSE: BRD-11's Files: line names this header and no
-// translation unit.
+// The decision is a value and the caller acts on it. Nothing here reads plugin
+// state, opens a file or shows a window. The no-firmware row carries no message
+// here, because two texts for one state are two texts that can drift.
 
 #pragma once
 
@@ -41,20 +26,17 @@
 
 namespace g2
 {
-	// The three rows of the design section 15.8 table.
 	enum class FirmwareVersionOutcome
 	{
 		LoadNormally,     // the versions match
 		MachineOnly,      // the versions differ
-		NoFirmware,       // design section 7.7 answers
+		NoFirmware,
 	};
 
 	/* What the caller does, and what it shows.
 	 *
-	 * `message` is EMPTY except on a mismatch. An empty message is not a
-	 * silence: the two states that carry none are the two the caller already
-	 * knows what to do about, and the no-firmware state gets its message from
-	 * design section 7.7. */
+	 * `message` is empty except on a mismatch. The no-firmware state gets its
+	 * message from firmwareState.h. */
 	struct FirmwareVersionDecision
 	{
 		FirmwareVersionOutcome outcome = FirmwareVersionOutcome::NoFirmware;
@@ -65,8 +47,7 @@ namespace g2
 	};
 
 	/* The decision, from the version word the machine's firmware carries and the
-	 * version word the patch was saved with. Both are the RAW 16-BIT WORDS that
-	 * design section 7.3 step 6 records, and not text.
+	 * version word the patch was saved with. Both are raw 16-bit words, not text.
 	 *
 	 * `_firmwarePresent` false answers NoFirmware whatever the two words hold,
 	 * because a machine with no firmware has no version to compare against. */
@@ -90,10 +71,10 @@ namespace g2
 			return decision;
 		}
 
-		// THE MESSAGE NAMES BOTH RELEASE NUMBERS, and it names which is which.
-		// A message that named one version alone would leave the user unable to
-		// tell whether the patch or the machine is the older of the two, and
-		// that is the fact the answer to the offer turns on.
+		// The message names both release numbers, and which is which: a message
+		// naming one version alone would leave the user unable to tell whether
+		// the patch or the machine is the older, which is the fact the answer
+		// to the offer turns on.
 		decision.outcome = FirmwareVersionOutcome::MachineOnly;
 		decision.loadPatchData = false;
 		decision.offerToLoadAnyway = true;

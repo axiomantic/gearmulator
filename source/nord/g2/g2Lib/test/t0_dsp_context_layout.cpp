@@ -1,32 +1,26 @@
-/* t0_dsp_context_layout.cpp -- the check of task SCH-6. Design 13.10.3.
+/* The check asserts the full member list, and not the layout alone.
  *
- * THE CHECK ASSERTS THE FULL MEMBER LIST, AND NOT THE LAYOUT ALONE.
- *
- * An earlier revision of this task asserted the JobFault enumerators, that
- * JobContext holds one field, that `base` is first, is_standard_layout_v and
- * offsetof(DspContext, base) == 0. A struct declared as
+ * Asserting only the JobFault enumerators, that `base` is first,
+ * is_standard_layout_v and offsetof(DspContext, base) == 0 would be satisfied
+ * by
  *
  *     struct DspContext { JobContext base; };
  *
- * PASSES EVERY ONE OF THOSE, and dspJob cannot be written at all against that
- * struct. So this check asserts each of the ten members design section 13.10.3
- * declares beside `base`, BY NAME AND BY TYPE, with a static_assert on each.
+ * against which dspJob cannot be written at all. So this check asserts each
+ * member declared beside `base` by name and by type, with a static_assert on
+ * each.
  *
- * A check that a bare one-member struct satisfies is not a weak check; it is a
- * check that cannot fail.
- *
- * FOUR OF THE TEN EXIST BECAUSE THE SCHEDULER DRIVES THE ESAI FRAME, and each
+ * Four of them exist because the scheduler drives the ESAI frame, and each
  * carries its own named assertion: audioEsai, secondEsai, frameIndex and
- * secondBusFrameDivider. frameIndex is the one SCH-19 writes before
- * Executor::run and no job writes. DELETING frameIndex FROM DspContext MAKES
- * THIS CHECK FAIL, and that is the acceptance criterion.
+ * secondBusFrameDivider. FrameIndex is the one the Scheduler writes before
+ * Executor::run and no job writes. Deleting frameIndex from DspContext makes
+ * this check fail.
  *
- * WHERE EACH HALF FAILS. The member list is a COMPILE-TIME property, so a
- * deleted or renamed member is a compile error and plan section 7.7.1 classes
- * that as a build failure rather than a check report. The runtime half below
- * is what this registered program reports on: the pointer recovery the
- * executor performs, and that the ten members are ten distinct objects rather
- * than names that alias one another.
+ * The member list is a compile-time property, so a deleted or renamed member is
+ * a build failure rather than a check report. The runtime half below is what
+ * this registered program reports on: the pointer recovery the executor
+ * performs, and that the members are distinct objects rather than names that
+ * alias one another.
  */
 
 #include "dspContext.h"
@@ -52,11 +46,9 @@ namespace
 
 /* ================ JobFault
  *
- * The five values, each by name. CoreHalted is the fifth and it is the
- * Scheduler's mapping of Board::faulted(). It exists so that
- * contextFault(i) != None is a valid fault test for EVERY context index and
- * not for the DSPs only; without it the MCU row of that test is a false
- * negative. */
+ * Each value by name. CoreHalted is the Scheduler's mapping of
+ * Board::faulted(). It exists so that contextFault(i) != None is a valid fault
+ * test for every context index and not for the DSPs only. */
 
 static_assert(std::is_enum_v<g2::JobFault>,
 	"JobFault is an enumeration.");
@@ -83,7 +75,7 @@ static_assert(g2::JobFault::CoreHalted != g2::JobFault::None,
 
 /* ================ JobContext
  *
- * It holds ONE field. The size assertion is the mechanical form of that
+ * It holds one field. The size assertion is the mechanical form of that
  * sentence: a second field of any type would make the struct larger than the
  * one field it may carry. */
 
@@ -99,9 +91,9 @@ static_assert(offsetof(g2::JobContext, fault) == 0,
 
 /* ================ DspContext -- the layout
  *
- * STANDARD LAYOUT IS LOAD-BEARING, NOT INCIDENTAL. Job::ctx is a JobContext*
+ * Standard layout is load-bearing, not incidental. Job::ctx is a JobContext*
  * and the job body must recover the DspContext from it. That recovery is legal
- * ONLY because DspContext is a standard-layout type, which makes it
+ * Only because DspContext is a standard-layout type, which makes it
  * pointer-interconvertible with its first member. A later member that broke
  * the property would make every job body undefined behaviour with no
  * diagnostic. */
@@ -135,7 +127,7 @@ static_assert(std::is_same_v<decltype(g2::DspContext::longDispatchQuanta),
 static_assert(std::is_same_v<decltype(g2::DspContext::dsp), dsp56k::DSP*>,
 	"DspContext::dsp -- borrowed. The Scheduler owns the DSP set.");
 
-/* The four the scheduler needs BECAUSE IT DRIVES THE ESAI FRAME. Without them
+/* The four the scheduler needs BECAUSE it DRIVES the ESAI FRAME. Without them
  * the job body cannot name the port it must advance, and it cannot decide
  * whether this quantum is inside the second bus's advance window. */
 
@@ -157,7 +149,7 @@ static_assert(std::is_same_v<decltype(g2::DspContext::secondBusFrameDivider),
 	"G2_SECOND_BUS_FRAME_DIVIDER. The job body advances the second bus only "
 	"when frameIndex % secondBusFrameDivider == 0.");
 
-/* NO EsaiClock ANYWHERE. An EsaiClock cannot follow a rational
+/* No EsaiClock ANYWHERE. An EsaiClock cannot follow a rational
  * cycles-for-each-frame rate, so the scheduler drives the frame instead and
  * this context carries the two ports rather than a clock. The type is not even
  * named here, and it is named nowhere in g2Lib. */
@@ -239,10 +231,9 @@ int main()
 	/* ---------------- a zeroed context carries no fault.
 	 *
 	 * JobFault::None is zero, so the Scheduler's own reset can clear a whole
-	 * context and the fault field then reads None. The field is STICKY --
-	 * a job never clears it and only Scheduler::reset does -- and that rule
-	 * belongs to the Scheduler, which SCH-19 and SCH-20 carry. What this task
-	 * owns is that None is the zero value the rule needs. */
+	 * context and the fault field then reads None. The field is sticky: a job
+	 * never clears it and only Scheduler::reset does. What this check owns is
+	 * that None is the zero value that rule needs. */
 	{
 		const g2::DspContext zeroed{};
 

@@ -5,12 +5,12 @@
 #include <cstdlib>
 #include <cstdio>
 
-// <filesystem> IS NOT AVAILABLE HERE and this is not a style choice.
+// <filesystem> is not AVAILABLE HERE and this is not a style choice.
 //
 // The root CMakeLists.txt sets CMAKE_OSX_DEPLOYMENT_TARGET to 10.13 or 10.12,
 // and std::filesystem was introduced in macOS 10.15. Compiling
 // std::filesystem::status against this tree's deployment target is a hard
-// error: "'path' is unavailable: introduced in macOS 10.15". baseLib takes the
+// error: "'path' is unavailable: introduced in macOS 10.15". BaseLib takes the
 // same split for the same reason and states it at baseLib/filesystem.cpp:8.
 //
 // baseLib::filesystem::isDirectory() is the house function for this question
@@ -53,13 +53,9 @@ namespace g2
 #endif
 		}
 
-		// Returns true only when _path names an EXISTING FILE. Every other
+		// Returns true only when _path names an existing file. Every other
 		// answer -- absent, unreadable, a directory, a broken symlink -- is
-		// false. Never throws.
-		//
-		// Mirrors the Python half's os.path.isfile() call: a path that is not
-		// there returns False rather than raising, so neither half needs an
-		// exception handler to satisfy the never-raises contract.
+		// false. Never throws, matching the Python half's os.path.isfile().
 		bool isExistingFile(const char* _path)
 		{
 #ifdef _WIN32
@@ -77,18 +73,11 @@ namespace g2
 #endif
 		}
 
-		// Concatenates a string literal with a runtime value to form one of
-		// the THREE messages design section 4.2 names. The wording is fixed by
-		// the design and must be word-for-word identical to the Python half in
-		// nmg2_tools/artifacts.py -- the only source of truth for these
-		// strings is the design section, but the only way to keep the two
-		// halves from drifting is to assert the wording in a test, and the test
-		// reads the wording from THIS file.
+		// The wording must be word-for-word identical to the Python half in
+		// nmg2_tools/artifacts.py.
 		//
-		// The buffer must be large enough for the longest message. The
-		// longest is message 3 with a 4096-byte path: 79 bytes of fixed text
-		// plus a name and a path. 8 KiB is well above that and matches the
-		// PATH_MAX convention without depending on it.
+		// The buffer must hold the longest message: 79 bytes of fixed text plus
+		// a name and a path. 8 KiB is well above a 4096-byte path.
 		void writeNoDirectoryMessage(char* _out, const char* _value)
 		{
 			std::snprintf(_out, 8192,
@@ -106,7 +95,7 @@ namespace g2
 
 	std::string EnvArtifactResolver::resolve(std::string& _why, const char* _name)
 	{
-		// Nothing below can throw. std::getenv does not throw, the isExisting*
+		// Nothing below can throw. Std::getenv does not throw, the isExisting*
 		// helpers do not throw, std::snprintf does not throw, and the only
 		// remaining escape is std::bad_alloc from a std::string assignment,
 		// which no caller could handle.
@@ -128,9 +117,8 @@ namespace g2
 
 		// A path that does not exist, a path the process cannot stat, and a
 		// path that exists but is not a directory all land here, and all three
-		// give message 2. The message echoes the variable's value unchanged,
-		// which is the wording the Python half in nmg2_tools/artifacts.py
-		// spells as `_message_no_directory(value)`.
+		// give message 2. The message echoes the variable's value unchanged so
+		// an operator with a wrong path sees the path they actually typed.
 		if(!isExistingDirectory(value))
 		{
 			char buffer[8192];
@@ -139,21 +127,13 @@ namespace g2
 			return {};
 		}
 
-		// The directory exists. If a name was asked for and the file is not in
-		// the directory, message 3 fires. The caller chose _name and we echo
-		// both it and the variable's value, which is the wording the Python
-		// half spells as `_message_not_found(name, value)`.
-		//
-		// A null _name means the caller did not ask for a file, which is the
-		// shape firmwareState.h and gatedFixture.h use today. The directory
+		// A null _name means the caller did not ask for a file. The directory
 		// alone is then enough to succeed and message 3 is unreachable.
 		if(_name)
 		{
-			// Build the candidate path "<value>/<name>". The path joins with a
-			// single forward slash on every platform -- POSIX path semantics
-			// accept it on macOS and Linux, and Windows accepts forward
-			// slashes in the path part as well as backslashes. The Python
-			// half uses os.path.join() which does the same.
+			// The path joins with a single forward slash on every platform:
+			// POSIX accepts it, and Windows accepts forward slashes in the
+			// path part as well as backslashes.
 			char candidate[8192];
 			std::snprintf(candidate, sizeof(candidate), "%s/%s", value, _name);
 

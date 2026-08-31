@@ -1,16 +1,7 @@
-// Task BRD-1. The memory decode and the two bus callbacks.
+// The memory decode and the two bus callbacks.
 //
-// Plan section 13.1, BRD-1. Design sections 5.2.1, 6.4, 17 row 7.24.
-// Logbook: AGENTS.md section 2.2.
-//
-// THIS FILE CARRIES NO ADDRESS AT ALL. The four recorded bases are named
-// constants in memoryMap.h and the three unrecorded ones are configuration.
-// See the header for the authority of each.
-//
-// NOTHING HERE ABORTS AND NOTHING HERE USES assert(). A failed access is
-// reported through the out-parameter of the callback and it writes one log
-// line. The default build is Release and defines NDEBUG, so an assert() would
-// be removed and a report built on one could never fire.
+// A failed access is reported through the out-parameter of the callback and it
+// writes one log line. Nothing here aborts.
 
 #include "memoryMap.h"
 

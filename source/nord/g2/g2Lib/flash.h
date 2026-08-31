@@ -1,15 +1,11 @@
 #pragma once
 
-// Task BRD-7. Design section 7.4.
-//
 // Read-only flash model. CS0 holds the boot loader image; CS2 holds the main
 // flash image. The model does not model erase, does not model write, and does
 // not run Clavia's update procedure: writes are logged as rejected.
 //
-// The CS0 and CS2 bases and sizes come from the test fixture and no shipped
-// header carries a number. AGENTS.md section 2.2 records them as unrecorded,
-// section 1.3 rule 1 forbids writing them into a header, and SPK-13 reads
-// CSAR0 to CSAR5 from the real firmware when a measured value is required.
+// No authority records the CS0 and CS2 bases and sizes, so the caller supplies
+// them and no shipped header carries a number.
 
 #include <cstdint>
 #include <vector>
@@ -41,11 +37,9 @@ namespace g2
 		uint16_t read16(uint32_t _addr) const;
 		uint32_t read32(uint32_t _addr) const;
 
-		// Writes are logged and rejected. The flash model is read-only:
-		// erase, write, and the Clavia update procedure are out of scope for
-		// this task. The model carries contents from reset, so whatever image
-		// was loaded is readable from the first cycle, but no call below ever
-		// changes the underlying bytes.
+		// Writes are logged and rejected. The model carries contents from
+		// reset, so whatever image was loaded is readable from the first
+		// cycle, but no call below ever changes the underlying bytes.
 		void write8 (uint32_t _addr, uint8_t  _value);
 		void write16(uint32_t _addr, uint16_t _value);
 		void write32(uint32_t _addr, uint32_t _value);

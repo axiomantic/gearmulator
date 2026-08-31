@@ -1,36 +1,22 @@
-/* t0_block_table_harness.cpp -- the check of task SCH-14.
- * Design section 13.4.6 consequence 2, and 18.2.
+/* The self-test of the block-table instrument. It establishes no
+ * maxDispatchCost: it runs the harness against a synthetic DSP program
+ * committed beside it, whose longest block is known by construction, and
+ * verifies that the instrument reads a block table correctly. It needs no
+ * artifact, so a fork contributor with no G2 ROM can run it.
  *
- * THIS IS THE SELF-TEST OF AN INSTRUMENT, AND IT ESTABLISHES NO
- * maxDispatchCost. It runs the harness against a synthetic DSP program
- * committed beside it, whose longest block is known by construction, so the
- * row asserts an exact figure. SPK-5 produces the number this project actually
- * uses and SCH-31 is the measurement that reads the real compiled kernel; this
- * row verifies that the instrument reads a block table correctly.
+ * The cap it asserts against is kLongestBlockCap, supplied by this fixture, and
+ * not the build's. MaxInstructionsPerBlock sits at the upstream default of 0,
+ * which means uncapped -- source/dsp56300/source/dsp56kEmu/jitconfig.h:20 --
+ * and a bound of "no block exceeds uncapped" has no threshold and passes for
+ * every possible measurement.
  *
- * IT NEEDS NO ARTIFACT. A fork contributor with no G2 ROM can run it.
- *
- * WHERE THE CAP COMES FROM, AND WHY IT IS NOT THE BUILD'S.
- *
- * An earlier revision of this task asserted that no block exceeds "the
- * maxInstructionsPerBlock cap". Measurement register row 2 records that field
- * at the upstream default of 0, which means UNCAPPED -- verified in this tree
- * at source/dsp56300/source/dsp56kEmu/jitconfig.h:20 -- and DSP-12 ships that
- * configuration until SPK-6 reports. A BOUND OF "NO BLOCK EXCEEDS UNCAPPED"
- * HAS NO THRESHOLD AND PASSES FOR EVERY POSSIBLE MEASUREMENT, FOR EVER.
- *
- * So the cap this row asserts against is kLongestBlockCap, supplied by this
- * fixture. The scratch configuration the harness walks under carries a FINITE
+ * The scratch configuration the harness walks under carries a finite
  * kScratchInstructionLimit, so nothing here is walked uncapped either. The two
- * are deliberately different numbers: a scratch limit EQUAL to the asserted
- * cap would make the assertion hold by construction of the library -- the
- * walk would split every block at the limit -- and a check that the library
- * cannot fail is the class this row exists to close. With the limit above the
- * cap, a program whose longest block exceeds the cap really does report a
- * block above it, and THE NEGATIVE CASE BELOW DRIVES EXACTLY THAT.
- *
- * SCH-9, SCH-12 and SCH-13 take their bound from their own fixture for the
- * same reason, and each says so at its own site.
+ * are deliberately different numbers: a scratch limit equal to the asserted cap
+ * would make the assertion hold by construction of the library, because the
+ * walk would split every block at the limit. With the limit above the cap, a
+ * program whose longest block exceeds the cap really does report a block above
+ * it, and the negative case below drives exactly that.
  */
 
 #include "tools/blockTableHarness.h"
@@ -84,7 +70,7 @@ namespace
 		++g_logLines;
 	}
 
-	/* THE CAP THIS FIXTURE SUPPLIES. Nothing reads it from a header. */
+	/* The cap this fixture supplies. Nothing reads it from a header. */
 	constexpr uint32_t kLongestBlockCap = 16;
 
 	/* The finite instruction limit the scratch configuration carries. It is
@@ -228,8 +214,8 @@ namespace
 		}
 	};
 
-	/* THE ROW'S OWN PREDICATE, AS ONE FUNCTION, so that the positive case and
-	 * the negative case read the SAME predicate and the negative case really
+	/* The ROW'S own predicate, as one function, so that the positive case and
+	 * the negative case read the same predicate and the negative case really
 	 * is the same assertion failing. */
 	bool noBlockExceedsCap(const g2::BlockTableReport& report,
 		const uint32_t cap)
@@ -272,19 +258,19 @@ int main(int argc, char** argv)
 		"the blocks the harness reported cover the whole program and no "
 		"more");
 
-	/* THE EXACT FIGURES OF THE LONGEST BLOCK. */
+	/* The exact figures of the longest block. */
 	checkEqual(report.largestInstructionCount, kLongestBlockInstructions,
 		"the longest block holds twelve nop and the jmp that closes it");
 	checkEqual(report.largestCycleCount, kLongestBlockCycles,
 		"the longest block's ENCODED CYCLE COUNT is the figure this row "
 		"names");
 
-	/* AND IT IS THE THIRD BLOCK, not whichever block happened to be walked
+	/* And it is the third block, not whichever block happened to be walked
 	 * last. */
 	check(report.largestCycleCountPc > kProgramBegin,
 		"the longest block is not the first block of the program");
 
-	/* THE SAME FIGURE, RE-DERIVED. The three blocks differ only by their nop
+	/* The same figure, re-derived. The three blocks differ only by their nop
 	 * count, so the cycle count of the longest one is the shortest one's plus
 	 * the difference in nop instructions. A library change to one instruction's
 	 * timing moves the exact figure above and this derivation together, and a
@@ -295,12 +281,12 @@ int main(int argc, char** argv)
 		"the longest block's cycle count is the shortest block's plus the "
 		"nine extra nop instructions between them");
 
-	/* ---------------- NO BLOCK EXCEEDS THE CAP THE FIXTURE SUPPLIES. */
+	/* ---------------- no BLOCK EXCEEDS the CAP the FIXTURE SUPPLIES. */
 	check(noBlockExceedsCap(report, kLongestBlockCap),
 		"no block of the committed program exceeds the cap this fixture "
 		"supplies");
 
-	/* ---------------- THE NEGATIVE CASE.
+	/* ---------------- the NEGATIVE CASE.
 	 *
 	 * A scratch program whose longest block is ABOVE the fixture's cap, walked
 	 * under the same scratch configuration. The row's predicate must be FALSE
@@ -334,13 +320,13 @@ int main(int argc, char** argv)
 			"the row's own predicate FALSE. This is what proves the cap "
 			"assertion can fail.");
 
-		/* ---------------- THE HARNESS REALLY READS THE CONFIGURATION IT IS
+		/* ---------------- the HARNESS really READS the CONFIGURATION it is
 		 * GIVEN.
 		 *
 		 * Every walk above runs under an instruction limit no block reaches,
 		 * so a harness that ignored the configuration and used the library's
 		 * own upstream default would report the same figures and every case so
-		 * far would pass. This case walks the SAME program under a limit BELOW
+		 * far would pass. This case walks the same program under a limit BELOW
 		 * its natural block length: the table then has to split, and a harness
 		 * that ignored the configuration reports one block of twenty-one
 		 * instead of three blocks capped at eight.

@@ -1,59 +1,47 @@
-/* t0_clock_guard.cpp -- the check of task SCH-3. Design sections 13.4.3, 23.1.
+/* Two cases, guarding two different things.
  *
- * TWO CASES, AND THEY GUARD TWO DIFFERENT THINGS.
+ * Case 1, the refuted MCU clock. The value 54 million is refuted, not merely
+ * unverified, so its literal is banned rather than tracked. The case asserts it
+ * appears nowhere in this repository, and it matches every spelling of it.
  *
- * CASE 1, the refuted MCU clock. The value 54 million is REFUTED on five
- * independent grounds, not merely unverified: an unverified value may turn out
- * right and a refuted one will not, so its literal is banned rather than
- * tracked. The case asserts it appears NOWHERE in this repository, and it
- * matches EVERY SPELLING of it and not one.
+ * A single-spelling grep is a check that a one-character edit walks around: a
+ * fixed-string search for the plain decimal form matches a header holding it
+ * and matches neither the digit-separator form, which the compiler reads as the
+ * same number, nor the exponent form. So the case matches the decimal form with
+ * optional digit separators, the hexadecimal form in either letter case, and
+ * the exponent forms, enumerated in one table.
  *
- * A single-spelling grep is a check that a one-character edit walks around,
- * and that was MEASURED rather than argued: a fixed-string search for the
- * plain decimal form matched a header holding it and matched NEITHER the
- * digit-separator form, which the compiler reads as the same number, NOR the
- * exponent form. Plan section 7.7 measurement 6 carries the transcript.
+ * Every spelling carries a positive control: each pattern is first run against
+ * a scratch file that holds that spelling, and it must match. Without that
+ * half, a pattern with a typo in it reports "absent" for ever and the case can
+ * never fail.
  *
- * So the case matches the decimal form with optional digit separators, the
- * hexadecimal form in either letter case, and the exponent forms, and the
- * spellings are ENUMERATED IN ONE TABLE so that a reader sees the whole set.
+ * No grep can catch a value computed from other constants. The grep is the
+ * cheap half; the rule that no shipped header carries the number is the half
+ * that does the work.
  *
- * EVERY SPELLING CARRIES A POSITIVE CONTROL. Each pattern is first run
- * against a scratch file that holds that spelling, and it must MATCH. Without
- * that half, a pattern with a typo in it reports "absent" for ever and the
- * case can never fail.
- *
- * WHAT NO GREP CAN CATCH is a value COMPUTED from other constants, and this
- * file does not pretend otherwise. The grep is the cheap half. Measurement
- * register row 7's rule -- that no shipped header carries the number -- is
- * the half that does the work.
- *
- * CASE 2, the configure-time guard. The two MCU BUS symbols are both 0u and
- * neither is derived, so a source that used either would compute with a zero.
- * BRD-0 installs a guard in g2Lib/CMakeLists.txt that fails the configure
- * step and names the symbol. Section 7.4.2 gives that file to BRD-0, so THIS
- * TASK DOES NOT EDIT IT: BRD-0 installs the mechanism and this task drives the
- * negative case that proves it fires.
+ * Case 2, the configure-time guard. The two MCU bus symbols are both 0u and
+ * neither is derived, so a source that used either would compute with a zero. A
+ * guard in g2Lib/CMakeLists.txt fails the configure step and names the symbol;
+ * this test drives the negative case that proves it fires.
  *
  * The negative case adds a scratch use and asserts the configure step fails
- * naming the symbol. A CONTROL RUN WITHOUT THE SCRATCH FILE asserts the guard
+ * naming the symbol. A control run without the scratch file asserts the guard
  * stays silent, so a guard that failed every configure for some other reason
  * would not be mistaken for a working one.
  *
- * EVERY NEEDLE IN THIS FILE IS ASSEMBLED FROM FRAGMENTS AT RUN TIME, and that
+ * Every needle in this file is assembled from fragments at run time, and that
  * is load-bearing twice over.
  *
- *   1. Case 1 scans every file in this repository with no exclusion list, so
- *      a file that spelled the refuted value out in full would match ITSELF,
- *      the case could never pass, and the usual repair -- excluding this file
- *      from its own scan -- would open exactly the hole the case exists to
- *      close.
- *   2. THIS FILE LIVES UNDER source/nord/g2/, WHICH IS THE TREE BRD-0's GUARD
- *      SCANS. A file that spelled either guarded symbol out in full would
- *      make the guard fire on the very test that proves it fires, and the
- *      whole project would stop configuring. The two symbols are therefore
- *      built from a shared prefix and a suffix and are never contiguous in
- *      this source.
+ *   1. Case 1 scans every file in this repository with no exclusion list, so a
+ *      file that spelled the refuted value out in full would match itself, the
+ *      case could never pass, and the usual repair -- excluding this file from
+ *      its own scan -- would open exactly the hole the case exists to close.
+ *   2. This file lives under source/nord/g2/, which is the tree the guard
+ *      scans. A file that spelled either guarded symbol out in full would make
+ *      the guard fire on the very test that proves it fires, and the whole
+ *      project would stop configuring. The two symbols are therefore built from
+ *      a shared prefix and a suffix and are never contiguous in this source.
  */
 
 #include <cstdio>
@@ -178,7 +166,7 @@ namespace
 		return stream.good();
 	}
 
-	/* PATHS ARE PLAIN STRINGS HERE. std::filesystem is unavailable at this
+	/* Paths are plain strings here. Std::filesystem is unavailable at this
 	 * target's deployment version, and every path operation this check needs
 	 * is a join, a basename or a directory creation. Directory work goes
 	 * through `cmake -E`, which every supported CMake carries and which needs
@@ -206,32 +194,28 @@ namespace
 		return path;
 	}
 
-	/* ---------------- what is NOT source, and how it is found
+	/* ---------------- what is not source, and how it is found
 	 *
-	 * THE SCAN MUST NOT READ BUILD OUTPUT, AND A DIRECTORY NAME IS NOT A
-	 * RELIABLE WAY TO TELL. This was measured rather than argued.
+	 * The scan must not read build output, and A directory name is not A
+	 * Reliable way to tell. This was measured rather than argued.
 	 *
 	 * The scan covers this repository's tracked files plus its untracked,
 	 * non-ignored ones. `.gitignore` ignores /build/, so a build tree at that
 	 * one path is out of scope -- and a build tree at ANY OTHER PATH is not.
-	 * A CTest log quotes the output of other tests, and task SCH-0's own check
-	 * PRINTS the refuted value in full when it reports the value absent. So a
+	 * A CTest log quotes the output of other tests, and one of those checks
+	 * prints the refuted value in full when it reports the value absent. So a
 	 * second build tree, at any name but `build`, puts the literal into
 	 * <tree>/Testing/Temporary/LastTest.log and this case reports it as
 	 * present. Measured: the case passed in `build` and failed in `build2`
 	 * with three matches, every one of them a log line.
 	 *
 	 * A check that passes because of a directory name is an accident, not a
-	 * check. The scope is therefore stated by a PROPERTY of the directory and
+	 * check. The scope is therefore stated by a property of the directory and
 	 * not by its name: a directory that holds a CMakeCache.txt is a CMake
 	 * build tree, and a build tree is output rather than source.
 	 *
-	 * The exclusions are REPORTED with any failure, so the scope is never
-	 * invisible to whoever reads the result.
-	 *
-	 * TASK SCH-0's CHECK CARRIES THE SAME FRAGILITY and this task does not
-	 * repair it: that check belongs to SCH-0 and section 7.4.2 keeps each task
-	 * to its own files. It is reported instead. */
+	 * The exclusions are reported with any failure, so the scope is never
+	 * invisible to whoever reads the result. */
 	std::vector<std::string> buildTreeExclusions(const std::string& repositoryRoot,
 		const std::string& gitExecutable)
 	{
@@ -488,9 +472,9 @@ int main(const int argc, const char* const* const argv)
 
 			/* ---- the real case.
 			 *
-			 * THE SCOPE IS STATED. `git grep` here searches this repository's
+			 * The scope is stated. `git grep` here searches this repository's
 			 * own tracked files plus its untracked, non-ignored ones. It does
-			 * NOT recurse into submodules and it does not read ignored paths,
+			 * Not recurse into submodules and it does not read ignored paths,
 			 * so the build tree is out of scope.
 			 *
 			 * That scope is chosen against a measurement. A literal walk of
@@ -566,10 +550,9 @@ int main(const int argc, const char* const* const argv)
 			"add_subdirectory(\"" + forwardSlashes(g2LibSourceDir)
 			+ "\" g2Lib)\n");
 
-		/* THE MCF5307 LINK IS TURNED OFF FOR THE SCRATCH CONFIGURE, and the
-		 * reason is stated rather than left as a flag nobody can explain.
+		/* The MCF5307 link is turned off for the scratch configure.
 		 *
-		 * Task BRD-23 turns G2_LINK_MCF5307 ON by default, and g2Lib then
+		 * G2_LINK_MCF5307 is on by default, and g2Lib then
 		 * either adds a subdirectory the ROOT CMakeLists.txt points it at or
 		 * calls FetchContent_MakeAvailable(mcf5307) against details the ROOT
 		 * declares. This scratch project is not that root, so the fetch has no
@@ -621,7 +604,7 @@ int main(const int argc, const char* const* const argv)
 		 * both are driven. */
 		for(const std::string& symbol : { clockSymbol, dividerSymbol })
 		{
-			/* THE SCRATCH USE. It is a real source file under
+			/* The scratch use. It is a real source file under
 			 * source/nord/g2/, which is the tree the guard scans. */
 			writeTextFile(scratchHeader,
 				std::string(
@@ -639,7 +622,7 @@ int main(const int argc, const char* const* const argv)
 					"-B", join(workDirectory, "negativeBuild_" + symbol)
 				});
 
-			/* REMOVED BEFORE THE RESULT IS READ, so that a failing assertion
+			/* Removed before the result is read, so that a failing assertion
 			 * cannot leave behind a file that breaks every later configure. */
 			std::remove(scratchHeader.c_str());
 
@@ -653,7 +636,7 @@ int main(const int argc, const char* const* const argv)
 				"the configure step FAILS when a source uses " + symbol + ":\n"
 					+ negative.output);
 
-			/* The message must name the symbol AND the file, so a configure
+			/* The message must name the symbol and the file, so a configure
 			 * that failed for some other reason cannot be read as a pass. The
 			 * guard's explanation names both symbols, so the form matched here
 			 * is the one that names the symbol that FIRED it. */

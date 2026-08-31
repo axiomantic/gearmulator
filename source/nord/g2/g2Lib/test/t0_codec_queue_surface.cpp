@@ -1,30 +1,20 @@
-/* t0_codec_queue_surface.cpp -- the check of task SCH-15.
- * Design sections 13.10.4 and 13.6.
+/* Two things, which fail in different ways on purpose.
  *
- * TWO THINGS, AND THEY FAIL IN DIFFERENT WAYS ON PURPOSE.
- *
- * THE SURFACE. The check takes the address of every declared method on both
- * queues, THROUGH ITS FULLY QUALIFIED MEMBER-FUNCTION-POINTER TYPE. That
- * spelling is what makes a renamed or re-signed method a COMPILE error rather
- * than a silent match against something else, and a missing definition a LINK
+ * The surface. The check takes the address of every declared method on both
+ * queues, through its fully qualified member-function-pointer type. That
+ * spelling is what makes a renamed or re-signed method a compile error rather
+ * than a silent match against something else, and a missing definition a link
  * error, because taking the address of a member function odr-uses it.
  *
- * THE ONE BEHAVIOURAL PROPERTY THIS ROW OWNS: CodecSink::push REFUSES WHEN
- * FULL AND THE FRAME ALREADY IN THE QUEUE IS UNCHANGED AFTERWARDS.
+ * The one behavioural property this row owns: CodecSink::push refuses when full
+ * and the frame already in the queue is unchanged afterwards. Overwriting would
+ * silently discard a frame the host has already been told to expect, which
+ * changes the real latency mid-session while the reported figure stays
+ * constant. Refusing makes it observable, and droppedFrames() > 0 is a defect
+ * report and not a tolerance.
  *
- * An earlier design draft declared "overwrites oldest when full" while the
- * lookahead section said "when the queue is full, the scheduler stops". Those
- * two cannot both stand, and the overwrite is the one that had to go:
- * overwriting silently discards a frame the host has already been told to
- * expect, which changes the real latency mid-session while the reported figure
- * stays constant. That is the exact failure the constant-latency requirement
- * exists to prevent, and one that no test in this design would see. Refusing
- * makes it observable instead, and droppedFrames() > 0 is a DEFECT REPORT and
- * not a tolerance.
- *
- * A BUILD OF THE TARGET TESTS NEITHER THE SURFACE NOR THE REFUSAL, so both
- * live in a registered program that runs. SCH-16 covers the capacity
- * arithmetic over 1,000 blocks; this row covers the surface and the refusal.
+ * A build of the target tests neither the surface nor the refusal, so both live
+ * in a registered program that runs.
  */
 
 #include "codecQueues.h"
@@ -90,7 +80,7 @@ namespace
 	}
 }
 
-/* ================ THE SURFACE
+/* ================ the SURFACE
  *
  * Every declared method of both queues, by its fully qualified
  * member-function-pointer type. Remove a parameter, change a return type, drop
@@ -135,7 +125,7 @@ static_assert(!std::is_convertible_v<size_t, g2::CodecSink>,
 
 int main()
 {
-	/* THE CAPACITY IS lookaheadFrames + B FOR BOTH QUEUES, and both figures
+	/* The capacity is lookaheadFrames + B for both QUEUES, and both figures
 	 * come from this fixture. B is the largest host block in 96 kHz frames and
 	 * the Device cannot see it: synthLib::Device has no prepareToPlay and no
 	 * block-size accessor, and synthLib::Plugin::setBlockSize keeps the value
@@ -201,10 +191,10 @@ int main()
 			"supplied a whole request");
 	}
 
-	/* ---------------- CodecSink::push REFUSES WHEN FULL AND NEVER OVERWRITES.
+	/* ---------------- CodecSink::push REFUSES when FULL and never OVERWRITES.
 	 *
 	 * This is the property this row owns. The queue is filled with frames
-	 * whose contents are known, a further push is made, and EVERY frame
+	 * whose contents are known, a further push is made, and every frame
 	 * already in the queue is asserted unchanged afterwards -- not the oldest
 	 * alone, because an overwrite of any one of them is the same defect. */
 	{
@@ -225,7 +215,7 @@ int main()
 		checkEqual(sink.droppedFrames(), 0u,
 			"a sink filled exactly to its capacity dropped nothing");
 
-		/* THE REFUSAL. */
+		/* The REFUSAL. */
 		const g2::Frame intruder = frameFor(999);
 
 		check(!sink.push(intruder),
@@ -237,7 +227,7 @@ int main()
 		checkEqual(sink.size(), capacityFrames,
 			"a refused push does not change the queue's size");
 
-		/* AND NOTHING IN THE QUEUE MOVED. Every frame is pulled and held
+		/* And nothing in the queue moved. Every frame is pulled and held
 		 * against what was pushed. A body that overwrote the oldest frame
 		 * would pass a size check and fail here. */
 		for(size_t i = 0; i < capacityFrames; ++i)
@@ -276,7 +266,7 @@ int main()
 
 	/* ---------------- CodecSource::push refuses when full, and counts it.
 	 *
-	 * A refused frame is HOST AUDIO INPUT AND IT IS DROPPED. There is no retry
+	 * A refused frame is HOST AUDIO INPUT and it is DROPPED. There is no retry
 	 * and no recovery, and the audible consequence is a gap of that many
 	 * frames in the input path. The capacity rule makes it unreachable in a
 	 * correct build, which is why the design counts it rather than handling
@@ -366,7 +356,7 @@ int main()
 		check(sink.push(frameFor(1)), "the sink accepts one frame");
 		check(sink.push(frameFor(2)), "the sink accepts a second frame");
 
-		/* THE BUFFER IS PRE-FILLED WITH A SENTINEL, and that is not tidiness.
+		/* The buffer is pre-filled with A sentinel, and that is not tidiness.
 		 * An uninitialised buffer that happens to be zero makes the silence
 		 * assertion below pass whether or not pull() writes anything -- a
 		 * check that cannot fail. This was measured: with the zeroing removed
@@ -383,7 +373,7 @@ int main()
 		check(sameFrame(out[0], frameFor(1)) && sameFrame(out[1], frameFor(2)),
 			"a short pull still returns the frames it had, in order");
 
-		/* THE FRAMES IT COULD NOT SUPPLY READ AS SILENCE. A consumer receives
+		/* The frames it could not supply read as silence. A consumer receives
 		 * the whole buffer it asked for, so the part that was not filled must
 		 * not carry whatever was there before. */
 		for(size_t i = 2; i < 8u; ++i)

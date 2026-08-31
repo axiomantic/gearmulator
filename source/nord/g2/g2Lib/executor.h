@@ -1,31 +1,25 @@
-/* executor.h -- the Executor interface and the serial executor. Task SCH-7.
- * Design sections 13.3 and 13.10.3.
+/* The Executor interface and the serial executor.
  *
- * ONE METHOD: run these eight jobs and return when all of them have returned.
- * Three things that sentence left out are here -- an error channel, a statement
- * about re-entry, and a guarantee that no allocation happens for each quantum.
+ * One method: run these eight jobs and return when all of them have returned.
  *
- * THE JOB IS A PLAIN FUNCTION POINTER PLUS A TYPED CONTEXT POINTER. No
+ * The job is a plain function pointer plus a typed context pointer. No
  * std::function, so no allocation and no indirect ownership. The Scheduler
  * builds the job array once, at construction, and passes the same array every
  * quantum.
  *
- * THE ERROR CHANNEL IS THE CONTEXT AND NOT A RETURN VALUE. A job never throws
- * and never returns a value: a fault writes ctx->fault and returns
- * immediately, and the Scheduler reads every job's fault after run() returns.
- * The Executor itself neither reads nor reports a fault -- it has no state to
- * report one from.
+ * The error channel is the context and not a return value. A job never throws
+ * and never returns a value: a fault writes ctx->fault and returns immediately,
+ * and the Scheduler reads every job's fault after run() returns. The Executor
+ * itself neither reads nor reports a fault.
  *
- * NO THREAD IS CREATED ANYWHERE IN THIS FILE OR IN serialExecutor.cpp, and
- * NEITHER <thread> NOR std::thread IS NAMED. The serial executor runs the jobs
- * in order ON THE CALLING THREAD. A discarded branch of this work gave the
- * Executor its own std::thread and a submit() that threw; both contradict the
- * bit-exactness claim this design makes at the 96 kHz Q23 integer boundary,
- * and both are refused here. A parallel implementation is a SEPARATE class
- * (PERF-6) that satisfies this interface and reports isSerial() false.
+ * The serial executor runs the jobs in order on the calling thread, and creates
+ * no thread. A worker thread would make job completion order depend on the host
+ * scheduler, which ends the bit-exactness claim this design makes at the 96 kHz
+ * Q23 integer boundary. A parallel implementation is a separate class that
+ * satisfies this interface and reports isSerial() false.
  *
- * NO FLOATING-POINT TYPE APPEARS ON THIS SURFACE. The determinism claim is
- * made at the Q23 integer boundary.
+ * No floating-point type appears on this surface: the determinism claim is made
+ * at the Q23 integer boundary.
  *
  * Ownership   The caller owns the Executor and passes it to the Scheduler by
  *             reference. The Scheduler never destroys it.
@@ -45,15 +39,15 @@
 
 namespace g2
 {
-	/* THE JOB ARRAY IS EXACTLY 8 AND IT HOLDS THE DSP CONTEXTS ONLY. The panel
-	 * and the MCU both run serially in the Scheduler, outside the Executor.
+	/* The job array is exactly 8 and holds the DSP contexts only. The panel and
+	 * the MCU both run serially in the Scheduler, outside the Executor.
 	 *
-	 * dspCount is therefore FIXED at 8 and SCH-18 rejects every other value,
-	 * including the 4-DSP machine BRD-15 records as a real configuration. The
-	 * narrow answer is chosen over the general one because nothing in this
-	 * milestone path needs a variable count: the base machine presents eight
-	 * responders and there is no "count what answers" fallback. WHEN A
-	 * VARIABLE COUNT IS WANTED, every array follows dspCount in one change and
+	 * dspCount is therefore fixed at 8 and every other value is rejected,
+	 * including the 4-DSP machine, which is a real configuration. The narrow
+	 * answer is chosen over the general one because nothing on this path needs
+	 * a variable count: the base machine presents eight responders and there is
+	 * no "count what answers" fallback. When a variable count is wanted, every
+	 * array follows dspCount in one change and
 	 * this comment is the trigger to make it. */
 	inline constexpr size_t kJobCount = 8;
 
@@ -76,7 +70,7 @@ namespace g2
 		 * job's state. That is what makes a parallel implementation give the
 		 * same answer as a serial one.
 		 *
-		 * run() IS NOT RE-ENTRANT. A job must never call run(). */
+		 * run() is not RE-ENTRANT. A job must never call run(). */
 		virtual void run(const Job* jobs, size_t count) noexcept = 0;
 
 		/* True for the serial executor. The determinism test runs the same
@@ -84,22 +78,20 @@ namespace g2
 		virtual bool isSerial() const noexcept = 0;
 	};
 
-	/* THE SERIAL EXECUTOR. It runs the jobs in order on the calling thread and
+	/* The serial executor. It runs the jobs in order on the calling thread and
 	 * it owns nothing.
 	 *
-	 * THE RE-ENTRY COUNTERS ARE CARRIED IN EVERY BUILD TYPE AND EXPOSED, and
+	 * The re-entry counters are carried in every build type and exposed, and
 	 * that is a decision with a measured reason rather than a convenience.
 	 * Design section 13.10.3 says "debug builds assert this with a depth
-	 * counter". THE DEFAULT BUILD OF THIS TREE IS Release AND DEFINES NDEBUG,
+	 * counter". The DEFAULT BUILD of this TREE is Release and DEFINES NDEBUG,
 	 * so an assert() is not in the translation unit at all: a check whose
 	 * predicate is "the debug build caught it" passes against a tree in which
 	 * the property was never written. So the counter is always present, the
 	 * re-entry is REFUSED rather than asserted, and t0_executor reads the
-	 * exposed value in a release build as well as a debug build. SCH-18 states
-	 * the same principle for the construction rejections and gives the same
-	 * reason.
+	 * exposed value in a release build as well as a debug build.
 	 *
-	 * A REFUSED RE-ENTRY RUNS NO JOB. Running the inner array would dispatch a
+	 * A refused re-entry runs no job. Running the inner array would dispatch a
 	 * job while another job was still on the stack, which breaks the
 	 * independence premise that makes the serial and the parallel executor
 	 * bit-identical. Returning without running is the only behaviour that

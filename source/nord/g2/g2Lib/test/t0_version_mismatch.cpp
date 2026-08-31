@@ -1,28 +1,18 @@
-// Task BRD-11. Tier T0: this test needs no firmware artifact of any kind.
+// The firmware version and the mismatch policy. Tier T0: this test needs no
+// firmware artifact.
 //
-// Plan section 13.2, BRD-11. Design sections 7.3 step 6 and 15.8.
+// The rule is: warn and require explicit confirmation, never reinterpret
+// silently. This test drives all three rows of the policy table and asserts the
+// rule directly.
 //
-// WHAT THIS TEST IS FOR. Design section 15.8 answers understanding section
-// 12.3 question 14 -- what happens when a project was authored against one OS
-// version and is restored on a machine that runs another -- with three rows and
-// one rule: WARN AND REQUIRE EXPLICIT CONFIRMATION, NEVER REINTERPRET SILENTLY.
-// This test drives all three rows and asserts the rule directly.
-//
-// THE WORST OF THE THREE OUTCOMES IS THE SILENT ONE. A silent reinterpretation
+// The worst of the three outcomes is the silent one: a silent reinterpretation
 // of a bit-packed structure produces a wrong sound with no warning, and neither
 // the plugin nor the user is told. Case group 4 is the exhaustive sweep that
 // says no version pair can reach it.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so an assert() is removed and a check built on
-// one could never fire. Every case reports through the counters below and the
-// process exit status.
-//
-// THE EXPECTED MESSAGES ARE WRITTEN OUT IN FULL ON PURPOSE. Design section 15.8
-// requires a message that NAMES BOTH VERSIONS, and a test that built the
-// expected text with the same call the header uses would pass for any text at
-// all, including a text that named neither version. Task REPO-5's own test
-// carries the same reasoning for the same reason.
+// The expected messages are written out in full on purpose. A test that built
+// the expected text with the same call the header uses would pass for any text
+// at all, including a text that named neither version.
 
 #include "firmwareVersion.h"
 
@@ -71,7 +61,7 @@ namespace
 		return "unknown";
 	}
 
-	// THE WHOLE DECISION AS ONE STRING, so that every case asserts every field.
+	// The whole decision as one string, so that every case asserts every field.
 	// A case that compared one field would pass for a decision that carried the
 	// right outcome and the wrong message, which is the only part of the
 	// decision the user ever sees.
@@ -92,10 +82,8 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 0. THE VERSION WORD READS AS A RELEASE NUMBER.
-	//
-	// Design section 7.3 step 6 records the version word, and the word is a
-	// plain integer that the release splits at the hundreds. 0x00A2 is 162,
+	// Case group 0. The version word reads as a release number. The word is a
+	// plain integer that the release splits at the hundreds: 0x00A2 is 162,
 	// which is release 1.62.
 	checkEqual(g2::versionText(0x00A2u), "1.62", "0x00A2 reads as release 1.62");
 	checkEqual(g2::versionText(100u), "1.00", "100 reads as release 1.00");
@@ -104,7 +92,7 @@ int main()
 	checkEqual(g2::versionText(1000u), "10.00", "1000 reads as release 10.00");
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE VERSIONS MATCH, SO THE PATCH LOADS NORMALLY.
+	// Case group 1. The VERSIONS MATCH, so the PATCH LOADS NORMALLY.
 	{
 		const g2::FirmwareVersionDecision decision =
 			g2::decideFirmwareVersion(true, 0x00A2u, 0x00A2u);
@@ -115,10 +103,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. THE VERSIONS DIFFER.
-	//
-	// Design section 15.8: load the machine, do NOT load the patch data, show a
-	// message that names BOTH versions, and offer to load anyway.
+	// Case group 2. The versions differ: load the machine, do not load the
+	// patch data, show a message that names both versions, and offer to load
+	// anyway.
 	{
 		const g2::FirmwareVersionDecision decision =
 			g2::decideFirmwareVersion(true, 0x00A2u, 0x00A0u);
@@ -132,7 +119,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE PATCH IS NEWER THAN THE MACHINE.
+	// Case group 3. The PATCH is NEWER THAN the MACHINE.
 	//
 	// The same row of the table, and the two names swap slots. A message built
 	// from one version and a fixed word for the other would pass case group 2
@@ -150,13 +137,10 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. NO FIRMWARE IS PRESENT.
-	//
-	// Design section 15.8's third row hands this case to section 7.7, which is
-	// task BRD-10's. THIS POLICY ANSWERS NOTHING HERE ON ITS OWN: it reports
-	// NoFirmware, loads nothing, offers nothing and carries no message, so that
-	// two texts for one state cannot drift apart. The two version arguments are
-	// deliberately different, and they change nothing.
+	// Case group 4. No firmware is present. This policy answers nothing on its
+	// own: it reports NoFirmware, loads nothing, offers nothing and carries no
+	// message, so that two texts for one state cannot drift apart. The two
+	// version arguments are deliberately different, and they change nothing.
 	{
 		const g2::FirmwareVersionDecision decision =
 			g2::decideFirmwareVersion(false, 0x00A2u, 0x0096u);
@@ -173,15 +157,15 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE EXHAUSTIVE SWEEP: NEVER REINTERPRET SILENTLY.
+	// Case group 5. The EXHAUSTIVE SWEEP: never REINTERPRET silently.
 	//
 	// Every pair of version words in 0 to 399 against 0 to 399, which is
 	// 160,000 pairs. The rule is asserted directly rather than by example:
 	//
 	//   * The patch data loads if and only if the two words are EQUAL.
-	//   * A pair that differs ALWAYS carries a message, ALWAYS offers to load
-	//     anyway, and NEVER reports LoadNormally.
-	//   * A pair that differs names BOTH release numbers in its message.
+	//   * A pair that differs always carries a message, always offers to load
+	//     anyway, and never reports LoadNormally.
+	//   * A pair that differs names both release numbers in its message.
 	//
 	// The third of those is what a message built from one version alone fails,
 	// and the second is the silent reinterpretation the design calls the worst

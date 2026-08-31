@@ -1,46 +1,37 @@
-/* t0_esai_frame.cpp -- the check of task SCH-10. Design section 13.10.3.
- *
- * ONE execTX() IS ONE ESAI SLOT, NOT ONE FRAME, and the whole shape of the two
+/* One execTX() is one ESAI slot, not one frame, and the whole shape of the two
  * calls follows from that. Esai::execTX latches the active slot into the
  * transmit frame, advances the slot counter, and only when that counter passes
  * getTxWordCount() does it resize the frame and fire the transmit callback. So
- * ONE TRANSMIT CALLBACK COSTS getTxWordCount() + 1 SLOTS, and getTxWordCount()
- * is the TDC field of the emulated TCCR -- guest register state, not a
- * constant this project may name.
+ * one transmit callback costs getTxWordCount() + 1 slots, and getTxWordCount()
+ * is the TDC field of the emulated TCCR -- guest register state, not a constant
+ * this project may name.
  *
- * THE TWO CALLS ARE NOT SYMMETRIC, AND THE LIBRARY AND NOT TASTE DECIDES IT.
- * The transmit loop counts FRAMES because a second caller of execTX exists:
- * Esai::writeTransmitControlRegister calls it whenever the guest CHANGES the
- * enabled-transmitter set. So transmit slot phase can be perturbed by exactly
+ * The two calls are not symmetric, and the library decides that. The transmit
+ * loop counts frames because a second caller of execTX exists:
+ * Esai::writeTransmitControlRegister calls it whenever the guest changes the
+ * enabled-transmitter set, so transmit slot phase can be perturbed by exactly
  * one slot at each transmitter enable, and a frame-counted loop re-phases
- * itself on the next quantum. The receive loop has no such caller -- the
- * mirror call is commented out upstream -- so the scheduler is execRX's only
- * caller and a fixed slot count is EXACT.
- *
- * WHAT THE FIXTURE IS, AND WHY IT IS THE LIBRARY'S OWN TYPES.
+ * itself on the next quantum. The receive loop has no such caller -- the mirror
+ * call is commented out upstream -- so the scheduler is execRX's only caller
+ * and a fixed slot count is exact.
  *
  * dsp56k::Esai needs an IPeripherals, and both control-register writes reach
- * through it to the DSP. The fixture therefore builds a real Memory, two
- * PeripheralsNop and a real DSP. PeripheralsNop is chosen for a reason and not
- * for convenience: NO EsaiClock IS CONSTRUCTED ANYWHERE IN THIS CHECK.
- * Esai::writeTransmitControlRegister restarts a clock only when the DSP's X
- * peripheral set is a Peripherals56362, and PeripheralsNop is not one, so the
- * branch does not fire. The scheduler drives the ESAI frame and no clock does,
- * which is the whole reason these two functions exist.
+ * through it to the DSP, so the fixture builds a real Memory, two
+ * PeripheralsNop and a real DSP. PeripheralsNop is chosen so that no EsaiClock
+ * is constructed anywhere in this check: Esai::writeTransmitControlRegister
+ * restarts a clock only when the DSP's X peripheral set is a Peripherals56362,
+ * and PeripheralsNop is not one, so the branch does not fire.
  *
  * The transmit and receive callbacks are the fixture's own. The library's
- * default callbacks use ring buffers that BLOCK -- a receive would wait for an
+ * default callbacks use ring buffers that block -- a receive would wait for an
  * input that never arrives -- so a check that left them in place would hang
  * rather than report.
  *
- * WHERE THE DEBUG ASSERTION FITS. Design section 13.10.3 puts
- * assert(slots <= getTxWordCount() + 1) in the implementation, an UPPER bound
- * and not an equality, because a transmitter enable legitimately costs one
- * slot fewer. THE DEFAULT BUILD OF THIS PROJECT IS Release AND DEFINES NDEBUG,
- * so that assertion is not in the shipped translation unit at all. This check
- * therefore asserts the same bound ITSELF, on every quantum, as a test
- * assertion that fails in every build type. An assertion that can only fire in
- * a build nobody runs is not a check.
+ * The implementation carries assert(slots <= getTxWordCount() + 1), an upper
+ * bound and not an equality, because a transmitter enable legitimately costs
+ * one slot fewer. The default build is Release and defines NDEBUG, so that
+ * assertion is not in the shipped translation unit at all; this check asserts
+ * the same bound itself, on every quantum, in every build type.
  */
 
 #include "esaiFrame.h"
@@ -84,7 +75,7 @@ namespace
 	/* The library's own memory sizes, as its own unit tests use them. */
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* THE LIBRARY'S LOG IS SILENCED, AND THE REASON IS STATED.
+	/* The LIBRARY'S log is silenced, and the reason is stated.
 	 *
 	 * The fixture never writes the ESAI transmit data registers, so the
 	 * library reports a transmit underrun at every slot it latches. That is
@@ -177,7 +168,7 @@ int main()
 {
 	/* ---------------- the disabled cases.
 	 *
-	 * A disabled transmitter is the WHOLE OF THE BOOT PHASE before the kernel
+	 * A disabled transmitter is the WHOLE of the BOOT PHASE before the kernel
 	 * programs TCR, and returning 0 there is the correct behaviour: no
 	 * callback fires and no written flag is set. It is also what makes the
 	 * transmit loop terminate at all -- Esai::execTX returns without advancing
@@ -213,17 +204,17 @@ int main()
 				"the word count the fixture programmed is the one the ESAI "
 				"reports");
 
-			/* THE ENABLE ITSELF COSTS ONE SLOT. Esai's own control-register
+			/* The enable itself costs one slot. Esai's own control-register
 			 * write calls execTX once when the enabled set changes, so the
 			 * first quantum after an enable is the legitimate case that
 			 * returns one slot FEWER. That is exactly why the implementation's
 			 * bound is an upper bound and not an equality. */
 			fixture.enableTransmitters();
 
-			/* THE BASELINE IS TAKEN AFTER THE ENABLE, and that is a measured
+			/* The baseline is taken after the enable, and that is a measured
 			 * correction and not a tidy-up. At a TDC of 0 a frame is one slot
 			 * long, so the single execTX that the enable itself performs
-			 * COMPLETES A WHOLE FRAME and fires a callback before this check
+			 * Completes A whole frame and fires a callback before this check
 			 * has run one quantum. At every larger TDC it does not. A baseline
 			 * of zero therefore reports one extra callback at a TDC of 0 and
 			 * says nothing about the function under test. */
@@ -264,11 +255,11 @@ int main()
 					break;
 				}
 
-				/* THE UPPER BOUND IS NOT RE-ASSERTED HERE. The equality above
+				/* The upper bound is not re-asserted here. The equality above
 				 * is strictly stronger, so a bound test beside it is a branch
 				 * that cannot fire -- which is the shape this project treats
 				 * as a defect rather than as harmless. The bound is asserted
-				 * where it is the ONLY thing that can be asserted: the first
+				 * where it is the only thing that can be asserted: the first
 				 * quantum after an enable, above, and the enable-and-disable
 				 * stream at the end of this file. */
 
@@ -282,7 +273,7 @@ int main()
 				}
 			}
 
-			/* EXACTLY ONE TRANSMIT CALLBACK FOR EACH QUANTUM. The return is
+			/* Exactly one transmit callback for each quantum. The return is
 			 * the slot count and the callback is the second observable of the
 			 * same event; asserting only one of them would let a body that
 			 * counted right and fired twice pass. */
@@ -360,10 +351,10 @@ int main()
 
 	/* ---------------- the enable-and-disable stream.
 	 *
-	 * THIS IS WHERE THE UPPER BOUND IS LOAD-BEARING. The guest changes the
+	 * This is where the upper bound is load-bearing. The guest changes the
 	 * enabled-transmitter set between quanta, so the slot phase is perturbed
 	 * by exactly one slot at each enable and the exact count for a given
-	 * quantum is not predictable from outside. What IS predictable is the
+	 * quantum is not predictable from outside. What is predictable is the
 	 * bound the implementation asserts in a debug build:
 	 *
 	 *     getTxWordCount() <= slots <= getTxWordCount() + 1
@@ -405,7 +396,7 @@ int main()
 			}
 		}
 
-		/* THE PERTURBATION REALLY HAPPENS. Without this the bound would pass
+		/* The perturbation really happens. Without this the bound would pass
 		 * against a stream in which no enable ever cost a slot, and the case
 		 * would prove nothing about the reason the bound is an inequality. */
 		check(lowSeen > 0u,

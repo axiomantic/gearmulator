@@ -1,6 +1,5 @@
-// Task BRD-7. Tier T0: this test runs with NMG2_ARTIFACTS unset.
-//
-// Plan section 9.2, BRD-7. Design section 7.4.
+// The read-only flash model. Tier T0: this test runs with NMG2_ARTIFACTS
+// unset.
 //
 // The properties this test holds the model to:
 //   1. CS0 and CS2 are reachable for read at their configured bases, and the
@@ -25,27 +24,21 @@
 
 namespace
 {
-	// The CS0 and CS2 bases and sizes come from the test fixture: AGENTS.md
-	// section 2.2 records them as unrecorded, and section 1.3 rule 1 forbids
-	// writing them into a header.
+	// The CS0 and CS2 bases and sizes come from the test fixture: no authority
+	// records them, so no shipped header carries a number for them.
 	constexpr uint32_t kFixtureCs0Base = 0x30000000;
 	constexpr uint32_t kFixtureCs0Size = 0x00010000;
 	constexpr uint32_t kFixtureCs2Base = 0x20000000;
 	constexpr uint32_t kFixtureCs2Size = 0x00010000;
 
-	// The reset-vector longwords. They are the SAME numbers the boot loader
-	// places in the real boot ROM but they are owned by this test and they
-	// have no Clavia byte behind them: the previous revision of this test
-	// read them through mcf5307_reset and was rewritten as a direct read
-	// against the model so the test stays T0 and runs with NMG2_ARTIFACTS
-	// unset.
+	// The reset-vector longwords, owned by this test.
 	constexpr uint32_t syntheticSp = 0x00080000;
 	constexpr uint32_t syntheticPc = 0x30000100;
 
 	// The rejection messages are emitted through
 	// baseLib::logging::logToConsole, whose LogFunc defaults to fputs on
 	// stdout (or OutputDebugString on Windows). Neither a std::cout.rdbuf
-	// redirect nor a C-stdout redirect can observe that. setLogFunc() is the
+	// redirect nor a C-stdout redirect can observe that. SetLogFunc() is the
 	// mechanism baseLib provides for redirecting the messages, so the test
 	// installs a capture LogFunc and asserts on the captured text. If a
 	// future refactor drops or rewrites the rejection log, the capture
@@ -76,7 +69,7 @@ int main()
 	// ---------------- CS0 image: reset vector at offsets 0 and 4, 0xAA fill
 	//
 	// The test sets longword 0 to a synthetic stack pointer and longword 4 to
-	// a synthetic program counter, in the shape BRD-6 already uses.
+	// a synthetic program counter.
 
 	std::vector<uint8_t> cs0(kFixtureCs0Size, 0xAA);
 	cs0[0] = static_cast<uint8_t>((syntheticSp >> 24) & 0xff);

@@ -1,32 +1,23 @@
-/* t0_codec_capacity.cpp -- the check of task SCH-16.
- * Design sections 13.6, 13.6.1, 13.10.4 and 18.2.
+/* The capacity arithmetic, not the surface. T0_codec_queue_surface holds the
+ * declared members and the refusal. This row drives blocks through push,
+ * runFrames and pull in that order and asserts that a capacity of L + B is
+ * enough and that nothing is dropped, overflowed or short-supplied.
  *
- * THE CAPACITY ARITHMETIC, NOT THE SURFACE. SCH-15's t0_codec_queue_surface
- * holds the declared members and the refusal. This row drives 1,000 blocks of
- * 256 frames through push, runFrames and pull IN THAT ORDER and asserts that
- * a capacity of L + B is enough and that nothing is dropped, overflowed or
- * short-supplied.
+ * The "runFrames" here is not the Scheduler's. The fixture below supplies the
+ * part of a quantum that touches the two codec queues and nothing else: the
+ * ingress reads front() and pops one frame from the CodecSource, and the egress
+ * pushes one frame into the CodecSink. That is the whole of what the capacity
+ * rule depends on -- the call order of push, runFrames and pull, and one frame
+ * in and one frame out for each of the block's frames.
  *
- * WHAT "runFrames" IS HERE, STATED PLAINLY BECAUSE IT IS NOT THE SCHEDULER'S.
- * Scheduler::runFrames is SCH-19's, and this task depends on SCH-15 alone. The
- * fixture below therefore supplies the part of a quantum that TOUCHES THE TWO
- * CODEC QUEUES and nothing else: the ingress reads front() and pops one frame
- * from the CodecSource, and the egress pushes one frame into the CodecSink.
- * That is the whole of what the capacity rule depends on -- the call ORDER of
- * push, runFrames and pull, and one frame in and one frame out for each of the
- * block's frames -- and it is what makes this row runnable in Wave 3a instead
- * of waiting for Wave 3b.
+ * The sink is primed with L frames, and without that this check cannot fail for
+ * the part it exists to test. The lookahead lives in the sink and is primed at
+ * the boot-to-play hand-off. An unprimed sink never holds more than B frames,
+ * so a capacity of B alone would pass every assertion below and the whole L + B
+ * rule would go untested. With the lookahead in place the sink reaches exactly
+ * L + B at the moment the block is produced.
  *
- * THE SINK IS PRIMED WITH L FRAMES, AND WITHOUT THAT THIS CHECK CANNOT FAIL
- * FOR THE PART IT EXISTS TO TEST. Design section 13.6.1 puts the lookahead in
- * the SINK and primes it at the boot-to-play hand-off. An unprimed sink never
- * holds more than B frames, so a capacity of B alone would pass every
- * assertion below and the whole L + B rule would go untested. With the
- * lookahead in place the sink reaches exactly L + B at the moment the block is
- * produced, which is why the capacity is what it is.
- *
- * L COMES FROM THE FIXTURE. Scheduler::Config::lookaheadFrames supplies it in
- * the shipping path, and this task declares no Scheduler.
+ * L comes from the fixture.
  */
 
 #include "codecQueues.h"
@@ -106,7 +97,7 @@ namespace
 		return true;
 	}
 
-	/* THE FIXTURE'S runFrames. One frame out of the source and one frame into
+	/* The FIXTURE'S runFrames. One frame out of the source and one frame into
 	 * the sink, for each frame of the block, in that order. The RETURN is how
 	 * many frames the sink accepted, so a caller can see a short run instead
 	 * of inferring one. */
@@ -135,7 +126,7 @@ int main()
 		g2::CodecSource source(kCapacity);
 		g2::CodecSink   sink(kCapacity);
 
-		/* THE BOOT-TO-PLAY HAND-OFF leaves the sink holding exactly L frames.
+		/* The boot-to-play hand-off leaves the sink holding exactly L frames.
 		 * See the file header for why this line is load-bearing. */
 		for(size_t i = 0; i < kLookaheadFrames; ++i)
 		{
@@ -203,7 +194,7 @@ int main()
 				break;
 			}
 
-			/* AND THE FRAMES ARE THE RIGHT ONES. The first L frames out are
+			/* And the frames are the right ones. The first L frames out are
 			 * the primed silence; every later frame is the one pushed L
 			 * frames earlier, which is the lookahead delay the capacity rule
 			 * exists to hold. */
@@ -236,7 +227,7 @@ int main()
 			kBlockCount * kLargestBlock, "every frame of every block was "
 			"pulled");
 
-		/* THE THREE COUNTERS ARE ZERO. Any one of them above zero is a defect
+		/* The three counters are zero. Any one of them above zero is a defect
 		 * report and not a tolerance. */
 		checkEqual(source.overflowFrames(), 0u,
 			"overflowFrames is zero: the source never refused a frame");
@@ -248,7 +239,7 @@ int main()
 		checkEqual(sink.underflowFrames(), 0u,
 			"underflowFrames is zero: every pull returned the whole request");
 
-		/* THE CAPACITY IS EXERCISED TO ITS LIMIT AND NOT BEYOND. The sink
+		/* The capacity is exercised to its limit and not beyond. The sink
 		 * really does reach L + B, which is what says the rule is necessary
 		 * rather than generous. */
 		checkEqual(highWaterSink, kCapacity,
@@ -285,7 +276,7 @@ int main()
 		(void) sink;
 	}
 
-	/* ---------------- NEGATIVE CASE 2: an under-sized CodecSink drives BOTH
+	/* ---------------- NEGATIVE CASE 2: an under-sized CodecSink drives both
 	 * droppedFrames and underflowFrames above zero.
 	 *
 	 * This is the quadrant an under-sized sink capacity actually lands in, and
@@ -322,9 +313,9 @@ int main()
 			"the shortfall is counted frame by frame");
 	}
 
-	/* ---------------- THE CAPACITY RULE IS TIGHT, NOT GENEROUS.
+	/* ---------------- the CAPACITY RULE is TIGHT, not GENEROUS.
 	 *
-	 * A sink ONE FRAME SHORT of L + B drops a frame on the first block. That
+	 * A sink one FRAME SHORT of L + B drops a frame on the first block. That
 	 * is what says L + B is the answer and L + B - 1 is not, and it is the
 	 * assertion an over-generous capacity would hide. */
 	{
@@ -347,7 +338,7 @@ int main()
 			"first block");
 	}
 
-	/* ---------------- AND A SINK SIZED L + framesPerQuantum IS THE NAMED
+	/* ---------------- and A SINK SIZED L + framesPerQuantum is the NAMED
 	 * DEFECT.
 	 *
 	 * With framesPerQuantum fixed at 1 that capacity is L + 1: the scheduler

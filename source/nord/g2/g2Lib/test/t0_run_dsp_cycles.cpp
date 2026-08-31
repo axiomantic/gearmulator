@@ -1,36 +1,27 @@
-/* t0_run_dsp_cycles.cpp -- the check of task SCH-9.
- * Design sections 13.10.3 and 18.2.
- *
- * THE BOUND, NOT THE CONTRACT. SCH-8's t0_run_dsp_cycles_contract fixes the
- * declared signature and the shape of the loop. This row drives the bound:
+/* The bound, not the contract. T0_run_dsp_cycles_contract fixes the declared
+ * signature and the shape of the loop. This row drives the bound:
  *
  *     w  <=  runDspCycles(dsp, w)  <  w + maxDispatchCost
  *
- * over at least 1,000 quanta, across block lengths that STRADDLE w.
+ * over many quanta, across block lengths that straddle w.
  *
- * WHY THE LOWER BOUND MATTERS. Design section 13.4.6's debt rule computes
- * `spent - want` and floors the result at zero. A return BELOW the budget would
- * be discarded there as though the context had idled -- a slow drift with no
- * counter watching it. The lower bound is the property the test-before loop
- * exists to give, and it is asserted on every one of the driven quanta rather
- * than once.
+ * The lower bound matters because the debt rule computes `spent - want` and
+ * floors the result at zero. A return below the budget would be discarded there
+ * as though the context had idled -- a slow drift with no counter watching it.
+ * It is asserted on every driven quantum rather than once.
  *
- * WHY THE UPPER BOUND COMES FROM THE FIXTURE AND NOT FROM A HEADER.
- * maxDispatchCost is measurement register row 1. It has NO VALUE until spike
- * criterion SPK-5 reports, and section 1.3 rule 1 forbids inventing one. A
- * bound taken from the build would today be `maxInstructionsPerBlock`, which
- * dsp56300 leaves at its upstream default of 0 -- UNCAPPED -- and a bound of
- * "below uncapped" has no threshold and passes for every possible measurement,
- * for ever. THIS FIXTURE MEASURES ITS OWN LARGEST BLOCK and holds the bound
- * against that. SCH-12, SCH-13 and SCH-14 take their bound from the same place
- * and for the same reason.
+ * The upper bound comes from the fixture and not from a header. A bound taken
+ * from the build would today be `maxInstructionsPerBlock`, which dsp56300
+ * leaves at its upstream default of 0 -- uncapped -- and a bound of "below
+ * uncapped" has no threshold and passes for every possible measurement. This
+ * fixture measures its own largest block and holds the bound against that.
  *
- * WHAT "SCRIPTED BLOCK LENGTHS" MEANS HERE. dsp56k::DSP is final and exec() is
- * neither virtual nor replaceable, so a synthetic DSP is a REAL DSP running a
- * scripted program. The fixture writes four loops of different lengths into P
- * memory, MEASURES what one dispatch unit of each costs, and asserts that the
- * four straddle the budget before it drives them -- so "the block lengths
- * straddle w" is a checked fact of this run and not a comment.
+ * dsp56k::DSP is final and exec() is neither virtual nor replaceable, so a
+ * synthetic DSP is a real DSP running a scripted program. The fixture writes
+ * loops of different lengths into P memory, measures what one dispatch unit of
+ * each costs, and asserts that they straddle the budget before it drives them,
+ * so "the block lengths straddle w" is a checked fact of this run and not a
+ * comment.
  */
 
 #include "runDspCycles.h"
@@ -106,7 +97,7 @@ namespace
 		{
 			Logging::setLogFunc(&countLogLine);
 
-			/* ONE exec() MUST BE ONE BLOCK. With block linking on, one
+			/* One exec() must be one BLOCK. With block linking on, one
 			 * dispatch unit can run a chain of blocks and every measured cost
 			 * below would be the cost of a chain. */
 			dsp56k::JitConfig config = dsp.getJit().getConfig();
@@ -137,7 +128,7 @@ namespace
 			return true;
 		}
 
-		/* A LOOP, NOT A SLED, so that 1,000 quanta run the same block and the
+		/* A loop, not A sled, so that 1,000 quanta run the same block and the
 		 * program counter never leaves the written region. */
 		bool writeLoop(const dsp56k::TWord begin, const unsigned nopCount)
 		{
@@ -156,7 +147,7 @@ namespace
 			return writeInstruction(jump, pc);
 		}
 
-		/* WHAT ONE DISPATCH UNIT OF THIS PROGRAM COSTS, MEASURED. */
+		/* What one dispatch unit of this program costs, measured. */
 		uint64_t measure(const dsp56k::TWord begin)
 		{
 			dsp.setPC(begin);
@@ -205,7 +196,7 @@ int main()
 		}
 	}
 
-	/* THE BUDGET. w is the third program's block cost, so two programs run a
+	/* The BUDGET. W is the third program's block cost, so two programs run a
 	 * block SHORTER than the budget and one runs a block LONGER than it. */
 	const uint64_t w = fixture.cost[2];
 
@@ -214,7 +205,7 @@ int main()
 	check(fixture.cost[3] > w,
 		"one of the scripted block lengths is ABOVE the budget");
 
-	/* THE BOUND'S UPPER HALF COMES FROM THIS FIXTURE. It is the largest
+	/* The BOUND'S upper half comes from this fixture. It is the largest
 	 * dispatch unit the fixture itself can produce, and nothing here reads
 	 * maxInstructionsPerBlock, which the shipped configuration leaves
 	 * uncapped. */
@@ -300,8 +291,8 @@ int main()
 	checkEqual(quanta, kProgramCount * kQuantaPerProgram,
 		"every quantum of every program ran");
 
-	/* ---------------- A SCRIPTED RUN THAT LANDS EXACTLY ON w RETURNS w AND
-	 * NOT LESS.
+	/* ---------------- A SCRIPTED RUN that LANDS exactly on w RETURNS w and
+	 * Not LESS.
 	 *
 	 * The third program's block costs exactly w, so a budget of w is met by
 	 * one dispatch unit with no overshoot at all, and a budget of three times
@@ -324,7 +315,7 @@ int main()
 		}
 	}
 
-	/* ---------------- A want OF 0 EXECUTES NO exec(). */
+	/* ---------------- A want of 0 EXECUTES no exec(). */
 	{
 		fixture.dsp.setPC(fixture.start[0]);
 

@@ -1,6 +1,4 @@
-/* tools/blockTableHarness.cpp -- the block-table harness. Task SCH-14.
- * Design section 13.4.6 consequence 2.
- */
+/* The block-table harness. */
 
 #include "tools/blockTableHarness.h"
 
@@ -23,7 +21,7 @@ namespace g2
 	{
 		BlockTableReport report;
 
-		/* AN EMPTY CACHE, AND THAT IS THE WHOLE POINT. JitBlock::getInfo ends
+		/* An empty cache, and that is the whole point. JitBlock::getInfo ends
 		 * a block early when it reaches code that already exists, so a walk
 		 * with a populated cache would report the blocks of whichever run
 		 * happened to compile first. An empty cache gives the table the
@@ -47,7 +45,7 @@ namespace g2
 			dsp56k::JitBlock::getInfo(info, dsp, pc, config, emptyCache,
 				noVolatileP, noLoopStarts, noLoopEnds);
 
-			/* A BLOCK OF NO WORDS WOULD NOT ADVANCE THE WALK. It means the
+			/* A block of no words would not advance the walk. It means the
 			 * analysis could make no block at this address, so the walk stops
 			 * and the caller sees a wordsWalked shorter than it asked for. */
 			if(info.memSize == 0)

@@ -1,28 +1,14 @@
-// Task BRD-1. The memory decode and the two bus callbacks.
+// The memory decode and the two bus callbacks.
 //
-// Plan section 13.1, BRD-1. Design sections 5.2.1, 6.4, 17 row 7.24.
-// Logbook: AGENTS.md section 2.2.
+// The MCF5307 core owns no address map. It installs two callbacks and asks the
+// board where each access goes. This file is the board side of that contract:
+// one decode, and one pair of callbacks that carries all three access widths.
 //
-// WHAT THIS FILE IS. The MCF5307 core owns no address map. It installs two
-// callbacks and asks the board where each access goes. This file is the board
-// side of that contract: one decode, and one pair of callbacks that carries
-// all three access widths.
+// No authority records a base for CS0, CS2 or CS4, and none records any window
+// size, so those arrive as configuration and a caller supplies them. Only the
+// four bases below have a source.
 //
-// THREE CHIP-SELECT BASES ARE NOT RECORDED BY ANY AUTHORITY, AND THIS FILE
-// CARRIES NO NUMBER FOR THEM. AGENTS.md section 2.2 records CS1 at
-// 0x11000000, CS3 at 0x13000000 and the CS5 latch at 0x15000000, and it
-// records NO address for CS0, CS2 or CS4. AGENTS.md open question 21 carries
-// all three and SPK-13 reads them from CSAR0 to CSAR5. Plan section 1.3 rule 1
-// therefore applies: the base AND the size of those three windows arrive as
-// configuration, and a caller supplies them.
-//
-// NO WINDOW SIZE IS RECORDED EITHER, so every size is configuration for the
-// same reason. Only the four bases below have a source.
-//
-// THE DECODE REPORTS THROUGH THE OUT-PARAMETER AND NEVER ABORTS. It uses no
-// language assert() as a reporting mechanism. The default build is Release and
-// it defines NDEBUG, so an assert() is removed and a report built on one could
-// never fire.
+// The decode reports through the out-parameter and never aborts.
 
 #pragma once
 
@@ -35,8 +21,7 @@
 
 namespace g2
 {
-	// The four bases AGENTS.md section 2.2 records. Nothing else in this file
-	// is an address.
+	// The four recorded bases. Nothing else in this file is an address.
 	constexpr uint32_t g_cs1Base = 0x11000000u;    // the HDI08 array
 	constexpr uint32_t g_cs3Base = 0x13000000u;    // the ISP1181 USB device
 	constexpr uint32_t g_cs5Base = 0x15000000u;    // the latches
@@ -112,9 +97,8 @@ namespace g2
 		uint32_t read(uint32_t _address, int _size, mcf5307_bus_status& _status);
 		void write(uint32_t _address, int _size, uint32_t _value, mcf5307_bus_status& _status);
 
-		// One line for every access that did not complete. Design section
-		// 5.2.1 rule 2 ties the report and the trace together, so a fault
-		// cannot be reported without a trace of it.
+		// One line for every access that did not complete, so a fault cannot
+		// be reported without a trace of it.
 		const std::vector<std::string>& log() const { return m_log; }
 		void clearLog() { m_log.clear(); }
 
@@ -130,7 +114,7 @@ namespace g2
 	// exact signatures of mcf5307_read_fn and mcf5307_write_fn, and `user` is
 	// a MemoryMap*.
 	//
-	// ONE PAIR CARRIES ALL THREE WIDTHS. The `size` argument holds 8, 16 or 32,
+	// One pair carries all three widths. The `size` argument holds 8, 16 or 32,
 	// so the board writes two handlers and not six, and the 32-bit case is
 	// native rather than decomposed into byte cycles. The ColdFire does issue
 	// 32-bit bus accesses, so a decomposition would be a model error.

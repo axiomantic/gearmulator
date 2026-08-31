@@ -1,7 +1,5 @@
-/* t0_frames_for_block.cpp -- the check of task SCH-2. Design section 14.1.1.
- *
- * framesForBlock() maps a host block of n samples to whole 96 kHz frames. It
- * is the same accumulator shape as alloc(), WIDENED TO 64 BITS because n * num
+/* framesForBlock() maps a host block of n samples to whole 96 kHz frames. It
+ * is the same accumulator shape as alloc(), widened to 64 bits because n * num
  * overflows 32 bits at a large block size.
  *
  * The range of m is exact. Write r = num / den. For every block,
@@ -9,16 +7,14 @@
  *     floor(n * r)  <=  m  <=  floor(n * r) + 1
  *
  * because the accumulator is below den at entry and at exit, so m takes one of
- * exactly TWO adjacent integer values and the long-run mean is exactly n * r
+ * exactly two adjacent integer values and the long-run mean is exactly n * r
  * with no drift.
  *
- * THIS ACCUMULATOR SITS OUTSIDE THE DETERMINISM BOUNDARY. It lives in the
- * framework's ResamplerInOut, one layer above the Device. This test checks the
- * SHAPE the design specifies for the accumulator this project owns. It is not
- * a requirement the adopted framework component fails.
+ * This accumulator sits outside the determinism boundary: it lives in the
+ * framework's ResamplerInOut, one layer above the Device.
  *
- * The numerator comes from g2/timebase.h. The host rates are FIXTURE VALUES:
- * a host rate is not a property of the machine and no shipped header carries
+ * The numerator comes from g2/timebase.h. The host rates are fixture values: a
+ * host rate is not a property of the machine and no shipped header carries
  * one.
  */
 
@@ -65,7 +61,7 @@ namespace
 	}
 
 	/* floor(n * num / den), in 64-bit integers. This is the closed form of
-	 * the same rule framesForBlock carries, and it is NOT a copy of its body:
+	 * the same rule framesForBlock carries, and it is not a copy of its body:
 	 * it takes no accumulator and it never carries. */
 	uint64_t floorFrames(const uint64_t n, const uint32_t num,
 		const uint32_t den) noexcept
@@ -77,7 +73,7 @@ namespace
 	 * CUMULATIVE state against the closed form after every block.
 	 *
 	 * The cumulative statement is what "no fraction is lost" means: after
-	 * blocks of n0, n1 ... nk the total is floor((n0 + n1 + ... + nk) * r) and
+	 * blocks of n0, n1 ... Nk the total is floor((n0 + n1 + ... + nk) * r) and
 	 * the accumulator is that product's remainder. A body that dropped the
 	 * remainder at a block boundary, or that reset the accumulator when n
 	 * changed, would still pass a per-block bound and would fail here. */
@@ -110,7 +106,7 @@ namespace
 				return cumulativeM;
 			}
 
-			/* EXACTLY TWO ADJACENT VALUES, and no third. */
+			/* Exactly two adjacent values, and no third. */
 			const uint64_t low = floorFrames(n, num, den);
 
 			if(m < low || m > low + 1u)
@@ -195,7 +191,7 @@ int main()
 		const uint64_t total =
 			driveBlocks(blocks, num, hostRate, "44.1 kHz, blocks of 32");
 
-		/* THE MEAN OVER 147 BLOCKS IS EXACTLY 32 * 320/147.
+		/* The mean over 147 BLOCKS is exactly 32 * 320/147.
 		 *
 		 * Asserted by cross-multiplication so that no division and no rounding
 		 * enters: total / period == n * num / hostRate becomes
@@ -247,7 +243,7 @@ int main()
 	 *
 	 * n enters the formula for EACH block and the accumulator carries the
 	 * remainder across the change unaltered. The proof is that a run of
-	 * changing block sizes reaches the same frame total as ONE block of the
+	 * changing block sizes reaches the same frame total as one block of the
 	 * same total sample count, from the same starting accumulator. */
 	{
 		const uint32_t hostRate = 44100u;

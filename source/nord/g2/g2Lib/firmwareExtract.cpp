@@ -1,5 +1,5 @@
-// Task BRD-6. The C++ firmware extractor. See firmwareExtract.h for what this
-// file is, for the licence statement, and for the stored-section report.
+// The C++ firmware extractor. See firmwareExtract.h for the container layout
+// and the stored-section case.
 
 #include "firmwareExtract.h"
 
@@ -12,11 +12,9 @@ namespace g2
 		// ------------------------------------------------------------------
 		// The message texts.
 		//
-		// EVERY ONE OF THESE IS WORD FOR WORD THE TEXT THE PYTHON ORACLE
-		// WRITES, and BRD-6's test compares whole messages. A message that
-		// only nearly matched would turn a parity assertion into a
-		// near-parity assertion, which is not what design section 20.2 asks
-		// for.
+		// Every one of these is word for word the text the Python oracle
+		// writes, and whole messages are compared. A message that only nearly
+		// matched would turn a parity assertion into a near-parity one.
 
 		std::string decimal(const uint64_t _value)
 		{
@@ -83,7 +81,7 @@ namespace g2
 			size_t position() const { return m_position; }
 
 			// One opcode byte. The end of the input at this point is a stream
-			// with NO END MARKER, which is a different fault from a truncated
+			// with no end marker, which is a different fault from a truncated
 			// read: every well-formed stream stops at an end marker, so there
 			// is always one more opcode to read.
 			uint8_t instruction()
@@ -104,7 +102,7 @@ namespace g2
 				return m_data[m_position++];
 			}
 
-			// The two-byte forms hold a LITTLE-ENDIAN word, and the low two
+			// The two-byte forms hold a little-endian word, and the low two
 			// bits of it are the trailing-literal count.
 			uint32_t word()
 			{
@@ -125,7 +123,7 @@ namespace g2
 				return true;
 			}
 
-			// The special case of the FIRST byte of the stream: a value above
+			// The special case of the first byte of the stream: a value above
 			// 17 means the stream opens with a literal run.
 			bool atStartOfLiteralRun() const
 			{
@@ -178,11 +176,11 @@ namespace g2
 
 		// Copies `_length` bytes that start `_distance` bytes back in `_out`.
 		//
-		// A DISTANCE SHORTER THAN THE LENGTH REPEATS the last `_distance`
+		// A distance shorter than the length repeats the last `_distance`
 		// bytes, which is what a byte-at-a-time copy produces. That is a
-		// property of the format and not an accident: the compressor uses it
-		// to encode a long run of one value, so the copy below must not be a
-		// memcpy of a fixed source range.
+		// property of the format: the compressor uses it to encode a long run
+		// of one value, so the copy below must not be a memcpy of a fixed
+		// source range.
 		bool copyMatch(std::vector<uint8_t>& _out, const uint32_t _distance, const uint32_t _length,
 			std::string& _error)
 		{
@@ -200,8 +198,8 @@ namespace g2
 		}
 
 		// The positions the format distinguishes. A literal run and a run of
-		// trailing literals are followed by DIFFERENT READINGS OF THE SAME
-		// OPCODE VALUE, so the position is part of the state.
+		// trailing literals are followed by different readings of the same
+		// opcode value, so the position is part of the state.
 		enum class State
 		{
 			Start,
@@ -248,7 +246,7 @@ namespace g2
 					const uint32_t count = uint32_t(reader.instruction()) - 17u;
 					if(!reader.copyLiterals(_out, count))
 						break;
-					// A run of fewer than four bytes is a run of TRAILING
+					// A run of fewer than four bytes is a run of trailing
 					// literals, and a match follows it.
 					state = count >= 4u ? State::AfterLiterals : State::BeforeMatch;
 				}
@@ -348,7 +346,7 @@ namespace g2
 						if(reader.failed())
 							break;
 						const uint32_t back = ((uint32_t(opcode) & 8u) << 11) + (value >> 2);
-						// The END MARKER. This is the one exit that is not a
+						// The end marker. This is the one exit that is not a
 						// failure, and it is why the loop has no other.
 						if(back == 0u)
 							return true;
@@ -427,10 +425,10 @@ namespace g2
 
 		const uint32_t count = readBe32(_image, 0x10);
 
-		// THE PRODUCT IS 64-BIT ON PURPOSE. A section count near 2^32 times the
+		// The product is 64-bit on purpose. A section count near 2^32 times the
 		// 0x2C stride overflows 32 bits, and an overflowed product compares
-		// SMALLER than the bytes available -- so a wrapped count would pass the
-		// check it exists to fail, and the walk would then read past the image.
+		// smaller than the bytes available, so a wrapped count would pass the
+		// check it exists to fail and the walk would then read past the image.
 		const uint64_t needed = uint64_t(count) * uint64_t(g_containerEntryStride);
 		const uint64_t available = uint64_t(_image.size()) - uint64_t(g_containerHeaderSize);
 
@@ -475,7 +473,7 @@ namespace g2
 			section.reserved = readBe32(_image, offset + 0x1C);
 
 			// The last 12 bytes of the entry carry no meaning this project
-			// knows and they are NOT read. The stride steps over them.
+			// knows and are not read. The stride steps over them.
 			_container.sections.push_back(section);
 		}
 
@@ -485,7 +483,7 @@ namespace g2
 	namespace
 	{
 		// `_length` bytes at the section's file offset. The check is on the
-		// bytes PRESENT, so an offset or a length the image cannot satisfy is a
+		// bytes present, so an offset or a length the image cannot satisfy is a
 		// named failure and never a short read.
 		bool sliceSection(const std::vector<uint8_t>& _image, const ContainerSection& _section,
 			const uint32_t _length, std::vector<uint8_t>& _slice, std::string& _error)
@@ -515,8 +513,7 @@ namespace g2
 
 		if(_section.isStored())
 		{
-			// THE STORED PATH. No stream, no compressed checksum. See the
-			// report at the top of firmwareExtract.h.
+			// The stored path. No stream, no compressed checksum.
 			if(!sliceSection(_image, _section, _section.uncompressedLength, _plain, _error))
 			{
 				_plain.clear();
@@ -552,7 +549,7 @@ namespace g2
 				return false;
 			}
 
-			// THE CONSUMED-LENGTH IDENTITY. See firmwareExtract.h for why this
+			// The consumed-length identity. See firmwareExtract.h for why this
 			// is one more decompression and not a comparison.
 			std::vector<uint8_t> shorter;
 			std::string ignored;

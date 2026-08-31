@@ -1,5 +1,4 @@
-/* codecQueues.cpp -- the two bounded queues. Task SCH-15.
- * Design sections 13.10.4 and 13.6.
+/* The two bounded queues.
  *
  * Both are the same ring: one vector allocated at construction, a read index
  * and a count. The write index is derived, so the two ends can never disagree
@@ -27,7 +26,7 @@ namespace g2
 	CodecSource::CodecSource(const size_t capacityFrames)
 		: m_ring(capacityFrames == 0 ? 1 : capacityFrames)
 	{
-		/* A CAPACITY OF ZERO IS REPLACED BY ONE RATHER THAN ACCEPTED. The
+		/* A capacity of zero is replaced by one rather than accepted. The
 		 * modulo above would divide by zero, and neither constructor has an
 		 * error channel. The Scheduler's own factory is where a bad
 		 * configuration is refused with a status; this is the last defence and
@@ -96,7 +95,7 @@ namespace g2
 
 	bool CodecSink::push(const Frame& frame) noexcept
 	{
-		/* REFUSES. IT DOES NOT OVERWRITE. Overwriting the oldest frame would
+		/* Refuses. It does not overwrite. Overwriting the oldest frame would
 		 * discard audio the host has already been told to expect, which moves
 		 * the real latency while the reported figure stays constant. */
 		if(m_count >= m_ring.size())
@@ -125,7 +124,7 @@ namespace g2
 			++taken;
 		}
 
-		/* THE PART THAT COULD NOT BE SUPPLIED READS AS SILENCE. The consumer
+		/* The part that could not be supplied reads as silence. The consumer
 		 * receives the whole buffer it asked for. */
 		for(size_t i = taken; i < frames; ++i)
 			out[i] = Frame{};

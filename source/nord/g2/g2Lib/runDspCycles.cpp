@@ -1,6 +1,4 @@
-/* runDspCycles.cpp -- the DSP-side run call. Task SCH-8.
- * Design sections 13.10.3 and 26.
- */
+/* The DSP-side run call. */
 
 #include "runDspCycles.h"
 
@@ -12,9 +10,9 @@ namespace g2
 {
 	uint32_t runDspCycles(dsp56k::DSP& dsp, const uint32_t wantCycles) noexcept
 	{
-		/* DEBUG ONLY, AND NOT THE PREDICATE OF ANY CHECK. The default build of
+		/* Debug only, and not the predicate of any check. The default build of
 		 * this tree is Release and defines NDEBUG, so neither assertion below
-		 * is in the shipped translation unit. t0_run_dsp_cycles_contract and
+		 * is in the shipped translation unit. T0_run_dsp_cycles_contract and
 		 * t0_run_dsp_cycles drive the two cases that decide this function and
 		 * neither reads an assertion. */
 		assert(dsp56k::g_useJIT &&
@@ -27,7 +25,7 @@ namespace g2
 		 * loop terminate. Do not bind it to a value and re-test the value. */
 		const uint64_t start = dsp.getCycles();
 
-		/* THE TEST IS BEFORE THE exec(). See the header. */
+		/* The test is before the exec(). See the header. */
 		while(dsp.getCycles() - start < wantCycles)
 			dsp.exec();
 

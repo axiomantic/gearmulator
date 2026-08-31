@@ -4,7 +4,7 @@
 // Plan section 9.2, REPO-7. Design section 18.5. Plan section 5.2 rules 2 and 3.
 //
 // ---------------------------------------------------------------------------
-// WHY THIS TEST BUILDS ITS OWN GATED SUBJECTS
+// Why this test builds its own gated subjects
 //
 // REPO-7's check reads: "Every gated test the build carries prints
 // `SKIPPED: firmware artifact not available (NMG2_ARTIFACTS unset)`."
@@ -92,7 +92,7 @@ int main()
 	{
 		// ---------------- every gated test skips, and prints the exact line
 		//
-		// Three gated tests, not one. "EVERY gated test the build carries"
+		// Three gated tests, not one. "every gated test the build carries"
 		// is a claim about a set, and a set of one cannot distinguish "every"
 		// from "the first".
 
@@ -134,11 +134,11 @@ int main()
 			check(contains(summary, "skipped=3"), "zero run: the summary carries the skipped count");
 		}
 
-		// ---------------- THE NEGATIVE CASE
+		// ---------------- the NEGATIVE CASE
 		//
-		// "A negative case asserts that a job which ran one gated test does NOT
-		// print NOT VERIFIED." Without it, summaryLine could return the
-		// NOT VERIFIED line unconditionally and every assertion above would
+		// "A negative case asserts that a job which ran one gated test does not
+		// print not VERIFIED." Without it, summaryLine could return the
+		// Not VERIFIED line unconditionally and every assertion above would
 		// still hold.
 
 		{
@@ -195,13 +195,10 @@ int main()
 		}
 
 		// ---------------- a directory that is not there is also a skip, and it
-		// prints message 2 of design section 4.2 rather than message 1.
+		// prints message 2 rather than message 1.
 		//
-		// Section 18.5's mechanism is written against ArtifactResolver, not
-		// against getenv, so the gate must close for every empty resolve and
-		// not only for the unset one. The skip line carries the actual reason
-		// the resolver returned: message 1 for unset/empty and message 2 for
-		// a path that does not exist or is not a directory.
+		// The gate is written against ArtifactResolver, not against getenv, so
+		// it must close for every empty resolve and not only for the unset one.
 
 		{
 			const std::string missingDir = "/nmg2/no/such/directory/REPO-7";

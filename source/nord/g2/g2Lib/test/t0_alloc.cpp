@@ -1,25 +1,17 @@
-/* t0_alloc.cpp -- the check of task SCH-1. Design section 13.4.1.
+/* alloc() turns a cycles-for-each-frame rational into a whole-cycle allocation
+ * for each quantum. It is exact, it uses no floating point and it reads no wall
+ * clock.
  *
- * alloc() turns a cycles-for-each-frame RATIONAL into a whole-cycle
- * allocation for each quantum. It is exact, it uses no floating point and it
- * reads no wall clock.
+ * The expected sequence is computed from G2_DSP_CYCLES_PER_FRAME_NUM and
+ * G2_DSP_CYCLES_PER_FRAME_DEN, and no figure is written down here. The
+ * numerator is still provisional, and with the sequence written down a new
+ * numerator would fail this test with no message that connects the failure to
+ * the change.
  *
- * THE EXPECTED SEQUENCE IS COMPUTED FROM G2_DSP_CYCLES_PER_FRAME_NUM AND
- * G2_DSP_CYCLES_PER_FRAME_DEN. NO FIGURE IS WRITTEN DOWN HERE.
- *
- * The reason is that this is a T0 test keyed to a value that section 4 of the
- * implementation plan marks PROVISIONAL, and REPO-9's timebase gate runs
- * before T1 and T2 only. With the sequence written down, the day spike
- * criterion (e) reports a new numerator this test fails in the required T0
- * job WITH NO MESSAGE THAT CONNECTS THE FAILURE TO THE CHANGE. At the
- * provisional numerator the derivation yields 1562, 1563, 1562, 1563 with a
- * mean of exactly 1562.5 -- and that is an ILLUSTRATION of what the
- * derivation gives today, not a constant this file carries.
- *
- * A NEGATIVE CASE PINS THE NUMERATOR TO A SCRATCH VALUE and asserts the
- * derived sequence MOVES with it, so the derivation is known to be live
- * rather than decorative. Without that case a derivation that silently
- * returned the same answer for every numerator would pass.
+ * A negative case pins the numerator to a scratch value and asserts the derived
+ * sequence moves with it, so the derivation is known to be live rather than
+ * decorative. Without that case a derivation that silently returned the same
+ * answer for every numerator would pass.
  */
 
 #include "g2/timebase.h"
@@ -119,7 +111,7 @@ namespace
 
 		for(uint32_t i = 0; i < frames; ++i)
 		{
-			/* THE ACCUMULATOR STAYS BELOW THE DENOMINATOR AT ENTRY. */
+			/* The accumulator stays below the denominator at entry. */
 			if(acc >= r.den)
 			{
 				printf("FAIL %s: accumulator %u is not below the denominator "
@@ -130,7 +122,7 @@ namespace
 
 			const uint32_t whole = alloc(r, &acc);
 
-			/* AND AT EXIT. */
+			/* And at exit. */
 			if(acc >= r.den)
 			{
 				printf("FAIL %s: accumulator %u is not below the denominator "
@@ -195,7 +187,7 @@ namespace
 				return observed;
 			}
 
-			/* EXACTLY TWO ADJACENT VALUES, and no third. */
+			/* Exactly two adjacent values, and no third. */
 			if(observed[i] != low && observed[i] != high)
 			{
 				printf("FAIL %s: frame %u returned %u, which is neither %u "
@@ -210,7 +202,7 @@ namespace
 			sum += observed[i];
 		}
 
-		/* THE EXACT MEAN, IN INTEGERS. `frames` is a whole number of
+		/* The exact mean, in integers. `frames` is a whole number of
 		 * accumulator periods, so sum/frames is exactly num/den and the
 		 * cross-multiplied form below carries no rounding at all. */
 		checkEqual(sum * r.den, static_cast<uint64_t>(frames) * r.num,
@@ -235,7 +227,7 @@ namespace
 	}
 }
 
-/* THE ARITHMETIC IS INTEGER THROUGHOUT, and that is asserted rather than
+/* The arithmetic is integer throughout, and that is asserted rather than
  * described. A floating-point step anywhere in the rational would make the
  * allocation inexact at some numerator, and the whole point of the rational is
  * that it is exact at every numerator. */
@@ -288,7 +280,7 @@ int main()
 	const std::vector<uint32_t> scratchSequence =
 		assertSequence(scratch, scratchFrames, "the scratch rational");
 
-	/* THE DERIVED SEQUENCE MOVES WITH THE NUMERATOR. */
+	/* The derived sequence moves with the numerator. */
 	{
 		const uint32_t compared =
 			shippedFrames < scratchFrames ? shippedFrames : scratchFrames;
@@ -348,9 +340,8 @@ int main()
 	 *
 	 * Two drives from the same starting accumulator give the same sequence.
 	 * A body that read a wall clock, a frame counter of its own or any other
-	 * hidden state would not. The SOURCE-level rule that no scheduler file
-	 * reads a system clock belongs to task SCH-26's continuous-integration
-	 * step; this case is the behavioural half of it. */
+	 * hidden state would not. This case is the behavioural half of the rule
+	 * that no scheduler file reads a system clock. */
 	{
 		const std::vector<uint32_t> first =
 			driveAlloc(shipped, 512u, "the first pure-function drive");

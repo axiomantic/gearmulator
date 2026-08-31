@@ -1,16 +1,14 @@
-/* t0_frame_conversion.cpp -- the check of task SCH-5. Design 13.10.1, 18.2.
- *
- * SCH-4 declares the two conversion points and t0_frame_layout holds their
- * SIGNATURES. This check holds their BEHAVIOUR:
+/* t0_frame_layout holds the signatures of the two conversion points. This check
+ * holds their behaviour:
  *
  *   toEsaiFrame(fromEsaiFrame(x, reg), reg, ...) == x
  *
- * over the FULL Q23 RANGE AT EVERY SLOT, including both saturation bounds, for
+ * over the full Q23 range at every slot, including both saturation bounds, for
  * dsp56k::Audio::TxFrame and dsp56k::Audio::RxFrame, at every register index in
- * the design's mapping table, and at slot counts 2 and 8.
+ * the mapping table, and at slot counts 2 and 8.
  *
- * THE MAPPING TABLE, from design section 13.10.1. `reg` is a parameter and not
- * a constant BECAUSE THE SECOND BUS TRANSMITS ON TX2:
+ * The mapping table. `reg` is a parameter and not a constant because the second
+ * bus transmits on TX2:
  *
  *   Bus          Direction  DMA endpoint         reg  Slots
  *   audio chain  receive    $FFFFA8 = M_RX0      0    8, or 2 at the head
@@ -19,18 +17,17 @@
  *   second bus   transmit   $FFFF82 = M_TX2_1    2    8 everywhere
  *
  * So the table names two register indices, 0 and 2, and two slot counts, 2 and
- * 8. Both indices are driven against BOTH frame types: the table gives 2 to
+ * 8. Both indices are driven against both frame types: the table gives 2 to
  * the second bus transmit alone, and driving it on the receive side as well
  * costs nothing and closes the case where a body ignored its argument.
  *
- * Three further cases the design names, each of which a careless
- * implementation fails:
+ * Three further cases, each of which a careless implementation fails:
  *
- *   1. A library word with BIT 23 SET converts to a NEGATIVE int32_t. A raw
+ *   1. A library word with bit 23 set converts to a negative int32_t. A raw
  *      cast would invert the whole negative half of the range in silence.
- *   2. NO REGISTER INDEX OTHER THAN `reg` IS DISTURBED.
+ *   2. No register index other than `reg` is disturbed.
  *   3. The slot-count round trip: fromEsaiFrame reads size() and toEsaiFrame
- *      calls resize(), so A COUNT OF 2 DOES NOT SILENTLY BECOME A COUNT OF 8.
+ *      calls resize(), so a count of 2 does not silently become a count of 8.
  */
 
 #include "frame.h"
@@ -88,10 +85,10 @@ namespace
 	static_assert(dsp56k::Audio::RxRegisterCount > 2,
 		"the receive slot carries register index 2.");
 
-	/* THE FULL Q23 SWEEP.
+	/* The full Q23 sweep.
 	 *
 	 * One pass over every one of the 16,777,216 Q23 words. Slot k takes the
-	 * word (v + k) & mask, so as v sweeps the whole range EVERY SLOT sees
+	 * word (v + k) & mask, so as v sweeps the whole range every SLOT sees
 	 * every word, and the pass costs one sweep rather than one for each slot.
 	 * The slots also hold DIFFERENT words at every step, which is what makes
 	 * a body that read slot 0 and copied it to the rest fail here. */
@@ -134,7 +131,7 @@ namespace
 				}
 			}
 
-			/* THE SIGN IS PART OF THE ROUND TRIP, not a separate property.
+			/* The sign is part of the round trip, not a separate property.
 			 * A body that round-tripped the bits while producing the wrong
 			 * intermediate would pass the comparison above and would feed
 			 * every consumer of g2::Frame a wrong number. */
@@ -204,7 +201,7 @@ namespace
 
 	/* CASE 2: no register index other than `reg` is disturbed.
 	 *
-	 * The destination is filled with a sentinel in EVERY register of EVERY
+	 * The destination is filled with a sentinel in every register of every
 	 * slot, including the slots beyond the count. Only [k][reg] for k below
 	 * the count may change. */
 	template<typename TLibraryFrame>

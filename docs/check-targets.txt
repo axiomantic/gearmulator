@@ -6,7 +6,7 @@
 # ignored. A line is either a ctest test name or a "pytest <path>"
 # invocation.
 #
-# THE FILE DECLARES THE TARGETS OF THE TASKS DECLARED COMPLETE, AND NO OTHERS.
+# The file declares the targets of the tasks declared complete, and no others.
 # The condition is asserted only for tasks a lint run declares complete, so a
 # target added before its task completes would make the lint fail on work that
 # has not happened yet.
@@ -31,11 +31,8 @@ t0_skip_discipline
 # REPO-8, artifacts.sha256 and golden.timebase.
 t0_manifest_parses
 
-# BRD-6, the C++ firmware extractor.
 t0_extract_matches_python
 
-# BRD-11, the firmware version and the mismatch policy.
 t0_version_mismatch
 
-# BRD-10, the no-firmware path.
 t0_no_firmware

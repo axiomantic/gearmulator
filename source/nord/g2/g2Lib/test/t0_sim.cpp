@@ -1,59 +1,32 @@
-// Task BRD-2. Tier T0: this test needs no firmware artifact of any kind.
+// The SIM registers. Tier T0: this test needs no firmware artifact.
 //
-// Plan section 13.1, BRD-2. Design sections 6.4, 8.2.
-// Logbook: AGENTS.md sections 2.2, 2.3, 4.1, 4.2.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail.
-//
-// THE REGISTER TABLE BELOW IS WRITTEN OUT AGAIN, ON PURPOSE. It is read from
-// the MCF5307 User's Manual and not from sim.cpp. A test that imported the
+// The register table below is written out again on purpose. It is read from the
+// MCF5307 User's Manual and not from sim.cpp: a test that imported the
 // implementation's own table would assert that the table equals itself.
 //
-// THE ACCESS IS DRIVEN THROUGH THE BRD-1 DECODE. The SIM sits in the MBAR
-// window of a MemoryMap and every access below goes through
-// memoryMapRead/memoryMapWrite, so the offset the SIM sees is produced by the
-// decode and not by this test.
+// The SIM sits in the MBAR window of a MemoryMap and every access below goes
+// through memoryMapRead/memoryMapWrite, so the offset the SIM sees is produced
+// by the decode and not by this test.
 //
-// THE CHIP-SELECT FAMILY BELOW IS AGENTS.md SECTION 3.8, NOT THE MANUAL.
-// Section 3.8 is a FIRMWARE MEASUREMENT of BOOT_128_Loader.bin programming
-// CS3 - CSAR3 $0A4 = $1300, CSMR3 $0A8 = $00000001, CSCR3 $0AE = $0540 - and
-// AGENTS.md is authoritative on hardware facts. Case group 8 drives those
-// three measured offsets directly.
+// The chip-select family below is a firmware measurement of
+// BOOT_128_Loader.bin programming CS3 -- CSAR3 $0A4 = $1300, CSMR3 $0A8 =
+// $00000001, CSCR3 $0AE = $0540 -- and not the manual. The 1998 manual
+// documents an earlier silicon mask; the G2 carries a later one, and sim.cpp
+// lists every modelled value the 1998 manual contradicts.
 //
-// THE SHARED-CSBAR READING AN EARLIER REVISION CARRIED WAS A CORRECT READING
-// OF THE 1998 MANUAL. It was checked against the manual on 2026-08-06 and
-// section 9.4.2.1 says what that revision quoted. The 1998 manual documents an
-// earlier silicon mask; the G2 carries a later one. sim.cpp's MASK-REVISION
-// CONFLICT block holds the full record and lists every modelled value the 1998
-// manual contradicts. Do not read the rows below as a manual disagreement that
-// somebody already settled in the model's favour. They are a mask difference,
-// and the operator owns whether the model keeps them.
+// Every modelled register is in exactly one of two width classes, so that the
+// check does not depend on a restriction that may not exist:
 //
-// THE TWO WIDTH CLASSES. Plan section 13.1 requires that every modelled
-// register is in exactly one of two classes, so that the check does not depend
-// on a restriction that may not exist:
+//   * Restricted. A width other than the one stated must be rejected and must
+//     write one log line. "All UART module registers must be accessed as
+//     bytes." MBAR+$1D0 is a UART module register.
+//   * Unrestricted. Every width must be accepted.
 //
-//   * RESTRICTED. A width other than the one stated must be REJECTED and must
-//     write one log line. MCF5307 UM section 14.3.7 states one such rule for
-//     the registers this task models: "All UART module registers must be
-//     accessed as bytes." MBAR+$1D0 is a UART module register.
-//   * UNRESTRICTED. Every width must be ACCEPTED.
-//
-// WHAT THE UNRESTRICTED CLASS DOES AND DOES NOT CLAIM. It claims that THIS
-// MODEL accepts every width at those offsets. IT DOES NOT CLAIM THAT THE REAL
-// PART DOES. An earlier revision of this file asserted "every other modelled
-// register carries no width restriction" and rested that on the manual saying
-// nothing. THAT REASONING STAYS WITHDRAWN, and the manual now confirms why it
-// had to be. The whole manual was searched on 2026-08-06. It states exactly
-// one access-width rule, section 14.3.7, and that rule is about the UART
-// block. Chapters 9, 11 and 12 state none. The WIDTH columns of Table 9-5,
-// Table B-1 and Table 11-1 give the width of each REGISTER, not the widths a
-// bus access may use. So the manual cannot close this either way: it does not
-// license a restriction and it does not license a claim of permissiveness.
-// sim.cpp records the finding. SPK-13's firmware read is now the only route
-// to a positive answer.
+// The unrestricted class claims that this MODEL accepts every width at those
+// offsets. It does not claim the real part does. The manual states exactly one
+// access-width rule, and that rule is about the UART block; the width columns
+// of its register tables give the width of each register, not the widths a bus
+// access may use.
 
 #include "memoryMap.h"
 #include "sim.h"
@@ -105,9 +78,8 @@ namespace
 		return result;
 	}
 
-	// This fixture chooses the MBAR base. AGENTS.md section 4.2 records that
-	// the boot loader programs MBAR through MOVEC, so the value is a firmware
-	// choice and not a property of the part.
+	// This fixture chooses the MBAR base. The boot loader programs MBAR through
+	// MOVEC, so the value is a firmware choice and not a property of the part.
 	constexpr uint32_t g_mbarBase = 0x10000000u;
 	constexpr uint32_t g_mbarSize = 0x00000400u;
 
@@ -128,23 +100,20 @@ namespace
 		const char* name;
 	};
 
-	// The chip-select family: AGENTS.md section 3.8. Everything else: MCF5307
-	// User's Manual, Appendix B Table B-1, section 9.4.1 Table 9-5, section
-	// 11.5.1 Table 11-1 and section 12.3.1 Table 12-1. Every one of those
-	// citations was verified against the manual on 2026-08-06.
+	// The chip-select family is a firmware measurement; everything else comes
+	// from the MCF5307 User's Manual.
 	//
-	// EACH CHIP SELECT CARRIES ITS OWN CSARn ON THE MASK THE G2 CARRIES.
-	// Section 3.8 measures the boot loader writing CSAR3 at $0A4, CSMR3 at $0A8
-	// and CSCR3 at $0AE, and each of the three sits exactly $24 above the CS0
-	// register of the same kind, so the family repeats every twelve bytes.
-	// CSAR3 = $1300 is a PER-SELECT base, $13000000, and the USB driver reaches
-	// the ISP1181 at exactly that address.
+	// Each chip select carries its own CSARn on the mask the G2 carries. The
+	// boot loader writes CSAR3 at $0A4, CSMR3 at $0A8 and CSCR3 at $0AE, and
+	// each sits exactly $24 above the CS0 register of the same kind, so the
+	// family repeats every twelve bytes. CSAR3 = $1300 is a per-select base,
+	// $13000000, and the USB driver reaches the ISP1181 at exactly that
+	// address.
 	//
-	// THE 1998 MANUAL DOCUMENTS A DIFFERENT LAYOUT, one shared 8-bit CSBAR at
+	// The 1998 manual documents a different layout, one shared 8-bit CSBAR at
 	// $098 and no CSAR2 to CSAR7. That is a real MCF5307 layout on an earlier
-	// mask, not an error. The rows below therefore DISAGREE WITH THE MANUAL at
-	// $098, $09C, $0A4, $0A8, $0B0, $0B4, $0BC and $0C0. sim.cpp lists each
-	// difference. The disagreement is reported and is not settled here.
+	// mask, not an error. The rows below therefore disagree with the manual at
+	// $098, $09C, $0A4, $0A8, $0B0, $0B4, $0BC and $0C0.
 	const RegisterFact g_registers[] =
 	{
 		{0x080, 16, Kind::ReadWrite, false, 0, false, 0, "CSAR0"},
@@ -183,22 +152,18 @@ namespace
 		{0x18c, 16, Kind::ReadWrite, false, 0x0000, true, 0, "TCN2"},
 		{0x191,  8, Kind::ReadWrite, false, 0x00,   true, 0, "TER2"},
 
-		// UM Table B-1 gives UIPCR reset $0F. AGENTS.md section 4.1 fixes
-		// bit 0 at zero for the machine this project presents, and the bit is
-		// a board strap, so a write cannot change it. Bits 3:1 stay at the
-		// manual's reset value.
+		// The manual gives UIPCR reset $0F. Bit 0 is fixed at zero for the
+		// machine this project presents, and the bit is a board strap, so a
+		// write cannot change it. Bits 3:1 stay at the manual's reset value.
 		//
-		// readOnlyBits IS 0 HERE ON PURPOSE, and it matches sim.cpp's row.
+		// readOnlyBits is 0 here on purpose, matching sim.cpp's row:
 		// Kind::ReadOnly already holds every bit, so a strap mask on this row
-		// changes nothing that any case group reads. The earlier revision set
-		// it to $01 and the value was DEAD DATA in both files. Case group 3
-		// carries the strap fact as behaviour instead, which is where it
-		// belongs.
+		// changes nothing any case group reads.
 		{0x1d0,  8, Kind::ReadOnly,  true, 0x0e, true, 0x00, "UIPCR"},
 
 		{0x244, 16, Kind::ReadWrite, false, 0x0000, true, 0x0000, "PADDR"},
-		// AGENTS.md sections 2.3 and 4.1: Port A bit 9 is an INPUT in every
-		// model and it reads LOW on an expanded machine.
+		// Port A bit 9 is an input in every model and reads LOW on an expanded
+		// machine.
 		{0x248, 16, Kind::ReadWrite, false, 0x0000, true, 0x0200, "PADAT"},
 	};
 
@@ -249,18 +214,13 @@ namespace
 	};
 
 	// -----------------------------------------------------------------------
-	// THE EXPECTATION SIDE AND THE OBSERVATION SIDE ARE DRAWN FROM DIFFERENT
-	// PLACES ON PURPOSE.
+	// The expectation side and the observation side are drawn from different
+	// places on purpose.
 	//
-	// tableCovers and tableWritableMask read THIS FILE'S table, which is the
-	// manual and AGENTS.md written out by hand. modelAnswersAt and
-	// modelWritableMask read THE MODEL, through its own behaviour and through
-	// nothing else. Case groups 11 to 14 hold one against the other.
-	//
-	// This is the shape case group 6 did not have. Group 6 compared this
-	// file's table with itself, so it could only fail when this file was
-	// edited, and a register added to sim.cpp alone went unobserved. The
-	// groups below fail when EITHER side moves without the other.
+	// tableCovers and tableWritableMask read this file's table, written out by
+	// hand. ModelAnswersAt and modelWritableMask read the model, through its own
+	// behaviour and through nothing else. The groups that hold one against the
+	// other fail when either side moves without the other.
 
 	// True when the offset falls inside a register this file's table names.
 	// Written out again rather than calling into sim.cpp, so that the two
@@ -276,10 +236,10 @@ namespace
 		return false;
 	}
 
-	// The bits this file's table says a write may change at this offset. A
-	// byte no register covers is reserved and yields zero: UM Table 9-5
-	// footnote 1. A read-only register yields zero. A read/write register
-	// yields every bit no board strap holds.
+	// The bits this file's table says a write may change at this offset. A byte
+	// no register covers is reserved and yields zero, because a write to a
+	// reserved address has no effect. A read-only register yields zero. A
+	// read/write register yields every bit no board strap holds.
 	uint8_t tableWritableMask(const uint32_t _offset)
 	{
 		for(const RegisterFact& r : g_registers)
@@ -298,11 +258,11 @@ namespace
 		return 0x00u;
 	}
 
-	// Whether THE MODEL carries a register at this offset, asked of the model
-	// and not of any table. sim.h states the contract this reads: the SIM
+	// Whether the MODEL carries a register at this offset, asked of the model
+	// and not of any table. Sim.h states the contract this reads: the SIM
 	// writes one log line for "every access to an offset the manual assigns to
 	// no register this model carries", and writes none for an offset it does
-	// carry. So an empty log after one access IS the model's own answer to
+	// carry. So an empty log after one access is the model's own answer to
 	// "do you have a register here".
 	bool modelAnswersAt(Bus& _bus, const uint32_t _offset)
 	{
@@ -312,7 +272,7 @@ namespace
 		return _bus.sim().log().empty();
 	}
 
-	// The bits THE MODEL actually lets a write change at this offset, asked of
+	// The bits the MODEL actually lets a write change at this offset, asked of
 	// the model by writing both polarities and reading each back. This
 	// recovers the model's write-protect mask from behaviour alone.
 	uint8_t modelWritableMask(Bus& _bus, const uint32_t _offset)
@@ -334,11 +294,10 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 1. THE RESET VALUES THE MANUAL STATES.
+	// Case group 1. The reset values the manual states.
 	//
-	// UM Table B-1 marks the chip-select and DRAM registers "uninitialized",
-	// so no reset value is asserted for those. Every register the table gives
-	// a value for is asserted here.
+	// The manual marks the chip-select and DRAM registers "uninitialized", so
+	// no reset value is asserted for those.
 	{
 		Bus bus;
 
@@ -358,8 +317,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. EVERY MODELLED REGISTER IS DRIVEN AT ITS OWN WIDTH AND THE
-	// VALUE IT READS BACK IS ASSERTED.
+	// Case group 2. Every modelled register is driven at its own width and the
+	// value it reads back is asserted.
 	//
 	// A read/write register returns what was written, less any bit a strap
 	// holds. A read-only register ignores the write and keeps its reset value.
@@ -391,16 +350,16 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE TWO STRAPS THE FIRMWARE READS.
+	// Case group 3. The two straps the firmware reads.
 	//
-	// AGENTS.md section 4.1 is authoritative on both. is_expanded() at
-	// 0x30037F64 reads MBAR+0x248 bit 9 and takes LOW to mean expanded, which
-	// presents eight DSPs. detect_model() at 0x30050864 reads MBAR+0x1D0 bit 0
-	// and takes SET to mean an Engine, which has no panel board.
+	// is_expanded() at 0x30037F64 reads MBAR+0x248 bit 9 and takes LOW to mean
+	// expanded, which presents eight DSPs. Detect_model() at 0x30050864 reads
+	// MBAR+0x1D0 bit 0 and takes SET to mean an Engine, which has no panel
+	// board.
 	//
-	// Each is asserted AFTER a write of all ones, because a strap is an input
-	// and a model that let the firmware write over it would present a
-	// different machine one instruction later.
+	// Each is asserted after a write of all ones, because a strap is an input
+	// and a model that let the firmware write over it would present a different
+	// machine one instruction later.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -423,16 +382,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. THE UNRESTRICTED CLASS ACCEPTS EVERY WIDTH.
+	// Case group 4. The unrestricted class accepts every width.
 	//
-	// This asserts a property of THIS MODEL and not of the part. See the note
-	// at the head of this file: AGENTS.md section 4.2 records that chip-select
-	// and DRAM controller access widths exist, so the manual saying nothing
-	// about them proves nothing about them. The manual was searched on
-	// 2026-08-06 and it does say nothing about them: section 14.3.7 is its only
-	// access-width rule. What is pinned here is that the model rejects a width
-	// at exactly one offset and nowhere else, which is the shape plan section
-	// 13.1 requires.
+	// This asserts a property of this model and not of the part. What is pinned
+	// is that the model rejects a width at exactly one offset and nowhere
+	// else.
 	{
 		Bus bus;
 		const int widths[] = {8, 16, 32};
@@ -458,13 +412,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE RESTRICTED CLASS REJECTS EVERY FORBIDDEN WIDTH AND
-	// WRITES ONE LOG LINE NAMING THE OFFSET, THE WIDTH AND THE DIRECTION.
+	// Case group 5. The restricted class rejects every forbidden width and
+	// writes one log line naming the offset, the width and the direction.
 	//
-	// UM section 14.3.7: "All UART module registers must be accessed as
-	// bytes." MBAR+$1D0 is one. A model that accepted every width at every
-	// offset fails this group, which is what makes the width data known to be
-	// live rather than decorative.
+	// "All UART module registers must be accessed as bytes." MBAR+$1D0 is one.
+	// A model that accepted every width at every offset fails this group.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -497,24 +449,15 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. A HYGIENE GUARD ON THE SKIP LOGIC OF GROUPS 4 AND 5. IT
-	// SAYS NOTHING ABOUT THE MODEL.
+	// Case group 6. A hygiene guard on the skip logic of groups 4 and 5. It
+	// says nothing about the model: it constructs no Bus, names no g2:: symbol
+	// and reads only this file's own table.
 	//
-	// WHAT THIS GROUP IS AND IS NOT. It constructs no Bus, it names no g2::
-	// symbol and it reads only this file's own table. It therefore CANNOT
-	// observe sim.cpp, and every assertion below is worded as a fact about
-	// THIS FILE. An earlier revision worded them as facts about the model -
-	// "the model covers 18 chip-select ... registers" - which was misleading:
-	// a register added to sim.cpp alone left every one of them green.
-	//
-	// The job it does do is real and worth keeping. Groups 4 and 5 divide the
-	// table by byteAccessOnly: group 4 SKIPS every restricted row and group 5
-	// drives the one restricted offset by hand. If the table ever carried two
-	// restricted rows, group 4 would silently stop driving one register and
-	// group 5 would never notice. The counts below are what stops that.
-	//
-	// THE MODEL-SIDE CLAIM IS CARRIED BY CASE GROUPS 11 TO 14, which read the
-	// model's own answers and hold them against this table.
+	// Groups 4 and 5 divide the table by byteAccessOnly: group 4 skips every
+	// restricted row and group 5 drives the one restricted offset by hand. If
+	// the table ever carried two restricted rows, group 4 would silently stop
+	// driving one register and group 5 would never notice. The counts below are
+	// what stops that.
 	{
 		size_t restricted = 0;
 		size_t unrestricted = 0;
@@ -542,9 +485,8 @@ int main()
 		checkEqual(g_registerCount, size_t(36),
 			"this file's table carries 36 rows: 18 chip-select, 5 DRAM controller, 10 timer, 1 strap and 2 parallel-port");
 
-		// The chip-select family is counted on its own, because it is the part
-		// of the table AGENTS.md section 3.8 governs and the part the earlier
-		// revision got wrong. Six selects, three registers each.
+		// The chip-select family is counted on its own: six selects, three
+		// registers each.
 		size_t chipSelect = 0;
 
 		for(const RegisterFact& r : g_registers)
@@ -559,13 +501,12 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. AN OFFSET THE MANUAL ASSIGNS TO NO REGISTER IS NOT
-	// SILENTLY ACCEPTED.
+	// Case group 7. An offset the manual assigns to no register is not silently
+	// accepted.
 	//
-	// UM Table 9-5 footnote 1: a write to a reserved address has no effect.
-	// The access completes, and the board writes one log line so that a
-	// firmware access nobody modelled leaves a trace. BRD-5 owns the full
-	// anomaly log; this is the trace the SIM itself writes.
+	// A write to a reserved address has no effect. The access completes, and
+	// the board writes one log line so that a firmware access nobody modelled
+	// leaves a trace.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -580,19 +521,17 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. THE BOOT LOADER'S OWN CS3 PROGRAMMING, FROM AGENTS.md 3.8.
+	// Case group 8. The boot loader's own CS3 programming.
 	//
-	// Section 3.8 measures BOOT_128_Loader.bin writing CSAR3 at MBAR+$0A4 =
-	// $1300, CSMR3 at MBAR+$0A8 = $00000001 and CSCR3 at MBAR+$0AE = $0540,
-	// and it reads CSAR3 = $1300 as the base $13000000 where the ISP1181 USB
-	// device controller sits.
+	// BOOT_128_Loader.bin writes CSAR3 at MBAR+$0A4 = $1300, CSMR3 at
+	// MBAR+$0A8 = $00000001 and CSCR3 at MBAR+$0AE = $0540. CSAR3 = $1300 is
+	// the base $13000000 where the ISP1181 USB device controller sits.
 	//
-	// EVERY CASE HERE ASSERTS THE LOG AS WELL AS THE READ-BACK, because a
-	// read-back on its own is not evidence that a write was modelled. Under
-	// the withdrawn CSBAR layout the 32-bit write of $00000001 to $0A8 READ
-	// BACK CORRECTLY - the low half landed in a two-byte register that layout
-	// placed at $0AA - while the model logged the same write UNMODELLED. The
-	// read-back said yes, the log said no, and the log was right.
+	// Every case here asserts the log as well as the read-back, because a
+	// read-back on its own is not evidence that a write was modelled. Under the
+	// shared-CSBAR layout the 32-bit write of $00000001 to $0A8 reads back
+	// correctly -- the low half lands in a two-byte register that layout places
+	// at $0AA -- while the model logs the same write UNMODELLED.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -632,7 +571,7 @@ int main()
 
 		bus.sim().clearLog();
 
-		// The value CSAR3 carries, read the way AGENTS.md 3.8 reads it.
+		// The value CSAR3 carries.
 		checkEqual(bus.read(0x0a4, 16, status) << 16, uint32_t(0x13000000u),
 			"CSAR3 gives CS3 the base 0x13000000, which AGENTS.md 3.8 names as the ISP1181");
 
@@ -645,12 +584,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 9. THE SIX CSARn ARE SIX SEPARATE REGISTERS.
+	// Case group 9. The six CSARn are six separate registers.
 	//
-	// AGENTS.md open question 21 and plan section 4.2 register row 18 both
-	// name CSAR0 to CSAR5. One shared base cannot answer for six selects, so
-	// each CSARn holds its own value. A table that collapsed two of them onto
-	// one offset passes every group above and fails here.
+	// One shared base cannot answer for six selects, so each CSARn holds its
+	// own value. A table that collapsed two of them onto one offset passes
+	// every group above and fails here.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -670,15 +608,14 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 10. THE POSITIVE CONTROL FOR EVERY "THE LOG IS EMPTY" ABOVE.
+	// Case group 10. The positive control for every "the log is empty" above.
 	//
-	// Groups 8 and 9 read an EMPTY log as proof that a write was modelled.
-	// That reading is sound only while the log can still record something. A
-	// control drawn from the chip-select block would share the assumption it
-	// guards and would prove nothing, so this one is drawn from OUTSIDE that
-	// block: MBAR+$300 lies past every register BRD-2 models, in the part of
-	// UM Table B-1 that belongs to blocks this task does not own. Its being
-	// unmodelled follows from nothing in the chip-select family.
+	// Groups 8 and 9 read an empty log as proof that a write was modelled. That
+	// reading is sound only while the log can still record something. A control
+	// drawn from the chip-select block would share the assumption it guards, so
+	// this one is drawn from outside it: MBAR+$300 lies past every register
+	// this file models, and its being unmodelled follows from nothing in the
+	// chip-select family.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -695,28 +632,23 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 11. WHAT THE MODEL ANSWERS, ASKED OF THE MODEL.
+	// Case group 11. What the model answers, asked of the model.
 	//
-	// EVERY GROUP ABOVE READS THE MODEL ONLY AT OFFSETS THIS FILE ALREADY
-	// NAMES, so the model was free to grow registers this file knows nothing
-	// about. Adding CSAR6, CSMR6 and CSCR6 to sim.cpp - which AGENTS.md
-	// section 2.2 forbids, because no G2 signal reaches CS6 or CS7, and which
-	// sim.cpp itself cites as its reason for omitting them - left every case
-	// above green. That is the original defect's exact shape: the model and
-	// the test disagreed and nothing observed the disagreement.
+	// Every group above reads the model only at offsets this file already
+	// names, so the model is free to grow registers this file knows nothing
+	// about: adding CSAR6, CSMR6 and CSCR6 to sim.cpp leaves every case above
+	// green.
 	//
-	// This group closes it by sweeping the WHOLE MBAR window and asking the
-	// model, at every one of its own g_simSpaceSize offsets, whether it
-	// carries a register there. The answer comes out of the model's log, which
-	// sim.h defines as carrying one line for every access to an offset the
-	// model does not carry. The expectation comes from this file's table. The
-	// two sides move independently, so the check fails when EITHER moves.
+	// This group closes it by sweeping the whole MBAR window and asking the
+	// model, at every one of its own g_simSpaceSize offsets, whether it carries
+	// a register there. The answer comes out of the model's log, which carries
+	// one line for every access to an offset the model does not carry. The
+	// expectation comes from this file's table, so the check fails when either
+	// side moves.
 	//
-	// IT CANNOT BE SATISFIED BY EDITING THIS FILE'S TABLE. Adding a row here
-	// to match a register added to sim.cpp makes this group pass again, and
-	// then case group 6's literal count of 36 rows fails instead. A register
-	// can only enter the model with both files, and this comment, changed
-	// together.
+	// It cannot be satisfied by editing this file's table alone: adding a row
+	// here makes this group pass again and case group 6's row count fail
+	// instead.
 	{
 		Bus bus;
 
@@ -745,11 +677,10 @@ int main()
 		checkEqual(modelledBytes, size_t(89),
 			"the model carries 89 register bytes: 48 chip-select, 18 DRAM controller, 18 timer, 1 strap and 4 parallel-port");
 
-		// CS6 and CS7 by name. AGENTS.md section 2.2 records that the G2 wires
-		// six chip selects and that no G2 signal reaches the other two. The
-		// twelve-byte stride the CS3 measurement fixes puts a seventh and an
-		// eighth family at exactly these six offsets, and the 1998 manual
-		// marks $0C8 and $0D4 Reserved. The model must answer at none of them.
+		// CS6 and CS7 by name. The G2 wires six chip selects and no G2 signal
+		// reaches the other two. The twelve-byte stride puts a seventh and an
+		// eighth family at exactly these six offsets, and the 1998 manual marks
+		// $0C8 and $0D4 Reserved. The model must answer at none of them.
 		const uint32_t forbidden[] = {0x0c8, 0x0cc, 0x0d2, 0x0d4, 0x0d8, 0x0de};
 
 		for(const uint32_t offset : forbidden)
@@ -758,18 +689,15 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 12. EVERY REGISTER'S UPPER BOUNDARY.
+	// Case group 12. Every register's upper boundary.
 	//
-	// No group above asserted where a register STOPS. Changing the model's
-	// lookup so that a register claims one byte past its end left every case
-	// green, which meant the reserved-address contract was unverified in both
-	// directions: nothing said a reserved offset stays reserved, and nothing
-	// said a register does not reach into one.
+	// Without it, changing the model's lookup so that a register claims one
+	// byte past its end leaves every case green: nothing says a reserved offset
+	// stays reserved, and nothing says a register does not reach into one.
 	//
 	// The byte directly above each register is asserted here, for every row
-	// this file's table names whose upper neighbour is not another register.
-	// Rows whose neighbour IS another register are covered by case group 11's
-	// sweep instead, which holds every offset in the window.
+	// whose upper neighbour is not another register. Rows whose neighbour is
+	// another register are covered by case group 11's sweep instead.
 	{
 		Bus bus;
 
@@ -786,18 +714,16 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 13. A WRITE TO A RESERVED ADDRESS HAS NO EFFECT.
+	// Case group 13. A write to a reserved address has no effect.
 	//
-	// UM Table 9-5 footnote 1. sim.cpp cites it, sim.h cites it and case group
-	// 7 cites it, and until now NO CASE DROVE IT: group 7 only READ a reserved
-	// offset and group 10 only WROTE one and looked at the log. Neither wrote
-	// a reserved offset and read it back, so the protection could be removed
-	// with every case still green.
+	// Group 7 only reads a reserved offset and group 10 only writes one and
+	// looks at the log. Neither writes a reserved offset and reads it back, so
+	// without this group the protection could be removed with every case still
+	// green.
 	//
-	// WHAT THE FAILURE WOULD COST. Without the protection the model stores a
-	// firmware write into reserved MBAR space and hands it back on a later
-	// read. A misdirected write then reads back exactly like a modelled one,
-	// which is the one thing BRD-5's anomaly log exists to make visible.
+	// Without the protection the model stores a firmware write into reserved
+	// MBAR space and hands it back on a later read, so a misdirected write
+	// reads back exactly like a modelled one.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -823,7 +749,7 @@ int main()
 		checkEqual(bus.read(0x08a, 16, status), uint32_t(0),
 			"CSCR0, above the hole, is untouched by the write to the hole");
 
-		// THE MISDIRECTED WRITE, IN THE SHAPE THE FIRMWARE WOULD MAKE IT. A
+		// The misdirected write, in the shape the firmware would make it. A
 		// 32-bit write at 0x086 starts inside CSMR0 and runs off its top into
 		// the reserved hole. The two bytes inside the register take the value
 		// and the two bytes in the hole must not.
@@ -840,27 +766,20 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 14. THE MODEL'S WHOLE WRITE-PROTECT MASK, RECOVERED FROM
-	// BEHAVIOUR.
+	// Case group 14. The model's whole write-protect mask, recovered from
+	// behaviour.
 	//
 	// Group 13 drives the protection at four offsets. This drives it at all
 	// g_simSpaceSize of them, by writing both polarities to every byte and
-	// reading each back, which recovers the model's mask without reading a
-	// line of sim.cpp. It pins three separate facts at once: every reserved
-	// byte is fully protected, every read-only register is fully protected,
-	// and every bit a board strap holds is protected while its neighbours in
-	// the same register are not.
+	// reading each back, which recovers the model's mask without reading a line
+	// of sim.cpp. It pins three facts at once: every reserved byte is fully
+	// protected, every read-only register is fully protected, and every bit a
+	// board strap holds is protected while its neighbours in the same register
+	// are not.
 	//
-	// ON THE strapBits FIELD, AND WHAT THIS GROUP CANNOT DO. sim.cpp's
-	// constructor once read strapBits only on a ReadWrite row. The form that
-	// replaced it applies strapBits on every row. THOSE TWO FORMS ARE THE SAME
-	// FUNCTION: Access::ReadOnly already sets every bit of the mask, so
-	// 0xff | strap is 0xff for every strap, and the ReadWrite arm is strap in
-	// both. No test can be red on that change, because it changes no
-	// behaviour. What CAN go wrong, and what this group does catch, is the
-	// mask being NARROWED - on either arm - so that a strap bit becomes
-	// writable. sim.cpp carries a static_assert for the same invariant at
-	// compile time. See sim.cpp for the full record.
+	// What this group catches is the mask being narrowed, on either arm, so
+	// that a strap bit becomes writable. Sim.cpp carries a static_assert for
+	// the same invariant at compile time.
 	{
 		Bus bus;
 
@@ -899,17 +818,15 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 15. THE SIM'S OWN WIDTH GUARD.
+	// Case group 15. The SIM's own width guard.
 	//
-	// sim.cpp rejects any width that is not 8, 16 or 32, and NO CASE ABOVE
-	// DROVE IT, because every access above goes through the decode and the
+	// sim.cpp rejects any width that is not 8, 16 or 32, and no case above
+	// drives it, because every access above goes through the decode and the
 	// decode carries the same guard and answers first. The two guards are
 	// separate code in separate files and each needs its own case.
 	//
-	// THIS GROUP DRIVES THE SIM AT ITS BusTarget INTERFACE, deliberately and
-	// as the only group in this file that does. The SIM is a BusTarget and its
-	// width guard is part of what it presents to any decode, not only to this
-	// one. Driving it through the decode could never reach the branch.
+	// This is the only group that drives the SIM at its BusTarget interface.
+	// Driving it through the decode could never reach the branch.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -947,7 +864,7 @@ int main()
 		checkEqual(bus.sim().read(0x080, 16, status), uint32_t(0),
 			"CSAR0 is unchanged by every rejected write above, so a rejected access reaches no storage");
 
-		// THE TWO GUARDS ARE SEPARATE. The same widths driven through the
+		// The two guards are separate: the same widths driven through the
 		// decode are rejected by the decode, and the SIM never sees them.
 		bus.sim().clearLog();
 		status = MCF5307_BUS_OK;
@@ -959,22 +876,18 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 16. AN ACCEPTED WIDE ACCESS IS BYTE-ADDRESSED, AND WHAT IT
-	// REACHES IS PINNED.
+	// Case group 16. An accepted wide access is byte-addressed, and what it
+	// reaches is pinned.
 	//
 	// Case group 4 drives every unrestricted register at all three widths and
-	// asserts ONLY that the access is accepted. It never asserts that
-	// acceptance is non-destructive. A 32-bit access at CSCR0, which is two
-	// bytes at 0x08a, runs into CSAR1 at 0x08c, and nothing said whether that
-	// was intended.
+	// asserts only that the access is accepted, never that acceptance is
+	// non-destructive. A 32-bit access at CSCR0, which is two bytes at 0x08a,
+	// runs into CSAR1 at 0x08c.
 	//
-	// IT IS INTENDED, AND IT IS RECORDED HERE RATHER THAN LEFT OPEN. The model
-	// treats an access as a run of bytes from the offset it is given, exactly
-	// as the part's bus does, and applies the write protection byte by byte.
-	// So a wide access at CSCR0 DOES reach CSAR1, and the neighbour it reaches
-	// is named below. A later change that made a wide access stop at the
-	// register boundary would fail here, which is the point: the behaviour is
-	// pinned either way and no longer rests on nobody having looked.
+	// That is intended. The model treats an access as a run of bytes from the
+	// offset it is given, exactly as the part's bus does, and applies the write
+	// protection byte by byte. A later change that made a wide access stop at
+	// the register boundary would fail here.
 	{
 		Bus bus;
 		mcf5307_bus_status status = MCF5307_BUS_OK;

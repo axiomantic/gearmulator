@@ -1,27 +1,17 @@
-// Task BRD-5. The anomaly log. Tier T0: this test needs no firmware artifact
-// of any kind.
+// The anomaly log. Tier T0: this test needs no firmware artifact.
 //
-// Plan section 13.1, BRD-5. Design section 6.3 and section 5.2.1 rule 2.
+// The canonical anomaly is RAMBAR1 at offset $C05: the firmware writes it, and
+// no MCF5307 manual assigns that offset to any register of this part -- $C05 is
+// a ColdFire V4 register and this part is V3. The board accepts the write and
+// records one anomaly log line. It never adjusts the model in silence.
 //
-// WHAT THIS TEST DRIVES. Design section 6.3 names the canonical anomaly: the
-// firmware writes RAMBAR1 (offset $C05), and no MCF5307 manual assigns that
-// offset to any register of this part -- $C05 is a ColdFire V4 register and
-// this part is V3. The board ACCEPTS the write and records one anomaly log
-// line. It NEVER adjusts the model in silence.
-//
-// THE MODEL THIS TEST WRITES TO IS AUTHORED BY THE TEST, exactly as BRD-7 and
-// BRD-10 author their own fixtures. AnomalyLog is a pure sink (see anomalyLog.h)
-// and carries no state of its own. The acceptance rule -- a write to an offset
-// the board does not carry: accepted, no state change, one log line -- is the
-// BOARD's contract, so this test represents it with a tiny RAMBAR1 model that
-// holds the register's would-be state and refuses to change it on a write.
-// That is what makes "an accepted write" and "never adjusts the model in
-// silence" observable against a real thing instead of against the log's own
-// text.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG, so a bare assert() is removed and a check
-// built on one can never fail.
+// AnomalyLog is a pure sink and carries no state of its own. The acceptance
+// rule -- a write to an offset the board does not carry: accepted, no state
+// change, one log line -- is the board's contract, so this test represents it
+// with a tiny RAMBAR1 model that holds the register's would-be state and
+// refuses to change it on a write. That is what makes "an accepted write" and
+// "never adjusts the model in silence" observable against a real thing instead
+// of against the log's own text.
 
 #include "anomalyLog.h"
 
@@ -61,11 +51,9 @@ namespace
 		++g_failures;
 	}
 
-	// AGENTS.md section 2.2 records the two genuine RAMBAR1 writes at
-	// 0x300582C6 and 0x30058216. $C05 is the control-register offset the
-	// firmware writes; $C05 is a ColdFire V4 register number, not a bus map
-	// offset, but it is the value the design section 6.3 names as the
-	// canonical anomaly, and the test drives exactly that number.
+	// The two genuine RAMBAR1 writes sit at 0x300582C6 and 0x30058216. $C05 is
+	// a ColdFire V4 control-register number, not a bus map offset, and it is
+	// the canonical anomaly, so the test drives exactly that number.
 	constexpr uint32_t g_rambar1Offset = 0x0C05u;
 
 	// The status the board returns from an access. MCF5307_BUS_OK means the
@@ -158,9 +146,9 @@ int main()
 	// ------------------------------------------------------------------
 	// Any peripheral register offset that does not match the MCF5307 manual
 	// is logged, and a write to it is always accepted and never changes state.
-	// The three offsets below are all outside the SIM's modelled range from
-	// BRD-2 and outside the manuals' maps; the design's rule is about the log,
-	// not about any one number, so the invariant is driven over several.
+	// The three offsets below are all outside the SIM's modelled range and
+	// outside the manuals' maps. The rule is about the log, not about any one
+	// number, so the invariant is driven over several.
 	{
 		constexpr uint32_t offsets[] = { 0x0002u, 0x0c05u, 0x0400u };
 		constexpr int widths[] = { 8, 16, 32 };

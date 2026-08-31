@@ -1,4 +1,4 @@
-// Task BRD-7. Design section 7.4.
+// The read-only flash model.
 
 #include "flash.h"
 

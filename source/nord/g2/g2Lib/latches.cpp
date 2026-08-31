@@ -1,20 +1,12 @@
-// Task BRD-12. The CS5 latches.
+// The CS5 latches.
 //
-// Plan section 13.3, BRD-12. Design sections 8.1, 8.2, 8.3.
-// Logbook: AGENTS.md sections 2.2, 2.3, 4.1.
+// The panel identifier is a strap and not a register: Clavia's service manual
+// records the model as two 0-ohm resistors, R79 and R80, on the panel board. A
+// write reaches the identifier bits and changes nothing, and the model presents
+// the same machine for the whole run.
 //
-// THIS FILE CARRIES NO ADDRESS. The one recorded base, 0x15000000, lives in
-// memoryMap.h as g_cs5Base, and the window size is configuration.
-//
-// THE PANEL IDENTIFIER IS A STRAP AND NOT A REGISTER. Clavia's service manual
-// records the model as two 0-ohm resistors, R79 and R80, on the panel board.
-// So a write reaches the identifier bits and changes nothing, and the model
-// presents the same machine for the whole run.
-//
-// THE SIX BITS OUTSIDE 5:4 HAVE NO RECORDED SOURCE AND THIS MODEL READS THEM
-// ZERO. AGENTS.md section 2.3 records the two identifier bits and records
-// nothing about the rest of the byte. Reading them zero is a model decision
-// and it is stated here rather than presented as a measurement.
+// The six bits outside 5:4 have no recorded source and this model reads them
+// zero. That is a model decision and not a measurement.
 
 #include "latches.h"
 

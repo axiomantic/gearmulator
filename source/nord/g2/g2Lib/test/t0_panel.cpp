@@ -1,22 +1,10 @@
-// Task BRD-12. Tier T0: this test needs no firmware artifact of any kind.
+// The panel and the CS5 latches. Tier T0: this test needs no firmware
+// artifact, and asserts only what the board does.
 //
-// Plan section 13.3, BRD-12. Design sections 8.1, 8.2, 8.3.
-// Logbook: AGENTS.md sections 2.2, 2.3, 4.1.
-//
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG.
-//
-// NO T0 CHECK READS THE OS BANNER. The banner is produced by Clavia's OS
-// image running, so it belongs to INT-1's t1_boot, which is T1 and gated.
-// BRD-14's t1_rejected_config is what proves the panel model is not
-// permissive. This test asserts only what the BOARD does.
-//
-// ONE ADDRESS HERE HAS A RECORDED SOURCE AND THE OTHER DOES NOT.
-// AGENTS.md section 2.2 records the CS5 latch at 0x15000000, and panel_id()
-// at 0x3005BFFE drives it and takes bits 5:4. The panel DISPLAY BUFFER sits on
-// CS4, and no authority records CS4's base or its size, so this fixture
-// supplies both and no shipped header carries a number. AGENTS.md open
-// question 21 carries CS4 and SPK-13 reads it from CSAR4.
+// One address here has a recorded source and the other does not. The CS5 latch
+// sits at 0x15000000, and panel_id() at 0x3005BFFE drives it and takes bits
+// 5:4. The panel display buffer sits on CS4, and no authority records CS4's
+// base or its size, so this fixture supplies both.
 
 #include "latches.h"
 #include "memoryMap.h"
@@ -112,13 +100,12 @@ namespace
 int main()
 {
 	// -----------------------------------------------------------------------
-	// Case group 1. THE PANEL IDENTIFIER LATCH PRESENTS A G2X.
+	// Case group 1. The panel identifier latch presents a G2X.
 	//
-	// AGENTS.md section 2.3 gives the map from the two bits to the model code:
-	// 0b00 is model code 0, a plain G2; 0b11 is model code 1, the G2X; 0b10 is
-	// model code 2, the Rack that never shipped; 0b01 and anything above 0b11
-	// are not written and the OS hangs on OS-HARDWARE ERR at 0x3001B86C.
-	// AGENTS.md section 4.1 fixes this machine at 0b11.
+	// The map from the two bits to the model code: 0b00 is model code 0, a
+	// plain G2; 0b11 is model code 1, the G2X; 0b10 is model code 2, the Rack
+	// that never shipped; 0b01 is not written and the OS hangs on OS-HARDWARE
+	// ERR at 0x3001B86C. This machine is 0b11.
 	{
 		Board board;
 		mcf5307_bus_status status = MCF5307_BUS_OK;
@@ -141,7 +128,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. THE IDENTIFIER IS A STRAP, SO A WRITE CANNOT CHANGE IT.
+	// Case group 2. The IDENTIFIER is A STRAP, so A WRITE CANNOT CHANGE it.
 	//
 	// Clavia's service manual records the model as two 0-ohm resistors, R79
 	// and R80, on the panel board. A model that let the firmware write over
@@ -161,7 +148,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. EVERY OTHER LATCH IN THE CS5 WINDOW IS AN OUTPUT LATCH.
+	// Case group 3. Every OTHER LATCH in the CS5 WINDOW is an OUTPUT LATCH.
 	//
 	// It keeps what was written. No authority records what each one drives, so
 	// the model carries no meaning for any of them and only the keeping is
@@ -183,7 +170,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. THE CS4 BASE IS CONFIGURATION AND IT IS LIVE.
+	// Case group 4. The CS4 BASE is CONFIGURATION and it is LIVE.
 	//
 	// Two boards differ only in where the display buffer sits. Each base is
 	// asserted to answer in the board that carries it and to answer nothing in
@@ -203,9 +190,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. THE DISPLAY WRITE PATH KEEPS THE LAST WRITTEN CONTENTS.
+	// Case group 5. The DISPLAY WRITE PATH KEEPS the LAST WRITTEN CONTENTS.
 	//
-	// This test asserts ONLY that the buffer returns what THIS TEST wrote into
+	// This test asserts only that the buffer returns what this TEST wrote into
 	// it. It reads no banner, because a banner is produced by Clavia's OS
 	// image running and this is a T0 check.
 	{
@@ -242,7 +229,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. THE PANEL IS QUIESCENT AND NO POLL CAN SPIN FOR EVER.
+	// Case group 6. The PANEL is QUIESCENT and no POLL can SPIN for EVER.
 	//
 	// A boot loop polls a panel until it answers. This model answers every
 	// offset of both windows, at every legal width, with a completed access.

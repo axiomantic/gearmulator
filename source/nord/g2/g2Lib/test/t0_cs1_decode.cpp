@@ -1,28 +1,16 @@
-// Task BRD-15. Tier T0: this test needs no firmware artifact of any kind.
+// The CS1 decode. Tier T0: this test needs no firmware artifact.
 //
-// Plan section 13.3, BRD-15. Design section 10.3.
-// Logbook: AGENTS.md section 3.1.
+// The addresses below are the values set_hdi08_bases(expanded) at 0x300391E8
+// writes into the 9-entry table at 0x30116970 at boot. They are written out
+// here as the expected input of a decode, not as a table the emulator carries:
+// hdi08Decode.h holds no address at all, and the exhaustive case below drives
+// all 256 line patterns, of which the nine recorded entries are nine. The nine
+// are the eight per-DSP addresses and the broadcast.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build is
-// Release and it defines NDEBUG.
-//
-// THE ADDRESSES BELOW ARE THE ONES AGENTS.md SECTION 3.1 RECORDS. They are the
-// values set_hdi08_bases(expanded) at 0x300391E8 writes into the 9-entry table
-// at 0x30116970 at boot. They are written out here as the EXPECTED INPUT of a
-// decode, not as a table the emulator carries: hdi08Decode.h holds no address
-// at all, and the exhaustive case below drives all 256 line patterns, of which
-// the nine recorded entries are nine.
-//
-// ON THE WORD "NINE". Plan section 24 row M-8 already records that BRD-15's
-// phrase "all nine expanded addresses and the broadcast address"
-// double-counts: AGENTS.md section 3.1 gives NINE entries and the ninth IS the
-// broadcast. This test drives all nine entries, which is the eight per-DSP
-// addresses and the broadcast, and it says so rather than inventing a tenth.
-//
-// THE OFFSET COMES FROM THE BRD-1 DECODE. The recorded values are absolute
-// addresses. This test turns each one into a CS1 offset by subtracting the
-// base of the CS1 window the MemoryMap carries, so the offset the decode sees
-// is produced by BRD-1 and not by arithmetic written here.
+// The recorded values are absolute addresses. This test turns each one into a
+// CS1 offset by subtracting the base of the CS1 window the MemoryMap carries,
+// so the offset the decode sees is produced by the decode and not by arithmetic
+// written here.
 
 #include "hdi08Decode.h"
 #include "memoryMap.h"
@@ -71,8 +59,8 @@ namespace
 		return result;
 	}
 
-	// The CS1 window. AGENTS.md section 2.2 records the base and this fixture
-	// chooses the size, because no authority records it. A3 to A10 span
+	// The CS1 window. The base is recorded and this fixture chooses the size,
+	// because no authority records it. A3 to A10 span
 	// 0x7F8, so the window is at least 0x800 bytes.
 	g2::MemoryMap makeMap()
 	{
@@ -89,10 +77,10 @@ namespace
 		const char* note;
 	};
 
-	// AGENTS.md section 3.1, the expanded 8-DSP column. Each entry drives
-	// exactly ONE of A3 to A10 low, and the table index is NOT the address
-	// line number: the ordering is deliberate so that index 0 and index N-1
-	// stay on the two physical chips that touch the codec.
+	// The expanded 8-DSP column. Each entry drives exactly one of A3 to A10
+	// low, and the table index is not the address line number: the ordering is
+	// deliberate so that index 0 and index N-1 stay on the two physical chips
+	// that touch the codec.
 	const RecordedEntry g_expandedTable[] =
 	{
 		{0, 0x110007b8u, 0x08u, "index 0 drives A6 low"},
@@ -106,8 +94,7 @@ namespace
 		{8, 0x11000000u, 0xffu, "index 8 is the broadcast and drives every populated select low"},
 	};
 
-	// AGENTS.md section 3.1, the base 4-DSP column. The base machine uses
-	// A3 to A6 only.
+	// The base 4-DSP column. The base machine uses A3 to A6 only.
 	const RecordedEntry g_baseTable[] =
 	{
 		{0, 0x110007b8u, 0x08u, "index 0 drives A6 low"},
@@ -124,13 +111,13 @@ int main()
 	const uint32_t cs1Base = map.window(g2::Region::Cs1).base;
 
 	// -----------------------------------------------------------------------
-	// Case group 0. The window this test decodes into is CS1 and it is the one
-	// AGENTS.md section 2.2 records.
+	// Case group 0. The window this test decodes into is CS1, at the recorded
+	// base.
 	checkEqual(map.decode(0x11000000u), g2::Region::Cs1, "0x11000000 decodes to CS1");
 	checkEqual(cs1Base, uint32_t(0x11000000u), "the CS1 window starts at the recorded base");
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE NINE RECORDED ENTRIES OF THE EXPANDED MACHINE.
+	// Case group 1. The NINE RECORDED ENTRIES of the EXPANDED MACHINE.
 	//
 	// The eight per-DSP entries each select exactly one port, and the ninth is
 	// the broadcast and selects all eight.
@@ -150,10 +137,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. 0x7F8 SELECTS NONE.
-	//
-	// AGENTS.md section 3.1 records it by itself, and it is the one pattern
-	// that drives every line high.
+	// Case group 2. 0x7F8 selects none: it is the one pattern that drives every
+	// line high.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 		const g2::Hdi08Selection selection = decode.decode(0x7f8u);
@@ -163,7 +148,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE FIVE RECORDED ENTRIES OF THE BASE MACHINE.
+	// Case group 3. The FIVE RECORDED ENTRIES of the BASE MACHINE.
 	//
 	// The same decode with four ports populated. The base broadcast at
 	// 0x11000780 drives A3 to A6 low and A7 to A10 high, which is exactly the
@@ -182,7 +167,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. AN ADDRESS OF THE EXPANDED TABLE SELECTS NOTHING ON A BASE
+	// Case group 4. An ADDRESS of the EXPANDED TABLE SELECTS NOTHING on A BASE
 	// MACHINE.
 	//
 	// The four expansion addresses drive A7 to A10, and a base machine carries
@@ -204,11 +189,11 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. IT IS A DECODE AND NOT A LOOKUP TABLE.
+	// Case group 5. It is a decode and not a lookup table.
 	//
-	// Every address here drives TWO OR MORE lines low at once and appears in
-	// no table AGENTS.md records. A nine-entry lookup could answer none of
-	// them, and the firmware's own broadcast is the same shape.
+	// Every address here drives two or more lines low at once and appears in no
+	// recorded table. A nine-entry lookup could answer none of them, and the
+	// firmware's own broadcast is the same shape.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 
@@ -221,10 +206,10 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. THE EXHAUSTIVE CASE.
+	// Case group 6. The EXHAUSTIVE CASE.
 	//
 	// All 256 patterns of A3 to A10, on both machines. The expected set is
-	// computed from the one-cold, active-low rule and NOT from any table, so a
+	// computed from the one-cold, active-low rule and not from any table, so a
 	// decode that answered any single pattern wrongly fails here.
 	{
 		const g2::Hdi08Decode expanded(g2::g_hdi08ExpandedPorts);
@@ -251,12 +236,12 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. ADDRESS BITS 2:0 ARE THE REGISTER OFFSET INSIDE THE PORT
-	// AND THEY DO NOT REACH THE SELECTS.
+	// Case group 7. Address bits 2:0 are the register offset inside the port
+	// and they do not reach the selects.
 	//
-	// The DSP56300 host port is eight bytes wide, and BRD-16's adapter routes
-	// local offsets 0 to 7. A decode that let those bits change the selected
-	// set would send one longword store to four different ports.
+	// The DSP56300 host port is eight bytes wide, so local offsets run 0 to 7.
+	// A decode that let those bits change the selected set would send one
+	// longword store to four different ports.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 
@@ -273,7 +258,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. ADDRESS BITS ABOVE A10 DO NOT REACH THE SELECTS EITHER.
+	// Case group 8. ADDRESS BITS ABOVE A10 do not REACH the SELECTS either.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 

@@ -1,41 +1,34 @@
-/* t0_run_dsp_cycles_contract.cpp -- the check of task SCH-8.
- * Design sections 13.10.3 and 26.
+/* The contract, not the bound. T0_run_dsp_cycles covers the bound; this row
+ * covers the declared signature and the two cases that fix the shape of the
+ * loop.
  *
- * THE CONTRACT, NOT THE BOUND. SCH-9 covers the bound over 1,000 quanta; this
- * row covers the declared signature and the two cases that fix the shape of
- * the loop.
- *
- * WHY THIS ADAPTER EXISTS AT ALL. dsp56k::DSP::exec is
+ * The adapter exists because dsp56k::DSP::exec is
  *   ASMJIT_FORCE_INLINE void exec() noexcept
- * -- no argument, no return value, ONE dispatch unit -- so no cycle-bounded run
- * call exists in the library. An earlier design draft asserted that DSP::exec
- * returns a uint32_t and takes a budget; a reader who trusted it would have
- * written dsp.exec(want), which does not compile.
+ * -- no argument, no return value, one dispatch unit -- so no cycle-bounded run
+ * call exists in the library.
  *
- * THE TEST IS BEFORE THE exec(), NEVER AFTER IT, and the two cases below are
+ * The test is before the exec(), never after it, and the two cases below are
  * what fix that:
  *
- *   A wantCycles of 0 EXECUTES NO exec() AT ALL. A test-after loop runs one
+ *   A wantCycles of 0 executes no exec() at all. A test-after loop runs one
  *   dispatch unit for a want of 0, which is the whole difference between the
  *   two shapes. The case reads the instruction counter, the cycle counter and
  *   the program counter, so "no exec at all" is measured three ways.
  *
- *   A wantCycles of 1 against a block that costs MORE THAN 1 executes EXACTLY
- *   ONE exec(). A loop that ran a second dispatch unit would show twice the
+ *   A wantCycles of 1 against a block that costs more than 1 executes exactly
+ *   one exec(). A loop that ran a second dispatch unit would show twice the
  *   block's instruction count.
  *
- * THE BLOCK COST IS MEASURED, NEVER HARDCODED. The fixture runs one exec()
- * and records what it cost, then holds every later assertion against that
- * figure. A hardcoded cycle count would be a second definition of the
- * library's own instruction timing, and it would fail on the day the library
- * changed one of them for a reason that has nothing to do with this adapter.
+ * The block cost is measured, never hardcoded. The fixture runs one exec() and
+ * records what it cost, then holds every later assertion against that figure. A
+ * hardcoded cycle count would be a second definition of the library's own
+ * instruction timing, and it would fail on the day the library changed one of
+ * them for an unrelated reason.
  *
- * WHERE THE DEBUG ASSERTIONS FIT. runDspCycles asserts dsp56k::g_useJIT and
- * asserts that the narrowing fits. BOTH ARE DEBUG-ONLY AND NEITHER IS THIS
- * CHECK'S PREDICATE. The default build of this tree is Release and defines
- * NDEBUG, so neither is in the translation unit; the two driven cases pass or
- * fail in any build type, and this check's verdict is a failure counter and
- * the process exit status.
+ * runDspCycles asserts dsp56k::g_useJIT and asserts that the narrowing fits.
+ * Both are debug-only and neither is this check's predicate: the default build
+ * is Release and defines NDEBUG, so neither is in the translation unit, and the
+ * two driven cases pass or fail in any build type.
  */
 
 #include "runDspCycles.h"
@@ -87,12 +80,12 @@ namespace
 		++g_logLines;
 	}
 
-	/* THE SYNTHETIC DSP. It is a real dsp56k::DSP running a scripted program,
+	/* The synthetic DSP. It is a real dsp56k::DSP running a scripted program,
 	 * which is the only thing "a synthetic DSP" can mean here: DSP is final,
 	 * exec() is neither virtual nor replaceable, and the cycle counter this
 	 * adapter reads is written by the compiled block.
 	 *
-	 * NO EsaiClock IS CONSTRUCTED. PeripheralsNop is not a Peripherals56362,
+	 * No EsaiClock is CONSTRUCTED. PeripheralsNop is not a Peripherals56362,
 	 * so nothing in this fixture starts one. */
 	struct Fixture
 	{
@@ -108,7 +101,7 @@ namespace
 		{
 			Logging::setLogFunc(&countLogLine);
 
-			/* ONE exec() MUST BE ONE BLOCK, so block linking is off. With
+			/* One exec() must be one BLOCK, so block linking is off. With
 			 * linking on, one dispatch unit can run a chain of blocks and the
 			 * "exactly one exec()" case below would measure a chain instead. */
 			dsp56k::JitConfig config = dsp.getJit().getConfig();
@@ -116,7 +109,7 @@ namespace
 			dsp.getJit().setConfig(config);
 		}
 
-		/* A LOOP, NOT A SLED. The program is `nopCount` nop instructions and a
+		/* A loop, not A sled. The program is `nopCount` nop instructions and a
 		 * jmp back to its own first word, so the program counter returns to
 		 * where it started and the same block runs for every quantum however
 		 * many quanta the check drives. A straight run of nop would walk off
@@ -167,7 +160,7 @@ namespace
 	};
 }
 
-/* ================ THE DECLARED SIGNATURE
+/* ================ the DECLARED SIGNATURE
  *
  * The argument list, the return type and the noexcept, held by the whole
  * function type. Change any one of them and this fails to compile; leave the
@@ -187,7 +180,7 @@ int main()
 	Fixture fixture;
 
 	/* A block of 12 nop instructions and the jmp that closes the loop. The
-	 * count is chosen only so that the block costs MORE THAN ONE cycle, which
+	 * count is chosen only so that the block costs MORE THAN one cycle, which
 	 * is what the want-of-1 case needs; the cost itself is measured below and
 	 * never assumed. */
 	if(!fixture.writeLoop(0x100, 12))
@@ -220,7 +213,7 @@ int main()
 		return 1;
 	}
 
-	/* ---------------- A wantCycles OF 0 EXECUTES NO exec() AT ALL.
+	/* ---------------- A wantCycles of 0 EXECUTES no exec() at all.
 	 *
 	 * This is the case that tells a test-before loop from a test-after one. A
 	 * test-after loop runs one dispatch unit before it looks, so it would move
@@ -243,7 +236,7 @@ int main()
 			"a wantCycles of 0 leaves the program counter where it was");
 	}
 
-	/* ---------------- A wantCycles OF 1 EXECUTES EXACTLY ONE exec().
+	/* ---------------- A wantCycles of 1 EXECUTES exactly one exec().
 	 *
 	 * The block costs more than 1, so one dispatch unit already satisfies the
 	 * budget and the loop must stop. A loop that ran a second unit would show

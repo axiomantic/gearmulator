@@ -1,35 +1,26 @@
-/* t0_executor.cpp -- the check of task SCH-7.
- * Design sections 13.3 and 13.10.3.
+/* Four things, which fail in different ways on purpose.
  *
- * FOUR THINGS, AND THEY FAIL IN DIFFERENT WAYS ON PURPOSE.
+ * The surface. JobFn, Job, run and isSerial are held by their fully qualified
+ * types. A renamed method, a dropped noexcept or a changed parameter list is a
+ * compile error; a declared and undefined method is a link error, because
+ * taking the address of a member function odr-uses it.
  *
- * THE SURFACE. The four declarations SCH-7 names are held by their fully
- * qualified types: JobFn, Job, run and isSerial. A renamed method, a dropped
- * noexcept or a changed parameter list is a COMPILE error; a declared and
- * undefined method is a LINK error, because taking the address of a member
- * function odr-uses it.
- *
- * THE JOB ARRAY IS EXACTLY 8 and it holds the DSP contexts only. kJobCount is
+ * The job array is exactly 8 and holds the DSP contexts only. KJobCount is
  * asserted at compile time, and the order case below drives that many jobs.
  *
- * THE SERIAL EXECUTOR RUNS THE JOBS IN ORDER ON THE CALLING THREAD. The order
+ * The serial executor runs the jobs in order on the calling thread. The order
  * half is a trace. The calling-thread half is a thread_local marker that main
  * writes and every job reads: a job that ran on a worker thread reads the
- * initial value instead, so an executor that owned a thread FAILS this case
- * rather than passing it in silence. A discarded branch of this work gave the
- * Executor its own std::thread and a submit() that threw, and both contradict
- * the bit-exactness claim this design makes at the 96 kHz Q23 integer
- * boundary. NEITHER std::thread NOR <thread> APPEARS IN THIS FILE OR IN THE
- * FILES IT CHECKS.
+ * initial value instead, so an executor that owned a thread fails this case
+ * rather than passing it in silence. Neither std::thread nor <thread> appears
+ * in this file or in the files it checks.
  *
- * RUN IS NOT RE-ENTRANT, AND THE CHECK OF THAT IS A COUNTER RATHER THAN AN
- * ASSERTION. The default build of this tree is Release and defines NDEBUG, so
- * an assert() is not in the translation unit at all and a check whose predicate
- * is "the debug build caught it" passes against a tree in which the property
- * was never written. The executor therefore carries the depth counter IN EVERY
- * BUILD TYPE and exposes it, and this case reads the exposed value. The verdict
- * is the process exit status and a failure counter, in a release build as well
- * as a debug build.
+ * run is not re-entrant, and the check of that is a counter rather than an
+ * assertion. The default build is Release and defines NDEBUG, so an assert() is
+ * not in the translation unit at all and a check whose predicate is "the debug
+ * build caught it" passes against a tree in which the property was never
+ * written. The executor therefore carries the depth counter in every build type
+ * and exposes it, and this case reads the exposed value.
  */
 
 #include "executor.h"
@@ -64,15 +55,15 @@ namespace
 		}
 	}
 
-	/* THE CALLING-THREAD WITNESS. A thread_local needs no <thread> and creates
-	 * no thread. main writes the magic value; every job reads it. A job that
+	/* The calling-thread witness. A thread_local needs no <thread> and creates
+	 * no thread. Main writes the magic value; every job reads it. A job that
 	 * ran anywhere but on the calling thread reads 0. */
 	thread_local uint32_t callingThreadMarker = 0;
 
 	constexpr uint32_t kMarker = 0xC0FFEEu;
 
 	/* The trace every job appends to. The serial executor must produce
-	 * 0, 1, 2 ... in the order the array carries. */
+	 * 0, 1, 2 ... In the order the array carries. */
 	unsigned traceLength = 0;
 	unsigned trace[64]   = {};
 
@@ -82,7 +73,7 @@ namespace
 	 * MCU run serially in the Scheduler and never enter the Executor. */
 	g2::DspContext contexts[g2::kJobCount];
 
-	/* THE POINTER RECOVERY IS THE POINT OF THE STANDARD-LAYOUT RULE. Job::ctx
+	/* The pointer recovery is the point of the standard-layout rule. Job::ctx
 	 * is a JobContext*, and the body recovers its DspContext from it with a
 	 * reinterpret_cast and nothing else. A body that recovered the wrong
 	 * object would append the wrong position and the order case would fail. */
@@ -97,7 +88,7 @@ namespace
 			trace[traceLength++] = c->position;
 	}
 
-	/* THE RE-ENTRY CASE. This job calls run() on the executor that is running
+	/* The re-entry case. This job calls run() on the executor that is running
 	 * it. The call must be refused and counted, and the inner call must
 	 * execute no job at all. */
 	g2::SerialExecutor* reentryTarget    = nullptr;
@@ -123,7 +114,7 @@ namespace
 	}
 }
 
-/* ================ THE SURFACE */
+/* ================ the SURFACE */
 
 static_assert(std::is_same_v<g2::Executor::JobFn,
 		void (*)(g2::JobContext*) noexcept>,
@@ -152,9 +143,9 @@ static constexpr void (g2::Executor::*kRun)(const g2::Executor::Job*, size_t)
 static constexpr bool (g2::Executor::*kIsSerial)() const noexcept
 	= &g2::Executor::isSerial;
 
-/* THE JOB ARRAY IS EXACTLY 8. SCH-18 rejects every other dspCount, including
- * the 4-DSP machine BRD-15 records as a real configuration, because this
- * array, SCH-19's order table and SCH-20's context count are all fixed at 8. */
+/* The job array is exactly 8. Every other dspCount is rejected, including the
+ * 4-DSP machine, which is a real configuration: this array, the order table and
+ * the context count are all fixed at 8. */
 static_assert(g2::kJobCount == 8u,
 	"The job array is exactly 8 and it holds the DSP contexts only.");
 
@@ -203,7 +194,7 @@ int main()
 		checkEqual(traceLength, g2::kJobCount,
 			"every job in the array ran exactly once");
 
-		/* THE ORDER IS THE ASSERTION. An executor that ran the array
+		/* The order is the assertion. An executor that ran the array
 		 * backwards, that skipped one, or that ran one twice produces a
 		 * different trace. */
 		for(unsigned k = 0; k < traceLength && k < g2::kJobCount; ++k)
@@ -226,7 +217,7 @@ int main()
 			"the depth counter returns to zero after the array is done");
 	}
 
-	/* ---------------- run() is NOT re-entrant, and the counter says so in a
+	/* ---------------- run() is not re-entrant, and the counter says so in a
 	 * release build.
 	 *
 	 * The inner call is refused: it runs no job and it raises the re-entry

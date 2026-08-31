@@ -1,12 +1,8 @@
-/* t0_backend_rule.cpp -- the check of task SCH-17. Design section 11.4.3.
+/* The backend rule: `Scheduler::create` succeeds only when
+ * `config.backend == Backend::Jit` and `dsp56k::g_useJIT` is true. Any other
+ * combination returns a null `Scheduler` object.
  *
- * THE RULE, IN ONE SENTENCE.
- *
- *   `Scheduler::create` succeeds only when `config.backend == Backend::Jit`
- *    AND `dsp56k::g_useJIT` is true. Any other combination returns a null
- *    `Scheduler` object.
- *
- * WHAT THIS TEST DOES.
+ * What this test does:
  *
  *   1. With backend == Backend::Jit and `g_useJIT` true,
  *      `Scheduler::create` returns a non-null object.
@@ -14,36 +10,19 @@
  *      null, regardless of `g_useJIT`.
  *
  * The second case is unconditional and runs on every build. The first is
- * CONDITIONAL ON THE BUILD: in an interpreter build the design records
- * that no Scheduler can be created at all, because `runDspCycles` cannot
- * terminate in such a build (the DSP's `m_cycles` counter is never
- * written). The test asserts the conditional case so that the assertion
- * does not pin a property the build cannot exercise.
+ * conditional on the build: in an interpreter build no Scheduler can be created
+ * at all, because `runDspCycles` cannot terminate there -- the DSP's `m_cycles`
+ * counter is never written. The test makes the first case conditional so that
+ * the assertion does not pin a property the build cannot exercise.
  *
- * WHAT THIS TEST DOES NOT DO.
+ * It does not assert "one backend for one run". `g_useJIT` is
+ * `static constexpr` at dsp.h:36 and the dispatch at dsp.h:172-178 is a plain
+ * `if`, not `if constexpr`, so the branch folds at compile time because its
+ * condition is a constant expression. A test asserting structural
+ * one-backend-per-build would pass by exercising nothing.
  *
- *   It does not look at `Status::BadBackend`. SCH-18 owns Status, and a
- *   check that asserted the Status value here would create the cycle this
- *   task is the first writer of. The null-vs-non-null distinction is what
- *   proves the rule, and it is observable without a Status type. Design
- *   section 13.10 rule 4 forbids throwing -- so the rule is observable
- *   solely through the return value.
- *
- *   It does not assert "one backend for one run". `g_useJIT` is
- *   `static constexpr` at dsp.h:36 and the dispatch at dsp.h:172-178 is a
- *   plain `if`, not `if constexpr`, so the branch folds at compile time
- *   because its condition is a constant expression. A test asserting
- *   structural one-backend-per-build would pass by exercising nothing --
- *   a green mirage of the class design section 18.7 exists to prevent.
- *
- * THE BUILD MODE IS PRINTED, IN THE FIRST LINE. The plan requires the
- * test to be observable in both configurations, and the printout makes
- * the configuration visible in the test log without a separate device.
- *
- * Counts failures, prints a one-line summary, and exits 0 on success.
- * Design section 18.5's skip discipline is the wrong tool here: this
- * test is T0 with no firmware artifact, and the rule's truth does not
- * gate on NMG2_ARTIFACTS.
+ * The build mode is printed in the first line, so the configuration is visible
+ * in the test log without a separate device.
  */
 
 #include "scheduler.h"
@@ -103,11 +82,10 @@ int main()
 
 	/* ---------------- case 2: backend == Backend::Interpreter
 	 *
-	 * UNCONDITIONAL. The semantic cross-check harness of design section
-	 * 11.4.3 drives DSP::exec directly and never constructs a Scheduler,
-	 * so the enumerator exists but is never accepted by create(). The
-	 * rule rejects it on every build, and the test asserts it on every
-	 * build. */
+	 * Unconditional. The semantic cross-check harness drives DSP::exec
+	 * directly and never constructs a Scheduler, so the enumerator exists
+	 * but is never accepted by create(). The rule rejects it on every
+	 * build, and the test asserts it on every build. */
 	{
 		g2::Scheduler::Config cfg;
 		cfg.backend = g2::Backend::Interpreter;

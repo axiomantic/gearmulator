@@ -1,29 +1,26 @@
-// Task REPO-5. Tier T0: this test runs with NMG2_ARTIFACTS unset and needs no
-// firmware artifact of any kind.
+// The artifact resolver. Tier T0: this test runs with NMG2_ARTIFACTS unset and
+// needs no firmware artifact.
 //
-// Plan section 9.2, REPO-5. Design sections 4.2 and 18.5.
+// The three properties it holds the resolver to:
 //
-// THE THREE PROPERTIES THIS TEST HOLDS THE RESOLVER TO:
-//
-//   1. With NMG2_ARTIFACTS UNSET or EMPTY, resolve() returns an empty string
-//      and writes message 1 of design section 4.2 WORD FOR WORD.
-//   2. With NMG2_ARTIFACTS set to a directory that is NOT THERE (or that
-//      names a file, not a directory), resolve() returns an empty string and
+//   1. With NMG2_ARTIFACTS unset or empty, resolve() returns an empty string
+//      and writes message 1 word for word.
+//   2. With NMG2_ARTIFACTS set to a directory that is not there, or that names
+//      a file rather than a directory, resolve() returns an empty string and
 //      writes message 2, echoing the variable's value unchanged.
-//   3. With NMG2_ARTIFACTS set to a directory that IS THERE, resolve() returns
+//   3. With NMG2_ARTIFACTS set to a directory that is there, resolve() returns
 //      the directory and clears `_why`. When the caller passes a name and the
-//      file is NOT in the directory, resolve() returns an empty string and
+//      file is not in the directory, resolve() returns an empty string and
 //      writes message 3, echoing both the name and the variable's value.
 //
-// resolve() NEVER throws. Design sections 5.3 and 13.10 give the
-// no-exceptions rule and section 4.2 restates it on this method.
+// resolve() never throws.
 //
-// The message literals below are written out in full ON PURPOSE. The Python
-// half of this task, nmg2_tools/artifacts.py in axiomantic/nmg2-tools, carries
-// the same literals and tests/test_artifacts.py asserts them the same way.
-// Comparing against a full literal in each language is what makes "word for
-// word and identically in both languages" a falsifiable claim. Deriving them
-// from the header under test would assert only that the module equals itself.
+// The message literals below are written out in full on purpose. The Python
+// half, nmg2_tools/artifacts.py in axiomantic/nmg2-tools, carries the same
+// literals and asserts them the same way. Comparing against a full literal in
+// each language is what makes "word for word in both languages" a falsifiable
+// claim; deriving them from the header under test would assert only that the
+// module equals itself.
 
 #include "../artifactResolver.h"
 
@@ -74,8 +71,8 @@ namespace
 	}
 
 	// Writes _path/_name and returns the joined path. The test fixture for
-	// message 3 needs an EXISTING directory that does NOT hold the artifact,
-	// which is the case where message 3 fires, and one that DOES hold it, which
+	// message 3 needs an EXISTING directory that does not hold the artifact,
+	// which is the case where message 3 fires, and one that does hold it, which
 	// is the success case for the name parameter.
 	std::string joinPath(const std::string& _path, const std::string& _name)
 	{
@@ -174,11 +171,11 @@ int main()
 		}
 
 		// ---------------- case 5: the variable names a real directory and the
-		// caller passes a name whose file is NOT in it (message 3)
+		// caller passes a name whose file is not in it (message 3)
 		//
 		// The Python half covers this in
 		// test_directory_without_named_artifact_returns_message_three. The
-		// message echoes the name AND the variable's value.
+		// message echoes the name and the variable's value.
 		{
 			const std::string presentDir = ".";
 			setArtifactsVariable(presentDir.c_str());
@@ -203,7 +200,7 @@ int main()
 		}
 
 		// ---------------- case 6: the variable names a real directory, the
-		// caller passes a name, and the file IS in it (success)
+		// caller passes a name, and the file is in it (success)
 		//
 		// The negative case for message 3. Without it, the resolver could
 		// always fire message 3 and every message-3 assertion above would hold.
@@ -225,7 +222,7 @@ int main()
 			std::remove("REPO-5-present.bin");
 		}
 
-		// ---------------- case 7: a real directory and NO name (success)
+		// ---------------- case 7: a real directory and no name (success)
 		//
 		// The negative case for messages 2 and 3. Without it, the resolver could
 		// always fail and every empty-result assertion above would hold.
@@ -245,8 +242,8 @@ int main()
 				"present directory, no name: a successful resolve writes no reason");
 		}
 
-		// ---------------- case 8: a real directory, a name, and the file IS
-		// there with NO NMG2_ARTIFACTS set at all is a contradiction this test
+		// ---------------- case 8: a real directory, a name, and the file is
+		// there with no NMG2_ARTIFACTS set at all is a contradiction this test
 		// does not run. The directory for case 6 was created in case 6 itself.
 
 		setArtifactsVariable(nullptr);
