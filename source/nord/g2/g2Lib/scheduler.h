@@ -319,7 +319,16 @@ namespace g2
 		 *
 		 * CallbackTimer is not part of it. It carries no emulated state, and a
 		 * state file recorded on a fast machine must load identically on a slow
-		 * one. */
+		 * one.
+		 *
+		 * THE CODEC REGIME IS NOT PART OF IT EITHER, SCH-36. A snapshot is
+		 * necessarily a PLAY-regime snapshot, and design section 15.6 restores
+		 * one INSIDE a boot whose remaining quanta must run the BOOT regime; a
+		 * regime that travelled with the state would put those quanta in the
+		 * play regime and fill the sink part-way through the boot. `stateSave`
+		 * never writes it, so `stateLoad` leaves the loading machine's own
+		 * regime standing. scheduler.cpp's state-block comment carries the
+		 * measurement and the reason exclusion was chosen over refusal. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
