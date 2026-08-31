@@ -392,10 +392,12 @@ namespace g2
 		 * g_transportQueueDepth is chosen, an ordinary tunable. A `.pch2` load
 		 * is originated whole: g2::pch2Load validates the container and then
 		 * hands the hub one frame per object with no quantum boundary in
-		 * between, so the whole patch must fit the queue at once or the load is
-		 * refused and nothing is delivered. A patch in the artifact corpus
-		 * carries 18 objects, so a depth of 16 refuses every real patch with
-		 * PCH2-SEND-REFUSED. */
+		 * between, so the whole patch must fit the queue at once. A depth below
+		 * the object count does not refuse the load cleanly: pass 2 stops at
+		 * the first frame the hub declines, and the frames already accepted are
+		 * delivered at the next boundary, so the device is left holding a
+		 * prefix. A patch in the artifact corpus carries 18 objects, so a depth
+		 * of 16 refuses every real patch with PCH2-SEND-REFUSED. */
 		constexpr size_t g_transportMaxFrameBytes = 1u + 2u + 65535u;
 		constexpr size_t g_transportQueueDepth    = 32u;
 	}

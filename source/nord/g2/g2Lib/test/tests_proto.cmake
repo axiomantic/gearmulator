@@ -6,10 +6,10 @@
 
 # ----------------- The CRC
 #
-# The test compiles ../crc16.cpp directly and links no library: the source is
-# not in G2LIB_SOURCES, so this target cannot reach it through g2Lib. The
-# checksum is free-standing arithmetic over a caller's bytes and needs nothing
-# g2Lib links.
+# Check: ctest --test-dir build --no-tests=error -R ^t0_crc16$
+#
+# The test compiles ../crc16.cpp directly and links no library: the checksum is
+# free-standing arithmetic over a caller's bytes and needs nothing g2Lib links.
 
 add_executable(t0_crc16 t0_crc16.cpp ../crc16.cpp)
 set_property(TARGET t0_crc16 PROPERTY FOLDER "G2")
@@ -20,9 +20,7 @@ set_tests_properties(t0_crc16 PROPERTIES LABELS "UnitTest")
 
 # ----------------- the internal protocol client
 #
-# The test compiles ../internalClient.cpp directly and links g2Lib for the hub.
-# transportHub.cpp is in G2LIB_SOURCES, so TransportHub arrives through the
-# library and is not compiled again here.
+# InternalClient and the hub both arrive through g2Lib.
 #
 # Every case reports through the test's own failure counter, so NDEBUG changes
 # none of them -- nothing in the source is an assert() and nothing catches an
@@ -30,8 +28,7 @@ set_tests_properties(t0_crc16 PROPERTIES LABELS "UnitTest")
 # carries in every build type.
 
 add_executable(t0_internal_client
-	${CMAKE_CURRENT_SOURCE_DIR}/t0_internal_client.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../internalClient.cpp)
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_internal_client.cpp)
 target_link_libraries(t0_internal_client PRIVATE g2Lib)
 set_property(TARGET t0_internal_client PROPERTY FOLDER "G2/test")
 
@@ -58,8 +55,6 @@ set_tests_properties(t0_internal_client PROPERTIES LABELS "UnitTest")
 
 add_executable(t0_pch2_load
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_pch2_load.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../internalClient.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../crc16.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2PatchLoad.cpp)
 target_link_libraries(t0_pch2_load PRIVATE g2Lib)
 set_property(TARGET t0_pch2_load PROPERTY FOLDER "G2/test")

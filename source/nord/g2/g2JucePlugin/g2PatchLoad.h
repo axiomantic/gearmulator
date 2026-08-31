@@ -14,9 +14,20 @@
  * payload: this module carries an object's bytes and never interprets one.
  * The firmware implements the protocol; the emulator only carries the bytes.
  *
- * A refused file originates nothing. The whole container is validated before
- * the first frame leaves, so a malformed file cannot leave the device holding
- * half a patch. That is why this module has two passes and not one.
+ * A file refused BY VALIDATION originates nothing. The whole container is
+ * checked before the first frame leaves, so a malformed file cannot leave the
+ * device holding half a patch. That is why this module has two passes and not
+ * one.
+ *
+ * SendRefused is the one refusal that does not carry that guarantee. Pass 2
+ * stops at the first frame the hub declines, and the frames already accepted
+ * stay queued and are delivered at the next quantum boundary, so a container
+ * with more objects than the hub's queue depth leaves a prefix on the device.
+ * The hub is not asked in advance because it cannot answer: the depth free
+ * inside one quantum is its queue depth minus what the previous drain still
+ * has borrowed, so a capacity check would return a number that is already
+ * stale by the last object. Pass-1 validation is what the malformed-file case
+ * needs, and it is exact.
  */
 #pragma once
 
