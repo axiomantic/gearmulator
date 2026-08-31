@@ -1,15 +1,15 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// EVERY DRIVEN WORD IS NON-ZERO, in the count and address headers and in the
+// Every driven word is non-zero, in the count and address headers and in the
 // body alike. Program memory is zero-filled, so 0x000000 is not a value that
 // distinguishes anything there.
 //
-// THE POST-COMPLETION CASE IS PINNED TO THE RECEIVE PATH AND NOT TO PROGRAM
-// MEMORY. `dsp56k::DspBoot`'s Finished state swallows a word rather than
+// The post-completion case is pinned to the receive path and not to program
+// memory. `dsp56k::DspBoot`'s Finished state swallows a word rather than
 // storing it, so no word reaches P:A+N for either side to read. The DSP's own
 // receive path is where a post-completion word does arrive.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build type is
+// No assertion in this file is a language assert(). The default build type is
 // Release, which defines NDEBUG.
 
 #include "dspSet.h"
@@ -36,7 +36,7 @@
 #include <type_traits>
 #include <vector>
 
-/* THE BRIDGE'S ADDRESS IS FIXED BY CONSTRUCTION, AND THIS IS WHAT PINS IT.
+/* THE BRIDGE's address is fixed by construction, and this is what pins it.
  * `programLanded` hands out a pointer into the bridge, so a bridge that could be
  * copied or moved would hand out an address a later relocation invalidates. The
  * runtime case below compares one address against another, which no
@@ -246,8 +246,8 @@ namespace
 
 	constexpr unsigned g_landedSlot = 5;
 
-	/* THE ADAPTER IS DECLARED BEFORE THE SET, AND THAT ORDER IS THE ONE
-	 * hdi08Bridge.h STATES AND Board KEEPS. Locals are destroyed in reverse
+	/* The adapter is declared before the set, and that order is the one
+	 * hdi08Bridge.h states and Board KEEPS. Locals are destroyed in reverse
 	 * declaration order and `~Hdi08Bridge` uninstalls through the host port it
 	 * was handed, so a set declared first would reach a destroyed port once per
 	 * slot. */
@@ -309,7 +309,7 @@ namespace
 
 	/* ---------------- group 4: a destroyed bridge leaves the port as it found it */
 
-	/* THE PORT'S OWN STATE IS THE SENTINEL, AND NOT THE DEAD BRIDGE. Reading a
+	/* THE PORT's own state is the sentinel, and not the dead bridge. Reading a
 	 * destroyed object to see whether it was called is the very fault under test,
 	 * so the assertions read only what the port and the slot hold: an uninstalled
 	 * write-transmit callback leaves the word in the port's own transmit queue,
@@ -335,7 +335,7 @@ namespace
 			checkEqualCount(transmitted.size(), 0u,
 				"a bridge that is alive leaves no word in the port's own transmit queue");
 
-			/* THE CONTROL FOR THE FLAG MIRROR IS TAKEN WHILE THE BRIDGE IS ALIVE,
+			/* The control for the flag mirror is taken while the bridge is alive,
 			 * so the assertion after its destruction is a change and not a value
 			 * that was never there. */
 			slot.hdi08().writeControlRegister(g_hostFlagMask);
@@ -370,7 +370,7 @@ namespace
 		check(slot.hdi08().hasTX(),
 			"the word the DSP transmitted after the bridge is destroyed is still on the DSP side");
 
-		/* THE EMPTY RECEIVE READ IS THE SECOND WAY BACK IN. A port that finds its
+		/* The empty receive read is the second way back in. A port that finds its
 		 * receive register empty asks for data, so the slot that answers that
 		 * question needs its own case. `HdiTXH` is the read side of the shared
 		 * byte register and is the first byte of a read sequence, which is the
@@ -420,12 +420,12 @@ namespace
 
 	/* ---------------- group 6: a destroyed set leaves every port as it found it
 	 *
-	 * THE ADAPTER OUTLIVES THE SET, AND THAT IS WHAT MAKES THE PORTS READABLE
-	 * AFTERWARDS. The same observation cannot be taken from a Board: a Board owns
+	 * The adapter outlives the set, and that is what makes the ports readable
+	 * afterwards. The same observation cannot be taken from a Board: a Board owns
 	 * both, so its ports are gone by the time its set has finished dying, and the
 	 * only reading left there is the declaration order t0_board_dsp_set asserts.
 	 *
-	 * THE CONTROL IS TAKEN ON THE LIVING SET, so each assertion after the
+	 * The control is taken on the living set, so each assertion after the
 	 * destruction is a change and not a value that was never there. */
 	void aDestroyedSetLeavesNoCallbackBehindOnAnyPort()
 	{
@@ -487,7 +487,7 @@ namespace
 
 	/* ---------------- group 7: a snapshot does not carry the bridges' state
 	 *
-	 * WHAT THE SNAPSHOT LEAVES OUT. dspSet.cpp walks the slots and nothing else,
+	 * What the snapshot leaves out. dspSet.cpp walks the slots and nothing else,
 	 * so `m_programLanded` and `dsp56k::DspBoot`'s download cursor are outside
 	 * it. A post-boot snapshot restored into a set whose bridges are fresh would
 	 * carry the right program memory behind a gate that never opens, and
@@ -519,7 +519,7 @@ namespace
 		check(landed != nullptr && *landed,
 			"the slot under test has landed its program before the refused load");
 
-		/* THE SNAPSHOT PREDATES THE PUSH, so a load that ran at all would zero the
+		/* The snapshot predates the push, so a load that ran at all would zero the
 		 * program memory the push filled. The reads below are what separates a
 		 * refusal from a load that reported one and copied anyway. */
 		check(set.stateLoad(snapshot.data()) == g2::Status::BridgesAttached,

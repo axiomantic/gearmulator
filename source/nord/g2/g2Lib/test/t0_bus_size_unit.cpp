@@ -18,9 +18,9 @@
 // by adding more callers of the same kind; it is caught by making the real one
 // drive.
 //
-// SO THIS TEST DRIVES THE REAL ONE. The Board's OWN core, reset and stepped
+// So this test drives the real one. The Board's OWN core, reset and stepped
 // through the Board's own methods, executes a real instruction of each of the
-// three widths, and the assertions are about what ARRIVED AT THE UNIT and
+// three widths, and the assertions are about what arrived at the unit and
 // what LANDED IN THE REGISTERS. A test that only checked that 1 maps to 8 would
 // be checking the conversion's arithmetic against itself; it would pass against
 // a board whose conversion is right and whose forwarding is broken, and it
@@ -372,7 +372,7 @@ int main()
 	// PART 1 -- the real core, driving the real board.
 	// ==================================================================
 	{
-		/* THE BOARD'S OWN CORE IS THE ONE THAT RUNS, reached through the handle
+		/* THE BOARD's own core is the one that runs, reached through the handle
 		 * the Board publishes. It already sits behind Board::onRead and
 		 * Board::onWrite -- they are the exact pair the Board hands to
 		 * mcf5307_create for it -- so the path under test is unchanged, and a

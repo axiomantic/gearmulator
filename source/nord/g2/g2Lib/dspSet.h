@@ -1,4 +1,4 @@
-/* dspSet.h -- the eight attached DSPs. Design 11.1, 13.10.3. */
+/* dspSet.h -- the eight attached DSPs. */
 
 #pragma once
 
@@ -25,7 +25,7 @@ namespace g2
 	public:
 		DspSet();
 
-		/* OUT OF LINE, BECAUSE THE BRIDGE IS INCOMPLETE HERE. Including
+		/* Out of line, because the bridge is incomplete here. Including
 		 * hdi08Bridge.h would put the host-side `mc68k::Hdi08` into the include
 		 * closure of every consumer of this header. */
 		~DspSet();
@@ -44,17 +44,13 @@ namespace g2
 		 * landed" and needs no agreement between the two sides. */
 		const bool* programLanded(unsigned index) const noexcept;
 
-		/* The trio BRD-21's Board and CHN-5's ChainAdapter already carry.
-		 * Those two return void from stateLoad because g2::Status did not
-		 * exist when they were written; this one returns the type.
+		/* The snapshot covers the register block of every slot as a struct
+		 * copy, plus that slot's P, X and Y memory. It does not cover the
+		 * peripherals, because the DSP library carries no save or load member
+		 * for a peripheral set, its ESAIs, its Dma, its Timers or its host
+		 * port. Restoring those needs new API in the dsp56300 fork.
 		 *
-		 * WHAT THE SNAPSHOT COVERS: the register block of every slot as a
-		 * struct copy, plus that slot's P, X and Y memory. IT DOES NOT COVER
-		 * THE PERIPHERALS, because the DSP library carries no save or load
-		 * member for a peripheral set, its ESAIs, its Dma, its Timers or its
-		 * host port. Restoring those needs new API in the dsp56300 fork.
-		 *
-		 * IT DOES NOT COVER THE BRIDGES EITHER, so stateLoad REFUSES a set
+		 * It does not cover the bridges either, so stateLoad REFUSES a set
 		 * that holds them and answers Status::BridgesAttached. A bridge carries
 		 * the landed flag the run gate borrows and a download cursor with no
 		 * accessor, and a load that restored the slots alone would leave a
@@ -79,7 +75,7 @@ namespace g2
 
 		Slot& slot(unsigned index) const noexcept;
 
-		/* THE ONE INSTALLER, AND IT IS A FRIEND RATHER THAN A PUBLIC SETTER. A
+		/* The one installer, and it is a friend rather than a public setter. A
 		 * setter would be a second way to populate this member, and a set holding
 		 * bridges nobody attached is a lifetime nobody checked. */
 		friend void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
@@ -87,12 +83,12 @@ namespace g2
 		dsp56k::DefaultMemoryValidator m_memoryValidator;
 		std::array<std::unique_ptr<Slot>, 8> m_slots;
 
-		/* DECLARED AFTER THE SLOTS SO IT IS DESTROYED BEFORE THEM. Each bridge
+		/* Declared after the slots so it is destroyed before them. Each bridge
 		 * holds a reference into its slot's peripherals. */
 		std::vector<std::unique_ptr<Hdi08Bridge>> m_bridges;
 	};
 
-	/* DECLARED AT NAMESPACE SCOPE AND DELIBERATELY NOT BEFRIENDED. The
+	/* Declared at namespace scope and deliberately not befriended. The
 	 * namespace-scope declaration is required: a friend declaration alone is
 	 * reachable only through argument-dependent lookup, so a caller naming it
 	 * qualified would not find it. Friendship is not, and this is where the

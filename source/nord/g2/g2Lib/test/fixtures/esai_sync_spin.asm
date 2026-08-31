@@ -1,33 +1,29 @@
-; esai_sync_spin.asm -- the input of task SCH-34's check.
+; esai_sync_spin.asm -- a conditional spin on the ESAI sync flag.
 ;
-; A CONDITIONAL BIT-TEST SPIN ON THE ESAI SYNC FLAG AND THE SENTINEL WRITE
-; IT FALLS THROUGH TO. The first instruction branches to ITSELF while the
+; a conditional bit-test spin on the ESAI sync flag and the sentinel write
+; it falls through to. The first instruction branches to ITSELF while the
 ; named sync bit of the ESAI status register is CLEAR, which is the shape a
 ; guest polling a frame-sync edge has. When the edge arrives the branch is
 ; not taken and a correct machine falls through to the sentinel write and
 ; the stop.
 ;
-; EVERY BRANCH TARGET HERE IS PC-RELATIVE WITH DISPLACEMENT ZERO, so each
+; Every branch target here is PC-relative with displacement zero, so each
 ; instruction branches to itself and the program is POSITION-INDEPENDENT.
 ; That is not decoration: the check loads this program at an address BELOW
 ; Vba_End ($100), and a program carrying an absolute target could not be
 ; loaded there.
 ;
-; THE SENTINEL WRITE IS THE OBSERVABLE. X:$000100 receives $AAAAAA on
+; The sentinel write is the observable. X:$000100 receives $AAAAAA on
 ; the first instruction after the spin. The test asserts the pre-state is
 ; zero and the post-run value is $AAAAAA, which is evidence the guest
 ; executed an instruction it could not reach without seeing the edge.
 ;
-; THE STOP IS A SELF-BRANCHING bra, not a nop sled. A self-branching bra
+; The stop is a self-branching bra, not a nop sled. A self-branching bra
 ; causes exec() to never return under the JIT with linkJitBlocks=false,
 ; which would hang runDspCycles. But below $100, dynamicFastInterrupts
 ; puts the JIT in FastInterruptMode::Dynamic and exec() returns after
 ; each instruction. The bra-to-self stops the guest from running past
 ; the sentinel write and into uncharted memory.
-;
-; THE LIMIT: this file is a spin and a sentinel and nothing else. It
-; exercises no peripheral beyond the ESAI status bit it polls, no
-; interrupt and no audio path, and a run of it says nothing about either.
 
 ; ---------------- the transmit-side spin. Branch back to this instruction
 ; while bit 13 (M_TFS) of x:<<$FFFFB3 (M_SAISR) is clear.

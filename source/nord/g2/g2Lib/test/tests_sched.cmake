@@ -271,10 +271,10 @@ set_property(TARGET t0_dsp_job_order PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_job_order COMMAND t0_dsp_job_order)
 
-# ---------------- SCH-33 - t0_dsp_run_gate
+# ---------------- t0_dsp_run_gate
 #
-# An ordinary executable. Unlike t0_dsp_job_order above, the context here
-# carries a live DSP running a scripted loop, so this check needs a JIT backend.
+# The context here carries a live DSP running a scripted loop, so this check
+# needs a JIT backend.
 
 add_executable(t0_dsp_run_gate
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_dsp_run_gate.cpp)
@@ -283,17 +283,12 @@ set_property(TARGET t0_dsp_run_gate PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_dsp_run_gate COMMAND t0_dsp_run_gate)
 
-# ---------------- SCH-32 - t0_status_contract
+# ---------------- t0_status_contract
 #
-# An ordinary executable. The compile-time half of the contract -- the scoping,
-# the non-conversion to int and the fixed underlying type -- is held by
-# static_asserts, so a violation there is a BUILD failure and this target is
-# what carries it. The run-time half -- the zero value, the roster against
-# Status::Count and the distinguishable failures -- reports through the test's
-# own failure counter, because the default build type is Release and Release
-# defines NDEBUG.
+# The compile-time half of the contract is held by static_asserts, so a
+# violation there is a BUILD failure and this target is what carries it.
 #
-# It does NOT link g2Lib. status.h is a header with no compiled part and the
+# It does not link g2Lib. status.h is a header with no compiled part and the
 # test reaches it through the include directory alone, so linking the library
 # would make this check wait on every other source in it without buying the
 # check anything.
@@ -305,29 +300,13 @@ set_property(TARGET t0_status_contract PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_status_contract COMMAND t0_status_contract)
 
-# ---------------- SCH-18 - t0_construction_rejection
+# ---------------- t0_construction_rejection
 #
-# An ordinary executable. Every rejectable value arrives through
-# Scheduler::Config, so the check drives one Config for each row of the plan's
-# rejection table and asserts BOTH halves of the row: a null return AND the
-# exact g2::Status. It links g2Lib because the factory now lives in
-# scheduler.cpp, and because the check constructs a real Board and the serial
-# Executor to satisfy the widened signature.
-#
-# NDEBUG CHANGES NO CASE IN IT, and that is a property of how the check is
-# written rather than one this registration exercises. Nothing in it is an
-# assert() and nothing in it catches an exception, so the status out-param is the
-# whole observable in either build type.
-#
-# WHAT THIS REGISTRATION DOES NOT COVER: the generator here is single-config and
-# the tree is configured Debug, so this add_test names one build type and can
-# name no other. A second tree configured -DCMAKE_BUILD_TYPE=Release, or a
-# multi-config generator, running this same registration is what would cover the
-# release half. This file configures no such tree.
-#
-# The Backend::Interpreter row is unconditional; the success cases are
-# conditional on dsp56k::g_useJIT, for the reason t0_backend_rule already
-# records above.
+# Nothing in the check is an assert() and nothing in it catches an exception, so
+# the status out-param is the whole observable in either build type. The
+# generator here is single-config and the tree is configured Debug, so this
+# add_test names one build type and can name no other; the release half needs a
+# second tree, and this file configures none.
 
 add_executable(t0_construction_rejection
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_construction_rejection.cpp)
@@ -336,18 +315,10 @@ set_property(TARGET t0_construction_rejection PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_construction_rejection COMMAND t0_construction_rejection)
 
-# ---------------- SCH-19 - t0_order
+# ---------------- t0_order
 #
-# An ordinary executable. It links g2Lib because the whole check drives a real
-# Board, a real DSP set and the real ChainAdapter through Scheduler::runFrames;
-# the check supplies only the two objects the factory already takes by
-# injection -- an Executor and, through Config::trace, a TraceSink.
-#
-# NDEBUG CHANGES NO CASE IN IT. Nothing in it is an assert() and nothing in it
-# catches an exception, so the failure counter is the whole observable in either
-# build type. WHAT THIS REGISTRATION DOES NOT COVER: the generator here is
-# single-config and the tree is configured Debug, so this add_test names one
-# build type and can name no other.
+# Nothing in the check is an assert() and nothing in it catches an exception, so
+# the failure counter is the whole observable in either build type.
 
 add_executable(t0_order ${CMAKE_CURRENT_SOURCE_DIR}/t0_order.cpp)
 target_link_libraries(t0_order PRIVATE g2Lib)
@@ -355,19 +326,17 @@ set_property(TARGET t0_order PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_order COMMAND t0_order)
 
-# ---------------- SCH-34 - t0_esai_slot_phase
+# ---------------- t0_esai_slot_phase
 #
-# An ordinary executable. The path of the committed fixture is passed on the
-# command line, the same way SCH-14's t0_block_table_harness passes
-# synthetic_block_program.asm. The test reads the path from argv[1] and
-# assembles the file at run time through dsp56k::Assembler.
+# The path of the committed fixture is passed on the command line; the test
+# reads it from argv[1] and assembles the file at run time.
 #
-# THE TEST MUST RUN UNDER THE JIT. g_useJIT is read at run time and the
-# test fails loudly rather than skip on a non-JIT build. The fixture spin
-# sits below Vba_End ($100) so dynamicFastInterrupts (set in DspSet::Slot::Slot
-# by DSP-19's production code) puts the JIT in FastInterruptMode::Dynamic and
-# exec() returns after each instruction. The test uses DspSet rather than
-# PeripheralsNop because dynamicFastInterrupts is set in DspSet::Slot::Slot.
+# The test must run under the JIT: g_useJIT is read at run time and the test
+# fails loudly rather than skip on a non-JIT build. The fixture spin sits below
+# Vba_End ($100) so dynamicFastInterrupts puts the JIT in
+# FastInterruptMode::Dynamic and exec() returns after each instruction. It uses
+# DspSet rather than PeripheralsNop because dynamicFastInterrupts is set in
+# DspSet::Slot::Slot.
 
 add_executable(t0_esai_slot_phase
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_slot_phase.cpp)
@@ -378,13 +347,10 @@ add_test(NAME t0_esai_slot_phase COMMAND t0_esai_slot_phase
 	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/esai_sync_spin.asm)
 set_tests_properties(t0_esai_slot_phase PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-35 - t0_esai_idle_core
+# ---------------- t0_esai_idle_core
 #
-# An ordinary executable over a fixture-free source: the discriminating case's
-# guest is the reset state itself and the companion case enables ports through
-# the public control-register writes, so no .asm is committed. The program is
-# assembled in-test and sits below Vba_End for the same reason
-# t0_esai_slot_phase's does.
+# No .asm is committed: the program is assembled in-test and sits below Vba_End
+# for the same reason t0_esai_slot_phase's does.
 
 add_executable(t0_esai_idle_core
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_idle_core.cpp)

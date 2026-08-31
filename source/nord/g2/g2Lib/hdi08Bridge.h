@@ -1,12 +1,12 @@
 // The host-port callback bridge, from `mc68k::Hdi08` to `dsp56k::HDI08`.
 //
-// THE INIT CALLBACK SLOT IS DELIBERATELY LEFT ALONE. `setInitHdi08Callback`
-// holds one std::function and ASSIGNS it, so a callback installed here would
+// The init callback slot is deliberately left alone. `setInitHdi08Callback`
+// holds one std::function and assigns it, so a callback installed here would
 // silently remove the ICR INIT clear `Hdi08Adapter` installs and return a
 // polling host to its spin. A port answers its own init request; the DSP side
 // needs nothing at init.
 //
-// THE STRUCTURE OF `n2xLib/n2xdsp.cpp` TRANSFERS AND ITS THREADING DOES NOT.
+// The structure of `n2xLib/n2xdsp.cpp` transfers and its threading does not.
 // That model runs each DSP on its own thread and blocks waiting for it. The G2
 // drives the MCU, the DSPs and the panel from ONE thread, so a blocking wait
 // there is a deadlock; the bounded per-quantum word count replaces it.
@@ -36,14 +36,14 @@ namespace g2
 	public:
 		Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp);
 
-		/* THE BRIDGE PLANTED THE CALLBACKS, SO THE BRIDGE REMOVES THEM. Both
+		/* The bridge planted the callbacks, so the bridge removes them. Both
 		 * ports outlive it -- the adapter's by the ownership rule below, the
 		 * DSP's because the set destroys its bridges before its slots -- and a
 		 * port left holding a closure over a destroyed bridge calls it on the
 		 * next word with nothing to report the fault. */
 		~Hdi08Bridge();
 
-		/* NEITHER COPYABLE NOR MOVABLE. The callbacks installed on the host port
+		/* Neither copyable nor movable. The callbacks installed on the host port
 		 * capture `this`, so a copy or a move would leave the port driving the
 		 * pending backlog of an object the caller no longer holds. */
 		Hdi08Bridge(const Hdi08Bridge&) = delete;
@@ -51,7 +51,7 @@ namespace g2
 		Hdi08Bridge& operator=(const Hdi08Bridge&) = delete;
 		Hdi08Bridge& operator=(Hdi08Bridge&&) = delete;
 
-		/* BORROWED AND NOT COPIED. The scheduler's run gate holds a `const bool*`
+		/* Borrowed and not copied. The scheduler's run gate holds a `const bool*`
 		 * for the whole run, so the flag has to be an object with an address and
 		 * not a predicate's return value. */
 		const bool* programLanded() const noexcept { return &m_programLanded; }
@@ -66,13 +66,13 @@ namespace g2
 		mc68k::Hdi08&  m_host;
 		dsp56k::HDI08& m_dsp;
 
-		/* THE CORE IS HELD AND NOT ONLY FORWARDED. A host command arrives as a
+		/* The core is held and not only forwarded. A host command arrives as a
 		 * vector for the core's own interrupt queue, and `dsp56k::DspBoot`
 		 * keeps its `DSP&` private with no accessor, so the constructor's
 		 * reference has to be kept here or the bridge has no route back. */
 		dsp56k::DSP& m_core;
 
-		/* THE BOOT CONSUMER IS THE LIBRARY'S AND NOT `g2::Hdi08Bootstrap`. This
+		/* The boot consumer is the library's and not `g2::Hdi08Bootstrap`. This
 		 * one primes the core -- the counter register, the address register, the
 		 * condition codes and the program counter -- and notifies the compiler of
 		 * every program-memory write. The G2 model does none of that, so a slot
@@ -88,22 +88,22 @@ namespace g2
 
 	// One bridge per slot, host port i to DSP i. The set takes ownership.
 	//
-	// THE ADAPTER HAS TO OUTLIVE THE SET, and that direction is the destructor's
+	// The adapter has to outlive the set, and that direction is the destructor's
 	// and not the callbacks'. `~Hdi08Bridge` uninstalls through the port it was
 	// handed, so a set outliving its adapter dereferences a dead port.
 	//
-	// A SECOND ATTACH ON ONE SET IS REFUSED. The run gate borrows the pointer
+	// A second attach on one set is refused. The run gate borrows the pointer
 	// `DspSet::programLanded` answers for the whole run, and replacing the
 	// bridges would leave that pointer aimed at a destroyed one.
 	//
-	// A BRIDGED PORT FEEDS ITS BOOT CONSUMER UNTIL A PROGRAM HAS LANDED, AND
-	// SAYS NOTHING WHILE IT DOES. The first words a port takes are a count, an
+	// A bridged port feeds its boot consumer until a program has landed, and
+	// says nothing while it does. The first words a port takes are a count, an
 	// address and that many body words; they reach program memory and neither
 	// `dsp56k::HDI08` nor any return value, so a driver that skips the handshake
 	// has its word absorbed as boot input with nothing to read afterwards. No
 	// check here can refuse it: the mistaken word and the firmware's own first
 	// word are the same word on the same wire. `DspSet::programLanded` is the
-	// report that the handshake completed, and SCH-33's run gate is what keeps a
-	// slot that never completed one from executing.
+	// report that the handshake completed, and the run gate is what keeps a slot
+	// that never completed one from executing.
 	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set);
 }

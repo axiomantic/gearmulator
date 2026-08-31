@@ -91,20 +91,17 @@ namespace g2
 		 * so a job cannot observe another job's state. */
 		uint64_t   frameIndex;
 
-		/* Whether this slot's program has landed. BORROWED, and a POINTER
+		/* Whether this slot's program has landed. Borrowed, and a pointer
 		 * rather than a bool by value: the producer sets its own flag once the
 		 * firmware download completes, and a copy taken at construction could
 		 * never see that.
 		 *
-		 * NULL MEANS NOT LANDED. The job body reads it as the gate on step 2,
+		 * NULL means NOT landed. The job body reads it as the gate on step 2,
 		 * and the direction is chosen so that an unwired gate stops the slot
 		 * rather than running one whose program memory holds nothing but
-		 * no-operations.
-		 *
-		 * THE INITIALIZER IS WHAT MAKES THAT DIRECTION STRUCTURAL RATHER THAN
-		 * CONVENTIONAL. Without it a context declared without braces holds an
-		 * indeterminate pointer, and the gate opens on whatever the storage
-		 * carried. */
+		 * no-operations. Without the initializer a context declared without
+		 * braces holds an indeterminate pointer, and the gate opens on whatever
+		 * the storage carried. */
 		const bool* programLanded = nullptr;  /* borrowed; NULL means NOT landed */
 
 		/* Design section 12.3's D, from G2_SECOND_BUS_FRAME_DIVIDER. Fixed at

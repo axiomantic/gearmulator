@@ -81,22 +81,21 @@ namespace
 	// Logging::g_logToConsole. The hook this filter installs is the emulator's own
 	// Logging::setLogFunc, so NOTHING in the vendored tree is patched to get here.
 	//
-	// THE LIMIT, AND IT IS THE WHOLE POINT OF THIS BLOCK. The underruns are REAL
-	// and they are EXPECTED in the boot regime: nothing drains the ESAIs until the
-	// codec queues arrive with task SCH-22, so every frame the Scheduler turns
-	// latches empty slots. This filter hides the REPETITION of that condition and
-	// nothing else -- it does not stop the underruns, and a green quiet run is NOT
-	// evidence that the ESAIs are being drained. Once SCH-22 lands, a run that
-	// still reports them is reporting a defect, and the kept lines below are what
-	// makes that visible without re-reading a suppressed log.
+	// The underruns are REAL and they are EXPECTED in the boot regime: nothing
+	// drains the ESAIs until the codec queues arrive, so every frame the Scheduler
+	// turns latches empty slots. This filter hides the REPETITION of that condition
+	// and nothing else -- it does not stop the underruns, and a green quiet run is
+	// NOT evidence that the ESAIs are being drained. Once the queues land, a run
+	// that still reports them is reporting a defect, and the kept lines below are
+	// what makes that visible without re-reading a suppressed log.
 	//
-	// EVERY OTHER LINE IS FORWARDED UNCHANGED, including any underrun line the
+	// Every other line is forwarded unchanged, including any underrun line the
 	// library ever emits with different wording. The match is one message text.
 	// mc68k keeps its own sink and its own stream -- mc68k::logToConsole writes to
 	// stderr and this filter never sees it -- so the core's diagnostics are
 	// untouched here by construction rather than by intent.
 	//
-	// TO TURN IT OFF: set G2_LOG_ESAI_UNDERRUN in the environment. With it set this
+	// To turn it off: set G2_LOG_ESAI_UNDERRUN in the environment. With it set this
 	// file installs no log function at all, and the run's output is byte for byte
 	// what the library produces on its own.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
@@ -535,8 +534,8 @@ namespace
 	// whole boot fits in g_handshakeIterations iterations.
 	constexpr uint32_t g_cyclesPerIteration = 4096u;
 
-	/* ONE SCHEDULER FRAME PER ITERATION, ALONGSIDE THE ADVANCE ABOVE RATHER THAN
-	 * INSTEAD OF IT, BECAUSE THE TWO DRIVE DIFFERENT CORES. Scheduler::runFrames
+	/* One scheduler frame per iteration, alongside the advance above rather than
+	 * Instead of it, because the two drive different cores. Scheduler::runFrames
 	 * runs Board::runMcu, which advances the core the BOARD constructs and which
 	 * nothing resets; the firmware runs on the core this file creates and resets
 	 * to the entry point, and the file header says why that second core has to
@@ -589,7 +588,7 @@ namespace
 		std::vector<uint64_t> dspCycles;
 	};
 
-	// WRITTEN OUT RATHER THAN READ FROM THE OBJECT UNDER TEST. DspSet holds a
+	// Written out rather than read from the object under test. DspSet holds a
 	// fixed array and dspCount() returns its size, so a comparison against that
 	// same accessor would agree with itself whatever the array became.
 	constexpr unsigned g_expectedDspCount = 8u;
@@ -693,12 +692,12 @@ namespace
 
 		mcf5307_reset(mcu, g_entrySp, g_entryPc);
 
-		/* THE SCHEDULER, TASK INT-3. It is declared AFTER the Board so that it is
+		/* The scheduler is declared AFTER the Board so that it is
 		 * destroyed BEFORE it: it borrows the Board's DSP set, and it installs
 		 * chain callbacks into ESAIs the Board owns. The Executor is declared
 		 * before the Scheduler for the same reason.
 		 *
-		 * A NULL RETURN IS THE ONE REJECTION THAT CARRIES A REASON, so the status
+		 * A NULL return is the one rejection that carries a reason, so the status
 		 * is reported here and the run loop is not entered. Every Config default
 		 * is a legal value and the factory is the single rejection point, so this
 		 * is the only place a reason exists to be printed. */
@@ -934,7 +933,7 @@ namespace
 
 int main()
 {
-	// BEFORE ANYTHING RUNS, so that no emitter escapes the filter by being
+	// Before anything runs, so that no emitter escapes the filter by being
 	// constructed early. See its definition for what it hides and how to stop it.
 	installLogFilter();
 
@@ -1059,15 +1058,15 @@ int main()
 		      "execution entered the banner function 0x3001B7FC AND the run ended at "
 		      "neither hard halt (0x3001BB4C flash gate, 0x3001B86C model byte)");
 
-		// --------------------------------------------- task INT-3, the scheduler drive
+		// ------------------------------------------------------- the scheduler drive
 		//
-		// THE CARDINALITY IS ASSERTED FIRST AND IT IS NOT REDUNDANT. The cycle
+		// The cardinality is asserted first and it is not redundant. The cycle
 		// property below is quantified over the count, and a property over an
 		// empty set is true without discriminating anything, so the count is
 		// held to a number written here rather than read from the object the
 		// loop bound already came from.
 		//
-		// WHAT THESE TWO DO NOT ESTABLISH. Not that any DSP ran the program it
+		// What these two do not establish. Not that any DSP ran the program it
 		// was given, not that the firmware received the word it polls for, and
 		// not that the boot left the loop at 0x300505d4..0x300505e0. A counter
 		// above zero says the scheduler reached the DSP phase and says nothing

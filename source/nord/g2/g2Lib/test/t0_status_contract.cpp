@@ -5,7 +5,7 @@
  * the contract: the scoping, the zero value, the roster and the
  * distinguishable failures.
  *
- * NO CASE HERE IS A LANGUAGE assert(). The default build type is Release and
+ * No case here is a language assert(). The default build type is Release and
  * Release defines NDEBUG, so an assert() would compile away and this check
  * would pass having checked nothing. Every run-time case reports through the
  * counter below; every compile-time case is a static_assert, which fires in

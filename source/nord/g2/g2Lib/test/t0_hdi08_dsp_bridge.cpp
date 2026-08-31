@@ -1,15 +1,15 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// THE HOST-SIDE RECEIVE ASSERTIONS READ `isr() & Rxdf` AND NEVER "the ISR is
+// The host-side receive assertions read `isr() & Rxdf` AND NEVER "the ISR is
 // non-zero". `mc68k::Hdi08::isr()` ORs `Txde` into every read it answers and
 // the adapter's init callback adds `Trdy` beside it, so a non-zero assertion
 // is satisfied by a port with nothing behind it.
 //
-// EVERY DRIVEN WORD IS NON-ZERO, IN BOTH DIRECTIONS. A driven 0x000000
+// Every driven word is non-zero, in both directions. A driven 0x000000
 // compares zero against a default-zero read and passes whether the word
 // crossed or not.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build type is
+// No assertion in this file is a language assert(). The default build type is
 // Release, which defines NDEBUG.
 
 #include "dspSet.h"
@@ -129,7 +129,7 @@ namespace
 		return _dsp.rxData()[_index];
 	}
 
-	/* A BRIDGED PORT FEEDS ITS BOOT CONSUMER UNTIL A PROGRAM HAS LANDED, so the
+	/* A bridged port feeds its boot consumer until a program has landed, so the
 	 * runtime wire is not reachable before that. The load driven here is the
 	 * shortest one the protocol admits. */
 	constexpr TWord g_bootAddress = 0x000300u;
@@ -151,8 +151,8 @@ namespace
 		g2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.dsp, slot.hdi08());
 		driveBootstrap(adapter.port(g_bridgedPort));
 
-		// THE FAN-OUT CASE RUNS FIRST SO ITS EXPECTED RING SIZE IS ZERO RATHER
-		// THAN A DELTA. A bridge that fans every host word to every DSP passes
+		// The fan-out case runs first so its expected ring size is zero rather
+		// than a delta. A bridge that fans every host word to every DSP passes
 		// every other case in this file.
 		hostWriteWord(adapter.port(g_unbridgedPort), 0x0f00a5u);
 		check(!slot.hdi08().hasRXData(),
@@ -177,8 +177,8 @@ namespace
 		checkEqualHex(hostReadWord(adapter.port(g_bridgedPort)), 0x135791u,
 			"the host read returns the DSP's word unchanged");
 
-		// A SECOND DSP WORD ARRIVES WHILE THE HOST RECEIVE REGISTER IS STILL
-		// FULL, so it can only reach the host through the receive-empty hook.
+		// A second DSP word arrives while the host receive register is still
+		// full, so it can only reach the host through the receive-empty hook.
 		slot.hdi08().writeTX(0x2468acu);
 		slot.hdi08().writeTX(0x0c0ffeu);
 		checkEqualHex(hostReadWord(adapter.port(g_bridgedPort)), 0x2468acu,
@@ -277,8 +277,8 @@ namespace
 		return 0x0a0000u | ((_slot + 1u) * 0x0101u);
 	}
 
-	/* THE ADAPTER IS DECLARED BEFORE THE SET, AND THAT ORDER IS THE ONE
-	 * hdi08Bridge.h STATES AND Board KEEPS. Locals are destroyed in reverse
+	/* The adapter is declared before the set, and that order is the one
+	 * hdi08Bridge.h states and Board KEEPS. Locals are destroyed in reverse
 	 * declaration order and `~Hdi08Bridge` uninstalls through the host port it
 	 * was handed, so a set declared first would reach a destroyed port once per
 	 * slot. */
@@ -289,7 +289,7 @@ namespace
 
 		g2::attachHdi08Bridges(adapter, set);
 
-		/* THE COUNT IS READ BACK THROUGH THE SET, WHICH OWNS THE BRIDGES. The
+		/* The count is read back through the set, which owns the bridges. The
 		 * per-slot flag is the only handle the set publishes on one, so a slot
 		 * that answers it is a slot that got a bridge. */
 		for(unsigned i = 0; i < set.dspCount(); ++i)

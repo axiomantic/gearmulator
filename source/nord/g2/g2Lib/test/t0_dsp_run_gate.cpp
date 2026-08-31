@@ -1,25 +1,25 @@
-/* t0_dsp_run_gate.cpp -- the check of task SCH-33. Design 13.10.3, 13.4.6.
+/* t0_dsp_run_gate.cpp -- the DSP job's run gate.
  *
- * THE GATE FAILS CLOSED. A context whose programLanded pointer is NULL is a
+ * The gate fails closed. A context whose programLanded pointer is NULL is a
  * slot whose program has NOT landed, so an unwired gate stops the machine. The
  * alternative -- read NULL as "landed" and run -- is refused because program
  * memory is zero-filled and 0x000000 is a no-operation on this core: a slot
  * released with an empty program walks that memory, faults nowhere and writes
  * no log line.
  *
- * WHY THE FIXTURE RUNS A REAL PROGRAM ON A REAL DSP: a cycle counter that
+ * Why the fixture runs a real program on a real DSP: a cycle counter that
  * stands still is evidence only from a fixture that could have moved it. So
  * the fixture writes a loop into program memory and drives one context, with a
  * non-zero want, through both gate states.
  *
- * A BAND AND NEVER AN EQUALITY: runDspCycles tests the counter BEFORE each
+ * A band and never an equality: runDspCycles tests the counter BEFORE each
  * exec(), so the last dispatch unit carries it past the want. The upper half
  * of the band is this fixture's own measured dispatch unit, taken from the
  * fixture for the reason t0_run_dsp_cycles states: the shipped configuration
  * leaves maxInstructionsPerBlock uncapped, so no bound read from the build has
  * a threshold.
  *
- * THE JOB IS ENTERED THROUGH THE JobContext* RECOVERY THE EXECUTOR USES, and
+ * The job is entered through the JobContext* recovery the Executor uses, and
  * not through a private helper, so the path exercised is the one the Executor
  * reaches.
  */
@@ -46,12 +46,11 @@
 
 namespace g2
 {
-	/* SCH-33's Files: line names dspJob.cpp and this test and no header, so the
-	 * declaration is forward-declared here, exactly as SCH-11's own check does. */
+	/* No header declares the job body, so it is forward-declared here. */
 	void dspJob(JobContext*) noexcept;
 }
 
-/* THE MEMBER'S DECLARED TYPE, PINNED IN THIS TASK'S OWN FILE. A borrowed
+/* THE MEMBER's declared type, pinned in this task's own file. A borrowed
  * pointer is what makes the gate readable without the context owning the flag;
  * a bool by value would be a copy that no producer could ever update. */
 static_assert(std::is_same_v<decltype(g2::DspContext::programLanded),
@@ -135,7 +134,7 @@ namespace
 		{
 			Logging::setLogFunc(&countLogLine);
 
-			/* ONE exec() MUST BE ONE BLOCK, or the measured dispatch unit below
+			/* ONE exec() must be one block, or the measured dispatch unit below
 			 * is the cost of a chain of them and the band's upper half is not
 			 * the bound it claims to be. */
 			dsp56k::JitConfig config = dsp.getJit().getConfig();
@@ -197,7 +196,7 @@ namespace
 			return true;
 		}
 
-		/* A LOOP, NOT A SLED, so a quantum of any length stays inside the
+		/* A LOOP, not a sled, so a quantum of any length stays inside the
 		 * written region. */
 		bool writeLoop(const dsp56k::TWord begin)
 		{
@@ -358,7 +357,7 @@ int main()
 		const uint64_t maxDispatchCost =
 			f.measureDispatchUnit(kProgramStart);
 
-		/* THE GUARD READS THE MEASUREMENT AND NOT THE FAILURE COUNTER. A
+		/* The guard reads the measurement and not the failure counter. A
 		 * counter read here would abandon this case whenever case 1 failed,
 		 * which is exactly the run in which a reader needs both. */
 		if(maxDispatchCost == 0)

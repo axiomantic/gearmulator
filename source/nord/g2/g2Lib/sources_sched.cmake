@@ -36,11 +36,6 @@ list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.h)
 
-# SCH-17 and SCH-18. scheduler.h declares the Backend enum, Scheduler::Config
-# and the create() factory; scheduler.cpp defines the factory and holds the
-# construction rejections. SCH-18 opens the translation unit rather than
-# SCH-19, because section 7.4.2 gives a path to the first writer in the Depends
-# chain and SCH-19 is not inside SCH-18's closure.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h
 	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.cpp)

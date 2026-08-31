@@ -350,7 +350,7 @@ namespace g2
 
 		const uint32_t cycles = mcf5307_exec(m_mcu, wantCycles);
 
-		/* THE FAULT BIT IS TAKEN FROM THE CORE RATHER THAN DECIDED HERE. It is
+		/* The fault bit is taken from the core rather than decided here. It is
 		 * read back on the same call that advanced the core, so the answer
 		 * faulted() gives cannot drift from the machine it describes. */
 		m_faulted = mcf5307_faulted(m_mcu) != 0;

@@ -1,31 +1,31 @@
-/* t0_chain_data_flow.cpp -- the check of task DSP-8. Design 13.10.2, 13.10.3.
+/* t0_chain_data_flow.cpp -- the chain carries a frame.
  *
  * A frame injected at slot i's AUDIO ESAI arrives at slot i + 1's AUDIO ESAI,
  * for every i, and slot i + 1's SECOND-BUS ESAI receives nothing from that
  * injection.
  *
- * WHY THE INJECTION GOES INTO TRANSMIT REGISTER 0 RATHER THAN ANY OTHER. The
+ * Why the injection goes into transmit register 0 rather than any other. The
  * audio transmit wrapper converts from register index 0 and the second-bus one
  * from index 2 (frame.h's register table), while both receive wrappers read
  * index 0. The transmit side is therefore the only one that discriminates
  * between the two buses.
  *
- * WHY THE CHAIN IS STEPPED hopFrames TIMES BETWEEN INJECTION AND READ-BACK. A
+ * Why the chain is stepped hopFrames times between injection and read-back. A
  * mailbox is a ring of hopFrames + 1 frames whose write cell is the head and
  * whose read cell is one past it, and advance() copies the head forward before
  * stepping it (mailbox.cpp). A value written at head h occupies h .. h + k
  * after k steps while read() sits at h + k + 1, so the two first coincide at
- * k == hopFrames. THE HOP DEPTH IS VARIED rather than fixed, so the step count
+ * k == hopFrames. The hop depth is varied rather than fixed, so the step count
  * is taken from the adapter and not from a literal.
  *
- * WHY EVERY PORT IS PROGRAMMED BEFORE ANY TRAFFIC, AND WHY EVERY FRAME CALL'S
- * RETURN VALUE IS READ. Esai::readRX answers 0 for a receiver whose RCR bit is
+ * Why every port is programmed before any traffic, and why every frame call's
+ * return value is read. Esai::readRX answers 0 for a receiver whose RCR bit is
  * clear (esai.cpp), transmitDspFrame answers 0 with no enabled transmitter and
  * receiveDspFrame answers 0 with no enabled receiver
  * (esaiFrame.cpp). Those returns are the observable that separates a port that
  * ran from one that was never enabled.
  *
- * NO DSP CORE RUNS AND NO PROGRAM IS LANDED. transmitDspFrame and
+ * No DSP core runs and no program is landed. transmitDspFrame and
  * receiveDspFrame take an Esai& and drive execTX and execRX directly;
  * Peripherals56311::exec never advances an ESAI.
  */
@@ -66,8 +66,8 @@ namespace
 		++failures;
 	}
 
-	/* THE CLOCK CONTROL REGISTERS ARE PROGRAMMED FOR A ONE-SLOT FRAME, WHICH IS
-	 * WHAT LETS readRX(0) REPORT SLOT 0. receiveDspFrame issues
+	/* The clock control registers are programmed for a one-slot frame, which is
+	 * what lets readRX(0) REPORT SLOT 0. receiveDspFrame issues
 	 * getRxWordCount() + 1 calls to execRX and each latches its own slot into
 	 * the read registers, so a wider frame leaves the last slot there while the
 	 * injected sample sits in slot 0. */
@@ -89,7 +89,7 @@ int main()
 	static const unsigned kPositions = 8u;
 	static const unsigned kSecondBusFrameDivider = 4u;
 
-	/* THE ADAPTERS OUTLIVE THE SET BECAUSE THEY ARE DECLARED BEFORE IT. Every
+	/* The adapters outlive the set because they are declared before it. Every
 	 * callback installed on the set's ESAIs borrows its adapter, and
 	 * chainAdapter.h states that lifetime as the adapter's own contract. */
 	g2::ChainAdapter adapters[] =
@@ -109,7 +109,7 @@ int main()
 
 		g2::attachChainCallbacks(adapter, set);
 
-		/* AFTER THE INSTALL, NEVER BEFORE. Enabling a transmitter drives one
+		/* After the install, NEVER BEFORE. Enabling a transmitter drives one
 		 * execTX out of writeTransmitControlRegister, and the callback that
 		 * fires is whichever one is installed at that instant. */
 		for(unsigned i = 0; i < kPositions; ++i)
@@ -131,9 +131,9 @@ int main()
 				"the injected sample is non-zero (a zero compares equal against "
 				"a default-zero read whether it crossed or not)", round, i);
 
-			/* THE WRITTEN FLAG IS THE ONLY READING HERE THAT SEPARATES AN
-			 * ATTACHED POSITION FROM AN UNATTACHED ONE, AND IT IS READ THROUGH
-			 * THE ADAPTER THE INSTALLER WAS HANDED. A transmit wrapper whose
+			/* The written flag is the only reading here that separates an
+			 * attached position from an unattached one, and it is read through
+			 * the adapter the installer was handed. A transmit wrapper whose
 			 * position holds no borrowed Esai pointer reads no M_TUE bit and
 			 * pins the flag to zero, yet still performs the mailbox write -- so
 			 * every arrival assertion below stays green while the ESAI attach is

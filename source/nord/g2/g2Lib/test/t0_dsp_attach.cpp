@@ -1,17 +1,18 @@
-/* t0_dsp_attach.cpp -- the check of task DSP-7. Design 11.1, 13.10.3.
+/* t0_dsp_attach.cpp -- eight DSPs attached face by face.
  *
- * EVERY WRITE THAT TESTS AN ATTACHMENT GOES THROUGH THE ATTACHED POINTER,
+ * Every write that tests an attachment goes through the attached pointer,
  * never through the DspSet's own peripheral accessor. A write issued through
  * DspSet::peripherals(i).ySpace() reaches the Peripherals56311 whatever the
- * DSP was attached to, so it would assert DSP-1's decode a second time and
- * say nothing about this task. Going through DSP::getPeriph(MemArea_Y) is
+ * DSP was attached to, so it would assert the peripheral decode a second
+ * time and say nothing about the attach. Going through
+ * DSP::getPeriph(MemArea_Y) is
  * what a PeripheralsNop in that slot, or the X face attached twice, fails.
  *
- * THE READ-BACKS GO THROUGH BOTH FACES because the Y face is a window over
+ * The read-backs go through both faces because the Y face is a window over
  * the ESAI the X face owns, and only reading both shows the window landed in
  * the object the X face exposes rather than in a backing array.
  *
- * THE RUN-TIME CASES REPORT THROUGH g_failures AND NOT THROUGH assert().
+ * The run-time cases report through g_failures and not through assert().
  * base.cmake at the repository root selects Release when CMAKE_BUILD_TYPE is
  * unset, Release defines NDEBUG, and every assert() then compiles to nothing
  * -- a test built that way would pass having checked nothing.

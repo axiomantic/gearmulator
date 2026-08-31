@@ -50,7 +50,7 @@ namespace g2
 			return 0;
 
 		const uint32_t start = esai.getTxFrameCounter();
-		/* THE BOUND IS READ BEFORE THE LOOP STARTS, because a guest TCR
+		/* The bound is read before the loop starts, because a guest TCR
 		 * write that clears TEM mid-loop causes execTX to return without
 		 * advancing the frame counter, and the frame-counted while would
 		 * spin forever. The bound is the safety net. */
@@ -99,7 +99,7 @@ namespace g2
 		{
 			esai.execRX();
 			_callback();
-			/* B5: re-read the bound inside the loop body and terminate
+			/* Re-read the bound inside the loop body and terminate
 			 * early if getRxWordCount() changes. A guest RCCR write that
 			 * changes the word count mid-loop leaves the for iterating
 			 * against a stale value; the re-read prevents that. */

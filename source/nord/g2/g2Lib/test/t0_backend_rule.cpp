@@ -56,7 +56,7 @@ int main()
 	std::printf("t0_backend_rule: g_useJIT = %s\n",
 		dsp56k::g_useJIT ? "true" : "false");
 
-	/* The factory's remaining arguments. SCH-18 widened the signature to
+	/* The factory's remaining arguments. The signature widened to
 	 * `(const Config&, Executor&, Board&, Status&)`, and this check still
 	 * reads only the return value: the status is written and deliberately
 	 * not asserted, for the reason the header comment above gives. */

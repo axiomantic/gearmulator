@@ -33,7 +33,7 @@ namespace g2
 			dsp56k::MemArea_P, dsp56k::MemArea_X, dsp56k::MemArea_Y
 		};
 
-		/* The register block is COPIED AS A STRUCT, not memcpy'd. Every
+		/* The register block is copied as a struct, not memcpy'd. Every
 		 * register in it is a RegType, which declares its own copy
 		 * constructor, so the block is not trivially copyable and a memcpy of
 		 * it is undefined however plain the data underneath. */
@@ -61,7 +61,7 @@ namespace g2
 		, peripherals(_secondBusFrameRateHz)
 		, dsp(memory, &peripherals, &peripherals.ySpace())
 	{
-		/* THE G2 EXECUTES CODE IN THE INTERRUPT REGION AS REGULAR JUMPS, which
+		/* The G2 executes code in the interrupt region as regular jumps, which
 		 * is the case jitconfig.h's own comment names for this field. At the
 		 * upstream default JitBlock::emit compiles every block entered below
 		 * Vba_End under JitOps::FastInterruptMode::Static, which SKIPS the
@@ -69,17 +69,13 @@ namespace g2
 		 * the program counter only on its TAKEN path, so a conditional bit-test
 		 * spin down there re-enters its own block for ever.
 		 *
-		 * IT IS A READ-MODIFY-WRITE AND NOT A FRESH JitConfig, so every field
-		 * this one does not name keeps whatever the library or a later task
-		 * chose for it. n2xdsp.cpp carries the same shape.
-		 *
-		 * IT SITS IN THE SLOT CONSTRUCTOR because that runs once for each DSP
-		 * with that DSP already fully built, which is what makes this a
-		 * per-slot property rather than a property of the set.
-		 *
-		 * THE LIMIT: this configures the just-in-time compiler and nothing else.
-		 * It makes a correct waveform OBSERVABLE to a compiled guest; it
-		 * produces none. */
+		 * It is a read-modify-write and not a fresh JitConfig, so every field
+ * this one does not name keeps whatever the library chose for it.
+ * n2xdsp.cpp carries the same shape.
+ *
+ * It sits in the slot constructor because that runs once for each DSP
+ * with that DSP already fully built, which is what makes this a
+ * per-slot property rather than a property of the set. */
 		dsp56k::JitConfig config = dsp.getJit().getConfig();
 		config.dynamicFastInterrupts = true;
 		dsp.getJit().setConfig(config);
@@ -173,21 +169,21 @@ namespace g2
 
 	Status DspSet::stateLoad(const void* const _src) noexcept
 	{
-		/* THE BRIDGES ARE OUTSIDE THE SNAPSHOT, AND REFUSING IS THE ONLY READING
-		 * OF THAT A CALLER CAN SEE. A bridge carries the landed flag the run gate
+		/* The bridges are outside the snapshot, and refusing is the only reading
+		 * of that a caller can see. A bridge carries the landed flag the run gate
 		 * borrows and dsp56k::DspBoot's download cursor, and neither is written by
 		 * stateSave. Restoring the slots alone leaves a slot whose program memory
 		 * is right behind a gate that reads NOT landed, attachHdi08Bridges refuses
 		 * the second attach that would replace the bridges, and the machine is
 		 * then silently dead with no way back.
 		 *
-		 * COVERING THE FLAG INSTEAD WAS REFUSED. It would restore the completed
+		 * Covering the flag instead was refused. It would restore the completed
 		 * download and leave a download stopped part way silently wrong, because
 		 * the dsp56300 fork carries no accessor for DspBoot's cursor -- the same
 		 * reason the peripherals are outside the snapshot. A partial cover fails
 		 * quietly; this returns.
 		 *
-		 * THE GUARD IS BEFORE THE FIRST WRITE, so a refused load changes nothing. */
+		 * The guard is before the first write, so a refused load changes nothing. */
 		if(!m_bridges.empty())
 			return Status::BridgesAttached;
 
@@ -211,17 +207,17 @@ namespace g2
 		return Status::Ok;
 	}
 
-	/* THE INSTALL LIVES HERE RATHER THAN IN hdi08Bridge.cpp because this is the
+	/* The install lives here rather than in hdi08Bridge.cpp because this is the
 	 * construction point that holds both ends of the wire.
 	 *
-	 * THE SET KEEPS THEM RATHER THAN THE CALLER. The run gate reads a flag that
+	 * The set keeps them rather than the caller. The run gate reads a flag that
 	 * lives on a bridge, so a caller-owned vector would leave the set unable to
 	 * answer for its own slots; and a bridge outliving nothing but a local is a
 	 * port driving a backlog its owner has dropped. */
 	void attachHdi08Bridges(Hdi08Adapter& _adapter, DspSet& _set)
 	{
-		/* THE SLOT COUNT AND THE PORT COUNT ARE TWO INDEPENDENT CONSTANTS, AND
-		 * NOTHING BUT THIS LINE TIES THEM. The loop below indexes the adapter with
+		/* The slot count and the port count are two independent constants, and
+		 * nothing but this line ties them. The loop below indexes the adapter with
 		 * a slot index, and Hdi08Adapter::port states that it asserts no bounds, so
 		 * a slot array that outgrew the port array would read past it and report
 		 * nothing. This assertion is inside the friend because m_slots is private
@@ -232,7 +228,7 @@ namespace g2
 			"indexes the adapter with a slot index and Hdi08Adapter::port asserts no "
 			"bounds.");
 
-		/* A SECOND ATTACH IS REFUSED RATHER THAN MADE RE-ENTRANT. Replacing the
+		/* A second attach is refused rather than made re-entrant. Replacing the
 		 * bridges would destroy the objects whose addresses the run gate already
 		 * borrowed through programLanded, and a borrowed pointer has no way to
 		 * learn that. Of the two failures only this one is visible. */
@@ -248,13 +244,13 @@ namespace g2
 		}
 	}
 
-	/* THE INSTALL LIVES HERE FOR THE REASON attachHdi08Bridges DOES: this is
+	/* The install lives here for the reason attachHdi08Bridges does: this is
 	 * the construction point that holds both ends of the wire. The adapter
 	 * keeps only borrowed ESAI pointers and hands out callables that borrow
 	 * it, so nothing is owned on either side and nothing is stored here. */
 	void attachChainCallbacks(ChainAdapter& _adapter, DspSet& _set)
 	{
-		/* EVERY POSITION IS ATTACHED BEFORE THE FIRST FACTORY RUNS, which is
+		/* Every position is attached before the first factory runs, which is
 		 * the order chainAdapter.h states: a position's transmit wrapper reads
 		 * the ESAI it was given from its first fire, and a wrapper produced
 		 * ahead of the attach carries a null one for the whole run. */
@@ -264,7 +260,7 @@ namespace g2
 			_adapter.attachEsai(i, p.getEsai(), p.getEsai1());
 		}
 
-		/* THE PAIR AND NOT setCallback. mqLib, xtLib and nord/n2x install a
+		/* The pair, and not setCallback. mqLib, xtLib and nord/n2x install a
 		 * single listener through Audio::setCallback; the chain needs the two
 		 * directions separately, which is what the adapter's per-direction
 		 * callback factories return. */

@@ -7,11 +7,11 @@
 
 namespace g2
 {
-	/* SCOPED, over a fixed underlying type. An unscoped enumeration converts to
+	/* Scoped, over a fixed underlying type. An unscoped enumeration converts to
 	 * int and through int to bool, so a caller writing the natural if(st) would
 	 * read every failure as true and the one success value as false.
 	 *
-	 * Ok IS NOT THE ZERO VALUE, and Unset is. create() reports through an
+	 * Ok is NOT the zero value, and Unset is. create() reports through an
 	 * out-param the CALLER declares; a caller writes `g2::Status st{};` and a
 	 * path that returns without writing it leaves the zero value in place. If
 	 * Ok were zero, a status nobody ever wrote would read as success.

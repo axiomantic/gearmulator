@@ -109,22 +109,15 @@ namespace g2
 		 * a bus error, an illegal instruction word, an illegal effective address
 		 * for the opcode, an illegal operand size or a divide by zero.
 		 *
-		 * FAULT AND HALT ARE DIFFERENT FLAGS AND THIS METHOD REPORTS THE FAULT,
-		 * which is what its name says. mcf5307.h is the authority: a valid
+		 * Fault and halt are different flags and this method reports the fault.
+		 * mcf5307.h is the authority: a valid
 		 * opcode with no implemented semantics halts WITHOUT faulting, and a
 		 * faulted core is always also halted. mcuHalted() below is the wider
 		 * condition. */
 		bool faulted() const noexcept;
 
-		/* THE HANDLE TO THE CORE THIS BOARD ALREADY OWNS. Each of these
-		 * forwards to the matching mcf5307_ call and does nothing else, which is
-		 * what runMcu above already does against mcf5307_exec. A Board whose
-		 * core pointer is nil answers a defined value rather than dereferencing
-		 * it, in the shape runMcu uses for that case.
-		 *
-		 * NO CREATE AND NO DESTROY IS PUBLISHED. The Board's lifetime already
-		 * owns both, and a second pair would be a second core -- which is the
-		 * shape this handle exists to make unnecessary.
+		/* A Board whose core pointer is nil answers a defined value rather than
+		 * dereferencing it, in the shape runMcu uses for that case.
 		 *
 		 * mcuReg and setMcuReg take the register file's own index: 0 to 7 are
 		 * d0 to d7, 8 to 15 are a0 to a7, 16 is the status register and 17 is
@@ -136,7 +129,7 @@ namespace g2
 		bool     setMcuReg(int index, uint32_t value) noexcept;
 
 		/* TRUE when the core will run no further instruction until the next
-		 * reset. It is the strictly WIDER condition of the two the core reports:
+		 * reset. It is the strictly wider condition of the two the core reports:
 		 * every faulted core is halted and a halted core need not be faulted, so
 		 * this is the one a caller asking "may I run more" must ask, and
 		 * faulted() is the one a caller asking "did this instruction trap" must
@@ -325,8 +318,8 @@ namespace g2
 		uint64_t     m_lastFrameIndex = 0;
 		bool         m_faulted        = false;
 
-		/* LAST, AND THAT POSITION IS DESTRUCTION ORDER AND NOT CONSTRUCTION
-		 * ORDER. The set borrows nothing at construction -- the bridges are
+		/* Last, and that position is destruction order and not construction
+		 * order. The set borrows nothing at construction -- the bridges are
 		 * attached from the constructor BODY, after every member exists -- but
 		 * `~Hdi08Bridge` uninstalls through the host port it was handed, so a
 		 * set destroyed after m_hdi08 would dereference a dead port once per

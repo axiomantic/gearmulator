@@ -151,14 +151,14 @@ static_assert(std::is_same_v<decltype(g2::DspContext::secondBusFrameDivider),
 	"G2_SECOND_BUS_FRAME_DIVIDER. The job body advances the second bus only "
 	"when frameIndex % secondBusFrameDivider == 0.");
 
-/* THE GATE'S OWN MEMBER. t0_dsp_run_gate pins the same type because the gate is
- * SCH-33's, and it is repeated here because this file is the one that claims to
+/* THE GATE's own member. t0_dsp_run_gate pins the same type because the gate is
+ * the run gate's, and it is repeated here because this file is the one that claims to
  * name every member. */
 static_assert(std::is_same_v<decltype(g2::DspContext::programLanded),
 		const bool*>,
 	"DspContext::programLanded -- borrowed, and NULL means NOT landed.");
 
-/* THE DEFAULT DIRECTION IS STRUCTURAL AND NOT CONVENTIONAL. programLanded
+/* The default direction is structural and not conventional. programLanded
  * carries a default member initializer, which is what makes `g2::DspContext c;`
  * a closed gate rather than an indeterminate one. A member with an initializer
  * gives the class a non-trivial default constructor, so this assertion is what
@@ -248,7 +248,7 @@ int main()
 
 	/* ---------------- a context declared WITHOUT braces closes the gate.
 	 *
-	 * THE STORAGE IS POISONED FIRST, so the read below is a value the
+	 * The storage is poisoned first, so the read below is a value the
 	 * initializer wrote and not one the stack happened to hold. Every other
 	 * member stays 0xFF and none is read. */
 	{

@@ -1,20 +1,19 @@
-/* t0_construction_rejection.cpp -- the construction rejections of task SCH-18.
- * Design sections 13.10 rule 4, 13.4.5, 13.6, 13.6.2. Plan section 14.5.
+/* t0_construction_rejection.cpp -- the construction rejections.
  *
  * `Scheduler::create` is the SINGLE rejection point, because every rejectable
  * value arrives through `Scheduler::Config`. Each case below asserts BOTH
  * halves of one row: a null return AND the exact `g2::Status`.
  *
- * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION. A
- * release build removes an assert(), and design section 13.10 rule 2 forbids
+ * No case here is a language assert() and no case catches an exception. A
+ * release build removes an assert(), and the design forbids
  * throwing, so the status out-param is the whole observable and this file runs
  * identically in a release build and a debug build.
  *
- * WHY BOTH HALVES OF EVERY ROW. A null return alone does not distinguish the
+ * Why both halves of every row. A null return alone does not distinguish the
  * rows from each other, and a status alone does not establish that no object
  * was handed back. Either half on its own leaves a defect it cannot name.
  *
- * ONE CONFIG CAN FAIL TWO ROWS AT ONCE, AND WHICH ONE ANSWERS IS A DECISION.
+ * One config can fail two rows at once, and which one answers is a decision.
  * A `dspCount` of 0 is such a Config: the DSP count row rejects it, and
  * `D_chain = (N - 1) * hopFrames` is unsigned, so at a count of 0 the
  * subtraction wraps and the lookahead bound is exceeded by the same Config. The
@@ -22,13 +21,13 @@
  * and the count row is the sixth of that table while the lookahead row is the
  * eighth, so the answer is `BadDspCount`.
  *
- * THE OVERLAP ITSELF DEPENDS ON THE WIDTH THE SUM IS ACCUMULATED AT. In 32 bits
+ * The overlap itself depends on the width the sum is accumulated at. In 32 bits
  * the wrapped delay plus a small `L` wraps a SECOND time and lands back UNDER
  * the bound, so the two rows would not overlap at all. The width is a premise of
  * the overlap rather than a detail of it, which is why it is written down beside
  * the value it governs rather than left to the reader.
  *
- * WHAT THIS FILE DOES NOT ESTABLISH. It does not establish that the Config
+ * What this file does not establish. It does not establish that the Config
  * defaults are the machine's shipped configuration. Two of them,
  * `lookaheadFrames` and `maxHostBlockFrames`, have no shipped constant to be
  * equal to and carry the smallest legal value instead. What the defaults buy
@@ -65,14 +64,14 @@ namespace
 		++g_failures;
 	}
 
-	/* The bound of design section 13.6.2, and the two terms that meet `L` under
+	/* The lookahead bound, and the two terms that meet `L` under
 	 * it. `D_codec` is 0 by construction and is written as a named term rather
 	 * than omitted, exactly as section 20's formula writes it. */
 	constexpr uint64_t kLookaheadBound = 16384;
 	constexpr uint64_t kDelayCodec     = 0;
 
 	/* The subtraction is `unsigned`, because ChainAdapter's `dspCount` and
-	 * `hopFrames` members are, and the WIDENING HAPPENS AFTER IT. That order is
+	 * `hopFrames` members are, and the widening happens after it. That order is
 	 * the whole point: a count of 0 wraps here and the wrapped value survives
 	 * into the sum, which is the premise the ordering case below rests on.
 	 *
@@ -102,7 +101,7 @@ namespace
 		check(status == _expected, what);
 	}
 
-	/* The success half. It is CONDITIONAL ON THE BUILD for the reason SCH-17's
+	/* The success half. It is conditional on the build for the reason the backend
 	 * check already records: in an interpreter build no Scheduler can be created
 	 * at all, so an unconditional success assertion would pin a property that
 	 * build cannot exercise. The rejection half above is unconditional. */
@@ -169,7 +168,7 @@ int main()
 		}
 	}
 
-	/* ---------------- row 2: a hop of zero, WITH THE OVERRIDE TAKEN.
+	/* ---------------- row 2: a hop of zero, with the override taken.
 	 *
 	 * The override is what makes this row independent of row 5 rather than
 	 * shadowed by it. A hop of zero collapses the hop: every mailbox is a delay
@@ -184,7 +183,7 @@ int main()
 		checkRejected(executor, board, config, g2::Status::BadHopFrames, "hopFrames of 0 with the override taken");
 	}
 
-	/* ---------------- row 3: a divider of zero, WITH THE OVERRIDE TAKEN.
+	/* ---------------- row 3: a divider of zero, with the override taken.
 	 *
 	 * The divider is a DIVISOR: dspContext.h's landed comment on that member
 	 * states that create() returns BadDivider and no object for that value so
@@ -239,14 +238,14 @@ int main()
 		checkAccepted(executor, board, config, "hop 2 and divider 1 with the override taken");
 	}
 
-	/* ---------------- row 5 again, WITH THE OVERRIDE LEFT UNNAMED.
+	/* ---------------- row 5 again, with the override left unnamed.
 	 *
 	 * Row 5 above writes `false` into the field, so it holds whatever the
 	 * struct's initialiser says. This case drives the same hop of 2 and names
 	 * nothing but the hop, so what it holds is the DEFAULT: a caller that never
 	 * mentions the escape is held to the build constants.
 	 *
-	 * WHAT THIS DOES NOT ESTABLISH: it fixes the initialiser and not the field.
+	 * What this does not establish: it fixes the initialiser and not the field.
 	 * A caller that names the override is a different Config and this case says
 	 * nothing about it. */
 	{
@@ -260,7 +259,7 @@ int main()
 	/* ---------------- row 6: the DSP count is fixed at 8.
 	 *
 	 * The job array is exactly 8 and holds the DSP contexts only, so every other
-	 * value is rejected -- including the 4-DSP machine BRD-15 records as a real
+	 * value is rejected -- including the 4-DSP machine that is a real
 	 * configuration. */
 	{
 		const unsigned driven[] = { 0u, 4u, 9u };
@@ -276,7 +275,7 @@ int main()
 		}
 	}
 
-	/* ---------------- row 6 against row 8: THE ORDERING DECISION, PINNED.
+	/* ---------------- row 6 against row 8: The ordering decision, PINNED.
 	 *
 	 * A dspCount of 0 satisfies two rows at once. `D_chain` is
 	 * `(N - 1) * hopFrames` over unsigned members, so at a count of 0 the
@@ -308,7 +307,7 @@ int main()
 	 * in EITHER width, which is why the value is chosen here rather than left at
 	 * the default.
 	 *
-	 * WHAT THIS DOES NOT ESTABLISH: it fixes the order alone and says nothing
+	 * What this does not establish: it fixes the order alone and says nothing
 	 * about the width the factory accumulates at. */
 	{
 		g2::Scheduler::Config config;
@@ -367,12 +366,12 @@ int main()
 	 * DISAGREE: the same Config is above the bound in 64 bits and lands back
 	 * under it in 32.
 	 *
-	 * THE HOP IS CHOSEN SO THAT `(N - 1) * hopFrames` LANDS JUST ABOVE 2^32 AND
-	 * THE LOOKAHEAD STAYS AT ITS DEFAULT. A large lookahead would carry the sum
+	 * The hop is chosen so that `(N - 1) * hopFrames` lands just above 2^32 and
+	 * the lookahead stays at its default. A large lookahead would carry the sum
 	 * past the bound on its own and the chain term would then be free to be any
 	 * value at all; at this hop the term itself is what crosses.
 	 *
-	 * WHAT THIS DOES NOT ESTABLISH: it fixes the width of the sum and the shape
+	 * What this does not establish: it fixes the width of the sum and the shape
 	 * of the chain term, and nothing about the range of either input. The
 	 * factory refuses no hop and no lookahead for being large on its own. */
 	{
@@ -405,7 +404,7 @@ int main()
 
 	/* ---------------- row 10: the backend.
 	 *
-	 * SCH-17's rule, now reported through a status: create() succeeds only when
+	 * The backend rule, reported through a status: create() succeeds only when
 	 * backend == Backend::Jit AND g_useJIT is true. This case is unconditional,
 	 * because the Interpreter enumerator is rejected on every build. */
 	{

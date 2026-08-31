@@ -1,24 +1,24 @@
-// Task BRD-26. Tier T0: this test needs no firmware artifact of any kind.
+// Tier T0: this test needs no firmware artifact of any kind.
 //
-// EVERY DRIVEN WORD IS NON-ZERO, the count and address headers as well as the
+// Every driven word is non-zero, the count and address headers as well as the
 // body. Program memory is zero-filled and a receive path reads zero for a word
 // that never arrived, so 0x000000 compares equal against both and would pass
 // whether it crossed or not.
 //
-// THE HANDSHAKE IS DRIVEN BEFORE EVERY RUNTIME WORD, AND AT THE PORT THE
-// RUNTIME WORD IS DRIVEN AT. `dsp56k::DspBoot` sits in front of every bridged
+// The handshake is driven before every runtime word, and at the port the
+// runtime word is driven at. `dsp56k::DspBoot` sits in front of every bridged
 // port, so a bare word is absorbed as the bootstrap count header and reaches no
 // receive path -- under the correct composition as much as under a broken one.
 // Driving the headers at the port under test is also what makes a wiring that
 // sends port `i` to another slot land its whole program there and read
 // differently from the correct one.
 //
-// EVERY SLOT'S RECEIVE PATH IS READ AT EVERY STEP. Reading only the slot being
+// EVERY SLOT's receive path is read at every step. Reading only the slot being
 // driven was rejected: a wiring that sends every port to one slot answers the
 // same way at the first port driven, so the slots nobody drove are what
 // separates it from the correct one.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). The default build type is
+// No assertion in this file is a language assert(). The default build type is
 // Release, which defines NDEBUG.
 
 #include "board.h"
@@ -166,8 +166,8 @@ namespace
 		}
 	}
 
-	/* THE TEARDOWN ORDER, BOUND ON A LIVING BOARD BECAUSE A DESTROYED ONE
-	 * CANNOT BE READ -- the host port the assertion would have to examine is
+	/* The teardown order, bound on a living board because a destroyed one
+	 * cannot be read -- the host port the assertion would have to examine is
 	 * the one the destroyed Board owned. Members sharing an access control are
 	 * allocated so that later ones have higher addresses, and they are
 	 * destroyed in reverse declaration order, so the set outranking the adapter
@@ -175,7 +175,7 @@ namespace
 	 * alive. Reading the addresses through the two production accessors keeps
 	 * the assertion off any member this class does not already publish.
 	 *
-	 * IT IS AN ADDRESS AND NOT THE TEARDOWN ITSELF, AND NO ASSERTION HERE CAN BE.
+	 * It is an address and not the teardown itself, and no assertion here can be.
 	 * The property wanted is that no callback survives on a port; the Board owns
 	 * the ports, so they are gone with it and there is nothing left to read. The
 	 * reading is sound only while the two members share one access specifier --

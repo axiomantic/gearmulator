@@ -29,7 +29,7 @@
 
 #include "dsp56kEmu/types.h"
 
-/* `dsp56k::HDI08` IS FORWARD-DECLARED RATHER THAN INCLUDED. board.h includes
+/* `dsp56k::HDI08` is forward-declared rather than included. board.h includes
  * this header, so including dsp56kEmu/hdi08.h here would put the DSP-side
  * HDI08 into the include closure of every board consumer. The two free
  * functions at the foot of this file take it by reference and need no complete
@@ -82,8 +82,8 @@ namespace g2
 		std::array<mc68k::Hdi08, g_hdi08PortCount> m_ports;
 	};
 
-	/* THE TWO FUNCTIONS BELOW ACT ON THE DSP SIDE, NOT ON THE `mc68k::Hdi08`
-	 * THE CLASS ABOVE HOLDS. A reader who conflates the two looks for a
+	/* The two functions below act on the DSP side, not on the `mc68k::Hdi08`
+	 * the class above holds. A reader who conflates the two looks for a
 	 * blocking wait in `mc68k` and finds none. `dsp56k::HDI08::writeRX` pushes
 	 * host words into a ring whose push waits on a semaphore once the ring is
 	 * full, and the G2 drives the MCU, the DSPs and the panel from ONE thread,

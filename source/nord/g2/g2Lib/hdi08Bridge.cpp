@@ -20,8 +20,8 @@ namespace g2
 		, m_core(_core)
 		, m_boot(_core)
 	{
-		/* THE BOOT CONSUMER SITS IN FRONT OF THE RUNTIME PATH AND IS REPLACED BY
-		 * IT. The firmware pushes a program into every port before it speaks to
+		/* The boot consumer sits in front of the runtime path and is replaced by
+		 * it. The firmware pushes a program into every port before it speaks to
 		 * the DSP at all, so a bridge that forwarded the first words to the
 		 * receive path would leave program memory zero-filled -- and 0x000000 is
 		 * a no-operation, so the core would walk it and fault nowhere. */
@@ -38,7 +38,7 @@ namespace g2
 			drainDspToHost();
 		});
 
-		/* THIS CALLBACK DOES NOT DRAIN, unlike the n2x precedent's. Draining
+		/* This callback does not drain, unlike the n2x precedent's. Draining
 		 * calls `mc68k::Hdi08::writeRx`, which reads the ISR, which re-enters
 		 * this callback. */
 		m_host.setReadIsrCallback([this](const uint8_t _isr)
@@ -46,7 +46,7 @@ namespace g2
 			return mirrorDspHostFlags(_isr);
 		});
 
-		/* THE BYTE IS PASSED THROUGH AND NOT RE-DERIVED. The host port has
+		/* The byte is passed through and not re-derived. The host port has
 		 * already computed `(_val & Hv) << 1` and the written byte is not in
 		 * scope here, so any arithmetic on this side would be a second
 		 * derivation of a value that is already the vector.
@@ -66,13 +66,13 @@ namespace g2
 		});
 	}
 
-	/* NULL IS THE UNINSTALL AND NOT A HOLE. Every `mc68k::Hdi08` setter puts the
+	/* NULL is the uninstall and not a hole. Every `mc68k::Hdi08` setter puts the
 	 * port's own default back when it is handed an empty function, so the port
 	 * returns to what it did before the bridge existed rather than to a callback
 	 * that cannot be called; `dsp56k::HDI08` leaves its transmit callback empty
 	 * instead and tests it before the one call it makes.
 	 *
-	 * THE INIT SLOT IS LEFT ALONE HERE FOR THE REASON IT IS LEFT ALONE ABOVE.
+	 * The init slot is left alone here for the reason it is left alone above.
 	 * `Hdi08Adapter` owns that one and the bridge never wrote it. */
 	Hdi08Bridge::~Hdi08Bridge()
 	{
@@ -91,7 +91,7 @@ namespace g2
 
 		m_programLanded = true;
 
-		/* THE ASSIGNMENT DESTROYS THE CLOSURE THIS CALL IS RUNNING INSIDE.
+		/* The assignment destroys the closure this call is running inside.
 		 * `mc68k::Hdi08` holds ONE write-transmit callback and assigns rather
 		 * than chains, so nothing that closure captured may be read afterwards
 		 * and this line is last for that reason. */

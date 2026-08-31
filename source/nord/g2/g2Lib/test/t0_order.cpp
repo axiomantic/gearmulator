@@ -1,37 +1,36 @@
-/* t0_order.cpp -- the check of task SCH-19. Design sections 13.5 and 13.10.5.
+/* t0_order.cpp -- the order inside one quantum.
  *
- * WHAT ONE QUANTUM IS, AND WHAT THIS FILE OBSERVES OF IT. Scheduler::runFrames
- * turns whole quanta. Design section 13.5 fixes the order inside one:
+ * What one quantum is, and what this file observes of it. Scheduler::runFrames
+ * turns whole quanta, in this order:
  *
  *     swap     ChainAdapter::advanceAll(frameIndex)
- *     ingress  ChainAdapter::injectCodecSource(frame)      PLAY REGIME ONLY
+ *     ingress  ChainAdapter::injectCodecSource(frame)      play regime only
  *     run      0  Panel::tick(frameIndex)
  *              1  Board::tickSofIfDue(frameIndex), then Board::runMcu(...)
  *              2  DSP 0 .. DSP 7, ascending
- *     egress   ChainAdapter::extractCodecSink(frame)       PLAY REGIME ONLY
+ *     egress   ChainAdapter::extractCodecSink(frame)       play regime only
  *
- * THE TWO PLAY-ONLY PHASES ARE NOT ASSERTED HERE AND THAT IS NOT AN OMISSION.
+ * The two play-only phases are not asserted here and that is not an omission.
  * A Scheduler of this task carries no regime member, so it is the boot machine
  * by construction and its quantum is FIVE records -- Swap, Panel, Sof, Mcu,
- * Dsp -- each carrying that quantum's frame index. SCH-22 owns the regime, the
- * two calls and the codec queues behind them, and its own check is where their
- * order is established. Nothing in this file says whether either ever runs.
+ * Dsp -- each carrying that quantum's frame index. Nothing in this file says
+ * whether either play-only phase ever runs.
  *
- * THE OBSERVATION SEAMS ARE THREE AND THE CHECK OPENS NO OTHER. The injected
+ * The observation seams are three and the check opens no other. The injected
  * Executor is handed the job array, so every DspContext is legally reachable
  * through Job::ctx -- dspContext.h's two static_asserts sanction exactly that
  * recovery. Board::dspSet() is a PUBLIC accessor, so the cores and the ESAI
  * ports the contexts are supposed to borrow are reachable for an ADDRESS
  * comparison. Neither reaches the phases that run serially in the Scheduler,
- * so Config::trace carries those, and it is the one member SCH-19 adds.
+ * so Config::trace carries those.
  *
- * WHY THE TRACE CARRIES A SEPARATE TAG FOR THE START-OF-FRAME TICK. Design
- * section 13.5 orders `tickSofIfDue` IMMEDIATELY BEFORE `runMcu`. Board is
+ * Why the trace carries a separate tag for the start-of-frame tick.
+ * `tickSofIfDue` runs IMMEDIATELY BEFORE `runMcu`. Board is
  * final with no virtual member, so no test double substitutes for it and the
  * adjacency has no other decider; folding the two into one tag would leave an
  * ordered imperative with nothing able to report it.
  *
- * WHAT THIS FILE DOES NOT ESTABLISH, SAID PLAINLY RATHER THAN LEFT TO A READER.
+ * What this file does not establish, said plainly rather than left to a reader.
  * It does not establish that a DSP ran. Every slot's run gate is shut here --
  * no firmware is downloaded, so every bridge's landed flag is false and
  * dspJob's step 2 is skipped for all eight -- and the trace records DISPATCH
@@ -41,7 +40,7 @@
  * observable for execution and it needs an open gate, which needs a completed
  * firmware download; neither is this task's.
  *
- * NO CASE HERE IS A LANGUAGE assert() AND NO CASE CATCHES AN EXCEPTION, so
+ * No case here is a language assert() and no case catches an exception, so
  * this file reports identically under NDEBUG and without it.
  */
 
@@ -116,7 +115,7 @@ namespace
 		return "?";
 	}
 
-	/* THE TRACE SINK. It records the phase tag and the frame index of every
+	/* The trace sink. It records the phase tag and the frame index of every
 	 * phase, in the order the Scheduler emits them, and it grows no storage
 	 * inside a noexcept callback. */
 	class RecordingTrace final : public g2::TraceSink
@@ -145,7 +144,7 @@ namespace
 		uint64_t       m_frame[kMax]{};
 	};
 
-	/* THE INJECTED EXECUTOR. It RUNS every job -- an Executor that did not
+	/* The injected executor. It RUNS every job -- an Executor that did not
 	 * would not be one -- and it records, BEFORE each job body runs, the whole
 	 * of the context that body is about to see. Reading the members after the
 	 * body would confuse what the Scheduler wired with what the job did. */
@@ -203,7 +202,7 @@ namespace
 		Record m_record[kMaxRuns]{};
 	};
 
-	/* THE CLOCK CONTROL REGISTERS ARE PROGRAMMED FOR A ONE-SLOT FRAME, which
+	/* The clock control registers are programmed for a one-slot frame, which
 	 * is what lets readRX(0) report slot 0. Copied from t0_chain_data_flow,
 	 * which drives the same peripheral for the same reason. */
 	void enableTransmitter(dsp56k::Esai& _esai)
@@ -218,7 +217,7 @@ namespace
 		_esai.writeReceiveControlRegister(1u << dsp56k::Esai::M_RE0);
 	}
 
-	/* THE SECOND BUS TRANSMITS ON TX2 AND NOT ON TX0 (frame.h's register
+	/* The second bus transmits on TX2 and not on TX0 (frame.h's register
 	 * table), so its transmitter has to be enabled as well as TX0's -- an
 	 * enabled-but-unwritten transmitter raises M_TUE on every frame, and the
 	 * written-flag rule reads that bit. */
@@ -228,10 +227,10 @@ namespace
 		_esai.writeTransmitControlRegister((1u << dsp56k::Esai::M_TE0) | (1u << dsp56k::Esai::M_TE2));
 	}
 
-	/* THE FIVE UNCONDITIONAL PHASES OF ONE QUANTUM, in design section 13.5's
-	 * order. The ingress and the egress are NOT here: both are PLAY REGIME
-	 * ONLY, a Scheduler built by this task carries no regime member and is the
-	 * boot machine by construction, and SCH-22 is the task that adds the
+	/* The five unconditional phases of one quantum, in order. The ingress and
+	 * the egress are NOT here: both are play regime only, a Scheduler built
+	 * here carries no regime member and is the
+	 * boot machine by construction, and the play regime is what adds the
 	 * regime, the two calls and the codec queues that feed them. A sequence
 	 * naming either would assert an observable this task cannot produce. */
 	constexpr g2::TracePhase kQuantum[] =
@@ -288,7 +287,7 @@ namespace
 	 * CASE 2. The eight DSP bodies are dispatched ascending, and every context
 	 * is wired to the Board's own set BY ADDRESS.
 	 *
-	 * THE ADDRESS COMPARISON IS THE ONE THAT DISCRIMINATES THE RESCOPE. A
+	 * The address comparison is the one that discriminates the rescope. A
 	 * Scheduler holding a DSP set of its own would satisfy every other
 	 * assertion in this file and fail exactly these three, because the two
 	 * sets' cores and ports sit at different addresses.
@@ -348,7 +347,7 @@ namespace
 					"quantum %zu context %u carries the Config's DSP rate denominator", q, i);
 				checkEqual(r.ctx[i]->rate.den, _config.dspRate.den, what);
 
-				/* THE RUN GATE'S OWN WIRING, AND IT IS BOTH HALVES. Non-null
+				/* The run gate's own wiring, and it is both halves. Non-null
 				 * alone would pass against a pointer at anything at all; the
 				 * address is what ties it to the bridge whose download
 				 * completes. Omit the write and all eight read null. */
@@ -366,13 +365,13 @@ namespace
 			}
 		}
 
-		/* THE THREE ZEROED MEMBERS, READ AT THE FIRST DISPATCH -- before any
-		 * job body has run. SCH-12's debt loop reads the accumulator before it
+		/* The three zeroed members, read at the first dispatch -- before any
+		 * job body has run. The debt loop reads the accumulator before it
 		 * ever writes one, so an indeterminate value here is a defect no later
 		 * reading could separate from a legitimate one.
 		 *
-		 * THESE THREE ARE TRACED AND NOT DEMONSTRATED, AND SAYING SO IS THE
-		 * POINT. Nothing this file can mutate reaches them. They are read at
+		 * These three are traced and not demonstrated, and saying so is the
+		 * point. Nothing this file can mutate reaches them. They are read at
 		 * the FIRST dispatch, before any job body has run, so no write by
 		 * dspJob can reach them whatever it does -- and dspJob writes these
 		 * three only through runQuantum, inside its step 2, behind the run
@@ -383,11 +382,11 @@ namespace
 		 * only mechanism that puts a zero there and no mutation of the
 		 * constructor can make them fail.
 		 *
-		 * DELETING THAT VALUE INITIALISER ALSO LEAVES THEM GREEN, AND NOT FOR
-		 * THE REASON A READER WOULD GUESS. It is not that the Scheduler lands
+		 * Deleting that value initialiser also leaves them green, and not for
+		 * the reason a reader would guess. It is not that the Scheduler lands
 		 * on fresh pages: MEASURED, with a block of exactly sizeof(Scheduler)
 		 * filled with 0xA5 and freed immediately before, the Scheduler lands on
-		 * THAT SAME ADDRESS and the three still read zero on entry to the
+		 * That same address and the three still read zero on entry to the
 		 * constructor. This platform's allocator zeroes the block, which is a
 		 * property of this platform and not a guarantee of anything.
 		 *
@@ -411,10 +410,10 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 3. A FRAME CROSSES THE CHAIN, which is the only assertion in this
+	 * CASE 3. A frame crosses the chain, which is the only assertion in this
 	 * file that reports whether the chain-callback installer ran.
 	 *
-	 * WHY NOT THE WRITTEN FLAG OR THE UNDERRUN COUNTER. Every run gate is shut
+	 * Why not the written flag or the underrun counter. Every run gate is shut
 	 * here, so no DSP writes a transmit register on its own and every
 	 * position's written flag is false in a correct build and in an
 	 * uninstalled one alike; the underrun counter rises once per position per
@@ -422,12 +421,12 @@ namespace
 	 * because the installer is the ONLY thing that binds a position's ESAI to
 	 * the adapter's mailboxes.
 	 *
-	 * WHY IT ALSO REPORTS THE ADAPTER'S dspCount. The audio bus is a Line of
+	 * Why it also reports the adapter'S dspCount. The audio bus is a Line of
 	 * dspCount + 1 mailboxes; a wrong count truncates the array and the higher
 	 * positions stop crossing, so driving EVERY adjacent pair is what makes
 	 * that argument's forwarding observable rather than assumed.
 	 *
-	 * THE QUANTUM COUNT IS DERIVED FROM THE Config AND IS NOT A LITERAL. A
+	 * The quantum count is derived from the Config and is not a literal. A
 	 * mailbox is a ring of hopFrames + 1 frames and one quantum performs
 	 * exactly one swap, so the count IS the hop. G2_CHAIN_HOP_FRAMES is marked
 	 * PROVISIONAL at g2/timebase.h, so a literal agrees with the derivation at
@@ -438,7 +437,7 @@ namespace
 	 * t0_chain_data_flow derives the same step count from adapter.hopFrames()
 	 * for the same reason.
 	 *
-	 * THE LIMIT OF THAT DERIVATION. It keeps this case honest when the
+	 * The limit of that derivation. It keeps this case honest when the
 	 * provisional constant moves; it establishes nothing about the hop the
 	 * ADAPTER was handed, because this Config's hop IS the constant. Case 4 is
 	 * where that forwarding is separated, at a hop the constant does not carry.
@@ -490,7 +489,7 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 4. THE HOP DEPTH REACHES THE ADAPTER'S MAILBOXES.
+	 * CASE 4. The hop depth reaches the adapter'S MAILBOXES.
 	 *
 	 * A mailbox is a ring of hopFrames + 1 frames, so a frame written at the
 	 * head first reaches the read cell after exactly hopFrames swaps. At a hop
@@ -533,7 +532,7 @@ namespace
 		dsp56k::Esai& from = set.peripherals(source).getEsai();
 		dsp56k::Esai& to   = set.peripherals(source + 1u).getEsai();
 
-		/* THE ABSENT READING BELOW CANNOT BE A LEFTOVER FROM CASE 3. This
+		/* The absent reading below cannot be a leftover from case 3. This
 		 * Scheduler owns a NEW ChainAdapter whose mailboxes are all zero, and
 		 * the sink's own receive frame runs inside the first quantum and
 		 * latches what that adapter holds. */
@@ -552,8 +551,8 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 5. THE SECOND BUS'S TOPOLOGY AND ITS FRAME DIVIDER REACH THE
-	 * ADAPTER, which are the two of the four chain arguments the audio bus
+	 * CASE 5. The second bus's topology and its frame divider reach the
+	 * adapter, which are the two of the four chain arguments the audio bus
 	 * cannot report: the audio chain is fixed to a Line at every topology, and
 	 * it advances on every quantum whatever the divider says.
 	 *
@@ -569,14 +568,14 @@ namespace
 	 * nothing writes. The wrap is therefore the assertion that separates the
 	 * two, and it is why every position is driven rather than one.
 	 *
-	 * WHY THE "NOT YET" READING TAKES ITS OWN RECEIVE FRAME. The job body
+	 * WHY THE "NOT YET" reading takes its own receive frame. The job body
 	 * receives on the second bus only inside the advance window, so on a
 	 * non-window quantum nothing latches and the receive registers would still
 	 * hold the previous window's value. The check drives receiveDspFrame itself
 	 * to make the reading current, exactly as t0_chain_data_flow does.
 	 *
-	 * THE QUANTUM COUNTS ARE DERIVED FROM THE Config AND ARE NOT LITERALS, AND
-	 * THE PRODUCT IS WHERE A LITERAL WENT WRONG. A quantum swaps at its own
+	 * The quantum counts are derived from the Config and are not literals, and
+	 * the product is where a literal went wrong. A quantum swaps at its own
 	 * frame index, the swap advances the second bus only on a frame index the
 	 * divider divides, and the mailbox is a ring of hopFrames + 1 frames -- so
 	 * the frame reaches the read cell after hopFrames of THOSE ADVANCES, not
@@ -585,16 +584,12 @@ namespace
 	 * quantum's successor. The settling quantum itself stays a literal 1: frame
 	 * index 0 is a window at every divider and is keyed to neither field.
 	 *
-	 * THE LIMIT, AND IT IS TWO. Deriving from this Config keeps the arm honest
-	 * when a provisional constant moves; it establishes NOTHING about the hop or
-	 * the divider the ADAPTER was handed, because this arm drives the default
-	 * Config where both fields ARE the build constants and the comparison is a
-	 * constant against itself. Case 4 separates the hop's forwarding and case 5b
-	 * the divider's, each at a value the constant does not carry. And the
+	 * Deriving from this Config keeps the arm honest when a provisional constant
+	 * moves; it establishes NOTHING about the hop or the divider the ADAPTER was
+	 * handed, because this arm drives the default Config where both fields ARE
+	 * the build constants and the comparison is a constant against itself. The
 	 * off-window probe below exists only while the divider is at least 2: at 1
-	 * every quantum is a window, the non-arrival has nothing to assert, and no
-	 * arithmetic rescues it -- that arm would then need its own testOverride
-	 * Config, and this sentence is what says so instead of a red suite.
+	 * every quantum is a window and the non-arrival has nothing to assert.
 	 */
 	void caseSecondBusForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
@@ -678,10 +673,10 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 5b. THE SECOND-BUS DIVIDER AT ITS OTHER ORDERED CONFIGURATION, AND
-	 * IT IS THE ARM THAT MAKES THE ARGUMENT'S FORWARDING OBSERVABLE.
+	 * CASE 5b. The second-bus divider at its other ordered configuration, and
+	 * it is the arm that makes the argument's forwarding observable.
 	 *
-	 * WHY CASE 5 ALONE COULD NOT REPORT IT. Case 5 drives the DEFAULT Config,
+	 * WHY CASE 5 alone could not report it. Case 5 drives the DEFAULT Config,
 	 * whose divider IS G2_SECOND_BUS_FRAME_DIVIDER -- so a Scheduler that
 	 * handed the adapter that macro instead of the Config's value satisfies it
 	 * at every position. MEASURED against this file as it stood WITHOUT this
@@ -689,34 +684,33 @@ namespace
 	 * adapter's construction, every case in it stayed green. The comparison was
 	 * against a constant equal to itself.
 	 *
-	 * WHY THE CONTEXT MEMBER DOES NOT COVER IT EITHER. Case 7 asserts
+	 * Why the context member does not cover it either. Case 7 asserts
 	 * DspContext::secondBusFrameDivider at a non-default value, which is the
 	 * value the JOB reads. The adapter's own copy is what the SWAP reads, and
 	 * the two are separate forwardings of one Config field: the mutation above
 	 * moves the swap's copy and leaves every context's untouched.
 	 *
-	 * THE DISCRIMINATOR IS A CADENCE. The swap advances the second bus only on
+	 * The discriminator is a cadence. The swap advances the second bus only on
 	 * a quantum whose frame index is a multiple of the divider. Frame index 1
 	 * is such a quantum at a divider of 1 and is not one at the shipped 4, so
 	 * a frame primed after the settling quantum crosses here and does not
-	 * cross in case 5. THE MUTATION AND ITS RED: hand the adapter
+	 * cross in case 5. The mutation and its red: hand the adapter
 	 * G2_SECOND_BUS_FRAME_DIVIDER instead of the Config's value and this
 	 * crossing stops happening, because the adapter then skips the quantum the
 	 * Config asked it to advance on.
 	 *
-	 * A DIVIDER OF 1 NEEDS Config::testOverride, which is the escape from the
+	 * A divider of 1 NEEDS Config::testOverride, which is the escape from the
 	 * equality row and nothing else; measurement register row 10 requires the
 	 * value in any case.
 	 *
-	 * THE QUANTUM COUNT IS DERIVED AND NOT A LITERAL, for the reason case 3
+	 * The quantum count is derived and not a literal, for the reason case 3
 	 * states: every quantum is an advance window at a divider of 1, so the
 	 * count is the hop and nothing else.
 	 *
-	 * THE LIMIT. This reports the divider the SWAP reads and says nothing about
-	 * the one each CONTEXT reads; those are two forwardings of one Config field
-	 * and case 7 is where the second is asserted. It says nothing about a DSP
-	 * having run either -- every run gate is shut here, as it is everywhere in
-	 * this file.
+	 * This reports the divider the SWAP reads and says nothing about the one
+	 * each CONTEXT reads; those are two forwardings of one Config field. It says
+	 * nothing about a DSP having run either -- every run gate is shut here, as
+	 * it is everywhere in this file.
 	 */
 	void caseSecondBusDividerOneForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
@@ -789,32 +783,32 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 6. THE SECOND BUS'S TOPOLOGY IS THE Config's AND NOT A LITERAL.
+	 * CASE 6. The second bus's topology is the Config's and not a literal.
 	 *
-	 * THE TWO TOPOLOGIES DIFFER AT EXACTLY ONE PAIR. A Ring gives the second
+	 * The two topologies differ at exactly one pair. A Ring gives the second
 	 * bus dspCount mailboxes and position k writes (k + 1) mod N, so the tail
 	 * writes the head's; a Line gives it dspCount + 1 and position k writes
 	 * k + 1, so the tail writes a mailbox nothing reads and the head reads a
 	 * mailbox nothing writes. Every other adjacent pair behaves identically.
-	 * THE WRAP IS THEREFORE THE WHOLE DISCRIMINATOR, and case 5 above already
+	 * The wrap is therefore the whole discriminator, and case 5 above already
 	 * asserts its PRESENCE at the default Ring.
 	 *
-	 * WHY THE SEVEN ADJACENT PAIRS ARE ASSERTED HERE TOO, and it is not
+	 * Why the seven adjacent pairs are asserted here too, and it is not
 	 * decoration: they are what stops the wrap's absence from passing
 	 * vacuously. A Scheduler that installed no chain callbacks at all would
 	 * deliver nothing anywhere, and an absence assertion alone would call that
 	 * a Line. The seven arrivals say the bus is running; the eighth says it is
 	 * running as a Line.
 	 *
-	 * THE MUTATION AND ITS RED: hand the adapter a literal ChainTopology::Ring
+	 * The mutation and its red: hand the adapter a literal ChainTopology::Ring
 	 * and position 7's frame reaches position 0, so the wrap assertion fails.
 	 *
-	 * THE QUANTUM COUNT IS DERIVED, by the ring-of-advances reasoning case 5
+	 * The quantum count is derived, by the ring-of-advances reasoning case 5
 	 * states. This arm asserts no non-arrival, so it spends none of the count on
 	 * an off-window probe and drives the whole product.
 	 *
-	 * THE LIMIT is case 5's first one: this arm drives the default hop and the
-	 * default divider, so the derivation reports neither field's forwarding.
+	 * This arm drives the default hop and the default divider, so the derivation
+	 * reports neither field's forwarding.
 	 */
 	void caseSecondBusTopologyForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
@@ -877,9 +871,9 @@ namespace
 			checkEqual(sink.readRX(0u), sample, what);
 		}
 
-		/* THE ONE ASSERTION THE TWO TOPOLOGIES DISAGREE ON, AND ITS
-		 * NON-VACUITY COMES FROM THE SEVEN ARRIVALS ABOVE AND NOT FROM A STALE
-		 * READING. A carried reading cannot be relied on here: whatever a
+		/* The one assertion the two topologies disagree on, and its
+		 * non-vacuity comes from the seven arrivals above and not from a stale
+		 * reading. A carried reading cannot be relied on here: whatever a
 		 * previous case left in position 0's second-bus receive register is
 		 * gone by this point, because this case's own settling quantum runs
 		 * dspJob for all eight slots and receiveDspFrame latches for any ESAI
@@ -894,10 +888,10 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 7. THE Config's SECOND-BUS DIVIDER AND ITS DSP RATE REACH EVERY
-	 * CONTEXT, asserted at values that are NOT the build constants.
+	 * CASE 7. THE Config's second-bus divider and its DSP rate reach every
+	 * context, asserted at values that are NOT the build constants.
 	 *
-	 * WHY A SECOND Scheduler RATHER THAN THE ONE CASE 2 DRIVES. Case 2 reads
+	 * Why a second Scheduler rather than the one case 2 DRIVES. Case 2 reads
 	 * both members off contexts built from a DEFAULT Config, where each field
 	 * already equals the build constant it came from -- so a Scheduler that
 	 * wrote G2_SECOND_BUS_FRAME_DIVIDER, or the two G2_DSP_CYCLES_PER_FRAME
@@ -908,7 +902,7 @@ namespace
 	 * equality row and nothing else; the DSP rate needs no override, because
 	 * the only rational the factory rejects is one with a zero denominator.
 	 *
-	 * THE MUTATIONS AND THEIR RED: write 4u (or the divider macro) into
+	 * The mutations and their red: write 4u (or the divider macro) into
 	 * DspContext::secondBusFrameDivider and this case fails at every position;
 	 * write the two DSP-rate macros into DspContext::rate and it fails at
 	 * every position.
@@ -980,8 +974,8 @@ int main()
 {
 	std::printf("t0_order: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
 
-	/* THE BOARD IS DECLARED FIRST AND EVERY Scheduler BELOW IS A LOCAL OR A
-	 * unique_ptr DECLARED AFTER IT. SCH-19's rule is that the Board OUTLIVES
+	/* The board is declared first and every Scheduler below is a local or a
+	 * unique_ptr declared after it. The rule is that the Board OUTLIVES
 	 * the Scheduler: the factory hands the Scheduler the Board's own DSP set
 	 * and every context borrows a core, two ESAI ports and a landed flag owned
 	 * by a slot of it. Declaration order is what enforces that at a call site,
@@ -1002,7 +996,7 @@ int main()
 	if(!dsp56k::g_useJIT)
 	{
 		/* In an interpreter build no Scheduler can be created at all, which is
-		 * SCH-17's rule and not a skip this check invents. Asserting the
+		 * the backend rule and not a skip this check invents. Asserting the
 		 * refusal is the only claim this file may make in such a build. */
 		check(scheduler == nullptr, "an interpreter build yields no Scheduler");
 		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::BadBackend),

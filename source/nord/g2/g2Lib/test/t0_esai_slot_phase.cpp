@@ -1,32 +1,31 @@
-/* t0_esai_slot_phase.cpp -- the check of task SCH-34.
- * Design 13.10.3, 12.3, 13.4.6.
+/* t0_esai_slot_phase.cpp -- the ESAI slot-and-core interleave.
  *
- * THE ESAI SLOT-AND-CORE INTERLEAVE. The two frame helpers gain a form
+ * The ESAI slot-and-core interleave. The two frame helpers gain a form
  * that invokes a caller-supplied callback after EACH execTX and EACH
  * execRX, and dspJob's step 2 passes a callback that runs one sub-budget
  * of runDspCycles, so core execution lands BETWEEN ESAI slots instead of
  * between whole frames.
  *
- * THE DISCRIMINATING OBSERVABLE IS THE GUEST'S OWN SENTINEL WRITE to
+ * The discriminating observable is the guest's own sentinel write to
  * X:$000100, value $AAAAAA, with a pre-state assertion that the word is
  * zero. Not a program counter read, not an ESAI bit sample, not a
  * dispatch count -- the sentinel is the only observable that requires the
  * guest to have executed an instruction it could not reach without seeing
  * the edge.
  *
- * THE FIXTURE SPIN SITS BELOW Vba_End ($100), where DSP-19's
+ * The fixture spin sits below Vba_End ($100), where
  * dynamicFastInterrupts puts the JIT in FastInterruptMode::Dynamic and
- * exec() returns after each instruction. THIS TEST READS NO PROGRAM
- * COUNTER AT ALL.
+ * exec() returns after each instruction. This test reads no program
+ * counter at all.
  *
- * THE TEST MUST RUN UNDER THE JIT AND MUST FAIL LOUDLY RATHER THAN SKIP ON
- * A NON-JIT BUILD. g_useJIT is read at run time.
+ * The test must run under the JIT and must fail loudly rather than skip on
+ * a non-JIT build. g_useJIT is read at run time.
  *
- * THE TEST USES DspSet BECAUSE dynamicFastInterrupts IS SET IN
- * DspSet::Slot::Slot (DSP-19's production code), so a test using
+ * The test uses DspSet BECAUSE dynamicFastInterrupts is set in
+ * DspSet::Slot::Slot, so a test using
  * PeripheralsNop would not have the flag set and would hang.
  *
- * M_TFS AND M_RFS START SET. The ESAI constructor sets them on slot 0.
+ * M_TFS and M_RFS start set. The ESAI constructor sets them on slot 0.
  * The guest does not execute until the interleave's callback runs it
  * AFTER an execTX/execRX call, so the initial state does not let the
  * brclr fall through before the interleave runs. On the transmit side,
@@ -37,7 +36,7 @@
  * side, the first frame starts at slot 0, which sets M_RFS, and the
  * callback lets the guest fall through on the first frame.
  *
- * FOUR ARMS, AND ONE UNIT IS ONE ARM.
+ * FOUR ARMS, and one unit is one arm.
  */
 
 #include "dspContext.h"
@@ -305,12 +304,12 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	/* ---------------- ARM 1, THE DISCRIMINATING ARM (transmit side).
+	/* ---------------- ARM 1, the discriminating arm (transmit side).
 	 *
 	 * A DspContext whose guest spins on BRCLR #13,X:$FFFFB3 (M_SAISR,
 	 * tested at the M_TFS bit) is driven through g2::dspJob for a BOUNDED
 	 * number of whole frames with its transmitters enabled. The assertion
-	 * is that the SENTINEL WORD APPEARS. It fails today. */
+	 * is that the sentinel word appears. It fails today. */
 	{
 		Fixture f;
 		f.disableBlockLinking();
@@ -351,7 +350,7 @@ int main(int argc, char** argv)
 			"ARM 1: sentinel $AAAAAA appeared in X:$000100 after bounded run");
 	}
 
-	/* ---------------- ARM 2, THE RECEIVE-SIDE ARM.
+	/* ---------------- ARM 2, the receive-side arm.
 	 *
 	 * The same shape on BRCLR #6,X:$FFFFB3 with receivers enabled, which
 	 * is the M_RFS edge. It fails today for the same reason and passes
@@ -413,16 +412,16 @@ int main(int argc, char** argv)
 			"ARM 2: sentinel $AAAAAA appeared in X:$000100 after bounded run");
 	}
 
-	/* ---------------- ARM 3, THE DERIVED-COUNT CONTROL.
+	/* ---------------- ARM 3, the derived-count control.
 
-	/* ---------------- ARM 3, THE DERIVED-COUNT CONTROL.
+	/* ---------------- ARM 3, the derived-count control.
 	 *
 	 * Two ports are configured with different word counts -- one with
 	 * txWordCount = 1 and one with txWordCount = 7 -- and the test asserts
 	 * the transmit slots driven for each port in one frame are exactly
 	 * getTxWordCount() + 1 for that port. Without it, an arm-1 pass
 	 * obtained by hard-coding 8 is indistinguishable from an arm-1 pass
-	 * obtained correctly. MUST PASS IN BOTH STATES. */
+	 * obtained correctly. Must pass in both states. */
 	{
 		Fixture f;
 		f.disableBlockLinking();
@@ -466,16 +465,16 @@ int main(int argc, char** argv)
 			"ARM 3: transmit slots driven equals getTxWordCount()+1");
 	}
 
-	/* ---------------- ARM 4, THE ZERO-SLICE CONTROL.
+	/* ---------------- ARM 4, the zero-slice control.
 	 *
 	 * A context is driven with an allocation SMALLER than its slot count,
 	 * and the test asserts that every slot's dispatch was issued with a
 	 * want of at least 1 and that the guest's cycle counter advanced
-	 * across each one. THE CARDINALITY CHECK COMES FIRST: the test
+	 * across each one. The cardinality check comes first: the test
 	 * asserts the dispatch count EQUALS the slot count BEFORE asserting
 	 * the per-slot property, so a mutation that eliminates the
 	 * dispatches goes Red on the cardinality and cannot pass vacuously
-	 * over an empty set. MUST FAIL LOUDLY RATHER THAN PASS QUIETLY. */
+	 * over an empty set. Must fail loudly rather than pass quietly. */
 	{
 		Fixture f;
 		f.disableBlockLinking();

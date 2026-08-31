@@ -427,18 +427,7 @@ target_sources(t0_sof_tick PRIVATE
 	../mbus.cpp
 	../max1039.cpp)
 
-# ----------------- BRD-26, the Board's own DspSet
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_board_dsp_set$
-#
-# T0 AND UNGATED. The test authors every word it drives, so no firmware artifact
-# reaches it.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement
-# t0_board_routing, t0_cs2_cfi, t0_bus_size_unit and t0_mbus already use: it
-# needs the real board.cpp composition with the real DspSet and Hdi08Bridge
-# behind it, and every one of those is a g2Lib source. NOTHING HERE REFERENCES
-# mcf5307::mcf5307, so no if(TARGET) guard is needed and none is written.
+# ----------------- The Board's own DspSet
 
 add_executable(t0_board_dsp_set t0_board_dsp_set.cpp)
 target_link_libraries(t0_board_dsp_set PRIVATE g2Lib)
@@ -448,44 +437,26 @@ add_test(NAME t0_board_dsp_set COMMAND t0_board_dsp_set)
 set_tests_properties(t0_board_dsp_set PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- BRD-26 consequence: t0_sof_tick's own sources
+# ----------------- t0_sof_tick's own sources
 #
-# THE COMPOSITION GAINED A DspSet BY VALUE AND t0_sof_tick COMPILES ../board.cpp
-# ON ITS OWN, so it must supply that member's objects too. This block is
-# appended rather than folded into t0_sof_tick's own block above, for the reason
-# the INT-1 block already states: this file is written by more than one task and
-# an edit inside another task's block is how two writers lose each other's work.
-#
-# NEITHER SOURCE IS AN mcf5307 SOURCE, so the property t0_sof_tick's own block
-# protects -- no mcf5307 archive on its link line -- is untouched. No library
-# joins the link line either: dsp56kEmu is already on it through the INT-1
-# consequence block above.
+# The composition holds a DspSet by value and t0_sof_tick compiles ../board.cpp
+# on its own, so it must supply that member's objects too. This block is
+# appended rather than folded into t0_sof_tick's own block above: this file is
+# written by more than one task and an edit inside another task's block is how
+# two writers lose each other's work.
 
 target_sources(t0_sof_tick PRIVATE
 	../dspSet.cpp
 	../hdi08Bridge.cpp)
 
 
-# ----------------- DSP-8 consequence: t0_sof_tick's own sources
+# ----------------- t0_sof_tick's own sources
 #
-# ../dspSet.cpp GAINED A CALL INTO THE CHAIN ADAPTER AND t0_sof_tick COMPILES
-# THAT SOURCE ON ITS OWN, so it must supply the adapter's objects too. Without
-# them the link fails on g2::ChainAdapter::attachEsai and on every callback
-# factory it hands out, and the directory's compile-failure fixture takes every
-# test here with it. This block is appended rather than folded into
-# t0_sof_tick's own block above, for the reason the INT-1 block already
-# states: this file is
-# written by more than one task and an edit inside another task's block is how
-# two writers lose each other's work.
-#
-# THE REMAINING SOURCES FOLLOW THE FIRST. ../chainAdapter.cpp holds Mailbox
-# objects by value and calls fromEsaiFrame and toEsaiFrame, so ../mailbox.cpp
-# and ../frame.cpp come with it.
-#
-# NONE IS AN mcf5307 SOURCE, so the property t0_sof_tick's own block protects
-# -- no mcf5307 archive on its link line -- is untouched. No library joins the
-# link line either: dsp56kEmu is already on it through the INT-1 consequence
-# block above.
+# ../dspSet.cpp calls into the chain adapter. Without the adapter's objects the
+# link fails on g2::ChainAdapter::attachEsai and on every callback factory it
+# hands out, and the directory's compile-failure fixture takes every test here
+# with it. ../chainAdapter.cpp holds Mailbox objects by value and calls
+# fromEsaiFrame and toEsaiFrame, so ../mailbox.cpp and ../frame.cpp come with it.
 
 target_sources(t0_sof_tick PRIVATE
 	../chainAdapter.cpp
@@ -493,18 +464,7 @@ target_sources(t0_sof_tick PRIVATE
 	../frame.cpp)
 
 
-# ----------------- BRD-28, the Board's handle to its own MCU core
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_board_mcu_handle$
-#
-# T0 AND UNGATED. The test hand-encodes the program it runs and needs no
-# firmware artifact of any kind.
-#
-# THE TEST LINKS g2Lib AND NOTHING ELSE, which is the arrangement the board
-# tests above already use: it resets and steps the Board's own core through the
-# Board's methods, and g2Lib carries the mcf5307 link itself. NOTHING HERE
-# REFERENCES mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
-# written.
+# ----------------- The Board's handle to its own MCU core
 
 add_executable(t0_board_mcu_handle t0_board_mcu_handle.cpp)
 target_link_libraries(t0_board_mcu_handle PRIVATE g2Lib)

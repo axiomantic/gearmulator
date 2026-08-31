@@ -1,27 +1,25 @@
-// Task BRD-28. The Board's own MCF5307 core is reachable from outside the
-// class: it can be reset, stepped, read and asked whether it stopped. Tier T0:
-// this test needs no firmware artifact of any kind.
+// The Board's own MCF5307 core is reachable from outside the class: it can be
+// reset, stepped, read and asked whether it stopped. Tier T0: this test needs
+// no firmware artifact of any kind.
 //
-// Plan section 13.4, BRD-28. Design sections 6.4, 13.10.5.
-//
-// THIS TEST BUILDS NO mcf5307_ctx OF ITS OWN, AND THAT IS THE POINT OF IT. A
+// This test builds no mcf5307_ctx of its own, and that is the point of it. A
 // check that created a core against Board::onRead and Board::onWrite would pass
 // against a Board whose own core is still unreachable, because the core it
 // asserted about would be the one it built. Every assertion below is about the
 // core the Board constructed.
 //
-// WHY THE PROGRAM AND ITS OPERAND ARE PLACED DIRECTLY INTO THE UNIT. A
+// Why the program and its operand are placed directly into the unit. A
 // placement that went through the bus callbacks would depend on the very path
 // the second assertion is about, so the setup pokes bytes into the unit and the
 // assertion reads back through Board::onRead.
 //
-// WHY THERE IS A SECOND PHASE. A predicate asserted only in its FALSE state
+// Why there is a second phase. A predicate asserted only in its FALSE state
 // cannot be told apart from a body that answers a constant, so the same Board is
 // reset a second time at a word the core refuses and both predicates are
-// asserted in their TRUE state. The refused word is CPU-12's rather than this
+// asserted in their TRUE state. The refused word is the core's rather than this
 // file's invention.
 //
-// WHAT THIS DOES NOT ESTABLISH. It runs a program this file wrote, so a Board
+// What this does not establish. It runs a program this file wrote, so a Board
 // that starts a synthetic program correctly is no evidence that the firmware
 // boots. The program-counter assertion is weaker than it looks: phase one's loop
 // already leaves when the counter reaches the code end, so on a passing run that
@@ -29,7 +27,7 @@
 // second time. What it discriminates is the other two ways the loop can leave --
 // the bound exhausted, and a halt.
 //
-// NOTHING HERE USES assert(). The default build defines NDEBUG, so an assert()
+// Nothing here uses assert(). The default build defines NDEBUG, so an assert()
 // would be removed and a report built on one could never fire.
 
 #include "board.h"
@@ -151,10 +149,9 @@ namespace
 		std::vector<uint8_t> m_bytes;
 	};
 
-	// ONE WINDOW, and the code, the stack and the operands all live in it. The
-	// base is the constant memoryMap.h ships from AGENTS.md section 2.2; the size
-	// and every offset below are this test's own configuration, which plan
-	// section 1.3 rule 1 requires because no authority records them.
+	// One window, and the code, the stack and the operands all live in it. The
+	// base is the constant memoryMap.h ships; the size and every offset below are
+	// this test's own configuration, because no authority records them.
 	constexpr uint32_t g_windowBase = g2::g_sdramBase;
 	constexpr uint32_t g_windowSize = 0x1000u;
 	constexpr uint32_t g_stackTop   = g_windowBase + 0x800u;
@@ -195,7 +192,7 @@ namespace
 	// lands on a value no other width produces.
 	constexpr uint32_t g_operand = 0xC0DEDA7Au;
 
-	// The refused word, from CPU-12's tests/t_lines.nim, where a line-A word
+	// The refused word, from the core's own line-A tests, where a line-A word
 	// reaches no operation and traps with the fault flag and the halt flag set
 	// and the counter left past the opcode.
 	constexpr uint16_t g_lineA    = 0xA001u;

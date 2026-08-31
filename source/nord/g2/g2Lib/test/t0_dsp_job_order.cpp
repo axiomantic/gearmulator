@@ -102,7 +102,7 @@ namespace
 
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
-	/* The run gate in dspJob (SCH-33) reads a BORROWED flag on the context and
+	/* The run gate in dspJob reads a BORROWED flag on the context and
 	 * a value-initialised context carries NULL, which that gate reads as NOT
 	 * landed. The factory below points it at a landed slot rather than leaving
 	 * that default, because a closed gate skips step 2 whole and would leave no

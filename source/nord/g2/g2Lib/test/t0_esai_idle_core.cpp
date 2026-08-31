@@ -1,8 +1,8 @@
-/* t0_esai_idle_core.cpp -- the check of task SCH-35. Design 13.10.3, 13.4.6.
+/* t0_esai_idle_core.cpp -- the idle-port route of the DSP job.
  *
- * TWO CASES, AND ONE UNIT IS ONE CASE.
+ * TWO CASES, and one unit is one case.
  *
- * CASE 1 IS THE DISCRIMINATING CASE. Both ESAI ports sit at their reset
+ * CASE 1 is the discriminating case. Both ESAI ports sit at their reset
  * state -- no fixture-side enable call of any kind -- and the assertion is
  * that the slot's cycle counter ADVANCES across the quantum. Against the
  * unrepaired dspJob it stays at zero, because both frame helpers return
@@ -11,24 +11,24 @@
  * (cycle delta - want) exactly, so a direct run that bypassed totalSpent
  * fails here and not in production.
  *
- * CASE 2 IS THE COMPANION CASE. Transmitters AND receivers are enabled
+ * CASE 2 is the companion case. Transmitters AND receivers are enabled
  * through the public control-register writes, and the guest spins on the
  * receive frame-sync bit (M_RFS). The sync edge exists only BETWEEN slots,
  * so the sentinel appears only when the interleave runs the guest between
- * execRX calls. THE FRAME-CALLBACK COUNTS ALONE DO NOT CATCH ITS MUTATION:
+ * execRX calls. The frame-callback counts alone do not catch its mutation:
  * the bare helpers still complete frames, so a dspJob that deleted the
  * callback wiring and went frame-granular keeps both counts at two per two
  * quanta. The sentinel assertion is what catches that mutation; the counts
  * pin the frame cadence around it.
  *
- * THE CYCLE ASSERTIONS USE A LOWER BAND AND NEVER AN EQUALITY: runDspCycles
+ * The cycle assertions use a lower band and never an equality: runDspCycles
  * tests the counter BEFORE each exec(), so the last dispatch unit carries it
  * past the want, and the dispatch unit is the fixture's own measured cost,
  * not a threshold any build symbol names. want itself is computed here by
  * the same formula dspJob uses, from the context's own fields.
  *
- * THE JOB IS ENTERED THROUGH THE JobContext* RECOVERY THE EXECUTOR USES, on
- * SCH-33's precedent, and the program sits BELOW Vba_End so
+ * The job is entered through the JobContext* recovery the Executor uses, on
+ * the run gate's precedent, and the program sits BELOW Vba_End so
  * dynamicFastInterrupts (set in DspSet::Slot::Slot) makes exec() return
  * after each instruction. The test fails loudly rather than skipping on a
  * non-JIT build.
@@ -235,9 +235,9 @@ int main()
 		return 1;
 	}
 
-	/* ---------------- CASE 1, THE DISCRIMINATING CASE (both ports idle).
+	/* ---------------- CASE 1, the discriminating case (both ports idle).
 	 *
-	 * NO ENABLE CALL EXISTS IN THIS CASE, fixture-side or guest-side. Both
+	 * No enable call exists in this case, fixture-side or guest-side. Both
 	 * ports are read back to prove the reset state before the run: if
 	 * either direction reported enabled, the case would exercise the
 	 * interleave and discriminate nothing. */
@@ -267,7 +267,7 @@ int main()
 
 		check(wantOf(ctx) > 0, "CASE 1: non-zero want before run");
 
-		/* THE RECONCILIATION IS ASSERTED PER QUANTUM, twice, each against
+		/* The reconciliation is asserted per quantum, twice, each against
 		 * a want recomputed from the context's LIVE fields before that
 		 * quantum runs -- the invariant is debt = spent - want for THAT
 		 * quantum, not for their sum. */
@@ -295,7 +295,7 @@ int main()
 			"CASE 1: sentinel $AAAAAA appeared in X:$000100");
 	}
 
-	/* ---------------- CASE 2, THE COMPANION CASE (ports enabled).
+	/* ---------------- CASE 2, the companion case (ports enabled).
 	 *
 	 * Transmitters AND receivers are enabled through the public
 	 * control-register writes, the same calls the guest firmware makes.

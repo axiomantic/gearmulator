@@ -1,30 +1,29 @@
-/* t0_dynamic_fast_interrupts.cpp -- the check of task DSP-19.
- * Design 11.4, 11.1, 13.4.6.
+/* t0_dynamic_fast_interrupts.cpp -- dynamicFastInterrupts on every slot.
  *
- * IT BUILDS A g2::DspSet AND NOT A HAND-MADE dsp56k::DSP, because what is under
+ * It builds a g2::DspSet and not a hand-made dsp56k::DSP, because what is under
  * test is the G2's OWN construction path. A check that built its own DSP and
  * installed its own JitConfig would answer the same whatever dspSet.cpp does,
  * so it could never go red to green on this repair.
  *
- * THE PROGRAM COUNTER IS THE OBSERVABLE, AND THE RETIRED-INSTRUCTION COUNT IS
- * NOT AN ALTERNATIVE TO IT. An unrepaired machine retires one instruction for
+ * The program counter is the observable, and the retired-instruction count is
+ * not an alternative to it. An unrepaired machine retires one instruction for
  * every dispatch while the guest never leaves the poll, so a count assertion is
- * SATISFIED BY THE DEFECT. The count is printed below as evidence and is
+ * Satisfied by the defect. The count is printed below as evidence and is
  * asserted on nowhere.
  *
- * THE RUN IS BOUNDED AND NOT TIMED. The unrepaired behaviour is an infinite
+ * The run is bounded and not timed. The unrepaired behaviour is an infinite
  * spin, and a check that hangs reports nothing a reader can act on.
  *
- * ON A BUILD WHERE dsp56k::g_useJIT IS FALSE THIS CHECK FAILS AND DOES NOT
- * SKIP. DSP::exec() selects its backend at run time, so such a build would run
+ * On a build where dsp56k::g_useJIT is FALSE this check fails and does not
+ * skip. DSP::exec() selects its backend at run time, so such a build would run
  * arm 1 through the interpreter, degenerate it into arm 3, and pass against
  * unrepaired code. A skip and a pass are the same observable to every reader
  * this row has; and dynamicFastInterrupts has no property an interpreter build
- * could assert instead, the way SCH-17's rule has its construction refusal.
+ * could assert instead, the way the backend rule has its construction refusal.
  *
- * THE LIMIT: a pass here says that a JIT-compiled guest can LEAVE a poll below
- * the fast-interrupt boundary. It says nothing about the ESAI sync-and-core
- * phase, nothing about the audio path, and it clears no milestone blocker.
+ * A pass here says that a JIT-compiled guest can LEAVE a poll below the
+ * fast-interrupt boundary. It says nothing about the ESAI sync-and-core phase
+ * and nothing about the audio path.
  */
 
 #include "dspSet.h"
@@ -76,7 +75,7 @@ namespace
 		++g_logLines;
 	}
 
-	/* The count W3-323's isolated reproduction observed the defect over. One
+	/* The count an isolated reproduction observed the defect over. One
 	 * dispatch that happens to leave the program counter on the spin address is
 	 * indistinguishable from a spin; ten consecutive ones are the measured
 	 * state. */
@@ -162,8 +161,8 @@ namespace
 				_program.words.push_back(result.word[i]);
 		}
 
-		/* THE FILE MUST REALLY CARRY THE PROGRAM THE ARMS BELOW ARE WRITTEN
-		 * AGAINST. An empty or truncated fixture would otherwise load nothing,
+		/* The file must really carry the program the arms below are written
+		 * against. An empty or truncated fixture would otherwise load nothing,
 		 * leave the program counter wherever it was set, and the landing
 		 * assertions would be reading an address no instruction produced. */
 		checkEqual(_program.instructionOffsets.size(), 2u,
@@ -187,7 +186,7 @@ namespace
 	bool loadInto(dsp56k::DSP& _dsp, const dsp56k::TWord _entry,
 		const Program& _program)
 	{
-		/* memWriteP AND NOT A WRITE THROUGH dsp56k::Memory, because only this
+		/* memWriteP and not a write through dsp56k::Memory, because only this
 		 * one notifies the just-in-time compiler that program memory moved. */
 		for(size_t i = 0; i < _program.words.size(); ++i)
 		{
@@ -207,8 +206,8 @@ namespace
 		return false;
 	}
 
-	/* READ-MODIFY-WRITE, AND linkJitBlocks IS THE ONLY FIELD THIS CHECK
-	 * OVERRIDES. With linking on, one dispatch runs a CHAIN of blocks and a
+	/* READ-MODIFY-WRITE, AND linkJitBlocks is the only field this check
+	 * overrides. With linking on, one dispatch runs a CHAIN of blocks and a
 	 * self-linked spin has no end, so "ten dispatches" would bound nothing.
 	 * Constructing a fresh JitConfig instead would carry the field under test at
 	 * its upstream default whatever dspSet.cpp does, arm 1 would be red in both
@@ -242,7 +241,7 @@ namespace
 
 		for(unsigned i = 0; i < kDispatches; ++i)
 		{
-			/* DSP::exec() IS THE ENTRY THE PRODUCTION PATH CALLS and the one
+			/* DSP::exec() is the entry the production path calls and the one
 			 * that carries the backend selection. Only the interpreter control
 			 * names its backend in the call. */
 			if(_backend == Backend::Inherited)
@@ -307,7 +306,7 @@ int main(int argc, char** argv)
 
 	g2::DspSet set;
 
-	/* ---------------- ARM 1, THE DISCRIMINATING ARM.
+	/* ---------------- ARM 1, the discriminating arm.
 	 *
 	 * The spin sits BELOW the fast-interrupt boundary, where JitBlock::emit
 	 * compiles it under FastInterruptMode::Static unless the slot's JitConfig
@@ -336,7 +335,7 @@ int main(int argc, char** argv)
 			"landing it falls through to");
 	}
 
-	/* ---------------- ARM 2, THE BOUNDARY CONTROL, AT Vba_End.
+	/* ---------------- ARM 2, the boundary control, AT Vba_End.
 	 *
 	 * The same program, the same entry, the same ten dispatches, at an address
 	 * the fast-interrupt path does not reach. It passes in BOTH states. Without
@@ -362,7 +361,7 @@ int main(int argc, char** argv)
 			"boundary leaves its own address");
 	}
 
-	/* ---------------- ARM 3, THE INTERPRETER CONTROL.
+	/* ---------------- ARM 3, the interpreter control.
 	 *
 	 * Arm 1's program at arm 1's entry address, through the interpreter named
 	 * in the call. It passes in BOTH states, which pins the defect to the JIT

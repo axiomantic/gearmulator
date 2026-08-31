@@ -1,24 +1,24 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// A PARTITION AT `dsp56k::Vba_IRQA` IS TAKEN INSTEAD OF AN EXACT VECTOR
-// READBACK. The core's pending-vector queue is private, the only public
+// A partition at `dsp56k::Vba_IRQA` is taken instead of an exact vector
+// readBack. The core's pending-vector queue is private, the only public
 // predicates over it return bool, and `injectInterrupt` returns a constant, so
 // no surface reports the value. What the partition rests on: out of reset both
 // interrupt-mask bits are set, `isInterruptMasked` masks every vector at or
 // above that base, and `execInterrupts` returns on a masked vector WITHOUT
 // popping it -- so a vector below the base drains under a bounded pump and one
-// at or above it never does. THE EXACT-VALUE ROUTE IS REJECTED HERE AND NOT
-// DENIED: running the core and observing that it executed from the vector
+// at or above it never does. The exact-value route is rejected here and not
+// denied: running the core and observing that it executed from the vector
 // address would discriminate the number, and it needs distinguishable code
 // planted at every candidate vector address, which this file does not build.
 // The partition therefore separates the correct vector from every re-derivation
 // of it and does not separate it from an arbitrary other value below the base.
 //
-// THE LANDED PROGRAM CLOSES A LOOP RATHER THAN RUNNING STRAIGHT. The pump
+// The landed program closes a loop rather than running straight. The pump
 // EXECUTES from the boot address, and a straight-line program walks off the end
 // of program memory into an out-of-range jit entry.
 //
-// assert() IS NOT USED FOR ANY ASSERTION HERE: NDEBUG compiles it out.
+// assert() is not used for any assertion here: NDEBUG compiles it out.
 
 #include "hdi08Adapter.h"
 #include "hdi08Bridge.h"
@@ -91,7 +91,7 @@ namespace
 			, peripherals(g_secondBusFrameRateHz)
 			, dsp(memory, &peripherals, &peripherals.ySpace())
 		{
-			/* ONE exec() IS ONE BLOCK HERE. With block linking on, a dispatch
+			/* ONE exec() is one block here. With block linking on, a dispatch
 			 * unit runs a chain, and the chain this fixture's self-jump program
 			 * forms has no end. */
 			dsp56k::JitConfig config = dsp.getJit().getConfig();
@@ -105,12 +105,12 @@ namespace
 	constexpr int g_bridgedPort = 2;
 	constexpr int g_unbridgedPort = 5;
 
-	/* `V` IS CHOSEN RATHER THAN ARBITRARY, AND THE static_asserts BELOW ARE
-	 * WHAT FIX IT -- TO A RANGE, NOT TO A VALUE. Each one carries a single
+	/* `V` is chosen rather than arbitrary, AND THE static_asserts below are
+	 * what fix it -- to a range, not to a value. Each one carries a single
 	 * clause, so a failure names the premise that broke, and each one can be
 	 * falsified on its own by some byte.
 	 *
-	 * WHAT THEY DO NOT CONSTRAIN, SAID HERE SO NO READER TAKES MORE FROM THEM.
+	 * What they do not constrain, said here so no reader takes more from them.
 	 * Of the re-derivations this check catches, only the second shift is pinned
 	 * by the choice of `V`. The rest are at or above `Vba_IRQA` for EVERY byte
 	 * rather than for this one: the raw CVR value always carries `Hc` and so
@@ -134,8 +134,8 @@ namespace
 
 	constexpr TWord g_bootAddress = 0x000240u;
 
-	/* THE PUMP IS BOUNDED SO THAT A STUCK VECTOR IS A FAILING ASSERTION AND NOT
-	 * A HANGING TEST. A masked vector is never popped, so an unbounded loop on
+	/* The pump is bounded so that a stuck vector is a failing assertion and not
+	 * A hanging test. A masked vector is never popped, so an unbounded loop on
 	 * `hasPendingInterrupts()` would spin until ctest killed it and report a
 	 * timeout instead of a value. */
 	constexpr int g_pumpLimit = 64;
@@ -203,8 +203,8 @@ namespace
 
 	/* ---------------- group 1: the vector leaves the host port
 	 *
-	 * THE UNBRIDGED HALF IS THE CONTROL AND IT EXERCISES `mc68k` RATHER THAN
-	 * THIS TASK. It earns its place by fixing the expected byte by measurement
+	 * The unbridged half is the control and it exercises `mc68k` rather than
+	 * this task. It earns its place by fixing the expected byte by measurement
 	 * instead of by hand, and by naming where the vector goes when no bridge
 	 * takes it rather than only where it does not go. */
 	void anUnbridgedPortKeepsTheVectorOnItsOwnQueue()
@@ -255,8 +255,8 @@ namespace
 
 	/* ---------------- group 2: the core acquires a pending interrupt
 	 *
-	 * `getProcessingMode()` IS READ BESIDE EVERY `hasPendingInterrupts()`
-	 * BECAUSE THE PREDICATE OPENS WITH `if(m_processingMode != Default) return
+	 * `getProcessingMode()` is read beside every `hasPendingInterrupts()`
+	 * Because the predicate opens with `if(m_processingMode != Default) return
 	 * true;`. Without that reading, a true could come from a core that is mid
 	 * interrupt for some other reason and say nothing about this wire. */
 	void aHostCommandGivesTheCoreAPendingInterrupt()
@@ -311,12 +311,12 @@ namespace
 
 	/* ---------------- group 4: a destroyed bridge leaves no callback behind
 	 *
-	 * THE PORT'S OWN STATE IS THE SENTINEL AND NOT THE DEAD BRIDGE. Reading a
+	 * THE PORT's own state is the sentinel and not the dead bridge. Reading a
 	 * destroyed object to see whether it was called is the fault under test, so
 	 * the only readings taken after the destruction are the port's own queue and
 	 * the core the bridge used to reach.
 	 *
-	 * THE ADAPTER AND THE SLOT BOTH OUTLIVE THE BRIDGE, which is the direction
+	 * The adapter and the slot both outlive the bridge, which is the direction
 	 * hdi08Bridge.h states: the destructor uninstalls through the port it was
 	 * handed, so a port that died first would be dereferenced dead. */
 	void aDestroyedBridgeReturnsTheHostCommandToThePort()

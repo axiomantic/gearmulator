@@ -42,7 +42,7 @@ namespace g2
 	/* The callback form: invokes _callback after EACH execTX, so core
 	 * execution lands BETWEEN ESAI slots instead of between whole frames.
 	 *
-	 * THE TRANSMIT LOOP TERMINATION GUARD (B1). The shipped form terminates
+	 * The transmit loop termination guard. The shipped form terminates
 	 * on the frame counter advancing, which is safe when no guest
 	 * instruction runs between iterations. The callback form puts one there,
 	 * so a guest TCR write that clears TEM mid-loop would hang the
@@ -50,7 +50,7 @@ namespace g2
 	 * read BEFORE the loop starts -- and terminates on EITHER the frame
 	 * counter advancing OR the bound being reached, whichever comes first.
 	 *
-	 * THE BOUND IS NOT A SECOND TERMINATION CONDITION IN THE SHIPPED SHAPE.
+	 * The bound is not a second termination condition in the shipped shape.
 	 * It is the safety net the interleave requires, because a guest that
 	 * clears TEM mid-frame is a real firmware event and not a pathology. */
 	uint32_t transmitDspFrame(dsp56k::Esai& esai,
@@ -74,7 +74,7 @@ namespace g2
 
 	/* The callback form: invokes _callback after EACH execRX.
 	 *
-	 * THE RECEIVE SIDE GUARD (B5). The shipped form reads getRxWordCount()
+	 * The receive side guard. The shipped form reads getRxWordCount()
 	 * once and iterates against that fixed count. Under the interleave, a
 	 * guest RCCR write can change the word count mid-loop, leaving the
 	 * for iterating against a stale value. The guard re-reads the bound
