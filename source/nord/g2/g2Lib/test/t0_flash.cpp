@@ -83,6 +83,19 @@ namespace
 			<< ", expected 0x" << _expected << std::dec << std::endl;
 		++failures;
 	}
+
+	// The captured text is compared in FULL rather than searched for a
+	// fragment, so a message that grew a second line, or that carried the
+	// right address under a wrong width word, fails here.
+	void checkEqualText(const std::string& _observed, const std::string& _expected, const char* const _what)
+	{
+		if(_observed == _expected)
+			return;
+
+		std::cout << "FAIL " << _what << ": observed <" << _observed
+			<< ">, expected <" << _expected << ">" << std::endl;
+		++failures;
+	}
 }
 
 int main()
@@ -160,21 +173,20 @@ int main()
 	// The byte invariance above is necessary but not sufficient: a refactor
 	// that silently dropped the rejection log would keep every assertion
 	// green. Each write is therefore wrapped in a capture of
-	// baseLib::logging, and the captured text must name both 'Rejected' and
-	// the exact address of the write. The full message prefix also locks the
-	// access width -- the write8 message carries no width word, the write32
-	// message carries "32-bit" -- so a width routed to the wrong message
-	// fails here as well.
+	// baseLib::logging, and the captured text is compared in full. The whole
+	// message rather than a fragment of it, so the access width is pinned too:
+	// the write8 message carries no width word and the write32 message carries
+	// "32-bit", and a width routed to the wrong message fails here as well.
 	g_capturedLog.clear();
 	flash.write8(kFixtureCs0Base, 0xff);
 	checkEqual(flash.read32(kFixtureCs0Base), syntheticSp, "write8 does not change the bytes");
-	check(contains(g_capturedLog, "Rejected write to read-only Flash at 0x30000000"),
+	checkEqualText(g_capturedLog, "Rejected write to read-only Flash at 0x30000000\n",
 		"write8 is reported as rejected, with its address");
 
 	g_capturedLog.clear();
 	flash.write32(kFixtureCs2Base + 0x10, 0u);
 	checkEqual(flash.read32(kFixtureCs2Base + 0x10), 0x12345678u, "write32 does not change the bytes");
-	check(contains(g_capturedLog, "Rejected 32-bit write to read-only Flash at 0x20000010"),
+	checkEqualText(g_capturedLog, "Rejected 32-bit write to read-only Flash at 0x20000010\n",
 		"write32 is reported as rejected, with its width and address");
 
 	if(failures != 0)
