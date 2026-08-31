@@ -233,8 +233,13 @@ namespace
 
 extern "C"
 {
-	void mcf5307_runtime_init(void)
+	/* ANSWERS 1, WHICH IS "THE RUNTIME IS USABLE". mcf5307.h states the status
+	 * is a truth value and not a POSIX error code, and 0 is reserved for a
+	 * one-time latch that was abandoned. This fake has no latch and no runtime
+	 * to stall, so 1 is the only answer it can honestly give. */
+	int mcf5307_runtime_init(void)
 	{
+		return 1;
 	}
 
 	mcf5307_ctx* mcf5307_create(void*, mcf5307_read_fn, mcf5307_write_fn,
@@ -320,9 +325,15 @@ extern "C"
 	/* The Board drains its transport hub into the device on every quantum
 	 * boundary, so board.cpp references this entry point and a target that
 	 * links no mcf5307 archive must supply it. It is a sink and not a recorder:
-	 * nothing in this file drives the hub, so no frame ever reaches it. */
-	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
+	 * nothing in this file drives the hub, so no frame ever reaches it.
+	 *
+	 * It answers 1, which is "an OUT buffer holds the packet". The Board reads
+	 * this return and treats 0 as a NAK, which leaves its cursor where it was
+	 * and offers the same packet again at the next quantum, so a sink that
+	 * answered 0 would be retried forever rather than drained. */
+	int isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
 	{
+		return 1;
 	}
 
 	/* The Board moves its handle off the Stub backend at construction, so
