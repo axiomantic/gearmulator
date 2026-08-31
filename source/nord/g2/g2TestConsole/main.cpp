@@ -876,6 +876,11 @@ namespace
 	constexpr int32_t g_impulseLeft  = 0x0055AA33;
 	constexpr int32_t g_impulseRight = 0x00337799;
 
+	/* The observer's known negative swaps these two, so a matcher stuck at true
+	 * is caught only while they differ. */
+	static_assert(g_impulseLeft != g_impulseRight,
+		"The impulse slots must differ, or the swapped-slot control matches.");
+
 	constexpr unsigned g_impulseOverrunQuanta = 1024u;
 
 	/* The outcome is printed on every exit path, including the ones that leave
@@ -1065,6 +1070,18 @@ namespace
 
 		const g2::Frame silence{};
 
+		/* The walk below and the self-test after it drive THE SAME two
+		 * predicates. Retyped copies let the self-test keep passing while the
+		 * walk's own comparison drifts away from it. */
+		const auto seen = [](const g2::Frame& _f)
+		{
+			return _f.slot[0] != 0 || _f.slot[1] != 0;
+		};
+		const auto matches = [](const g2::Frame& _f)
+		{
+			return _f.slot[0] == g_impulseLeft && _f.slot[1] == g_impulseRight;
+		};
+
 		int      arrival      = -1;
 		bool     arrivalExact = false;
 		unsigned framesPulled = 0;
@@ -1086,30 +1103,33 @@ namespace
 			 * the chain at all. */
 			framesPulled += unsigned(scheduler->pull(&out, 1));
 
-			if(arrival < 0 && (out.slot[0] != 0 || out.slot[1] != 0))
+			if(arrival < 0 && seen(out))
 			{
 				arrival      = int(q);
-				arrivalExact = out.slot[0] == g_impulseLeft && out.slot[1] == g_impulseRight;
+				arrivalExact = matches(out);
 			}
 		}
 
-		/* The observer's own known positive and known negative, run on the
-		 * detector and not on the chain. The loop above reports an absence, and
-		 * an absence reported by a detector that cannot detect is not evidence.
-		 * This drives the same two predicates over a frame this program built,
-		 * whose answers are known before the run: the injected pattern must be
-		 * seen and must compare equal, and a zero frame must not be seen. */
+		/* The observer's own controls, run on the detector and not on the chain.
+		 * The loop above reports an absence, and an absence reported by a
+		 * detector that cannot detect is not evidence.
+		 *
+		 * THE SWAPPED-SLOT FRAME IS THE CONTROL THAT COSTS SOMETHING. A
+		 * `matches` wired to a constant true survives both other controls:
+		 * silence never reaches it, because `seen` rejects the zero frame
+		 * first, and the injected frame is supposed to match. Only a frame that
+		 * is non-zero AND wrong separates a matcher from a matcher that always
+		 * says yes -- which is the exact failure that would report every
+		 * arriving frame as arrivalExact. */
 		bool observerSelfTest = false;
 		{
-			const g2::Frame& positive = impulseFrame;
-			const g2::Frame& negative = silence;
+			g2::Frame mismatch{};
+			mismatch.slot[0] = g_impulseRight;
+			mismatch.slot[1] = g_impulseLeft;
 
-			const bool positiveSeen   = positive.slot[0] != 0 || positive.slot[1] != 0;
-			const bool positiveMatches = positive.slot[0] == g_impulseLeft
-				&& positive.slot[1] == g_impulseRight;
-			const bool negativeSeen   = negative.slot[0] != 0 || negative.slot[1] != 0;
-
-			observerSelfTest = positiveSeen && positiveMatches && !negativeSeen;
+			observerSelfTest = seen(impulseFrame) && matches(impulseFrame)
+				&& !seen(silence)
+				&& seen(mismatch) && !matches(mismatch);
 		}
 
 		std::cout << "impulse: dspCount=" << dspCount
