@@ -51,9 +51,15 @@
 namespace
 {
 	int g_failures = 0;
+	int g_cases = 0;
 
+	// The totals below are COUNTED here rather than written as a literal in
+	// the report. A literal goes stale the moment a case is added, and says so
+	// in no way at all.
 	void check(const bool _condition, const std::string& _what)
 	{
+		++g_cases;
+
 		if(_condition)
 		{
 			std::cout << "ok   " << _what << std::endl;
@@ -74,6 +80,12 @@ namespace
 //
 // It CATCHES: a runtime entry point that does not return -- an aborting Nim
 // runtime, or an idempotence latch that recursed.
+//
+// It CATCHES: an initialisation latch that stalled. mcf5307_runtime_init
+// answers 1 when the runtime is usable and 0 when the latch was abandoned, and
+// the status is checked below rather than dropped. A 0 makes mcf5307_create
+// and isp1181_create return null, so every later call in the track answers out
+// of a runtime that was never initialised; this is the first place that shows.
 //
 // It DOES NOT CATCH a wrong ANSWER from the core. Nothing below executes a
 // program: mcf5307_exec has its address taken but is never called, because
@@ -135,24 +147,36 @@ int main()
 	// on a defect rather than returning a wrong value, so a core that aborted
 	// on the second call leaves this at one and never reaches the report.
 	volatile int returnedCalls = 0;
+	volatile int initialisedCalls = 0;
 
-	runtimeInit();
+	initialisedCalls += runtimeInit();
 	++returnedCalls;
-	runtimeInit();
+	initialisedCalls += runtimeInit();
 	++returnedCalls;
-	runtimeInit();
+	initialisedCalls += runtimeInit();
 	++returnedCalls;
 
 	check(returnedCalls == 3,
 		"mcf5307_runtime_init returned from all three of three calls");
 
+	// Case 3. The runtime reports itself usable, and keeps reporting it.
+	//
+	// The status is a truth value and not a POSIX error code: 1 is usable, 0
+	// is a latch that reached its deadline and was abandoned. The abandoned
+	// state is terminal, so a stall on any of the three calls leaves this sum
+	// below three. Summing rather than checking the last call is what keeps a
+	// latch that answered 1 and then 0 from passing.
+	check(initialisedCalls == 3,
+		"mcf5307_runtime_init reported the runtime usable on all three calls");
+
 	if(g_failures)
 	{
-		std::cout << "t0_mcf5307_link: " << g_failures << " of 2 cases failed"
-			<< std::endl;
+		std::cout << "t0_mcf5307_link: " << g_failures << " of " << g_cases
+			<< " cases failed" << std::endl;
 		return 1;
 	}
 
-	std::cout << "t0_mcf5307_link: 2 of 2 cases passed" << std::endl;
+	std::cout << "t0_mcf5307_link: " << g_cases << " of " << g_cases
+		<< " cases passed" << std::endl;
 	return 0;
 }
