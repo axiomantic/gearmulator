@@ -80,7 +80,11 @@ namespace g2
 	 * for iterating against a stale value. The guard re-reads the bound
 	 * inside the loop body and terminates early if getRxWordCount()
 	 * changes. The for loop is a fixed count and does not hang; the guard
-	 * prevents a phase perturbation the shipped shape excludes. */
+	 * prevents a phase perturbation the shipped shape excludes.
+	 *
+	 * THE RETURN IS THE SLOTS ACTUALLY DRIVEN, so an early break reports
+	 * fewer than getRxWordCount() + 1. Returning the bound on that path
+	 * would hide the very perturbation the re-read exists to catch. */
 	uint32_t receiveDspFrame(dsp56k::Esai& esai,
 		const std::function<void()>& _callback) noexcept;
 }

@@ -96,9 +96,51 @@ namespace g2
 		uint64_t totalSpent = 0;
 		uint32_t slotIndex = 0;
 
+		/* Whether the second bus advances this quantum. Read here, above
+		 * the interleave, because the slot population below counts its
+		 * two halves only on a divider frame. */
+		const bool secondBus = c->frameIndex % c->secondBusFrameDivider == 0;
+
+		/* THE SLOT POPULATION THE INTERLEAVE WILL FIRE, and the divisor
+		 * want is spread over. A quantum runs the RECEIVE half and the
+		 * TRANSMIT half of the audio port -- getRxWordCount() + 1 plus
+		 * getTxWordCount() + 1, sixteen slots at the word counts the
+		 * firmware programs -- and both halves of the second bus on top
+		 * of that on a divider frame. A hardcoded 8 stood here, so a
+		 * quantum firing sixteen to thirty-two callbacks delivered its
+		 * budget two to four times over against one want, and the
+		 * reconciliation below cannot take back cycles already run.
+		 *
+		 * The transmit terms are an UPPER BOUND: a transmitter enable
+		 * costs one slot, so the quantum after one fires one slot fewer
+		 * and under-delivers by that slot's share. The reconciliation
+		 * absorbs a shortfall -- it floors the carry-over at zero -- and
+		 * that is the direction to err in. */
+		uint32_t slotCount = 0;
+
+		if(c->audioEsai->hasEnabledReceivers())
+			slotCount += c->audioEsai->getRxWordCount() + 1u;
+		if(c->audioEsai->hasEnabledTransmitters())
+			slotCount += c->audioEsai->getTxWordCount() + 1u;
+
+		if(secondBus)
+		{
+			if(c->secondEsai->hasEnabledReceivers())
+				slotCount += c->secondEsai->getRxWordCount() + 1u;
+			if(c->secondEsai->hasEnabledTransmitters())
+				slotCount += c->secondEsai->getTxWordCount() + 1u;
+		}
+
+		/* subBudget divides by this. Zero reaches it only when no
+		 * direction is enabled anywhere, and then no callback fires at
+		 * all, so the value is unobservable -- but a division is not the
+		 * place to rely on that. */
+		if(slotCount == 0)
+			slotCount = 1;
+
 		const std::function<void()> run = [&]() noexcept
 		{
-			const auto sub = subBudget(want, 8u, slotIndex);
+			const auto sub = subBudget(want, slotCount, slotIndex);
 			++slotIndex;
 			if(sub > 0)
 				totalSpent += runDspCycles(*c->dsp, sub);
@@ -130,10 +172,10 @@ namespace g2
 
 		/* 1. The receive half of the frame, interleaved with core
 		 * execution when the interleave runs. The second bus advances
-		 * only inside the window ChainAdapter::advanceAll uses. */
-		const bool secondBus = c->frameIndex % c->secondBusFrameDivider == 0;
-
-		/* The run gate. A NULL pointer is NOT landed, and that direction
+		 * only inside the window ChainAdapter::advanceAll uses, and
+		 * secondBus is read above, where the slot population needs it.
+		 *
+		 * The run gate. A NULL pointer is NOT landed, and that direction
 		 * is the whole of the gate. Reading NULL as "landed" would run
 		 * a slot whose program memory is zero-filled -- and 0x000000 is
 		 * a no-operation on this core, so that slot faults nowhere and
@@ -173,19 +215,43 @@ namespace g2
 				transmitDspFrame(*c->secondEsai);
 		}
 
-		/* Reconcile the debt using the same floor-at-zero rule runQuantum
-		 * uses. */
-		c->debt = static_cast<int64_t>(totalSpent) - want;
-		if(c->debt < 0)
-			c->debt = 0;
+		/* THE SHORTFALL TOP-UP, and it is what makes the slot count above
+		 * safe to over-estimate. The transmit terms of slotCount are an
+		 * upper bound, so a quantum whose transmit half fires one slot
+		 * fewer leaves that slot's share of want unspent -- and t0_dsp_
+		 * run_gate's contract is that an open gate delivers AT LEAST the
+		 * want and overshoots by less than one dispatch unit. The residue
+		 * is one slot's share and it runs here, after the frame, because
+		 * there is no slot left to run it between. */
+		if(landed && !audioIdle && want > 0
+			&& static_cast<int64_t>(totalSpent) < want)
+		{
+			totalSpent += runDspCycles(*c->dsp,
+				static_cast<uint32_t>(want - static_cast<int64_t>(totalSpent)));
+		}
 
-		/* The long-dispatch quantum counter. When want <= 0, the callback
-		 * runs nothing and the debt is paid down by the whole allocation,
-		 * which is the long-dispatch condition runQuantum counts. */
+		/* Reconcile the debt, and THE TWO BRANCHES ARE EXCLUSIVE, exactly
+		 * as runQuantum's are: its want <= 0 arm returns before the
+		 * carry-over line ever runs. Applying both paid the allocation
+		 * down TWICE -- the carry-over line already subtracts want, which
+		 * is budget - debt, and the counter arm then subtracted budget
+		 * again -- and nothing floors the second subtraction, so the debt
+		 * could go negative and bank credit the design forbids. */
 		if(want <= 0)
 		{
+			/* The previous quantum already overran this quantum's whole
+			 * budget. Rule 4: the long-dispatch condition, counted. No
+			 * cycle ran -- subBudget answers 0 for every slot and the
+			 * direct route is gated on want > 0 -- so there is nothing to
+			 * carry over, only the allocation to pay down. */
 			c->debt -= budget;
 			++c->longDispatchQuanta;
+		}
+		else
+		{
+			c->debt = static_cast<int64_t>(totalSpent) - want;
+			if(c->debt < 0)
+				c->debt = 0;   /* no credit banking */
 		}
 	}
 }

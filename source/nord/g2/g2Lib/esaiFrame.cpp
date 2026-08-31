@@ -95,9 +95,16 @@ namespace g2
 
 		const uint32_t bound = esai.getRxWordCount() + 1u;
 
+		/* THE RETURN IS THE SLOTS DRIVEN AND NOT THE BOUND. The early
+		 * break below is exactly the case where the two differ, and
+		 * returning the bound there reports slots that were never
+		 * driven -- the one perturbation this form exists to expose. */
+		uint32_t slots = 0;
+
 		for(uint32_t i = 0; i < bound; ++i)
 		{
 			esai.execRX();
+			++slots;
 			_callback();
 			/* Re-read the bound inside the loop body and terminate
 			 * early if getRxWordCount() changes. A guest RCCR write that
@@ -107,6 +114,6 @@ namespace g2
 				break;
 		}
 
-		return bound;
+		return slots;
 	}
 }

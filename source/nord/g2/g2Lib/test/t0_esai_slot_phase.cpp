@@ -496,8 +496,10 @@ int main(int argc, char** argv)
 		const bool landed = true;
 		g2::DspContext ctx = makeContext(f, &landed);
 		/* A rate of G2_FRAME_RATE_HZ/G2_FRAME_RATE_HZ gives one cycle per
-		 * frame, which is smaller than the slot count (8), so the floor
-		 * overrides the sum and every slot gets a dispatch of at least 1. */
+		 * frame, which is smaller than the slot count -- the receive half
+		 * and the transmit half of the audio port, each
+		 * getWordCount() + 1 -- so the floor overrides the sum and every
+		 * slot gets a dispatch of at least 1. */
 		ctx.rate = {G2_FRAME_RATE_HZ, G2_FRAME_RATE_HZ};
 
 		const uint64_t cyclesBefore = f.dsp.getCycles();
