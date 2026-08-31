@@ -13,6 +13,8 @@
 
 #include "internalClient.h"
 
+#include "crc16.h"
+
 #include <cstring>
 
 namespace g2
@@ -41,6 +43,28 @@ namespace g2
 		 * maxFrameBytes and the queue depth for what leaves, and a second
 		 * refusal here would be a second place to keep that number. */
 		return m_hub.toDevice(*this, _frame);
+	}
+
+	bool InternalClient::sendTransfer(uint8_t* const _buffer, const std::size_t _messageSize) noexcept
+	{
+		if(_buffer == nullptr || _messageSize == 0)
+			return false;
+
+		const std::size_t total = 2 + _messageSize + 2;
+
+		/* THE TOTAL IS A 16-BIT FIELD AND A TRANSFER THAT OVERFLOWS IT IS
+		 * REFUSED RATHER THAN TRUNCATED. A wrapped total names a shorter
+		 * transfer than the bytes that follow it, which the device's
+		 * reassembly reads as a complete message and checksums as one. */
+		if(total > 0xFFFFu)
+			return false;
+
+		_buffer[0] = static_cast<uint8_t>(total >> 8);
+		_buffer[1] = static_cast<uint8_t>(total & 0xFFu);
+
+		crc16Store(_buffer + 2 + _messageSize, crc16(_buffer + 2, _messageSize));
+
+		return send(ProtocolFrame{ _buffer, total });
 	}
 
 	void InternalClient::onFrameFromDevice(const ProtocolFrame _frame) noexcept
