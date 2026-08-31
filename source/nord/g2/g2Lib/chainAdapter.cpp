@@ -65,6 +65,11 @@ namespace g2
 		assert(hopFrames >= 1u
 			&& "a mailbox with a hop delay of zero cannot express the delay "
 			"line - Scheduler::create rejects it before this is reached");
+		assert(secondBusFrameDivider >= 1u
+			&& "a divider of zero makes the frameIndex modulo in advanceAll "
+			"and in secondTxCallback undefined - Scheduler::create rejects it "
+			"before this is reached, but this surface is constructed directly "
+			"by tests");
 	}
 
 	/* ------------- accessors. ------------------------------------------------- */

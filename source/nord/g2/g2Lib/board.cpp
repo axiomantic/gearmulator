@@ -15,6 +15,7 @@
 
 #include "board.h"
 
+#include <cassert>
 #include <cstring>
 #include <iostream>
 
@@ -24,9 +25,11 @@ namespace g2
 {
 	namespace
 	{
-		// The version word of the Board's own snapshot block. It exists so that
-		// a state file from a different revision is a named mismatch rather
-		// than a silent acceptance. The value has no other meaning.
+		// The version word of the Board's own snapshot block. stateLoad has no
+		// error channel -- it returns void -- so a mismatch is an assert and
+		// not a reported status. A snapshot written by a different revision
+		// has a different field layout, and reading it would restore
+		// plausible-looking wrong values in silence.
 		constexpr uint32_t g_boardStateVersion = 1u;
 
 		// The flat snapshot the Board serialises. It is a fixed-size, plain-old
@@ -108,7 +111,10 @@ namespace g2
 
 	void Board::stateSave(void* const dst) const noexcept
 	{
-		BoardState s;
+		// Value-initialised so the padding between the fields is zero. The
+		// snapshot is memcpy'd whole, and indeterminate padding would make two
+		// saves of the same Board state differ byte for byte.
+		BoardState s{};
 		s.version        = g_boardStateVersion;
 		s.lastFrameIndex = m_lastFrameIndex;
 		s.faulted        = m_faulted ? 1u : 0u;
@@ -119,6 +125,9 @@ namespace g2
 	{
 		BoardState s;
 		std::memcpy(&s, src, sizeof s);
+		assert(s.version == g_boardStateVersion
+			&& "a snapshot from a different revision would be read with this "
+			"revision's field layout");
 		m_lastFrameIndex = s.lastFrameIndex;
 		m_faulted        = s.faulted != 0u;
 	}

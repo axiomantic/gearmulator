@@ -135,21 +135,30 @@ int main()
 		check(board.faulted() == false,
 		      "faulted() returns false for a fresh board that has not run");
 
-		// tickSofIfDue: callable on any frame index.
-		board.tickSofIfDue(0u);
-		board.tickSofIfDue(96u);
-		check(true, "tickSofIfDue is callable with a frame index");
-
-		// stateSize/stateSave/stateLoad: a flat snapshot that round-trips.
 		const std::size_t size = board.stateSize();
 		check(size > 0u, "stateSize() returns a non-zero snapshot size");
 
-		std::vector<std::uint8_t> snapshot(size, 0u);
-		board.stateSave(snapshot.data());
-		// Overwrite one byte so the load really copies state back in.
-		snapshot[size / 2] = static_cast<std::uint8_t>(~snapshot[size / 2]);
-		board.stateLoad(snapshot.data());
-		check(true, "stateSave then stateLoad round-trip without crashing");
+		// tickSofIfDue: the snapshot is the only surface that observes the
+		// recorded frame index, so two saves either side of a tick are what
+		// prove the argument was kept.
+		board.tickSofIfDue(0u);
+		std::vector<std::uint8_t> atZero(size, 0u);
+		board.stateSave(atZero.data());
+
+		board.tickSofIfDue(96u);
+		std::vector<std::uint8_t> at96(size, 0u);
+		board.stateSave(at96.data());
+		check(at96 != atZero,
+		      "tickSofIfDue records the frame index it was given");
+
+		// stateLoad must overwrite what the Board currently holds: the Board
+		// is at frame 96, and loading the frame-zero snapshot back has to make
+		// the next save reproduce the frame-zero bytes exactly.
+		board.stateLoad(atZero.data());
+		std::vector<std::uint8_t> reSaved(size, 0u);
+		board.stateSave(reSaved.data());
+		check(reSaved == atZero,
+		      "stateLoad restores the snapshot, proven by re-saving the same bytes");
 
 		std::cout.rdbuf(oldBuf);
 	}

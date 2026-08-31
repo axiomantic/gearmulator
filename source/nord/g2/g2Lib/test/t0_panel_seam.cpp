@@ -166,9 +166,15 @@ int main()
 
 		// A zero-byte save has no pointer to touch: a null destination is a
 		// legal call, which lets the scheduler's snapshot path skip the
-		// panel's block without special-casing it.
+		// panel's block without special-casing it. The panel it saved from
+		// must still serve what it held.
+		mcf5307_bus_status status = MCF5307_BUS_OK;
+		board.write(g_displayBase, 32, 0x4e4d4732u, status);
 		board.panel().stateSave(nullptr);
-		check(true, "stateSave accepts a null destination, because zero bytes are written");
+		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0x4e4d4732u),
+			"a null destination leaves the display buffer the panel serves untouched");
+		checkEqual(board.panel().stateSize(), size_t(0),
+			"a null destination leaves the zero-byte state at zero");
 	}
 
 	// Case group 4. A load of a zero-byte block reads zero bytes and restores
