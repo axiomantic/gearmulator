@@ -6,9 +6,9 @@
 # adds its steps inside this job, in this file, and touches `ci.yml` in zero
 # places.
 #
-# THIS JOB ASSERTS NOTHING YET AND IT SAYS SO. Until the sched track adds its
-# no-system-clock step, this job exists to give that step a file to live in and
-# to give the caller a resolvable `uses:` reference.
+# Until the sched track adds its no-system-clock step, this job exists to
+# give that step a file to live in and to give the caller a resolvable
+# `uses:` reference.
 
 name: track-sched
 

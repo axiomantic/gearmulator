@@ -85,11 +85,8 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 #
 # THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
 # clean configure, so a check against the core would measure a different core
-# from one run to the next and a green result would not be reproducible.
-#
-# THE PIN IS ADVANCED BY HAND AND NOTHING IN THIS TREE DETECTS THAT IT IS
-# STALE. A configure here cannot see the upstream tip without a network call,
-# so the staleness of this line is a CI question and not a configure one.
+# from one run to the next. The pin is advanced by hand, and nothing in this
+# tree detects that it is stale.
 #
 # base.cmake appends `-Ofast` to the release flags of the whole build, mcf5307
 # test targets carry `-Werror`, and a current Apple clang deprecates the flag,
