@@ -2,7 +2,7 @@
 #
 # Append every source name this track adds under source/nord/g2/g2Lib/ to
 # G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
-# file in this tree. See plan section 7.4.2.
+# file in this tree.
 
 # A test target that compiles a source directly does not prove g2Lib carries
 # its symbols. g2JucePlugin links g2Lib rather than recompiling its sources, so

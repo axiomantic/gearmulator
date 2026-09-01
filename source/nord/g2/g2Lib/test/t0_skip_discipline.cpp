@@ -1,13 +1,11 @@
-// Task REPO-7. Tier T0: this test runs with NMG2_ARTIFACTS unset and needs no
-// firmware artifact of any kind.
-//
-// Plan section 9.2, REPO-7. Design section 18.5. Plan section 5.2 rules 2 and 3.
+// Tier T0: this test runs with NMG2_ARTIFACTS unset and needs no firmware
+// artifact of any kind.
 //
 // ---------------------------------------------------------------------------
 // Why this test builds its own gated subjects
 //
-// REPO-7's check reads: "Every gated test the build carries prints
-// `SKIPPED: firmware artifact not available (NMG2_ARTIFACTS unset)`."
+// The acceptance is: every gated test the build carries prints
+// `SKIPPED: firmware artifact not available (NMG2_ARTIFACTS unset)`.
 //
 // The clause quantifies over the gated tests the build carries. When no test
 // the build carries is gated, that set is EMPTY.

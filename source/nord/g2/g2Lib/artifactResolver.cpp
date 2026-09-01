@@ -1,5 +1,3 @@
-// Task REPO-5. Design section 4.2.
-
 #include "artifactResolver.h"
 
 #include <cstdlib>
@@ -16,7 +14,7 @@
 // baseLib::filesystem::isDirectory() is the house function for this question
 // and this file DELIBERATELY does not call it. Its USE_DIRENT branch discards
 // stat()'s return value and then reads statbuf.st_mode, so a path that does not
-// exist -- which is precisely the case REPO-5's check drives -- reads an
+// exist -- which is precisely the case this resolver's gate drives -- reads an
 // uninitialised struct. The behaviour is undefined and the gate would be
 // unreliable in exactly the case it exists to assert. The defect is reported
 // upstream; it is not silently inherited here.

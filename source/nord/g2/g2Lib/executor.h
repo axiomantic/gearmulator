@@ -83,9 +83,9 @@ namespace g2
 	 *
 	 * The re-entry counters are carried in every build type and exposed, and
 	 * that is a decision with a measured reason rather than a convenience.
-	 * Design section 13.10.3 says "debug builds assert this with a depth
-	 * counter". The DEFAULT BUILD of this TREE is Release and DEFINES NDEBUG,
-	 * so an assert() is not in the translation unit at all: a check whose
+	 * A depth counter asserted only in debug builds would not hold here: the
+	 * default build of this tree is Release and defines NDEBUG, so an
+	 * assert() is not in the translation unit at all, and a check whose
 	 * predicate is "the debug build caught it" passes against a tree in which
 	 * the property was never written. So the counter is always present, the
 	 * re-entry is REFUSED rather than asserted, and t0_executor reads the
