@@ -86,6 +86,62 @@ option(G2_LINK_MCF5307 "Link the MCF5307 core" ON)
 
 if(G2_LINK_MCF5307)
 	if(G2_MCF5307_SOURCE_DIR)
+		# A sibling checkout sits wherever its last piece of work left it, which is
+		# usually neither the pin nor whatever the pin is being moved to, so an
+		# unannounced override quietly makes every result a statement about a third
+		# tree. A diverged tree is not itself wrong — iterating on both
+		# repositories at once is the reason this override exists — so what is
+		# fatal is entering that state without saying so. A warning alone would
+		# not do: an unread line in a configure log is the signal this whole
+		# failure class already gets past. The acknowledgement is the label, and
+		# once given, the divergence is restated on every configure that follows.
+		option(G2_MCF5307_SOURCE_DIR_IS_NOT_THE_PIN "Build from G2_MCF5307_SOURCE_DIR even when that checkout is not the pinned commit" OFF)
+		find_program(G2_GIT_EXECUTABLE NAMES git)
+
+		set(mcf5307HeadIsPin FALSE)
+		set(mcf5307Divergence "")
+		execute_process(
+			COMMAND ${G2_GIT_EXECUTABLE} -C "${G2_MCF5307_SOURCE_DIR}" rev-parse HEAD
+			OUTPUT_VARIABLE mcf5307Head OUTPUT_STRIP_TRAILING_WHITESPACE
+			ERROR_QUIET RESULT_VARIABLE mcf5307HeadResult)
+		execute_process(
+			COMMAND ${G2_GIT_EXECUTABLE} -C "${G2_MCF5307_SOURCE_DIR}" rev-parse "${G2_MCF5307_GIT_TAG}^{commit}"
+			OUTPUT_VARIABLE mcf5307Pin OUTPUT_STRIP_TRAILING_WHITESPACE
+			ERROR_QUIET RESULT_VARIABLE mcf5307PinResult)
+		execute_process(
+			COMMAND ${G2_GIT_EXECUTABLE} -C "${G2_MCF5307_SOURCE_DIR}" status --porcelain
+			OUTPUT_VARIABLE mcf5307Dirty OUTPUT_STRIP_TRAILING_WHITESPACE
+			ERROR_QUIET RESULT_VARIABLE mcf5307DirtyResult)
+
+		if(NOT mcf5307HeadResult EQUAL 0 OR NOT mcf5307DirtyResult EQUAL 0)
+			set(mcf5307Divergence "its state could not be read: `git -C <dir> rev-parse HEAD` or `git status` failed, so this tree cannot be compared against the pin at all")
+		elseif(NOT mcf5307PinResult EQUAL 0)
+			set(mcf5307Divergence "it does not contain the pinned commit ${G2_MCF5307_GIT_TAG} at all; its HEAD is ${mcf5307Head}")
+		elseif(NOT mcf5307Head STREQUAL mcf5307Pin)
+			set(mcf5307Divergence "its HEAD is ${mcf5307Head}, and the pin is ${mcf5307Pin}")
+		elseif(NOT mcf5307Dirty STREQUAL "")
+			set(mcf5307Divergence "its working tree has uncommitted changes, so what would compile is not the pinned commit even though its HEAD is")
+		else()
+			set(mcf5307HeadIsPin TRUE)
+		endif()
+
+		if(NOT mcf5307HeadIsPin AND NOT G2_MCF5307_SOURCE_DIR_IS_NOT_THE_PIN)
+			message(FATAL_ERROR
+				"G2_MCF5307_SOURCE_DIR points at ${G2_MCF5307_SOURCE_DIR}, but "
+				"${mcf5307Divergence}. Every result from this build tree would be a "
+				"statement about that tree and not about the pin.\n"
+				"Unset G2_MCF5307_SOURCE_DIR to build against the pin, check the "
+				"sibling out onto ${G2_MCF5307_GIT_TAG}, or pass "
+				"-DG2_MCF5307_SOURCE_DIR_IS_NOT_THE_PIN=ON to build against it "
+				"deliberately — and then label every result from this build tree as "
+				"not testing the pin.")
+		endif()
+		if(NOT mcf5307HeadIsPin)
+			message(WARNING
+				"mcf5307: building against ${G2_MCF5307_SOURCE_DIR}, not the pin, because "
+				"${mcf5307Divergence}. Results from this build tree do not describe the pin.")
+		endif()
+
 		add_subdirectory(${G2_MCF5307_SOURCE_DIR} ${CMAKE_BINARY_DIR}/mcf5307 EXCLUDE_FROM_ALL)
 	else()
 		include(FetchContent)
