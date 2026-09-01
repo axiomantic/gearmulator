@@ -4,14 +4,10 @@
 // and report MCF5307_BUS_OK, which is what a board that models no fault does;
 // the routing to the CS0 to CS5 devices comes later.
 //
-// WHAT THIS FILE IS. board.cpp owns the Board's lifetime and its six-method
-// surface. The Check of BRD-21 is t0_board_surface: concreteness (final,
-// non-polymorphic, non-copyable, non-movable), the six methods the Scheduler
-// uses, and the single construction log line that names the MCU core clock
-// and its owner. The bodies below are the T0 minimum that makes
-// every method real and callable; the board-track integration that follows
-// (the CS0 to CS5 devices, the TransportHub, the real memory routing) widens
-// the constructor and the bodies, and BRD-22 owns the real tickSofIfDue.
+// stateSave/stateLoad serialise the Board's own determinism-relevant state
+// only. The core's mcf5307_state_* and isp1181_state_* blocks are not folded
+// in here yet: doing so fixes a snapshot layout across two repositories, and
+// the Board does not own an isp1181 handle to snapshot in the first place.
 //
 // The routing. onRead and onWrite forward to busRead and busWrite, which hand
 // the access to the MemoryMap. The decode turns the address into a region and a
@@ -106,8 +102,7 @@ namespace g2
 
 		// The flat snapshot the Board serialises. It is a fixed-size, plain-old
 		// data struct with no pointer inside, so a state file cannot carry a
-		// dangling address. The Nim mcf5307_*/isp1181_* blocks join it once a
-		// cpu task exports them.
+		// dangling address. The core's own state blocks are not folded in here.
 		struct BoardState
 		{
 			uint32_t version;
