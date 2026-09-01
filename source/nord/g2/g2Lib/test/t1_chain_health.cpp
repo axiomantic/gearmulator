@@ -16,18 +16,18 @@
 //                                the same Scheduler accessors the golden run
 //                                asserts zero on.
 //
-//   phaseErrorFrames(p)          Two known positives. The first drives a
-//                                ChainAdapter directly, with a real emulated
+//   phaseErrorFrames(p)          One known positive drives a ChainAdapter
+//                                directly, with a real emulated
 //                                Esai so the written-flag condition is real:
 //                                one position's audio transmit wrapper fired
 //                                TWICE inside one quantum.
 //
-//                                The second drives the same condition on a
+//                                Another drives the same condition on a
 //                                Scheduler and reads it back through
 //                                Scheduler::phaseErrorFrames. That accessor is
 //                                the adapter reading MINUS a baseline taken at
-//                                beginPlayPhase, and the first known positive
-//                                says nothing about the subtraction.
+//                                beginPlayPhase, and the adapter-driven known
+//                                positive says nothing about the subtraction.
 //
 //                                The Scheduler cannot be made to ask for a
 //                                second transmit -- that is the whole point of
@@ -548,7 +548,7 @@ namespace
 	// Scheduler::phaseErrorFrames is the adapter reading minus
 	// m_phaseErrorBase, captured at beginPlayPhase.
 	//
-	// The order of the three steps is load-bearing. The baseline is taken by
+	// The order of the steps below is load-bearing. The baseline is taken by
 	// beginPlayPhase, so the two transmits are driven AFTER it -- a delivery
 	// before it would be absorbed into the baseline and read back as zero.
 	void knownPositiveSchedulerPhaseError()
