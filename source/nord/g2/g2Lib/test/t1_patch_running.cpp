@@ -365,6 +365,52 @@ namespace
 		{0x3001213Au, "the 0x25 ARM (sole route in the table)"},
 		{0x30013568u, "wrapper FUN_30013568 entry"},
 		{0x3004C10Cu, "worker  FUN_3004c10c entry"},
+		// The event loop that is the dispatcher's ONLY caller, in call order.
+		// Derived, not guessed: a longword scan of the image for 0x30012050 finds
+		// exactly one occurrence, 0x300046BC -- the operand of `jsr 0x30012050` at
+		// 0x300046BA, inside FUN_30004674. The same scan for 0x30004674 finds
+		// exactly one, 0x3001B54C, the operand of `jsr 0x30004674` at 0x3001B54A.
+		// The loop body disassembles as four `jsr %a2@` with %a2 loaded by
+		// `lea 0x30003914,%a2` at 0x3000467A -- so 0x30003914 is the dequeue's own
+		// entry, not a pointer cell -- pushing the four queue handles 0x302A2700,
+		// 0x302A26EC, 0x302A26F8 and 0x302A26F0 in that order, each short-circuited
+		// by `bnes 0x300046B8`. 0x30004674 is the prologue and runs once; the
+		// repeat target is 0x30004680, so that address counts iterations.
+		{0x3001B54Au, "sole call site of the event loop"},
+		{0x30004674u, "EVENT LOOP entry FUN_30004674 (prologue, once)"},
+		{0x30004680u, "loop head -- one per iteration"},
+		{0x30003914u, "DEQUEUE entry FUN_30003914"},
+		{0x300046A2u, "dequeue call for queue 0x302A26F8 (the 0x25 queue)"},
+		{0x300046B8u, "SOME queue returned non-empty -> dispatch"},
+		{0x300046CCu, "all four queues empty -> idle branch"},
+		{0x300047D6u, "queue construction FUN_300047d6 (creates all seven)"},
+		// The init function that contains BOTH the queue construction and the loop
+		// launch, and the ladder that bisects it. Derived: the sole longword ref to
+		// 0x300047D6 is 0x3001B104 (operand of `jsr 0x300047d6` at 0x3001B102) and
+		// the sole ref to 0x30004674 is 0x3001B54C (operand of the jsr at 0x3001B54A).
+		// Scanning back, the nearest preceding rts is 0x3001B098 and the next
+		// linkw is `4e56 fffc` at 0x3001B09C; the nearest following unlk/rts is
+		// 0x3001B556/0x3001B558. So 0x3001B102 and 0x3001B54A sit in ONE function,
+		// 0x3001B09C, with no return between them -- and that function has exactly
+		// one caller, the jsr whose operand is at 0x3001BC10. The queue
+		// construction ran once and the loop launch never did, so the run stops
+		// somewhere in this span. Each rung below is a `jsr` site read straight off
+		// the disassembly, in address order.
+		{0x3001B09Cu, "INIT entry FUN_3001b09c"},
+		{0x3001B102u, "rung: jsr queue construction (anchor, must be 1)"},
+		{0x3001B158u, "rung: jsr 0x30029e76"},
+		{0x3001B1C8u, "rung: jsr (a3) in the table-walk block"},
+		{0x3001B25Eu, "rung: jsr 0x30057e4e"},
+		{0x3001B2BCu, "rung: jsr (a4) in the alternate block"},
+		{0x3001B360u, "rung: jsr 0x300383f0 (both branches rejoin here)"},
+		{0x3001B384u, "rung: jsr 0x30012018"},
+		{0x3001B3CCu, "rung: jsr 0x3001c660"},
+		{0x3001B3FEu, "rung: jsr 0x3001b55a"},
+		{0x3001B412u, "rung: jsr 0x30055bb0"},
+		{0x3001B480u, "rung: jsr 0x30055f28"},
+		{0x3001B4C2u, "rung: jsr 0x3001b674"},
+		{0x3001B526u, "rung: jsr 0x3005e68c"},
+		{0x3001B544u, "rung: jsr 0x3005e568 (the rung before the loop launch)"},
 	};
 
 	constexpr size_t g_probeCount = sizeof(g_probes) / sizeof(g_probes[0]);
@@ -1428,8 +1474,55 @@ namespace
 					? "DISPATCHER RAN AND TOOK THE INDEXED JUMP, BUT NEVER THE 0x25 ARM -- the events it routed were other codes"
 					: "THE 0x25 ARM WAS TAKEN";
 
+			const uint64_t loopCall = _r.life[13];
+			const uint64_t loopEnter= _r.life[14];
+			const uint64_t loopIter = _r.life[15];
+			const uint64_t deq      = _r.life[16];
+			const uint64_t deqQ25   = _r.life[17];
+			const uint64_t nonEmpty = _r.life[18];
+			const uint64_t idle     = _r.life[19];
+			const uint64_t queuesMade = _r.life[20];
+
+			const char* loopReading =
+				(loopEnter == 0)
+					? "EVENT LOOP NEVER FETCHED -- the scheduler never reached FUN_30004674"
+				: (loopIter == 0)
+					? "EVENT LOOP ENTERED BUT NEVER REACHED ITS HEAD"
+				: (deq == 0)
+					? "LOOP RUNS BUT THE DEQUEUE IS NEVER CALLED -- something before it diverts"
+				: (nonEmpty == 0)
+					? "LOOP RUNS AND DEQUEUES, BUT NO QUEUE EVER RETURNED AN ITEM -- all four always empty"
+					: "A QUEUE RETURNED AN ITEM AND THE DISPATCH BRANCH WAS TAKEN";
+
 			std::cout << _label << ": READING consumer = " << consumer << std::endl;
 			std::cout << _label << ": READING dispatch = " << dispatchReading << std::endl;
+			std::cout << _label << ": READING loop     = " << loopReading << std::endl;
+			{
+				// The last rung of the init ladder that was fetched. Probe 21 is
+				// the init entry and probes 22.. are the rungs in address order,
+				// so the highest index with a non-zero count names how far the
+				// init got before it stopped.
+				size_t last = 0;
+				for(size_t p = 21; p < g_probeCount; ++p)
+					if(_r.life[p] != 0)
+						last = p;
+				std::cout << _label << ": INIT LADDER last rung fetched = "
+				          << (last == 0 ? "NONE -- FUN_3001b09c itself never ran"
+				                        : g_probes[last].what)
+				          << " (" << hex32(g_probes[last ? last : 21].addr) << ")" << std::endl;
+				for(size_t p = 21; p < g_probeCount; ++p)
+					std::cout << _label << ": rung " << hex32(g_probes[p].addr)
+					          << " = " << _r.life[p]
+					          << "  " << g_probes[p].what << std::endl;
+			}
+			std::cout << _label << ": LOOP DETAIL callSite=" << loopCall
+			          << " enter=" << loopEnter
+			          << " iterations=" << loopIter
+			          << " dequeueCalls=" << deq
+			          << " dequeueForQ26F8=" << deqQ25
+			          << " nonEmpty=" << nonEmpty
+			          << " idle=" << idle
+			          << " queuesConstructed=" << queuesMade << std::endl;
 		}
 		std::cout << _label << ": RX DESCRIPTOR [" << hex32(g_rxDescriptorPtr)
 		          << "] = " << hex32(_r.rxDescriptor)
