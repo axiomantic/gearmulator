@@ -46,6 +46,22 @@ jobs:
     name: repo-lints
     runs-on: ubuntu-latest
     steps:
+    # EVERY GUARD REPORTS INDEPENDENTLY. Actions skips the remaining steps of a
+    # job once one has failed, so with a plain sequential list a guard that goes
+    # red makes every guard after it report `skipped` -- a word that is not
+    # `success` and is not `failure`, and that reads to a human as "not
+    # applicable here". The guards below close different holes and none
+    # substitutes for another, so one of them firing is the WORST moment to stop
+    # asking the others: the tree is already known to be wrong, and the run
+    # silently stops saying how wrong.
+    #
+    # `!cancelled()` rather than `always()`: a cancelled run should stop, and a
+    # failed one should finish reporting. Neither form makes the JOB green -- a
+    # step that runs and fails still fails the job, so the overall verdict is
+    # unchanged and only the amount the run tells you goes up.
+    #
+    # The two checkout steps carry no condition. Every guard below reads a tree
+    # one of them produces, so a failed checkout leaves nothing to lint.
       - name: Check out the repository under test
         uses: actions/checkout@v4
         with:
@@ -106,6 +122,7 @@ jobs:
       #   2. at least two entry points were derived from it
       #   3. at least one `tools/*` branch was fetched to compare against
       - name: lint-current-is-not-behind
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: |
           set -euo pipefail
@@ -188,15 +205,18 @@ jobs:
           echo "OK: lint-current carries every tools/* change to the files this job reads."
 
       - name: Set up Python
+        if: ${{ !cancelled() }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: no-private-submodule
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: python3 -m nmg2_tools.submodule_lint "${GITHUB_WORKSPACE}/under-test"
 
       - name: no-clavia-payload
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: |
           python3 -m nmg2_tools.payload_lint "${GITHUB_WORKSPACE}/under-test" \
@@ -223,6 +243,7 @@ jobs:
       # that expanded to nothing prints nothing and exits 0, which is byte for
       # byte what a clean tree prints.
       - name: no-clavia-upload
+        if: ${{ !cancelled() }}
         env:
           VISIBILITY: ${{ inputs.visibility }}
         run: |
@@ -331,6 +352,7 @@ jobs:
       # own exit status; overloading this reporter's status would duplicate the
       # tier rule.
       - name: gated-test-summary
+        if: ${{ !cancelled() }}
         run: |
           set -uo pipefail
           counts="${GITHUB_WORKSPACE}/under-test/gated-tests.counts"
@@ -362,6 +384,7 @@ jobs:
           fi
 
       - name: no-artifact-credential
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: |
           python3 -m nmg2_tools.credential_lint "${GITHUB_WORKSPACE}/under-test" \
