@@ -1316,9 +1316,9 @@ int main()
 		// ---------------------------------------- the transport loses NOTHING
 		//
 		// THE NO-LOSS INVARIANT, ASSERTED AND NOT NARRATED. Every frame this
-		// Board took out of the hub either sits in the device or is still held
-		// for another offer; there is no third destination. That is the whole
-		// content of the repair, and before it these two cases were BOTH red:
+		// Board took out of the hub sits in the device, is still held for
+		// another offer, or is counted undeliverable; nowhere else. That is the
+		// whole content of the repair, and before it these two cases were BOTH red:
 		// the pump handed each drained frame to `isp1181_rx`, discarded the
 		// answer, and 17 of 19 frames on this arm vanished with every visible
 		// signal reading healthy.
@@ -1336,11 +1336,20 @@ int main()
 				+ std::to_string(u.offered) + " == " + std::to_string(u.accepted)
 				+ " + " + std::to_string(u.refused));
 
-			check(u.drained == u.accepted + (u.held ? 1u : 0u),
+			check(u.drained == u.accepted + u.undeliverable + (u.held ? 1u : 0u),
 				std::string("NOTHING DRAINED IS LOST: ") + std::to_string(u.drained)
 				+ " frames left the hub, " + std::to_string(u.accepted)
-				+ " are in the device and " + (u.held ? "1 is" : "0 are")
+				+ " are in the device, " + std::to_string(u.undeliverable)
+				+ " were too large to offer and " + (u.held ? "1 is" : "0 are")
 				+ " still held for another offer");
+
+			// Separate from the invariant on purpose. The invariant stays true
+			// whatever this reads, and this says the hub's size guarantee held:
+			// a frame too large for the hold buffer should never reach the
+			// drain at all.
+			check(u.undeliverable == 0u,
+				std::string("no frame left the hub too large to be offered to the device: ")
+				+ std::to_string(u.undeliverable));
 		}
 
 		// -------------------------------------------------------- the verdict lines

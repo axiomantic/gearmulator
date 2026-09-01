@@ -579,6 +579,17 @@ namespace g2
 					" reported rather than truncated or silently dropped.\n",
 					frame.size, m_heldBytes.size());
 				++m_usbStats.stallReports;
+
+				/* THE FRAME IS COUNTED WHERE IT WENT, so the no-loss invariant
+				 * stays total. This is the one path on which a drained frame
+				 * reaches neither the device nor the hold, and leaving it
+				 * uncounted would put `drained` one ahead of
+				 * `accepted + held` with nothing naming the difference. It is
+				 * not subtracted from `drained` either: the frame did leave
+				 * the hub, and a counter that said otherwise would hide the
+				 * loss in the same silence this function was rewritten to
+				 * remove. */
+				++m_usbStats.undeliverable;
 				return;
 			}
 

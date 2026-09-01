@@ -294,21 +294,31 @@ namespace g2
 		 * `offered` counts calls to `isp1181_rx`, so it counts RE-offers of
 		 * one held frame as well as first offers; `accepted` and `refused`
 		 * partition it exactly. `drained` counts frames taken out of the hub,
-		 * so `drained == accepted + (held ? 1 : 0)` holds at every quantum
-		 * boundary and IS the no-loss invariant: nothing this Board takes out
-		 * of the hub can go anywhere except into the device or into the hold.
+		 * so `drained == accepted + undeliverable + (held ? 1 : 0)` holds at
+		 * every quantum boundary and IS the no-loss invariant: nothing this
+		 * Board takes out of the hub can go anywhere except into the device,
+		 * into the hold, or into `undeliverable`.
+		 *
+		 * `undeliverable` is that third destination and it is a defect report
+		 * rather than a mode: a frame too large for the hold buffer left the
+		 * hub and can never be offered. The hub refuses such a frame before
+		 * the drain, so a non-zero reading means THAT guarantee broke. It is
+		 * not subtracted from `drained`, because the frame did leave the hub,
+		 * and it is not `refused`, because the device never saw it.
+		 *
 		 * `stallReports` counts the loud lines written for a frame the device
 		 * would not take within the datasheet's own NAK retry window. */
 		struct UsbTransportStats
 		{
-			uint64_t pumps        = 0;
-			uint64_t drained      = 0;
-			uint64_t offered      = 0;
-			uint64_t accepted     = 0;
-			uint64_t refused      = 0;
-			uint64_t stallReports = 0;
-			uint64_t heldAttempts = 0;
-			bool     held         = false;
+			uint64_t pumps         = 0;
+			uint64_t drained       = 0;
+			uint64_t offered       = 0;
+			uint64_t accepted      = 0;
+			uint64_t refused       = 0;
+			uint64_t undeliverable = 0;
+			uint64_t stallReports  = 0;
+			uint64_t heldAttempts  = 0;
+			bool     held          = false;
 		};
 
 		UsbTransportStats usbTransport() const noexcept;
