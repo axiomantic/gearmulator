@@ -1,0 +1,64 @@
+# t0_pch2_load -- the expected editor message sequence for the SYNTHESIZED
+# corpus. Task PROTO-11. Design sections 15.7 and 15.3.
+#
+# HOW THIS FILE WAS PRODUCED, because a fixture the code under test produced
+# asserts nothing. Every row below comes from a walker written in Python from
+# design sections 15.7 and 15.3 alone -- the same two specifications the C++
+# load path is written from, and a different implementation of them, in a
+# different language. It read no C++ and ran none.
+#
+# WHAT EACH ROW MEANS. The load path parses one `.pch2` container and
+# ORIGINATES one protocol frame for each object in it, through the internal
+# client, in file order. A `FRAME` row is one such frame as the hub drained it:
+#
+#     <file> FRAME <index> <type> <payload length> <CRC-16/XMODEM of payload>
+#
+# THE PAYLOAD IS SUMMARISED BY ITS CRC AND NOT SPELLED OUT, and the bound that
+# buys is stated rather than left implicit: `length_boundaries.pch2` carries a
+# payload of 65,469 bytes and a hex transcript of it would be a 130 KB fixture.
+# A CRC-16 catches every single-bit and double-bit difference and every burst
+# shorter than 17 bits; two objects whose payloads were exchanged differ in it.
+# It does not distinguish every possible pair of payloads, and no row here
+# claims that it does.
+#
+# A `TRAILER` row is the bytes between the last object and the stored CRC.
+# Design section 15.7's second file-against-wire difference puts `2d 00` there
+# in a USB dump, and those two bytes are NOT an object -- an object header is
+# three bytes -- so the load path originates no frame for them and records them
+# here instead. That is what makes `wire_extra_bytes_file.pch2` and
+# `wire_extra_bytes_usb.pch2` two different expectations rather than one.
+#
+# A `REFUSED` row is a file the load path rejected. The name is the one
+# `MANIFEST.tsv` states for that file, and a refused file originates NO frame:
+# a partly loaded patch is a patch nobody asked for.
+bad_crc.pch2	REFUSED	PCH2-BAD-CRC
+bad_length_past_end.pch2	REFUSED	PCH2-LENGTH-PAST-END
+bad_truncated_object.pch2	REFUSED	PCH2-TRUNCATED-OBJECT
+bad_unknown_type.pch2	REFUSED	PCH2-UNKNOWN-OBJECT-TYPE
+bit_widths.pch2	FRAME	0	0x60	1	0x6CA6
+bit_widths.pch2	FRAME	1	0x60	3	0xAF93
+bit_widths.pch2	FRAME	2	0x60	12	0x6A1E
+bit_widths.pch2	TRAILER	-
+length_boundaries.pch2	FRAME	0	0x21	0	0x0000
+length_boundaries.pch2	FRAME	1	0x4A	65469	0x37C1
+length_boundaries.pch2	TRAILER	-
+min.pch2	FRAME	0	0x21	0	0x0000
+min.pch2	TRAILER	-
+object_types.pch2	FRAME	0	0x21	1	0x0000
+object_types.pch2	FRAME	1	0x4A	1	0x1021
+object_types.pch2	FRAME	2	0x4D	1	0x2042
+object_types.pch2	FRAME	3	0x52	1	0x3063
+object_types.pch2	FRAME	4	0x60	1	0x4084
+object_types.pch2	FRAME	5	0x62	1	0x50A5
+object_types.pch2	FRAME	6	0x65	1	0x60C6
+object_types.pch2	FRAME	7	0x69	1	0x70E7
+object_types.pch2	TRAILER	-
+wire_extra_bytes_file.pch2	FRAME	0	0x21	2	0xE405
+wire_extra_bytes_file.pch2	TRAILER	-
+wire_extra_bytes_usb.pch2	FRAME	0	0x21	2	0xE405
+wire_extra_bytes_usb.pch2	TRAILER	2d00
+wire_morph_names.pch2	FRAME	0	0x65	9	0x0F4C
+wire_morph_names.pch2	TRAILER	-
+wire_variation_count.pch2	FRAME	0	0x4D	10	0x53A2
+wire_variation_count.pch2	FRAME	1	0x65	10	0x53A2
+wire_variation_count.pch2	TRAILER	-
