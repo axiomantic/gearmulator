@@ -37,7 +37,7 @@
  *
  *   u8x4 magic 'G','2','S','T'
  *   u16  stateFormatVersion            -- item 6, g_stateFormatVersion below
- *   u16  firmwareVersionWord           -- item 5, the raw word of section 7.3
+ *   u16  firmwareVersionWord           -- item 5, the word the writer ran
  *   u32  parameterOverflowCount        -- item 7
  *   per slot, g_stateSlotCount times:  -- items 2 and 3
  *     u32 patchByteCount; u8 patch[patchByteCount]; u16 patchId

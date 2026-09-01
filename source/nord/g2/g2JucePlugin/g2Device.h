@@ -123,11 +123,21 @@ namespace g2
 		 * does not retry, so the constructor asks once and never again. */
 		const g2::FirmwareStatus& firmwareStatus() const noexcept { return m_firmwareStatus; }
 
-		/* The RAW 16-bit version word the machine's firmware carries (design
-		 * section 7.3 step 6), resolved once beside the FirmwareStatus and
-		 * saved as state item 5 (design section 15.5). Zero when no firmware
-		 * is present, which decideFirmwareVersion never reads: the absent
-		 * row answers NoFirmware before the words are compared. */
+		/* The 16-bit firmware version word this machine is taken to run,
+		 * resolved once beside the FirmwareStatus and saved as state item 5.
+		 * Zero when no firmware is present, which decideFirmwareVersion never
+		 * reads: the absent row answers NoFirmware before the words are
+		 * compared.
+		 *
+		 * IT IS THE EXPECTED WORD AND NOT ONE READ OUT OF THE BINARY, and the
+		 * constructor is why: it resolves the firmware without booting, so
+		 * there is no machine to ask. resolveFirmwareState decides presence
+		 * from the artifact directory alone and never opens the image. A user
+		 * who supplies a firmware of another version is therefore recorded
+		 * here as g_expectedFirmwareVersion, and the mismatch that comparison
+		 * exists to catch is a mismatch between two SAVED states rather than
+		 * between the state and the bytes on disk. Reading the real word
+		 * requires the boot this constructor deliberately does not perform. */
 		uint16_t firmwareVersionWord() const noexcept { return m_firmwareVersionWord; }
 
 		/* ---------------------------------------------------------------
@@ -422,8 +432,9 @@ namespace g2
 
 		FirmwareStatus m_firmwareStatus;
 
-		/* PLG-5, state item 5. The raw firmware version word, resolved once
-		 * at construction; zero when the firmware is absent. */
+		/* State item 5. The expected firmware version word, resolved once at
+		 * construction; zero when the firmware is absent. firmwareVersionWord()
+		 * above says why it is the expected word and not a read one. */
 		uint16_t m_firmwareVersionWord = 0;
 
 		/* PLG-5. The seven-item state of design section 15.5, held between
