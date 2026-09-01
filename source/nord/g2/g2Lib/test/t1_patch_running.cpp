@@ -300,17 +300,49 @@ namespace
 
 	// ------------------------------------------------------------ the probe set
 	//
-	// The patch-load handler itself, which no prior run has covered. The prior
-	// run measured every member of the restart chain at zero on both arms with a
-	// live known positive on the same counter, so control never arrives at the
-	// chain's first link. These six addresses are the layers above it, in call
-	// order, so the run says at which layer control stops.
+	// Two halves of one question, probed together because separately neither is
+	// decisive. The prior pass measured the whole restart chain at zero on both
+	// arms with a live known positive, so control never reaches FUN_3004c10c --
+	// yet the packet leaves the endpoint buffer. Something drains it.
 	//
-	// The two live possibilities are separated by one pair of counts. A non-zero
-	// at the parser call with a zero at the request-restart call is the
-	// parse-failure signature: the handler ran, the parser refused the packet,
-	// and the handler took its abort path and returned 3 without ever reaching
-	// the restart request. Every probe zero is the handler never running at all.
+	// Both halves were read out of CODE_30000400.bin with m68k-elf-objdump, and
+	// each address below is an instruction boundary in that disassembly.
+	//
+	// HALF 1, THE DISPATCHER. FUN_3004c10c has exactly one longword reference in
+	// the whole image, at 0x3001357E, inside the thin wrapper 0x30013568 which
+	// reads a word length at msg+2 and a pointer at msg+4 and calls the worker.
+	// That wrapper has exactly one caller, 0x3001213A, which is one arm of the
+	// switch at 0x30012050:
+	//
+	//     moveb  (a0),d0        ; d0 = msg[0], the event code
+	//     subql  #1,d0          ; index = code - 1
+	//     moveq  #68,d1         ; codes 1..69 are in range
+	//     cmpl   d0,d1
+	//     bcsw   default
+	//     movew  (0x30012072,pc,d0.l*2),d0
+	//     jmp    (0x30012072,pc,d0.l)
+	//
+	// Decoding that 69-entry table, the entry at 0x300120BA holds 0x00C8 and so
+	// sends index 36 -- code 0x25 -- to 0x3001213A. Code 0x25 is the ONLY code in
+	// the table routed there. So the dispatch is not inferred from intent: it is
+	// read off the table, and probing the dispatcher entry, the indexed jump and
+	// that one arm separates "the 0x25 event is never raised" from "it is raised
+	// and the table sends it elsewhere".
+	//
+	// HALF 2, THE CONSUMER. The 0x25 message is built by 0x30055DD0, which is the
+	// only writer of a literal 0x25 into a message's byte 0 that also fills the
+	// (2)=length, (4)=pointer layout the wrapper reads back. It enqueues onto
+	// 0x302A26F8, one of the four queues the event loop at 0x30004674 drains
+	// before calling the dispatcher. 0x30055DD0 has exactly one caller: the drain
+	// at 0x300556FE, which reads the endpoint through 0x300544FA, accumulates
+	// into a descriptor at [0x30280CF8], and raises 0x25 only when the fill count
+	// reaches the length it parsed from the first two bytes.
+	//
+	// 0x300544FA writes 0x10+ep to 0x13000010 (ISP1181 command port, "read buffer
+	// endpoint n") and streams from 0x13000000; 0x300545CC writes 0x70+ep ("clear
+	// buffer"). Both are called from 0x300556FE with `pea 0x4` -- ENDPOINT INDEX
+	// 4. The emulator's BoardConfig::usbProtocolEndpoint is 3. That disagreement
+	// is why the consumer half is probed rather than argued about.
 	struct ProbePoint
 	{
 		uint32_t    addr;
@@ -318,19 +350,51 @@ namespace
 	};
 
 	constexpr ProbePoint g_probes[] = {
+		// the consumer, in call order
+		{0x30055D5Au, "drain call from the EP interrupt path"},
+		{0x300556FEu, "DRAIN entry FUN_300556fe"},
+		{0x30055728u, "read endpoint buffer (ep index 4)"},
+		{0x30055740u, "parse length from first two bytes"},
+		{0x30055776u, "MESSAGE COMPLETE (fill == length)"},
+		{0x30055790u, "call the 0x25 raiser"},
+		{0x30055DD0u, "RAISER entry FUN_30055dd0"},
+		{0x30055DFEu, "write code 0x25 into msg[0]"},
+		// the dispatcher, in call order
+		{0x30012050u, "DISPATCHER entry FUN_30012050"},
+		{0x30012068u, "indexed jump (code was in range 1..69)"},
+		{0x3001213Au, "the 0x25 ARM (sole route in the table)"},
+		{0x30013568u, "wrapper FUN_30013568 entry"},
 		{0x3004C10Cu, "worker  FUN_3004c10c entry"},
-		{0x3004C30Eu, "handler FUN_3004c30e entry"},
-		{0x3004C6C4u, "BEGIN            (depth 0->1)"},
-		{0x3004C702u, "parser  FUN_3002a2f8 call"},
-		{0x3004C77Eu, "REQUEST RESTART  (sets pending bit0)"},
-		{0x3004C792u, "END/COMMIT       (depth 1->0)"},
 	};
 
 	constexpr size_t g_probeCount = sizeof(g_probes) / sizeof(g_probes[0]);
 
-	// The one address the single-line verdict names: the handler's entry point.
-	// It is g_probes[1]; spelling it again here keeps the verdict readable.
-	constexpr uint32_t g_probeTarget = 0x3004C30Eu;
+	// A zero from an address the counter never sees is not a reading. The counter
+	// buckets only EVEN 16-bit reads and only inside the loaded image, so both
+	// properties are asserted at COMPILE time against the image extent this run
+	// measures at runtime and prints below. static_assert survives a release
+	// build, which assert() does not.
+	constexpr uint32_t g_imageLo = 0x30000400u;
+	constexpr uint32_t g_imageHi = 0x3012A3D0u;
+
+	constexpr bool probesAreEvenAndInImage()
+	{
+		for(size_t p = 0; p < g_probeCount; ++p)
+		{
+			if((g_probes[p].addr & 1u) != 0u)
+				return false;
+			if(g_probes[p].addr < g_imageLo || g_probes[p].addr >= g_imageHi)
+				return false;
+		}
+		return true;
+	}
+
+	static_assert(probesAreEvenAndInImage(),
+		"a probe address is odd or outside the loaded image; the counter would never see it");
+
+	// The one address the single-line verdict names: the dispatcher's entry.
+	// It is g_probes[8]; spelling it again here keeps the verdict readable.
+	constexpr uint32_t g_probeTarget = 0x30012050u;
 
 	// The three memory probes, read as single bytes at the close of the window.
 	// They are state and not control flow, so a count would say nothing: what
@@ -343,6 +407,11 @@ namespace
 	// ~4.55 million. A lifetime count near that proves the mechanism; a zero
 	// there condemns the four zeros above as an artefact rather than a finding.
 	constexpr uint32_t g_probeLifePositive = 0x30055FBAu;
+
+	// Where the drain keeps the pointer to the receive descriptor it accumulates
+	// into. Read at the close of the window and dereferenced, not counted: what
+	// decides is the pair of values, not how often they were touched.
+	constexpr uint32_t g_rxDescriptorPtr = 0x30280CF8u;
 
 	constexpr uint32_t g_probeDspCount = 0x302AA5D4u;
 	constexpr uint32_t g_probeSuspend  = 0x30115574u;
@@ -820,6 +889,17 @@ namespace
 		// this run gave the machine. Without that flag a 0 cannot be told from
 		// an address the model never covered.
 		uint64_t life[g_probeCount] = {};
+
+		// The receive descriptor the drain accumulates into, dereferenced through
+		// the pointer the firmware keeps at 0x30280CF8. +2 is the length the drain
+		// parsed out of the message's first two bytes; +6 is how many bytes it has
+		// actually accumulated. The drain raises 0x25 only when they are equal, so
+		// when they are not, these two numbers say by how much and in which
+		// direction it fell short.
+		uint32_t rxDescriptor = 0;
+		uint32_t rxLength     = 0;
+		uint32_t rxFill       = 0;
+		bool     rxInRam      = false;
 		uint64_t lifePositive = 0;
 
 		uint64_t writesDspCount = 0;
@@ -1045,6 +1125,33 @@ namespace
 			_r.byteSuspend  = ram.byteAt(g_probeSuspend);
 			_r.byteDepth    = ram.byteAt(g_probeDepth);
 
+			{
+				const auto long32 = [&ram](const uint32_t _a) -> uint32_t
+				{
+					return (uint32_t(ram.byteAt(_a))     << 24)
+					     | (uint32_t(ram.byteAt(_a + 1)) << 16)
+					     | (uint32_t(ram.byteAt(_a + 2)) <<  8)
+					     |  uint32_t(ram.byteAt(_a + 3));
+				};
+
+				_r.rxInRam = ram.covers(g_rxDescriptorPtr) && ram.covers(g_rxDescriptorPtr + 3);
+
+				if(_r.rxInRam)
+				{
+					_r.rxDescriptor = long32(g_rxDescriptorPtr);
+
+					if(ram.covers(_r.rxDescriptor) && ram.covers(_r.rxDescriptor + 9))
+					{
+						_r.rxLength = long32(_r.rxDescriptor + 2);
+						_r.rxFill   = long32(_r.rxDescriptor + 6);
+					}
+					else
+					{
+						_r.rxInRam = false;
+					}
+				}
+			}
+
 			for(size_t p = 0; p < g_probeCount; ++p)
 				_r.life[p] = ram.life(p);
 
@@ -1248,6 +1355,18 @@ namespace
 			std::cout << _label << ": at the CONTROL arm's known positive "
 			          << hex32(_r.crossAddr) << " this arm read " << _r.crossHits
 			          << std::endl;
+		{
+			bool allInMeasuredImage = true;
+			for(size_t p = 0; p < g_probeCount; ++p)
+				if(g_probes[p].addr < _r.imageBase || g_probes[p].addr >= _r.imageEnd)
+					allInMeasuredImage = false;
+			std::cout << _label << ": PROBE VALIDITY " << g_probeCount
+			          << " probes, all even-aligned (compile-time), all inside the "
+			          << "image THIS RUN loaded (" << hex32(_r.imageBase) << ".."
+			          << hex32(_r.imageEnd) << ") = "
+			          << (allInMeasuredImage ? "YES" : "NO -- SOME ZEROS BELOW ARE ABSENCES, NOT READINGS")
+			          << std::endl;
+		}
 		for(size_t p = 0; p < g_probeCount; ++p)
 		{
 			std::cout << _label << ": probe " << hex32(g_probes[p].addr)
@@ -1274,23 +1393,54 @@ namespace
 		          << hex32(g_probeLifePositive) << " = " << _r.lifePositive << std::endl;
 
 		// The reading, derived here so the run states it rather than leaving it
-		// to be reconstructed. The parser call and the request-restart call are
-		// the pair that separates the two live possibilities.
+		// to be reconstructed. Two halves, and the pair that separates them is the
+		// raiser's write of 0x25 against the dispatcher's 0x25 arm: if the code is
+		// written and the arm never fetched, the table sent it elsewhere; if the
+		// code is never written, the event was never raised and the question moves
+		// up to the drain.
 		{
-			const uint64_t handler = _r.life[1];
-			const uint64_t parse   = _r.life[3];
-			const uint64_t restart = _r.life[4];
+			const uint64_t epIrq     = _r.life[0];
+			const uint64_t drain     = _r.life[1];
+			const uint64_t epRead    = _r.life[2];
+			const uint64_t complete  = _r.life[4];
+			const uint64_t raiseCode = _r.life[7];
+			const uint64_t dispatch  = _r.life[8];
+			const uint64_t indexed   = _r.life[9];
+			const uint64_t arm25     = _r.life[10];
 
-			const char* reading =
-				handler == 0 ? "HANDLER NEVER RAN -- control stops above FUN_3004c30e"
-				: (parse != 0 && restart == 0)
-					? "PARSE FAILURE -- handler ran, parser call fired, restart request never did (abort path, return 3)"
-				: (parse != 0 && restart != 0)
-					? "HANDLER RAN AND REACHED THE RESTART REQUEST"
-					: "HANDLER RAN BUT DID NOT REACH THE PARSER CALL";
+			const char* consumer =
+				(drain == 0 && epIrq == 0)
+					? "DRAIN NEVER RAN -- nothing in the firmware read the endpoint buffer"
+				: (epRead == 0)
+					? "DRAIN ENTERED BUT NEVER READ THE ENDPOINT"
+				: (complete == 0)
+					? "DRAIN READ THE ENDPOINT BUT NO MESSAGE EVER COMPLETED (fill never reached the parsed length)"
+				: (raiseCode == 0)
+					? "MESSAGE COMPLETED BUT 0x25 WAS NEVER WRITTEN"
+					: "0x25 WAS RAISED";
 
-			std::cout << _label << ": READING = " << reading << std::endl;
+			const char* dispatchReading =
+				(dispatch == 0)
+					? "DISPATCHER NEVER RAN -- no event reached FUN_30012050"
+				: (indexed == 0)
+					? "DISPATCHER RAN BUT EVERY CODE FELL OUT OF RANGE 1..69"
+				: (arm25 == 0)
+					? "DISPATCHER RAN AND TOOK THE INDEXED JUMP, BUT NEVER THE 0x25 ARM -- the events it routed were other codes"
+					: "THE 0x25 ARM WAS TAKEN";
+
+			std::cout << _label << ": READING consumer = " << consumer << std::endl;
+			std::cout << _label << ": READING dispatch = " << dispatchReading << std::endl;
 		}
+		std::cout << _label << ": RX DESCRIPTOR [" << hex32(g_rxDescriptorPtr)
+		          << "] = " << hex32(_r.rxDescriptor)
+		          << "  parsed length(+2) = " << _r.rxLength
+		          << "  accumulated fill(+6) = " << _r.rxFill
+		          << (_r.rxInRam
+		              ? (_r.rxLength == _r.rxFill
+		                 ? "  (equal -- the drain would have raised 0x25)"
+		                 : "  (UNEQUAL -- this is why 0x25 was never raised)")
+		              : "  (OUTSIDE THIS RAM: an absence, not a reading)")
+		          << std::endl;
 		std::cout << _label << ": WRITES to the byte probes (boot included) "
 		          << hex32(g_probeDspCount) << " = " << _r.writesDspCount
 		          << " | " << hex32(g_probeSuspend) << " = " << _r.writesSuspend
