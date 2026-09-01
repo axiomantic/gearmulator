@@ -29,9 +29,7 @@
  * the condition can occur. Whether the counters that feed on these flags then
  * rise is t0_esai_underrun_gate.
  *
- * THE FLAGS ARE PER POSITION AND PER BUS, so the test asserts the separation
- * directly: delivering a good frame on position 0's audio bus sets audio[0]
- * and leaves audio[1], second[0] and second[1] clear.
+ * The flags are per position and per bus.
  */
 
 #include "chainAdapter.h"
@@ -121,11 +119,8 @@ int main()
 			"audio flag CLEAR even though the callback fired");
 	}
 
-	/* ------------- Case 3: the rule is the delivery's quality, not arrival.
-	 *
-	 * Three deliveries in a row: good, stale, good. The flag tracks the kind of
-	 * each delivery, never the mere arrival -- an arrival flag would read set
-	 * after all three. */
+	/* ------------- Case 3: the flag tracks the kind of each delivery and never
+	 * the mere arrival. */
 	{
 		audio0.goodFrame(0x333333u);
 		check(adapter.audioWritten(0u), "good  -> set,   delivery 1");
@@ -170,8 +165,7 @@ int main()
 	/* ------------- Case 5: the ESAI's own status bit is not the source.
 	 *
 	 * Setting M_TUE by hand must change nothing, because the wrappers do not
-	 * read it. Without this case a later change could quietly reinstate the
-	 * dead input and every case above would still pass. */
+	 * read it. */
 	{
 		audio0.goodFrame(0x555555u);
 		check(adapter.audioWritten(0u), "precondition (flag set by a good delivery)");

@@ -1,34 +1,30 @@
 /* g2Parameters.h -- the host automation surface: a fixed pool of parameter
  * slots plus the named morph group amounts.
  *
- * THE POOL NEVER GROWS. All g_automationSlotCount slots exist from the one
- * registration, which builds them from a const list. Allocation does not
- * create a slot; it binds one. The host's reported parameter count is fixed
- * at registration and never varies with the patch.
+ * The pool never grows. Allocation does not create a slot; it binds one. The
+ * host's reported parameter count is fixed at registration and never varies
+ * with the patch.
  *
- * THE ALLOCATION ORDER IS A CONTRACT. Allocation walks the patch's
- * parameters in ascending module instance, then ascending parameter index
- * within each instance, and binds each to the lowest-numbered free slot.
- * That order is what makes one patch produce one slot map on every load, on
- * every machine and in every host; an order taken from hash iteration or
- * from parse order would not.
+ * The allocation order is a contract: ascending module instance, then
+ * ascending parameter index within each instance, each bound to the
+ * lowest-numbered free slot. That order is what makes one patch produce one
+ * slot map on every load, on every machine and in every host; an order taken
+ * from hash iteration or from parse order would not.
  *
- * THERE IS NO SURVIVOR PINNING. Every allocation starts from an empty pool:
- * a binding that a previous patch also held gets no claim on its previous
- * slot number. The map is then a function of the patch and of nothing else.
- * Pinning would make it a function of the load history instead, and would
- * make the set of parameters that fall past the last slot depend on which
- * slots the survivors held.
+ * There is no survivor pinning. Every allocation starts from an empty pool, so
+ * the map is a function of the patch and of nothing else. Pinning would make
+ * it a function of the load history instead, and would make the set of
+ * parameters that fall past the last slot depend on which slots the survivors
+ * held.
  *
- * EXHAUSTION IS NOT A REFUSAL. A patch that binds more parameters than the
- * pool holds is a valid patch. Allocation stops after the last slot and
- * every parameter after that is unbound; an unbound parameter still plays
- * and still edits, and the only thing it lacks is a host automation lane.
+ * Exhaustion is not a refusal. A patch that binds more parameters than the
+ * pool holds is a valid patch: allocation stops after the last slot and every
+ * parameter after that is unbound. An unbound parameter still plays and still
+ * edits, and the only thing it lacks is a host automation lane.
  *
- * THE MORPH GROUP AMOUNTS ARE OUTSIDE THE POOL. There are eight of them,
- * they are patch-independent, and they mean the same thing in every patch,
- * so they are registered under their own names and never take part in
- * allocation. Their lanes never retarget.
+ * The morph group amounts are outside the pool. They are patch-independent and
+ * mean the same thing in every patch, so they are registered under their own
+ * names and never take part in allocation. Their lanes never retarget.
  */
 
 #pragma once
@@ -40,8 +36,7 @@
 
 namespace g2
 {
-	/* The pool size. One named constant in one header: changing it is this
-	 * line plus a state format version bump. */
+	/* Changing the pool size is this line plus a state format version bump. */
 	constexpr size_t g_automationSlotCount = 512;
 
 	/* The morph group amounts, registered outside the pool. */
@@ -80,7 +75,7 @@ namespace g2
 	 * the pool, and a pool that changed size with the patch would be the
 	 * varying parameter count the host must never see.
 	 *
-	 * `boundCount` and `unboundCount` sum to the number of DISTINCT
+	 * `boundCount` and `unboundCount` sum to the number of distinct
 	 * parameter identities the patch presented. */
 	struct SlotAllocation
 	{
@@ -90,16 +85,16 @@ namespace g2
 	};
 
 	/* The pool's slot names, built one time from a const list and returned
-	 * by reference. Every call returns the SAME object: the framework's rule
+	 * by reference. Every call returns the same object: the framework's rule
 	 * is that registration runs one time, and a function that rebuilt the
 	 * list per call would let a second registration disagree with the first.
 	 *
 	 * Size is g_automationSlotCount, and entry i is "Param i". */
 	const std::vector<std::string>& automationSlotNames();
 
-	/* The eight morph group amount names, "Morph 1" through "Morph 8", built
-	 * the same way and disjoint from the pool's names. A user who automates
-	 * a morph sweep gets a lane called "Morph 1", not a pool slot number. */
+	/* The morph group amount names, "Morph 1" upward, built the same way and
+	 * disjoint from the pool's names. A user who automates a morph sweep gets
+	 * a lane called "Morph 1", not a pool slot number. */
 	const std::vector<std::string>& morphGroupNames();
 
 	/* How many times the two lists above have actually been built in this
@@ -107,8 +102,7 @@ namespace g2
 	 * which is the observable form of "registered one time". */
 	uint32_t parameterListBuildCount();
 
-	/* The count the host is told at registration: the whole pool plus the
-	 * morph amounts. It does not vary with the patch. */
+	/* The count the host is told at registration. */
 	constexpr size_t reportedParameterCount()
 	{
 		return g_automationSlotCount + g_morphGroupCount;
@@ -119,7 +113,7 @@ namespace g2
 	 * Every slot starts free -- this function does not read a previous
 	 * allocation and cannot pin a survivor. Duplicate identities in
 	 * _patchParameters bind one slot between them, so the result is a
-	 * function of the SET of identities and not of how many times the
+	 * function of the set of identities and not of how many times the
 	 * caller listed one.
 	 *
 	 * Allocation stops when the pool is full; the remaining identities, the
@@ -134,11 +128,7 @@ namespace g2
 	 *
 	 * It exists so that loading is a real event with a before and an after:
 	 * the map a plugin holds after loading Y and then X must equal the map a
-	 * fresh plugin holds after loading X alone. This class is where a
-	 * survivor-pinning change would go -- loadPatch would have to read the
-	 * previous allocation to write the next one -- and holding the previous
-	 * allocation here is what lets a test observe that as a failure instead
-	 * of as a compile error. */
+	 * fresh plugin holds after loading X alone. */
 	class AutomationSurface
 	{
 	public:

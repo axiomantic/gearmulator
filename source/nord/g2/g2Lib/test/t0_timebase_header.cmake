@@ -1,21 +1,21 @@
-# t0_timebase_header.cmake -- the driver for task SCH-0's check.
+# t0_timebase_header.cmake -- the driver for the g2/timebase.h check.
 #
-# Run by ctest, not by the build. It performs the cases below in order and fails if
-# ANY of them fails:
+# Run by ctest, not by the build. It performs the cases below in order and fails
+# if any of them fails:
 #
 #   1. It compiles t0_timebase_header.c as C11. That is what proves the header
 #      is C11 only: a C++ reference parameter, a namespace, a template or an
 #      overload is a syntax error in C, and every _Static_assert in the header
 #      and in the test fires here.
 #   2. It runs the resulting program, which drives alloc() and framesForBlock()
-#      against the sequences design sections 13.4.1 and 14.1.1 state.
+#      against their specified sequences.
 #   3. It runs the grep case, and then that case's own negative case: it builds
 #      a second build tree, under a name that is not `build`, and asserts the
 #      grep case's verdict does not move.
 #
-# The compile is a TEST-time action on purpose. A header that stopped being C11
+# The compile is a test-time action on purpose. A header that stopped being C11
 # would otherwise break the build and report nothing through `ctest -R`, which
-# plan section 7.7.1 names as a distinct class of check failure.
+# is a distinct class of check failure.
 
 cmake_minimum_required(VERSION 3.15)
 
@@ -84,24 +84,23 @@ endif()
 
 # ---------------- case 3: the grep case
 #
-# Two strings must appear NOWHERE: the debt-alarm macro that design section
-# 13.4.6 deleted, and the MCU clock literal that design section 13.4.3 REFUTES
-# with five independent objections. Refuted is not "unverified": an unverified
-# value may turn out right and a refuted one will not, so its literal is banned
-# rather than tracked.
+# Two strings must appear nowhere: the deleted debt-alarm macro, and the
+# refuted MCU clock literal. Refuted is not "unverified": an unverified value
+# may turn out right and a refuted one will not, so its literal is banned rather
+# than tracked.
 #
-# THE NEEDLES ARE ASSEMBLED FROM HALVES, and that is load-bearing rather than
+# The needles are assembled from halves, and that is load-bearing rather than
 # cosmetic. This driver is a tracked file inside the tree the scan covers, and
 # nothing below excludes it, so a driver that spelled either needle out in full
 # would match itself.
 string(CONCAT g2RefutedMcuClock "540" "00000")
 string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 
-# THE SCOPE, STATED, because a scope nobody measured is the defect this kind of
+# The scope, stated, because a scope nobody measured is the defect this kind of
 # check usually carries.
 #
 # `git grep` here searches this repository's own tracked files plus its
-# untracked, non-ignored ones. It does NOT recurse into submodules and it does
+# untracked, non-ignored ones. It does not recurse into submodules and it does
 # not read ignored paths, so build/ is out of scope.
 #
 # That scope is chosen against a measurement, not by taste. A literal walk of
@@ -110,7 +109,7 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 # dsp56300/wxWidgets -- where it is a coincidental substring of a
 # CRC constant and has nothing to do with any clock. A check scoped to the
 # literal tree could therefore never pass on a clone with submodules
-# initialised. This scope is the WIDEST one that still passes, and it covers
+# initialised. This scope is the widest one that still passes, and it covers
 # every file this project actually writes.
 #
 # -I skips binary files. --fixed-strings makes the needle a literal.
@@ -142,7 +141,7 @@ string(CONCAT g2DeletedDebtMacro "G2_DEBT_" "ALARM_QUANTA")
 # a directory inside the working tree and has to delete it again on the failing
 # path exactly as on the passing one; a CMake -P script has no `finally`, so a
 # message(FATAL_ERROR) raised inside the scan would abort the script with that
-# directory still on disk. Every caller therefore deletes what it made FIRST and
+# directory still on disk. Every caller therefore deletes what it made first and
 # raises the verdict afterwards.
 #
 # g2OutVerdict receives the string PASS, or the text of the failure.
@@ -191,7 +190,7 @@ function(g2ScanForNeedles g2Label g2OutVerdict g2OutReport g2OutExcluded)
 	endif()
 
 	# The listing is what makes the exclusion computable. If it could not run the
-	# scan still proceeds -- a WIDER scan can only produce a false positive,
+	# scan still proceeds -- a wider scan can only produce a false positive,
 	# never a false pass -- but the report says so rather than implying an
 	# exclusion set that was never computed.
 	if(NOT g2ListingResult EQUAL 0)
@@ -205,7 +204,7 @@ function(g2ScanForNeedles g2Label g2OutVerdict g2OutReport g2OutExcluded)
 	set(${g2OutExcluded} "${g2ExcludedNames}" PARENT_SCOPE)
 
 	# Printed here, ahead of the results it scopes, rather than by the caller
-	# after them. The report is ALSO returned, because every failure message
+	# after them. The report is also returned, because every failure message
 	# below repeats it: a verdict whose scope is not attached to it is a verdict
 	# nobody can check.
 	message(STATUS "${g2ScopeReport}")
@@ -224,7 +223,7 @@ function(g2ScanForNeedles g2Label g2OutVerdict g2OutReport g2OutExcluded)
 			OUTPUT_VARIABLE g2GrepOutput
 			ERROR_VARIABLE g2GrepError)
 
-		# git grep exits 0 when it MATCHED, 1 when it did not, and >1 on an
+		# git grep exits 0 when it matched, 1 when it did not, and >1 on an
 		# error. A match is the failure here, so the exit codes are read
 		# explicitly rather than through a truthiness test that would score an
 		# error as a pass.
@@ -264,36 +263,36 @@ endif()
 
 # ---------------- case 3's negative case
 #
-# THE EXCLUSION ABOVE IS ONLY PROVEN IF SOMETHING IS ACTUALLY EXCLUDED. On the
-# machine where it was written two untracked build trees happened to be lying
-# around, so the branch was entered by accident. On a fresh clone the excluded
-# set is empty, the branch is never entered, AND NOTHING GOES RED TO SAY THAT
-# THE NEGATIVE CASE HAS STOPPED EXISTING. That is the very defect the exclusion
-# was written against: a verdict owed to what happens to be on one filesystem.
+# The exclusion above is proven only if something is actually excluded. Borrowing
+# whatever untracked build trees happen to lie around makes that accidental: on a
+# fresh clone the excluded set is empty, the branch is never entered, and nothing
+# goes red to say the negative case has stopped existing. That is the very defect
+# the exclusion was written against: a verdict owed to what happens to be on one
+# filesystem.
 #
 # So this case builds its own build tree rather than borrowing one. The
-# directory holds a CMakeCache.txt -- the PROPERTY the rule names -- and holds
+# directory holds a CMakeCache.txt -- the property the rule names -- and holds
 # the refuted literal where a real build tree would put it, in a CTest log. The
-# case then asserts that the verdict DOES NOT MOVE.
+# case then asserts that the verdict does not move.
 #
-# ITS NAME IS DELIBERATELY NOT `build`, and not any spelling of it. A name-based
+# Its name is deliberately not `build`, and not any spelling of it. A name-based
 # exclusion is the defect under repair, so a fixture called `build` would be
 # excluded by the broken logic too and would prove nothing. The name is long and
 # states its own purpose so that it can collide with nothing real, and so that a
 # copy left behind by a killed run explains itself to whoever finds it.
 #
-# THE FIXTURE IS PROVEN ARMED BEFORE IT IS TRUSTED. A scan restricted to the
-# directory must REPORT the literal: that establishes the file exists, that git
+# The fixture is proven armed before it is trusted. A scan restricted to the
+# directory must report the literal: that establishes the file exists, that git
 # reaches it as untracked and non-ignored, and that it really carries the
 # needle. Without that, a fixture that failed to be written would make this case
 # pass vacuously -- which is what it exists to prevent.
 #
-# THE DIRECTORY IS DELETED BEFORE ANY VERDICT IS RAISED, so it cannot survive a
+# The directory is deleted before any verdict is raised, so it cannot survive a
 # failure. Everything between the writes and the delete is execute_process,
 # which reports through a variable and never aborts the script.
 #
-# WHAT THIS DOES NOT COVER, stated rather than implied: two runs of this driver
-# against the SAME repository at the same time would share the one fixture path,
+# What this does not cover, stated rather than implied: two runs of this driver
+# against the same repository at the same time would share the one fixture path,
 # and the first to finish would delete the other's directory. The check is
 # registered once, so that does not arise; a second concurrent registration
 # would have to give the fixture a per-run name.

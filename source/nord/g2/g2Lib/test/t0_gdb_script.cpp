@@ -1,31 +1,21 @@
-// Task TOOL-18. The GDB-with-traffic harness, tier T0. It reads no firmware
-// artifact; the machines it places are synthetic, in the shape t0_gdb_stub
-// places its machine.
+// The GDB-with-traffic harness, tier T0. It reads no firmware artifact; the
+// machines it places are synthetic, in the shape t0_gdb_stub places its
+// machine. Two machines are placed:
 //
-// WHAT THIS TEST IS. The client is `gdbScript.py`, driven as a CHILD PROCESS
-// (`python3 gdbScript.py --port N --script <file>`), and this test asserts on
-// the lines it prints. Two machines are placed:
+//   Machine A -- a synthetic Board whose `GdbStub` is served in-process and
+//   reached over loopback, which is the packet sequence an operator session
+//   runs.
 //
-//   MACHINE A -- the child console, `g2TestConsole --gdb 0`. Port 0 asks for
-//   a free port and the console prints the one it bound; the test parses that
-//   line. THIS IS THE SHAPE AN OPERATOR'S OWN SESSION TAKES, and it is what
-//   cases one through four and case six assert against.
+//   Machine B -- the delivery machine: a Board with a `GdbStub` attached, plus
+//   an `InternalClient`. A `pch2Load` delivery is driven on that same machine
+//   while the session is open, so the watchpoint fires on a write the delivery
+//   path makes and not on one the boot makes.
 //
-//   MACHINE B -- the TEST's own Board, built in-process with a `GdbStub`
-//   attached exactly as t1_gdb_dsp attaches it, plus an `InternalClient`. The
-//   script connects to THIS stub over loopback, and the test drives a
-//   delivery through `pch2Load` on ITS machine while the script's continue
-//   runs. THIS IS CASE SEVEN, GDB-WITH-TRAFFIC: the watchpoint the script
-//   armed fires on a write the DELIVERY path makes, not on one the boot
-//   makes.
+// The cases assert answers and not acceptance: they read the stub's own
+// replies, and one case asserts an absence of stop replies from a session that
+// was never told to continue.
 //
-// THE CASES ASSERT ANSWERS AND NOT ACCEPTANCE. A script that printed a fixed
-// verdict independent of the stub's replies would fail every case: the cases
-// read the `stop pc=... hit=... count=...` lines and the `arm ...` lines the
-// script prints, and case six asserts an ABSENCE of stop lines from a script
-// that was never told to continue.
-//
-// NO assert() ANYWHERE. The default build is Release with NDEBUG, so every
+// No assert() anywhere. The default build is Release with NDEBUG, so every
 // verdict here is a return value, a printed line and an exit code.
 
 #include "board.h"
@@ -102,9 +92,8 @@ namespace
 	// ------------------------------------------------------------- machine A
 
 	/* Byte-addressed, big-endian, in the shape t0_gdb_stub's Ram takes. The
-	 * addresses below are this test's own configuration, which plan section
-	 * 1.3 rule 1 requires because no authority records a size for the SDRAM
-	 * window. */
+	 * addresses below are this test's own configuration: no authority records
+	 * a size for the SDRAM window. */
 	class Ram final : public g2::BusTarget
 	{
 	public:
@@ -177,16 +166,16 @@ namespace
 	constexpr uint32_t g_codeBase    = g_windowBase + g_codeOffset;
 	constexpr uint32_t g_scratchAddr = g_windowBase + g_scratchOffset;
 
-	/* THE PROGRAM, hand-encoded, the same shape t0_gdb_stub's is.
+	/* The program, hand-encoded, the same shape t0_gdb_stub's is.
 	 *
 	 *     +0x00  4E71  nop
 	 *     +0x02  4E71  nop
-	 *     +0x04  4E71  nop              the FIRST reached breakpoint
-	 *     +0x06  4E71  nop              the SECOND reached breakpoint
+	 *     +0x04  4E71  nop              the first reached breakpoint
+	 *     +0x06  4E71  nop              the second reached breakpoint
 	 *     +0x08  4E71  nop
 	 *     +0x0A  A001  line-A, which faults and halts
 	 *
-	 * The two breakpoint addresses sit at DIFFERENT instructions, in program
+	 * The two breakpoint addresses sit at different instructions, in program
 	 * order, so the batch case's two stop lines have a reach order to assert.
 	 * The store case does not use this program: its write comes from the
 	 * delivery path on machine B, not from this one. */
@@ -195,15 +184,11 @@ namespace
 	constexpr uint32_t g_bpFirst  = g_codeBase + 0x004u;
 	constexpr uint32_t g_bpSecond = g_codeBase + 0x006u;
 
-	/* The breakpoint the machine never reaches. It is ODD and inside the code,
-	 * so no program counter can equal it -- the same construction
-	 * t0_gdb_stub's phase seven uses, for the same reason. */
-	/* The breakpoint the machine never reaches. It is ODD and inside the code,
-	 * so no program counter can equal it -- the same construction
-	 * t0_gdb_stub's phase seven uses, for the same reason. */
+	/* The breakpoint the machine never reaches. It is odd and inside the code,
+	 * so no program counter can equal it. */
 	constexpr uint32_t g_bpUnreached = g_codeBase + 0x001u;
 
-	/* THE REGISTER INDICES OF THE MCF5307 C ABI. 17 is the program counter,
+	/* The register indices of the MCF5307 C ABI. 17 is the program counter,
 	 * which is the register the stub's breakpoint compare reads and the one
 	 * every PC assertion here reads. */
 	constexpr int g_regPc = 17;
@@ -217,18 +202,18 @@ namespace
 
 	// ------------------------------------------------------------ machine B
 
-	/* THE WATCHED WORD. Machine B is the delivery machine: its Board config
+	/* The watched word. Machine B is the delivery machine: its Board config
 	 * carries a real CS3 window, so the frames pch2Load originates cross the
 	 * hub into the device, and the device's own register file is live. The
-	 * word the watchpoint observes is a SDRAM scratch word the MACHINE'S OWN
-	 * PROGRAM stores to -- the store is a bus write the stub's wrapper sees,
-	 * and the delivery is layered on the SAME machine while the session is
+	 * word the watchpoint observes is an SDRAM scratch word the machine's own
+	 * program stores to -- the store is a bus write the stub's wrapper sees,
+	 * and the delivery is layered on the same machine while the session is
 	 * open. */
 	constexpr uint32_t g_cs3Size      = 0x00010000u;
 	constexpr uint32_t g_watchOffsetB = 0x400u;
 	constexpr uint32_t g_watchAddrB   = g_windowBase + g_watchOffsetB;
 
-	/* THE STORE THE WATCHED WORD OBSERVES. Machine B's program: move.l
+	/* The store the watched word observes. Machine B's program: move.l
 	 * d0,(a1) at +0x00 -- the write the watchpoint stops on -- then line-A,
 	 * which faults and halts. The value is distinct in every byte, so a
 	 * transfer of the wrong width lands on a value no other width produces. */
@@ -294,17 +279,17 @@ namespace
 
 	// ----------------------------------------------------- machine B's session
 
-	/* THE DELIVERY DRIVER, ON ITS OWN THREAD. The stub answers packets on this
-	 * test's main thread -- t0_gdb_stub's arrangement -- while the client
+	/* The delivery driver, on its own thread. The stub answers packets on this
+	 * test's main thread while the client
 	 * thread performs the script's exchanges. One request is in flight at a
 	 * time, which is what makes every Board read happen between two answered
 	 * packets.
 	 *
-	 * THE DELIVERY WINDOW IS THE TEST'S OWN DECISION, NOT THE CLIENT'S. The
-	 * script only continues and reads; when its continue-until-stop returns,
+	 * The delivery window is the test's own decision, not the client's. The
+	 * client only continues and reads; when its continue-until-stop returns,
 	 * the main thread drives one `pch2Load` and one quantum boundary so the
 	 * frame crosses the hub and reaches the device while the machine is
-	 * stopped. The watchpoint record is taken by the NEXT continue's MCU
+	 * stopped. The watchpoint record is taken by the next continue's MCU
 	 * phase, which is the phase that reads the data port. */
 	struct Channel
 	{
@@ -455,9 +440,9 @@ namespace
 		_board.resetMcu(g_stackTop, g_codeBase);
 	}
 
-	// Ask the stub one question and return its answer. The t0_gdb_stub
-	// arrangement: the main thread pumps the stub, so every Board read happens
-	// between two answered packets and the machine is quiescent here.
+	// Ask the stub one question and return its answer. The main thread pumps
+	// the stub, so every Board read happens between two answered packets and
+	// the machine is quiescent here.
 	std::string ask(const std::string& _payload)
 	{
 		{
@@ -481,11 +466,10 @@ namespace
 int main()
 {
 	// ==================================================================
-	// MACHINE A, cases one to four and case six. The stub is served
-	// in-process -- the tier-T0 way to hold a session without the console
-	// binary, which boots firmware this test must not read -- and the script
-	// runs against it over loopback, exactly the packet sequence an operator
-	// session runs.
+	// Machine A. The stub is served in-process -- the tier-T0 way to hold a
+	// session without the console binary, which boots firmware this test must
+	// not read -- and the client runs against it over loopback, exactly the
+	// packet sequence an operator session runs.
 	// ==================================================================
 	g2::Board boardA(makeConfigA());
 	Ram       ramA(g_windowSize);
@@ -496,9 +480,8 @@ int main()
 
 	boardA.resetMcu(g_stackTop, g_codeBase);
 
-	/* THE STUB IS CONSTRUCTED AFTER EVERY UNIT IS ATTACHED, for the reason
-	 * t0_gdb_stub states: it interposes its watchpoint wrapper on the targets
-	 * the map holds at that moment. */
+	/* The stub is constructed after every unit is attached: it interposes its
+	 * watchpoint wrapper on the targets the map holds at that moment. */
 	g2::GdbStub stubA(boardA);
 	g_stub = &stubA;
 
@@ -544,9 +527,9 @@ int main()
 	          "machine A: the session opens the way the script's first packet opens it");
 
 	// ==================================================================
-	// MACHINE B -- the delivery machine. The stub is served on its own loopback
+	// Machine B -- the delivery machine. The stub is served on its own loopback
 	// port, and it is the stub the watchpoint cases connect to. The delivery
-	// runs on the SAME Board the stub serves, which is what makes this
+	// runs on the same Board the stub serves, which is what makes this
 	// GDB-with-traffic: the session's breakpoints, watchpoints and the
 	// delivery all sit on one machine.
 	// ==================================================================
@@ -561,12 +544,12 @@ int main()
 	boardB.setMcuReg(g_regD0, g_deliveryWord);
 	boardB.setMcuReg(g_regA1, g_watchAddrB);
 
-	/* THE STUB IS CONSTRUCTED AFTER EVERY UNIT IS ATTACHED, for the reason
+	/* The stub is constructed after every unit is attached, for the reason
 	 * stated above. The Board's hub exists from construction on. */
 	g2::GdbStub stubB(boardB);
 
 	// ==================================================================
-	// MACHINE A, CASE ONE -- the breakpoint the synthetic boot reaches.
+	// Machine A, case one -- the breakpoint the synthetic boot reaches.
 	// ==================================================================
 	{
 		restartA(boardA);
@@ -581,7 +564,7 @@ int main()
 	}
 
 	// ==================================================================
-	// MACHINE A, CASE THREE -- the batch of two breakpoints, in reach order.
+	// Machine A, case three -- the batch of two breakpoints, in reach order.
 	// ==================================================================
 	{
 		restartA(boardA);
@@ -605,13 +588,12 @@ int main()
 	}
 
 	// ==================================================================
-	// MACHINE A, CASE FIVE -- REQUIRED RED. The miss is REPORTED as a miss.
-	// The unreachable breakpoint sits beside the known positive, and the run
-	// must stop at the KNOWN POSITIVE: a stop reply at the unreachable
-	// address, or a run that never reaches the known positive, is red. The
-	// distinction the script's print makes -- hit=break@address versus
-	// hit=none -- is what turns this into the W3-420 discipline enforced by
-	// the harness instead of remembered by the operator.
+	// Machine A, case five -- the miss is reported as a miss. The unreachable
+	// breakpoint sits beside the known positive, and the run must stop at the
+	// known positive: a stop reply at the unreachable address, or a run that
+	// never reaches the known positive, is red. The distinction between
+	// hit=break@address and hit=none is what the harness enforces here rather
+	// than leaving it to the operator to remember.
 	// ==================================================================
 	{
 		restartA(boardA);
@@ -637,12 +619,11 @@ int main()
 	}
 
 	// ==================================================================
-	// MACHINE B, CASES TWO AND SEVEN -- the watchpoint the script armed fires
-	// on the write the DELIVERY path makes. The delivery is driven on machine
-	// B's OWN stub connection: the watchpoint is armed through stubB, the
-	// frames pch2Load originates cross the hub, and the stop names the word
-	// the delivery driver wrote. That is GDB-WITH-TRAFFIC -- the boot path
-	// touches none of it.
+	// Machine B, cases two and seven -- the armed watchpoint fires on the write
+	// the delivery path makes. The delivery is driven on machine B's own stub
+	// connection: the watchpoint is armed through stubB, the frames pch2Load
+	// originates cross the hub, and the stop names the word the delivery driver
+	// wrote. The boot path touches none of it.
 	// ==================================================================
 	{
 		Channel channelB;
@@ -675,13 +656,13 @@ int main()
 			checkText(ask("Z2," + hexAddr(g_watchAddrB) + ",4"), "OK",
 			          "case two: the watchpoint is accepted on the delivery word");
 
-			// THE KNOWN POSITIVE beside it, the W3-420 discipline: a watchpoint
-			// that never fires and a session that reports nothing must be
-			// distinguishable from a delivery that did not cross.
+			// The known positive beside it: a watchpoint that never fires and a
+			// session that reports nothing must be distinguishable from a
+			// delivery that did not cross.
 			checkText(ask("Z0," + hexAddr(g_bpFirst) + ",2"), "OK",
 			          "case two: the known-positive breakpoint is armed beside the watchpoint");
 
-			// THE DELIVERY, on the SAME machine the stub serves. pch2Load
+			// The delivery, on the same machine the stub serves. pch2Load
 			// originates the frames through the InternalClient -- the same code
 			// path the plugin calls -- while the machine is stopped.
 			{
@@ -698,7 +679,7 @@ int main()
 				check(result == g2::Pch2LoadResult::Loaded,
 				      "case two: the container loads through pch2Load on the session's machine");
 
-				// THE HUB RECEIVED IT. The frames pch2Load queued are drained
+				// The hub received it. The frames pch2Load queued are drained
 				// by the Board's own pump at the quantum boundary -- the
 				// delivered count is the hub-to-device half of the crossing,
 				// read off the Board and not asserted from the load's return
@@ -740,9 +721,9 @@ int main()
 	}
 
 	// ==================================================================
-	// MACHINE A, CASE SIX -- a client that never sends `c` leaves the machine
+	// Machine A, case six -- a client that never sends `c` leaves the machine
 	// stopped. The counter is read across a real connection: whatever the
-	// answer, the connection is closed FIRST, so the value read is the
+	// answer, the connection is closed first, so the value read is the
 	// machine's and not the socket's.
 	// ==================================================================
 	{
@@ -777,13 +758,12 @@ int main()
 
 				clientThread6 = std::thread(clientLoop, std::ref(channel6), std::ref(client6));
 
-				// THE CLIENT CONNECTS AND NEVER SENDS `c`. qSupported is
-				// answered; nothing else is sent. The session then ENDS, which
-				// is the shape a script that was never told to continue takes.
+				// The client connects and never sends `c`. qSupported is
+				// answered; nothing else is sent, and the session then ends.
 				checkText(ask("qSupported:multiprocess+"), "PacketSize=1000",
 				          "case six: the session opens and the client stays idle");
 
-				// THE ANSWER, READ WHILE THE MACHINE IS STILL THE STUB'S. The
+				// The answer, read while the machine is still the stub's. The
 				// `?` packet is answered from the stub's own halt state; no `c`
 				// was ever sent, so the machine has executed nothing since the
 				// session opened.
@@ -814,9 +794,8 @@ int main()
 	}
 
 	// ==================================================================
-	// THE DETACH. The stub answers OK and ends the session -- the measured
-	// stub-exits-on-D behaviour, now a contract the console's own exit
-	// satisfies when a real `--gdb` session detaches.
+	// The detach. The stub answers OK and ends the session -- the measured
+	// stub-exits-on-D behaviour.
 	// ==================================================================
 	checkText(ask("D"), "OK", "the stub answers the detach packet");
 

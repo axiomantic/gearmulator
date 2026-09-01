@@ -1,26 +1,15 @@
-// Task INT-1. The test console.
+// The test console.
 //
-// Plan section 15 (INT-1), section 7.4.2. This directory is SHARED BY ORDER and
-// not by ownership: INT-1 creates this file in Wave 4a, INT-2 extends it in
-// Wave 5b, PLG-14 in Wave 6 and PERF-1 in Wave 7, and no two writers share a
-// wave.
+// `g2TestConsole --boot` boots the Clavia OS image directly at 0x30000400 and
+// prints display 0's 32 character cells. It asserts nothing; this program is
+// the operator-facing window onto the same boot, and its output is meant to be
+// read by a person bringing the machine up.
 //
-// WHAT THIS PROGRAM IS. `g2TestConsole --boot` boots the Clavia OS image
-// directly at 0x30000400 and PRINTS display 0's 32 character cells. It asserts
-// nothing; this program is the operator-facing window onto the same boot, and
-// its output is meant to be read by a person bringing the machine up.
-//
-// IT EXISTS BECAUSE ITS ABSENCE WAS ITSELF A DEFECT. Until this file existed
-// `g2TestConsole/CMakeLists.txt` generated a placeholder translation unit whose
-// `main` returned 0 immediately, so the milestone's own acceptance command
-// exited 0 and printed nothing -- plan section 24.6 row W3-95, the project's
-// signature defect sitting on a milestone definition. The generator stops
-// firing the moment this file is present.
-//
-// EVERY ADDRESS AND EVERY WINDOW BELOW HAS THE SAME PROVENANCE AS
-// `g2Lib/test/t1_boot.cpp` AND IS DOCUMENTED THERE. Two of them -- CS0's base
-// and CS4's base -- are INVENTED BY THIS HARNESS because no authority records
-// them, and they are labelled at their site rather than presented as measured.
+// Every address and every window below has the same provenance as
+// `g2Lib/test/t1_boot.cpp` and is documented there. Two of them -- CS0's base
+// and CS4's base -- are invented by this harness because no authority records
+// them, and they are labelled at their site rather than presented as
+// measured.
 
 #include "board.h"
 #include "executor.h"
@@ -32,7 +21,7 @@
 
 #include "impulseOutcome.h"
 
-// TASK M4 CLAUSE 1 reads the DMA registers of each position's peripheral set.
+// The DMA dump reads the registers of each position's peripheral set.
 // board.h already reaches dma.h through dspSet.h and peripherals56311.h; the
 // include is written out because this file names dsp56k::Dma and dsp56k::TWord.
 #include "dsp56kEmu/dma.h"
@@ -103,10 +92,10 @@ namespace
 		          << std::endl;
 	}
 
-	// ---------------------------------------------------------------- section 6.6
+	// ---------------------------------------------------------- the boot map
 
-	// Plan section 6.6.4 clause 1: the display buffer base, confirmed at
-	// 0x30057040 as `addil #808062392,%d0`.
+	// The display buffer base, confirmed at 0x30057040 as
+	// `addil #808062392,%d0`.
 	constexpr uint32_t g_displayBase   = 0x302A0DB8u;
 	constexpr uint32_t g_displayStride = 298u;
 	constexpr uint32_t g_lineWidth     = 16u;
@@ -124,25 +113,25 @@ namespace
 	// bytes and never a width in bits.
 	constexpr int g_byte = 1;
 
-	// MEASURED, plan section 6.6.3: the loader's `movel #0x10000001,%d0` /
+	// Measured: the loader's `movel #0x10000001,%d0` /
 	// `movec %d0,%mbar` at loader offset 0x1E. The OS never writes MBAR, so a
 	// direct boot of the OS image makes this the harness's job.
 	constexpr uint32_t g_mbarBase = 0x10000000u;
 
-	// MEASURED, plan section 6.6.9: CSAR2 = $1200 and CSMR2 = $007F0001 at
+	// Measured: CSAR2 = $1200 and CSMR2 = $007F0001 at
 	// loader offsets 0x70 and 0x7c give 0x12000000..0x127FFFFF.
 	constexpr uint32_t g_cs2Base = 0x12000000u;
 	constexpr uint32_t g_cs2Size = 0x00800000u;
 
-	// INVENTED BY THIS HARNESS. No authority records CS0's or CS4's base; plan
-	// section 4.2 register row 18 is still open on both. Neither value below is
-	// a measurement and neither may be copied into a shipped header.
+	// Invented by this harness. No authority records CS0's or CS4's base, and
+	// both are still open. Neither value below is a measurement and neither may
+	// be copied into a shipped header.
 	constexpr uint32_t g_cs0Base = 0x00000000u;
 	constexpr uint32_t g_cs0Size = 0x00020000u;
 	constexpr uint32_t g_cs4Base = 0x14000000u;
 	constexpr uint32_t g_cs4Size = 0x00010000u;
 
-	// MEASURED, the workspace logbook section 3.8: CS3 is a 64 KiB window,
+	// Measured from the workspace logbook: CS3 is a 64 KiB window,
 	// derived from CSMR3 at 0x100000A8. The OS touches only 0x13000000 and
 	// 0x13000010 inside it.
 	constexpr uint32_t g_cs3Size = 0x00010000u;
@@ -176,12 +165,12 @@ namespace
 	constexpr uint8_t g_clearByte = 0x20u;
 
 	// The G2 display does not hold ASCII. The display helper at 0x30056FEA is a
-	// table-translating copy, and the firmware remaps exactly five entries onto
+	// table-translating copy, and the firmware remaps these entries onto
 	// the CGRAM alias range 0x08..0x0C --
 	//
 	//     'g' -> 0x08   'p' -> 0x09   'q' -> 0x0A   'y' -> 0x0B   'j' -> 0x0C
 	//
-	// -- the five descenders, whose glyph bitmaps it then uploads. A cell
+	// -- the descenders, whose glyph bitmaps it then uploads. A cell
 	// holding 0x09 is a correctly displayed 'p'. `Version 1.62 Exp` contains
 	// one, so a console without this decode misreports a correct machine.
 	constexpr uint8_t g_cgramFirst = 0x08u;
@@ -205,7 +194,7 @@ namespace
 		return _byte >= g_cgramFirst && _byte <= g_cgramLast;
 	}
 
-	// A cell is content if it is an ordinary printable byte, or one of the five
+	// A cell is content if it is an ordinary printable byte, or one of the
 	// CGRAM glyphs. The second clause is what stops a line whose only printable
 	// character is a descender from counting as blank.
 	constexpr bool isDisplayContent(const uint8_t _byte)
@@ -240,10 +229,9 @@ namespace
 	 * has been quiet for this many iterations. */
 	constexpr uint32_t g_bannerSettleIterations = 20000u;
 
-	// The SDRAM the firmware executes from. board.cpp attaches the seven units
-	// plan section 24.6 row W3-115 names and leaves Region::Sdram with no target
-	// on purpose, so the store is the harness's to supply. Big-endian, matching
-	// the part.
+	// The SDRAM the firmware executes from. board.cpp attaches its units and
+	// leaves Region::Sdram with no target on purpose, so the store is the
+	// harness's to supply. Big-endian, matching the part.
 	class Ram final : public g2::BusTarget
 	{
 	public:
@@ -376,7 +364,7 @@ namespace
 	}
 
 	// Reads through Board::onRead, which is the exact callback the Board hands
-	// to mcf5307_create and therefore the path the core itself takes. The five
+	// to mcf5307_create and therefore the path the core itself takes. The
 	// CGRAM glyphs are decoded back to the characters they render; every other
 	// byte passes through untouched, so a genuinely wrong cell still reads as
 	// whatever it actually is.
@@ -430,7 +418,7 @@ namespace
 
 	// ------------------------------------------------------------ the DMA check
 	//
-	// The four constants below are read off the kernel's own MOVEP block:
+	// The constants below are read off the kernel's own MOVEP block:
 	//
 	//   Channel | DSR            | DDR                          | DCO
 	//   2       | $FFFFA8 ESAI   | $001C00, $001C04 at the head | $007001, $001001 at the head
@@ -523,9 +511,9 @@ namespace
 	}
 
 	/* DDR2 is a moving pointer and a terminal read of it answers the wrong
-	 * question. This check establishes that the kernel PROGRAMMED each
+	 * question. This check establishes that the kernel programmed each
 	 * position's DMA block correctly, and nothing about whether any sample has
-	 * ever moved through it. DDR is the DESTINATION pointer of a receive channel
+	 * ever moved through it. DDR is the destination pointer of a receive channel
 	 * and `DmaChannel::execTransfer` advances it on every transfer -- the
 	 * `increment(m_ddr)`, `++m_ddr` and `m_ddr += m_dco + 1` sites in `dma.cpp`
 	 * -- and the emulator saves no base beside it. After 500,000 frames it holds
@@ -561,8 +549,8 @@ namespace
 		return complete;
 	}
 
-	// Prints one line for each position and answers whether EVERY position
-	// matched. THE VERDICT IS THE WORST POSITION: `all` is a conjunction over
+	// Prints one line for each position and answers whether every position
+	// matched. The verdict is the worst position: `all` is a conjunction over
 	// the per-position results and never a separately computed summary, so a
 	// single FAIL row cannot coexist with a PASS verdict.
 	bool dumpDspDma(g2::Board& _board, const std::vector<dsp56k::TWord>& _ddr2Latched)
@@ -836,13 +824,11 @@ namespace
 		// writes the clear cannot produce, and anyContent refuses 0x20 itself.
 		const bool bootOk = bannerLatched && anyContent(line0) && !halted && !faulted;
 
-		/* TASK M4 CLAUSE 1. The dump runs AFTER the drive, on the same Board the
-		 * drive turned, and it is the last thing the program does before it
-		 * answers -- the registers it reads are the ones the firmware left at
-		 * the bound.
-		 *
-		 * IT IS SKIPPED ENTIRELY WITHOUT THE FLAG, so `--boot` alone answers on
-		 * the banner predicate exactly as it did before this task. */
+		/* The dump runs after the drive, on the same Board the drive turned, and
+		 * it is the last thing the program does before it answers -- the
+		 * registers it reads are the ones the firmware left at the bound. It is
+		 * skipped entirely without the flag, so `--boot` alone answers on the
+		 * banner predicate. */
 		const bool dmaOk = _dumpDspDma ? dumpDspDma(board, ddr2Latched) : true;
 
 		/* The verdict is the worse of the two clauses. A run whose
@@ -871,7 +857,7 @@ namespace
 	 * dspCount is read off the booted machine and hopFrames off the
 	 * Scheduler::Config this program hands the factory.
 	 *
-	 * A report is not a verdict: this function exits NON-ZERO unless the pattern
+	 * A report is not a verdict: this function exits non-zero unless the pattern
 	 * arrived, arrived at exactly that frame, and arrived unchanged. */
 	constexpr int32_t g_impulseLeft  = 0x0055AA33;
 	constexpr int32_t g_impulseRight = 0x00337799;
@@ -908,10 +894,10 @@ namespace
 	 * quantum 0; this is headroom and not an expectation. */
 	constexpr unsigned g_sinkControlQuanta = 64u;
 
-	/* THE OUTCOME IS PRINTED ON EVERY EXIT PATH, INCLUDING THE ONES THAT LEAVE
-	 * BEFORE A BOARD EXISTS. A path that returned a bare status printed figures
-	 * that a reader had to reconstruct an answer from, and the reconstruction
-	 * of "no artifact" and "the chain carried nothing" produced the same one. */
+	/* The outcome is printed on every exit path, including the ones that leave
+	 * before a Board exists. A bare status leaves a reader to reconstruct the
+	 * answer from figures, and "no artifact" and "the chain carried nothing"
+	 * reconstruct to the same one. */
 	void reportOutcome(const g2console::ImpulseOutcome _outcome, const std::string& _detail)
 	{
 		std::cout << "impulse: OUTCOME=" << g2console::name(_outcome) << std::endl;
@@ -1315,7 +1301,7 @@ namespace
 
 		const g2::Frame silence{};
 
-		/* The walk below and the self-test after it drive THE SAME two
+		/* The walk below and the self-test after it drive the same two
 		 * predicates. Retyped copies let the self-test keep passing while the
 		 * walk's own comparison drifts away from it. */
 		const auto seen = [](const g2::Frame& _f)
@@ -1740,10 +1726,10 @@ namespace
 			}
 		}
 
-		/* THE OBSERVER'S OWN KNOWN POSITIVE AND KNOWN NEGATIVE, RUN ON THE
-		 * DETECTOR AND NOT ON THE CHAIN. The loop above reports an absence, and
+		/* The observer's own known positive and known negative, run on the
+		 * detector and not on the chain. The loop above reports an absence, and
 		 * an absence reported by a detector that cannot detect is not evidence.
-		 * This drives the SAME two predicates over a frame this program built,
+		 * This drives the same two predicates over a frame this program built,
 		 * whose answers are known before the run: the injected pattern must be
 		 * seen and must compare equal, and a zero frame must not be seen. */
 		bool observerSelfTest = false;
@@ -1797,7 +1783,7 @@ namespace
 
 		/* The chain-health counters. The per-position figures are reported as
 		 * their maximum over the positions, with the position that carried it,
-		 * so a reader is told WHICH one moved. */
+		 * so a reader is told which one moved. */
 		uint64_t underrun = 0, secondUnderrun = 0, phaseError = 0;
 		unsigned underrunAt = 0, secondUnderrunAt = 0, phaseErrorAt = 0;
 
@@ -1967,14 +1953,14 @@ namespace
 
 		reportSuppressedLogLines();
 
-		/* THE VERDICT, AND IT IS THE WORST OF ITS CLAUSES. A machine that never
+		/* The verdict is the worst of its clauses. A machine that never
 		 * booted read its arrival off a chain that was not running, and a
 		 * pattern that arrived at the wrong frame or changed on the way is a
 		 * failure of the row and not a note beside it. */
-		/* THE VERDICT IS THE CLASSIFIER'S, AND IT IS ONE WORD BEFORE IT IS A
-		 * STATUS. The clauses that used to be AND-ed into a single bool are the
-		 * classifier's fields now, so a reader is told WHICH answer this was
-		 * rather than handed the conjunction's false and left to reconstruct it.
+		/* The verdict is the classifier's, and it is one word before it is a
+		 * status. The clauses are the classifier's fields, so a reader is told
+		 * which answer this was rather than handed a conjunction's false and
+		 * left to reconstruct it.
 		 *
 		 * `rxArmed` is a condition of having reached the play phase at all, and
 		 * that is where it belongs rather than in a sixth outcome arm. A drive
@@ -2001,11 +1987,11 @@ namespace
 		return g2console::exitStatus(outcome);
 	}
 
-	/* TASK TOOL-13. THE GDB REMOTE STUB, AND IT IS OPT-IN AND ABSENT BY DEFAULT.
-	 * `--gdb <port>` places the same machine `--boot` places -- the same image at
-	 * the same entry, the same vector table, the same reset -- and then BLOCKS
-	 * until a debugger attaches instead of driving it. NOTHING ADVANCES THE
-	 * MACHINE HERE: the debugger's own `continue` and `stepi` are what run it, so
+	/* The GDB remote stub, opt-in and absent by default. `--gdb <port>` places
+	 * the same machine `--boot` places -- the same image at the same entry, the
+	 * same vector table, the same reset -- and then blocks until a debugger
+	 * attaches instead of driving it. Nothing advances the machine here: the
+	 * debugger's own `continue` and `stepi` are what run it, so
 	 * a session that never attaches leaves a machine that has executed nothing.
 	 *
 	 * It drives the whole machine through the Scheduler, which is what `--boot`
@@ -2016,7 +2002,7 @@ namespace
 	 * alone and stalls forever the first time the MCU waits on a DSP -- and
 	 * reports a clean, plausible MISS rather than stalling visibly.
 	 *
-	 * There is still no DSP56300 stub. The DSPs run; they are not instrumented.
+	 * There is no DSP56300 stub. The DSPs run; they are not instrumented.
 	 * A breakpoint on a DSP program counter, a DSP register read or a DSP memory
 	 * watchpoint is not available here. */
 	int gdb(const uint16_t _port)
@@ -2081,7 +2067,7 @@ namespace
 		}
 
 		/* The Scheduler is declared after the Board so that it is destroyed
-		 * BEFORE it: it borrows the Board's DSP set and installs chain callbacks
+		 * before it: it borrows the Board's DSP set and installs chain callbacks
 		 * into ESAIs the Board owns. The Executor is declared before the
 		 * Scheduler for the same reason. Nothing here runs a frame -- the
 		 * debugger's own `s` and `c` advance the machine. */
@@ -2098,7 +2084,7 @@ namespace
 			return 2;
 		}
 
-		/* THE STUB IS CONSTRUCTED AFTER THE STORE IS ATTACHED. Its watchpoint
+		/* The stub is constructed after the store is attached. Its watchpoint
 		 * wrapper is interposed in front of whatever the memory map holds at that
 		 * moment, so a target attached later would sit in front of the wrapper
 		 * rather than behind it and its accesses would be invisible. */
@@ -2214,9 +2200,9 @@ namespace
 
 int main(int _argc, char** _argv)
 {
-	// NO ARGUMENT IS NOT A SUCCESS. The placeholder this file replaces exited 0
-	// and printed nothing, which is exactly how a milestone check passes against
-	// a program that does nothing. An unrecognised invocation is an error here.
+	// No argument is not a success. A program that exits 0 and prints nothing is
+	// exactly how a milestone check passes against a program that does nothing,
+	// so an unrecognised invocation is an error here.
 	if(_argc < 2)
 	{
 		usage();
@@ -2297,9 +2283,9 @@ int main(int _argc, char** _argv)
 		return named("--impulse", impulse(rxProbe));
 	}
 
-	/* TASK PLG-14. `--help` IS A HANDLED WORD AND NOT A FALL-THROUGH. Before
-	 * this task it printed the usage text only because it was UNRECOGNISED, and
-	 * it exited 2 -- a defensible exit for an unknown flag and not a --help. */
+	/* `--help` is a handled word and not a fall-through: reaching the usage text
+	 * as an unrecognised flag exits 2, which is a defensible exit for an unknown
+	 * flag and not for a --help. */
 	if(command == "--help")
 	{
 		usage();

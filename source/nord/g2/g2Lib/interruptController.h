@@ -21,7 +21,7 @@
 //     $048 row is four byte columns whose first three are Reserved, so $048 is
 //     the longword group base and $04B is the register byte. Table B-1 gives
 //     $048, $049 and $04A no row at all, so this class answers none of them --
-//     and both G2 firmware images write the byte at $1000004B.
+//     and the G2 firmware writes the byte at $1000004B.
 //   * IRQPAR at MBAR+$006, which re-maps the external pins: IRQ5 to level 5 or
 //     4, IRQ3 to level 6 or 3, IRQ1 to level 1 or 2. IRQ7 is always level 7.
 //     MCF5307 UM section 8.3.4.1 and Table 8-4, pp. 8-9..8-10.
@@ -57,8 +57,8 @@ namespace g2
 	class InterruptController final
 	{
 	public:
-		// The MBAR-relative offsets this class answers. All three are facts
-		// from the MCF5307 User's Manual, sections 8.3.3 and 8.3.4.
+		// The MBAR-relative offsets this class answers, from the MCF5307
+		// User's Manual, sections 8.3.3 and 8.3.4.
 		static constexpr uint32_t gAvrOffset   = 0x04Bu;
 		static constexpr uint32_t gIcrBase     = 0x04Cu;
 		static constexpr uint32_t gIcrCount    = 12u;   // MBAR+$04C..$057
@@ -94,8 +94,8 @@ namespace g2
 		void setInternalVector(int _index, uint8_t _vector);
 		void setExternalVector(ExternalPin _pin, uint8_t _vector);
 
-		// The last-presented state, so that a test that installs the callback
-		// can read back what was presented as well as record it.
+		// The last-presented state, readable back by whoever installed the
+		// callback.
 		int presentedLevel() const { return m_lastLevel; }
 		uint8_t presentedVector() const { return m_lastVector; }
 		int presentedAutovector() const { return m_lastAutovector; }

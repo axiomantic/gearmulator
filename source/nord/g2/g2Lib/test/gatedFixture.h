@@ -1,18 +1,12 @@
 #pragma once
 
-// Task REPO-7, the skip discipline. Design section 18.5, plan section 5.2
-// rules 2 and 3.
+// The skip discipline for firmware-gated tests. A gated test that cannot run
+// must skip with a reason and must never pass silently.
 //
-// This is the mechanism EVERY firmware-gated test in this repository uses. A
-// gated test that cannot run must skip WITH A REASON and must never pass
-// silently.
+// Header-only on purpose: a gated test needs the fixture at compile time.
 //
-// Header-only on purpose: REPO-7's Files: line names this header and no
-// translation unit, and a gated test needs the fixture at compile time.
-//
-// The fixture is written against ArtifactResolver and NEVER against getenv, so
-// that a later fetch implementation of design section 4.2 changes no test.
-// Design section 18.5 step 1 states that requirement directly.
+// The fixture is written against ArtifactResolver and never against getenv, so
+// that a later fetch implementation changes no test.
 
 #include "../artifactResolver.h"
 
@@ -24,23 +18,20 @@ namespace g2
 {
 	namespace test
 	{
-		// Section 18.5's skip line is section 4.2's message with this prefix.
-		// It is built here by CONCATENATION and is not spelled out a second
-		// time: a message with two texts is a message with two meanings, and
-		// the one an implementer copies is the one that drifts.
+		// The skip line is the resolver's message with this prefix. It is
+		// built here by concatenation and is not spelled out a second time: a
+		// message with two texts is a message with two meanings, and the one
+		// an implementer copies is the one that drifts.
 		constexpr const char* g_skippedPrefix = "SKIPPED: ";
 
-		// The three verdict tokens. They are UPPERCASE and the count labels
-		// below are lowercase, which is what lets "the summary never prints
-		// PASS" be a case-sensitive test that `passed=0` cannot satisfy by
-		// accident.
+		// The verdict tokens are uppercase and the count labels below are
+		// lowercase, so a case-sensitive search for PASS in a summary line is
+		// not satisfied by `passed=0`.
 		constexpr const char* g_verdictPass = "PASS";
 		constexpr const char* g_verdictFail = "FAIL";
 		constexpr const char* g_verdictNotVerified = "NOT VERIFIED";
 
-		// The four counts design section 18.5 step 3 names.
-		//
-		// `run` counts gated tests that EXECUTED THEIR BODY. A skipped test is
+		// `run` counts gated tests that executed their body. A skipped test is
 		// not a run test, which is what makes "a run that executed zero gated
 		// tests" the condition `run == 0`.
 		struct GatedCounters
@@ -56,7 +47,7 @@ namespace g2
 		// When it does not, writes the skip line to _out and counts one skip.
 		// _body returns true when the gated test passed.
 		//
-		// Returns true when the body ran, which is NOT the same as the body
+		// Returns true when the body ran, which is not the same as the body
 		// passing: a caller that conflated the two would report a failed gated
 		// test as a skip.
 		template<typename Body>
@@ -95,7 +86,7 @@ namespace g2
 		constexpr int g_gatedSkipExitCode = 77;
 
 		// A run that executed no gated body is neither a pass nor a failure, and
-		// `run == 0` is tested FIRST for the same reason summaryLine tests it
+		// `run == 0` is tested first for the same reason summaryLine tests it
 		// first: an artifact-less machine must not be failed, and must not be
 		// reported as having verified anything either.
 		inline int gatedExitCode(const GatedCounters& _counters)
@@ -106,14 +97,13 @@ namespace g2
 			return _counters.failed > 0 ? 1 : 0;
 		}
 
-		// The summary line design section 18.5 step 3 requires, carrying the
-		// four counts, and step 4's rule:
+		// The summary line, carrying the counts, and the rule:
 		//
 		//   "A run that executed zero gated tests is reported as NOT VERIFIED,
 		//    not as PASS."
 		//
 		// A green tick on a run that verified nothing is the failure the whole
-		// discipline exists to prevent, so `run == 0` is tested FIRST and the
+		// discipline exists to prevent, so `run == 0` is tested first and the
 		// PASS branch is unreachable from it.
 		inline std::string summaryLine(const GatedCounters& _counters)
 		{

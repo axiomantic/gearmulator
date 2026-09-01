@@ -1,40 +1,27 @@
 /* t0_latency_formula.cpp -- the latency the plugin reports to the host.
  *
- * TIER T0 AND UNGATED: no firmware artifact and no booted machine. The formula
- * reads three constants, the chain configuration and two framework getters.
+ * Tier T0 and ungated: no firmware artifact and no booted machine.
  *
  *     D_total(R) = ceil((L + D_chain + D_codec) * R / G2_FRAME_RATE_HZ)
  *                  + D_resampler(R)
  *     D_chain    = (N - 1) * G2_CHAIN_HOP_FRAMES
  *
- * WHAT IT HOLDS.
+ * The reported figure is built from the named constants --
+ * g2::kLookaheadFrames, the chain delay the plugin's own configuration gives,
+ * and g2::kDelayCodecFrames -- and not from a literal written here a second
+ * time.
  *
- * 1. The reported figure equals the formula, at each host rate of the design's
- *    table, from the NAMED constants -- g2::kLookaheadFrames, the chain delay
- *    the plugin's own configuration gives, and g2::kDelayCodecFrames -- and
- *    not from a literal written here a second time.
+ * The ceiling is why this file exists. `L + D_chain + D_codec` must stay at or
+ * below the framework's clamp. Above that the framework clamps the latency it
+ * is handed and only logs it, so the plugin reports a figure shorter than it
+ * takes and every host silently mis-compensates. A latency the framework
+ * truncates is not a slow plugin, it is a wrong one.
  *
- * 2. THE CEILING, AND IT IS THE REASON THIS TEST EXISTS. `L + D_chain +
- *    D_codec` must stay at or below 16,384 frames. Above that the framework
- *    clamps the latency it is handed and only logs it, so the plugin reports a
- *    figure SHORTER than it takes and every host silently mis-compensates. A
- *    latency the framework truncates is not a slow plugin, it is a wrong one,
- *    and nothing else in this design would see it.
- *
- *    The ceiling is asserted twice over: once as arithmetic on the shipped
- *    constants, and once behaviorally -- Scheduler::create accepts a sum AT
- *    the bound and refuses one frame above it with Status::BadLookahead. The
- *    second binding is what keeps the literal below honest: a build whose
- *    real bound moved would take the pair red rather than leave a stale number
- *    passing.
- *
- * 3. The ceil rounds UP and is not a truncation: at 44.1 kHz the sum lands on
- *    a fraction and the reported figure is the frame above it.
- *
- * 4. At a 96 kHz host rate the resampler is bypassed and D_resampler is 0.
- *
- * 5. The Device declares no internal latency of its own, which is the premise
- *    that lets D_resampler be read out of the framework's public figure.
+ * The ceiling is bound twice over: once as arithmetic on the shipped
+ * constants, and once behaviorally -- Scheduler::create accepts a sum at the
+ * bound and refuses one frame above it with Status::BadLookahead. The second
+ * binding is what keeps the literal below honest: a build whose real bound
+ * moved would take the pair red rather than leave a stale number passing.
  */
 
 #include "g2JucePlugin/g2Plugin.h"
@@ -102,14 +89,14 @@ namespace
 
 int main()
 {
-	/* The three terms, named, and the chain delay the configuration gives. */
+	/* The terms, named, and the chain delay the configuration gives. */
 	uint64_t chainDelayFrames = 0;
 	uint64_t totalFrames      = 0;
 	{
 		g2::Device device{synthLib::DeviceCreateParams{}};
 		g2::Plugin plugin(&device, noReplacement());
 
-		/* 5. The premise D_resampler is read on. */
+		/* The premise D_resampler is read on. */
 		check(device.getInternalLatencyMidiToOutput() == 0 && device.getInternalLatencyInputToOutput() == 0,
 			"the Device declares no internal latency, so the framework's public figure carries the resampler's alone");
 
@@ -130,7 +117,7 @@ int main()
 			static_cast<unsigned long long>(totalFrames));
 	}
 
-	/* 2. THE CEILING. */
+	/* The ceiling. */
 	{
 		check(totalFrames <= g_frameworkLatencyClamp,
 			"L + D_chain + D_codec stays at or below the framework's 16,384-frame clamp");
@@ -161,11 +148,11 @@ int main()
 			"Scheduler::create refuses a sum ONE FRAME above the clamp with Status::BadLookahead");
 	}
 
-	/* 1, 3 and 4. The formula at each host rate, then the two rates whose
-	 * behavior the formula is chosen for. ONE Device carries all of it: each
-	 * prepareToPlay re-runs the pre-warm and recomputes the reported figure
-	 * from scratch, and constructing a second machine would build eight DSP
-	 * emulators to learn nothing. */
+	/* The formula at each host rate, then the rates whose behavior the formula
+	 * is chosen for. One Device carries all of it: each prepareToPlay re-runs
+	 * the pre-warm and recomputes the reported figure from scratch, and
+	 * constructing a second machine would build another set of DSP emulators
+	 * to learn nothing. */
 	{
 		g2::Device device{synthLib::DeviceCreateParams{}};
 		g2::Plugin plugin(&device, noReplacement());
@@ -192,7 +179,7 @@ int main()
 		check(allMatch,
 			"the reported latency equals ceil((L + D_chain + D_codec) * R / 96000) + D_resampler(R) at every host rate");
 
-		/* 4. The rate at which the resampler drops out entirely. */
+		/* The rate at which the resampler drops out entirely. */
 		plugin.prepareToPlay(256u, 96000.0f);
 
 		check(plugin.resamplerDelaySamples() == 0,
@@ -200,7 +187,7 @@ int main()
 		check(plugin.reportedLatencySamples() == totalFrames,
 			"at a 96 kHz host rate the reported latency is the frame sum itself");
 
-		/* 3. The rate at which the rounding direction is observable. */
+		/* The rate at which the rounding direction is observable. */
 		plugin.prepareToPlay(256u, 44100.0f);
 
 		const double exact = static_cast<double>(totalFrames) * 44100.0 / static_cast<double>(G2_FRAME_RATE_HZ);

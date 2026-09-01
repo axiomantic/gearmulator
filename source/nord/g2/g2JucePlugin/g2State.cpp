@@ -1,14 +1,9 @@
-/* g2State.cpp -- the seven-item plugin state format's body. Task PLG-5.
+/* The plugin state format's body: the single definition site of the item
+ * layout, the insert-never-assign rule, and the version-mismatch policy
+ * wired here from g2Lib/firmwareVersion.h.
  *
- * Design sections 15.5 (the seven items, the single definition site), 17
- * row 7.29 (insert, never assign), 15.8 (the version-mismatch policy, wired
- * here from BRD-11's g2Lib/firmwareVersion.h).
- *
- * The emulated machine does not exist yet (the boot is PLG-12's), so the
- * data behind the seven items is what the Device holds today: empty and
- * zero. The FORMAT is what this file declares, and the round trip through
- * it is exact from the first revision; item 5 (the firmware version word)
- * and item 6 (the format version) are real values now.
+ * The format is what this file declares, and the round trip through it is
+ * exact.
  */
 
 #include "g2State.h"
@@ -101,10 +96,10 @@ namespace g2
 		const uint16_t _firmwareVersionWord,
 		const uint32_t _parameterOverflowCount)
 	{
-		// APPEND, never assign: the Plugin layer has already pushed its own
+		// Append, never assign: the Plugin layer has already pushed its own
 		// version header into _state (plugin.cpp pushes g_stateVersion and
 		// the StateType before the Device is called), and an assignment
-		// would overwrite it in silence -- design section 17 row 7.29.
+		// would overwrite it in silence.
 		if(_slotPatches.size() != g_stateSlotCount || _slotPatchIds.size() != g_stateSlotCount)
 			return false;
 
@@ -208,7 +203,8 @@ namespace g2
 			return refused();
 
 		// Every header checked out and the whole image is consumed. Only now
-		// does the load begin, and BRD-11's table decides what it loads.
+		// does the load begin, and decideFirmwareVersion decides what it
+		// loads.
 		const FirmwareVersionDecision decision =
 			decideFirmwareVersion(_firmwarePresent, _machineFirmwareVersionWord, firmwareVersionWord);
 
@@ -220,8 +216,8 @@ namespace g2
 
 		if(!result.machineLoaded)
 		{
-			// No firmware present: design section 7.7 owns the answer and
-			// BRD-10's surface carries its message. Nothing loads here.
+			// No firmware present: the firmware-state surface carries the
+			// message. Nothing loads here.
 			return result;
 		}
 

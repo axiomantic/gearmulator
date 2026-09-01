@@ -1,68 +1,30 @@
-/* t0_callback_timer.cpp -- the check of task PLG-13. Design section 18.10,
- * with 13.7.
+/* The check of g2::CallbackTimer.
  *
- * WHAT THE CHECK HOLDS, CASE BY CASE.
+ * The surface is taken through fully qualified member-function-pointer
+ * types. That spelling is what makes a renamed or re-signed method a
+ * compile error rather than a silent match against something else, and a
+ * missing definition a link error, because taking the address of a member
+ * function odr-uses it.
  *
- * THE SURFACE. The check takes the address of every declared method and of
- * the Report members, THROUGH ITS FULLY QUALIFIED MEMBER-FUNCTION-POINTER
- * TYPE. That spelling is what makes a renamed or re-signed method a COMPILE
- * error rather than a silent match against something else, and a missing
- * definition a LINK error, because taking the address of a member function
- * odr-uses it. The constructor signature is pinned the same way: the
- * explicit single size_t form.
+ * The ring is a plain ring of the last N, not reservoir sampling and not a
+ * growing buffer. Mean, max and count are running figures since
+ * construction or reset, over the whole history and not the window; the two
+ * differ once the window is full. The count is exact: one per end().
  *
- * THE RING IS A PLAIN RING OF THE LAST N, not reservoir sampling and not a
- * growing buffer. The deciding case drives a STRICTLY INCREASING duration
- * series -- each callback is made longer than the last by construction --
- * and then reads the window. On such a series the window of N holds the N
- * LONGEST durations, sorted, and the p99 of the window therefore sits
- * strictly below the running max; a buffer that kept the whole history
- * would put the history's p99 AT the top of the series and the check goes
- * red. The host cannot perturb the ORDER, which is the property under
- * test; the absolute magnitudes are whatever the host gives.
+ * reset() takes effect at the next end() and not immediately.
  *
- * MEAN, MAX AND COUNT ARE RUNNING FIGURES SINCE CONSTRUCTION OR RESET,
- * over the WHOLE history and not the window -- the header's Report comment
- * says so and the two differ once the window is full. The count is exact:
- * one per end(). The max is at least the p99 and the p99 at least the mean
- * on the increasing series.
+ * CallbackTimer is not part of the Scheduler snapshot, because it has no
+ * emulated state. The detectable form of that absence is a SFINAE probe: a
+ * class that declares stateSave makes the probe well-formed, and the
+ * static_assert flips red.
  *
- * reset() TAKES EFFECT AT THE NEXT END(). The case calls reset() from a
- * non-audio thread, asserts nothing has moved yet, drives one more
- * callback, and asserts the count reads 1 -- not 0, which is what an
- * immediate clear would give and what the header comment forbids. Mean,
- * max and window all restart with that one callback.
+ * This test compiles perf/CallbackTimer.cpp directly and links g2Lib.
  *
- * THE SEQLOCK HOLDS. One thread drives begin()/end(); another reads
- * report() continuously. Every Report must be internally consistent:
- * callbacks never decreases across successive reports, p99 never exceeds
- * max, mean never exceeds max. A retry inside report() is possible and is
- * NOT a failure; it never surfaces here.
- *
- * IT IS NOT PART OF THE SNAPSHOT AND CANNOT NAME A CONTEXT. These are
- * properties of what the class does NOT declare: no stateSave/stateLoad
- * exists on it, and no method takes a context parameter. The detectable
- * form of the first is a SFINAE probe -- a class that declares stateSave
- * makes the probe well-formed, and the static_assert flips red. The second
- * is pinned by the member-pointer surface itself: every method declared
- * is listed, and none takes a context.
- *
- * NO STATE SURFACE MEANS NO SNAPSHOT MEMBERSHIP, and that is the design's
- * wording: "it is not part of the Scheduler snapshot, because it has no
- * emulated state".
- *
- * THIS TEST COMPILES ../perf/CallbackTimer.cpp DIRECTLY and links g2Lib.
- * CallbackTimer.cpp is NOT yet on sources_perf.cmake: the source-list edit
- * belongs to the perf track's own file, out of this task's declared scope.
- * The direct compile is the same arrangement t0_device_surface uses for
- * the g2JucePlugin sources.
- *
- * THE TEST ITSELF READS NO HOST CLOCK AND CARRIES NONE OF THE FIVE
- * SYSTEM-CLOCK SPELLINGS, not even in a comment -- the SCH-26 lint
- * searches text and cannot tell a comment from a call. The strictly
- * increasing series is built by the timer's OWN begin/end around each
- * driven callback -- each end() produces a real duration and the case
- * only asserts ORDER properties that any monotonic clock satisfies.
+ * The test reads no host clock and carries none of the system-clock
+ * spellings, not even in a comment -- the lint searches text and cannot
+ * tell a comment from a call. The increasing duration series is built by
+ * the timer's own begin/end around each driven callback, and the cases
+ * assert only order properties that any monotonic clock satisfies.
  */
 
 #include "perf/CallbackTimer.h"
@@ -155,7 +117,7 @@ namespace
 
 	void runCaseRing()
 	{
-		/* Window of 8 over 20 callbacks. The DURATION MAGNITUDES are
+		/* Window of 8 over 20 callbacks. The duration magnitudes are
 		 * whatever the host gives -- the test reads no clock -- so the
 		 * exact p99 value cannot be asserted here. What IS asserted is
 		 * everything the host cannot perturb: the count is exact, the
@@ -186,7 +148,7 @@ namespace
 
 	void runCaseRingOrder()
 	{
-		/* CASE 2b: the ring holds THE LAST N. The deciding construction
+		/* Case 2b: the ring holds the last N. The deciding construction
 		 * cannot manufacture exact durations without a clock, so it
 		 * manufactures the ORDER through the one monotone resource the
 		 * design gives the audio thread: the timer's own record of the

@@ -1,14 +1,11 @@
-// Drives the eight expanded addresses through the decode and asserts the
-// selected port set for each, then exercises the two paths a firmware word can
-// arrive by -- a 32-bit store at register offset 4, and a byte-at-a-time
-// TXH/TXM/TXL sequence -- and asserts the same 24-bit word comes out either
-// way. It also drives the broadcast and asserts the word arrives at every
-// populated port.
+// Drives the expanded per-DSP addresses through the decode, the two paths a
+// firmware word can arrive by -- a 32-bit store at register offset 4, and a
+// byte-at-a-time TXH/TXM/TXL sequence -- and the broadcast.
 //
 // The addresses below are the expected input of a decode, not a table the
 // emulator carries: they are the values `set_hdi08_bases(expanded)` writes at
-// boot, and hdi08Adapter.h and hdi08Decode.h hold none of them. This test
-// reads them only to compute CS1-relative offsets for the adapter.
+// boot. This test reads them only to compute CS1-relative offsets for the
+// adapter.
 
 #include "hdi08Adapter.h"
 #include "hdi08Decode.h"
@@ -89,8 +86,8 @@ namespace
 		int count = 0;
 	};
 
-	// THE ARRAY IS THE CALLER'S, AND IT IS AN OUT-PARAMETER RATHER THAN A RETURN
-	// VALUE ON PURPOSE. The per-port lambdas outlive this call and hold a
+	// The array is the caller's, and it is an out-parameter rather than a
+	// return value on purpose. The per-port lambdas outlive this call and hold a
 	// reference to whatever they were given. Returning a local by value would
 	// bind them to storage this function owns, which survives the return only
 	// while a compiler chooses NRVO -- an optimisation it is permitted to
@@ -162,7 +159,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. THE BROADCAST.
+	// Case group 1. The broadcast.
 	//
 	// An offset of zero drives every populated select low. A longword at
 	// register offset 4 pushes the same word to every port.
@@ -234,7 +231,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. THE 16-BIT PATH.
+	// Case group 3. The 16-bit path.
 	//
 	// A 16-bit store at register offset 6 writes TXM then TXL, so the word
 	// completes with the low 16 bits of the value and a zero high byte. This
@@ -341,9 +338,8 @@ int main()
 			}
 		}
 
-		// Case 5b -- ONLY INIT CLEARS. The host sets HF0 and TREQ in the same
-		// byte and both must survive, so a clear that took the whole register or
-		// the wrong bit is visible here and nowhere else.
+		// Case 5b -- only INIT clears. The host sets HF0 and TREQ in the same
+		// byte and both must survive.
 		{
 			const uint32_t portBase = 0x110007f0u; // port 0.
 			const int portIndex = 0;
@@ -432,9 +428,7 @@ int main()
 				"a port whose rx-empty callback was cleared reads an empty RX register as zero");
 		}
 
-		// Case 6c -- an installed callback is still the one that runs. A default
-		// that swallowed the caller's own handler would satisfy 6a and 6b and be
-		// visible nowhere else.
+		// Case 6c -- an installed callback is still the one that runs.
 		{
 			mc68k::Hdi08 hdi08;
 

@@ -7,22 +7,22 @@
 // exactly the configuration a fresh clone and CI both build.
 //
 // What the funnel is for, and why "no crash" is not the test. g2::writePMem is
-// the one function in the G2 that writes DSP P memory, and it always tells the
+// the funnel through which DSP P memory is written, and it always tells the
 // just-in-time compiler that the word changed. Skipping that notification does
 // not corrupt memory and does not fault on most hosts: the write lands, and the
-// DSP goes on running the block the compiler built BEFORE the write. The
+// DSP goes on running the block the compiler built before the write. The
 // firmware's new code is in memory and the old code is what executes. That is
 // silent on Linux and Windows; on macOS the MMU path is force-disabled
-// (dsp56kBase/mmuarray.h:67-69) and the same defect can present as a
-// segmentation fault instead. A test that asserted only "no crash" would pass
-// everywhere but macOS while the real defect shipped.
+// (dsp56kBase/mmuarray.h) and the same defect can present as a segmentation
+// fault instead. A test that asserted only "no crash" would pass everywhere but
+// macOS while the real defect shipped.
 //
 // So case group 2 is the test. It compiles a block, overwrites the block's
-// first word THROUGH THE FUNNEL, re-executes the same address, and asserts the
-// NEW code ran. The observable is the DSP's own instruction counter rather than
-// a register value: it depends on nothing but `nop` and `jmp`, whose encodings
-// this repository already exercises, and the two programs differ in length by
-// construction so the expected counts are known without measuring them.
+// first word through the funnel, re-executes the same address, and asserts the
+// new code ran. The observable is the DSP's own instruction counter rather than
+// a register value: it depends on nothing but `nop` and `jmp`, and the two
+// programs differ in length by construction so the expected counts are known
+// without measuring them.
 //
 // An immediate-move's placement rule -- which byte of the destination an 8-bit
 // literal lands in -- is a detail of the instruction set that a register-based
@@ -93,7 +93,7 @@ namespace
 			: memory(g_memoryValidator, 0x080000, 0x800000, 0x200000)
 			, dsp(memory, &peripheralsX, &peripheralsY)
 		{
-			// ONE exec() MUST BE ONE BLOCK. With block linking on, a single
+			// One exec() must be one block. With block linking on, a single
 			// dispatch unit runs a chain of blocks and the instruction counts
 			// below would be the counts of a chain rather than of the block
 			// the funnel rewrote.
@@ -170,10 +170,9 @@ int main()
 	// holds. `nop` on the DSP56300 encodes as 0x000000, which
 	// is exactly what an untouched P word reads, so a group that wrote `nop`
 	// asserted "the word landed" against a value that was already there: a
-	// funnel that wrote NOTHING passed, and so did one that wrote to the
-	// neighbouring address as well. A mutation run caught it. Case group 1
-	// therefore writes the jmp, and this check is what keeps the choice from
-	// silently reverting.
+	// funnel that wrote nothing passed, and so did one that wrote to the
+	// neighbouring address as well. Case group 1 therefore writes the jmp, and
+	// this check is what keeps the choice from silently reverting.
 	check(jmpWord != g_emptyPWord,
 		"the word case group 1 writes differs from what empty P memory reads, "
 		"so 'the word landed' is not satisfied by an untouched address");
@@ -208,15 +207,15 @@ int main()
 	// Case group 2. A write through the funnel replaces code the compiler has
 	// already built. This is the case the funnel exists for.
 	//
-	// Program v1 at 0x100 is three nop and the jmp that ends the block: FOUR
-	// instructions. The funnel then overwrites the block's FIRST word with the
-	// jmp, making program v2 exactly ONE instruction. Re-executing 0x100 must
-	// run one instruction and not four.
+	// Program v1 at 0x100 is three nop and the jmp that ends the block: four
+	// instructions. The funnel then overwrites the block's first word with the
+	// jmp, making program v2 one instruction. Re-executing 0x100 must run one
+	// instruction and not four.
 	//
-	// A funnel that writes P memory but does not call
-	// notifyProgramMemWrite leaves the compiled v1 block in place, the
-	// re-execution runs the STALE four-instruction block, and this case goes
-	// red. That is the whole defect, made observable.
+	// A funnel that writes P memory but does not call notifyProgramMemWrite
+	// leaves the compiled v1 block in place, the re-execution runs the stale
+	// four-instruction block, and this case goes red. That is the whole defect,
+	// made observable.
 	{
 		constexpr dsp56k::TWord programStart = 0x100;
 
@@ -230,7 +229,7 @@ int main()
 		checkEqual(v1Instructions, uint64_t(4),
 			"the first program is four instructions and the compiler built it");
 
-		// The overwrite. ONE word, through the funnel, at an address that now
+		// The overwrite. One word, through the funnel, at an address that now
 		// carries a compiled block.
 		g2::writePMem(fixture.dsp, programStart, jmpWord);
 
@@ -250,7 +249,7 @@ int main()
 	//
 	// Group 2 shortened a block. A funnel that always invalidated the address
 	// it was given but also, say, invalidated everything, would pass group 2.
-	// This group LENGTHENS a block at a different address and asserts the
+	// This group lengthens a block at a different address and asserts the
 	// block built in group 2 is still gone rather than resurrected, so the two
 	// groups do not share a single failure mode.
 	{

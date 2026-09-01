@@ -1,41 +1,35 @@
-/* t0_channel_counts.cpp -- the check of task PLG-2. Design sections 14.6,
- * 14.7 and 17 rows 7.32/7.33.
+/* t0_channel_counts.cpp
  *
- * WHAT THE CHECK OWNS: getChannelCountIn() returns 2 and getChannelCountOut()
- * returns 2, and both return their FINAL values the instant the Device
- * constructor returns -- before the firmware is loaded, before the boot, and
- * whether or not any artifact was found.
+ * getChannelCountIn() and getChannelCountOut() return their final values the
+ * instant the Device constructor returns -- before the firmware is loaded,
+ * before the boot, and whether or not any artifact was found.
  *
- * THE LOAD-BEARING CLAUSE IS THE NO-FIRMWARE PATH. The Plugin queries the
- * counts exactly once, in its constructor's member-initializer list
- * (plugin.cpp:15, the only call site anywhere in synthLib), and
- * ResamplerInOut stores both as const members that nothing re-reads. A count
- * that becomes final only after the firmware loads or the boot completes is
- * a count the host has already read as something else.
+ * The load-bearing clause is the no-firmware path. The Plugin queries the
+ * counts in its constructor's member-initializer list, and ResamplerInOut
+ * stores both as const members that nothing re-reads. A count that becomes
+ * final only after the firmware loads or the boot completes is a count the
+ * host has already read as something else.
  *
- * THE TWO CASE GROUPS, ONE PER RESOLVER OUTCOME:
+ * The case groups, one per resolver outcome:
  *
- *  1. NMG2_ARTIFACTS cleared -- the no-firmware path of design section 7.7.
- *     The device is constructed with the variable unset, the counts are read
- *     the instant the constructor returns, and the FirmwareStatus the
- *     constructor resolved is asserted ABSENT so the group cannot pass by
- *     accident with artifacts in view.
+ *  1. NMG2_ARTIFACTS cleared. The device is constructed with the variable
+ *     unset, the counts are read the instant the constructor returns, and the
+ *     FirmwareStatus the constructor resolved is asserted absent so the group
+ *     cannot pass by accident with artifacts in view.
  *
- *  2. NMG2_ARTIFACTS set to an existing directory -- the Present path. The
- *     directory needs no artifact file in it: the constructor resolves
- *     firmware STATE (BRD-10) and does not boot, and with no artifact name
- *     asked for, an existing directory is enough for the resolver to succeed.
- *     The status is asserted PRESENT so the group proves it walked the other
- *     outcome. The counts are read and must still be 2 and 2.
+ *  2. NMG2_ARTIFACTS set to an existing directory. The directory needs no
+ *     artifact file in it: the constructor resolves firmware state and does
+ *     not boot, and with no artifact name asked for, an existing directory is
+ *     enough for the resolver to succeed. The status is asserted present so
+ *     the group proves it walked the other outcome.
  *
- * THE ENVIRONMENT IS OWNED, NOT ASSUMED, exactly as t0_no_firmware states:
- * ctest runs a test with whatever the invoking shell carried, so a count that
- * depended on the shell's variable would be untestable. Every case sets or
- * clears the variable itself. Paths are plain strings: std::filesystem is
- * unavailable at this deployment target, and the directory this group names
- * is one the platform guarantees.
+ * The environment is owned, not assumed: ctest runs a test with whatever the
+ * invoking shell carried, so a count that depended on the shell's variable
+ * would be untestable. Every case sets or clears the variable itself. Paths
+ * are plain strings: std::filesystem is unavailable at this deployment
+ * target, and the directory this group names is one the platform guarantees.
  *
- * NO ASSERTION IN THIS FILE IS A LANGUAGE assert() and nothing here depends
+ * No assertion in this file is a language assert() and nothing here depends
  * on NDEBUG, so this file reports identically in every build type.
  */
 
@@ -100,9 +94,8 @@ namespace
 
 int main()
 {
-	/* ------------- Case group 1. THE NO-FIRMWARE PATH, the clause the plan
-	 * marks load-bearing: the constructor returns with no artifact found, and
-	 * the counts are already final. */
+	/* ------------- Case group 1, the no-firmware path: the constructor
+	 * returns with no artifact found, and the counts are already final. */
 	{
 		setArtifacts(nullptr);
 
@@ -115,9 +108,8 @@ int main()
 		check(device.firmwareStatus().state == g2::FirmwareState::Absent,
 			"the first device really resolved the no-firmware path (the variable was cleared, the status is Absent)");
 
-		// The counts are NOT const virtuals (design row 7.32, device.h:78-79),
-		// so the ask is on a non-const device -- the same shape the Plugin's
-		// member-initializer list makes.
+		// The counts are not const virtuals, so the ask is on a non-const
+		// device -- the same shape the Plugin's member-initializer list makes.
 		checkEqual(uint32_t(device.getChannelCountIn()), uint32_t(2),
 			"getChannelCountIn() returns 2 the instant the constructor returns with no firmware artifact");
 		checkEqual(uint32_t(device.getChannelCountOut()), uint32_t(2),
@@ -132,10 +124,10 @@ int main()
 			"getChannelCountOut() answers 2 again on a second call");
 	}
 
-	/* ------------- Case group 2. THE PRESENT PATH. The variable names an
-	 * existing directory; the constructor resolves firmware STATE (BRD-10)
-	 * and does not boot, so no artifact file is needed. The counts must be
-	 * final here too. */
+	/* ------------- Case group 2, the firmware-present path. The variable
+	 * names an existing directory; the constructor resolves firmware state and
+	 * does not boot, so no artifact file is needed. The counts must be final
+	 * here too. */
 	{
 		setArtifacts(kPresentDirectory);
 

@@ -1,19 +1,16 @@
 # Test registrations for the sched track. Owned by the sched track.
 #
 # Append one add_test(NAME <name> ...) for every test this track adds under
-# source/nord/g2/g2Lib/test/. The NAME is the EXACT STRING the TASK'S Check:
-# Line passes to -r. Edit no other CMake file in this tree.
-#
-# Created empty by task BRD-0.
+# source/nord/g2/g2Lib/test/. The name is the exact string ctest -R must
+# match. Edit no other CMake file in this tree.
 
-# ---------------- SCH-0 - t0_timebase_header
+# ---------------- t0_timebase_header
 #
-# The check COMPILES t0_timebase_header.c as C11 at TEST time and then runs the
+# The check compiles t0_timebase_header.c as C11 at test time and then runs the
 # grep case. Both live in t0_timebase_header.cmake, which fails if either
-# fails. The compile is not left to the build on purpose: plan section 7.7.1
-# separates "the build broke" from "the check reported", and design section
-# 13.4.1 makes "g2/timebase.h is a C header" a contract that has to be
-# reportable through `ctest -R`.
+# fails. The compile is not left to the build on purpose: that separates "the
+# build broke" from "the check reported", and keeps "g2/timebase.h is a C
+# header" reportable through `ctest -R`.
 #
 # No library is linked and no C++ is involved, so this test needs no target.
 
@@ -30,16 +27,14 @@ add_test(NAME t0_timebase_header
 		-DG2_GIT_EXECUTABLE=${G2_GIT_EXECUTABLE}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/t0_timebase_header.cmake)
 
-# ---------------- SCH-4 - t0_frame_layout
+# ---------------- t0_frame_layout
 #
-# An ordinary executable, because SCH-4's acceptance criterion is a BUILD-time
-# property: the four fully qualified function-pointer types in
-# t0_frame_layout.cpp must fail to compile when any parameter is removed from
-# any one of them, and a missing conversion overload must be a link error.
-# Those two failures belong to the compiler and the linker. What remains for
-# ctest is the behaviour -- the sign extension, the 24-bit mask, the slot count
-# and the untouched registers -- and that is what the program checks when it
-# runs.
+# An ordinary executable, because the acceptance criterion is a build-time
+# property: the fully qualified function-pointer types in t0_frame_layout.cpp
+# must fail to compile when any parameter is removed, and a missing conversion
+# overload must be a link error. Those failures belong to the compiler and the
+# linker. What remains for ctest is the behaviour, and that is what the program
+# checks when it runs.
 
 add_executable(t0_frame_layout ${CMAKE_CURRENT_SOURCE_DIR}/t0_frame_layout.cpp)
 target_link_libraries(t0_frame_layout PRIVATE g2Lib)
@@ -100,7 +95,7 @@ add_test(NAME t0_clock_guard COMMAND t0_clock_guard
 
 # ---------------- t0_frame_conversion
 #
-# t0_frame_layout holds the four signatures, which is a build-time property.
+# t0_frame_layout holds the signatures, which is a build-time property.
 # This one holds the behaviour, so it links the library the conversions live in.
 
 add_executable(t0_frame_conversion
@@ -151,10 +146,10 @@ add_test(NAME t0_codec_queue_surface COMMAND t0_codec_queue_surface)
 
 # ---------------- t0_executor
 #
-# The four declared names are held by their fully qualified types inside the
+# The declared names are held by their fully qualified types inside the
 # translation unit, so the compiler and the linker carry that half. What remains
-# is the behaviour: the order of the eight jobs, that every job ran on the
-# calling thread, and that a refused re-entry is counted. The re-entry count is
+# is the behaviour: the order of the jobs, that every job ran on the calling
+# thread, and that a refused re-entry is counted. The re-entry count is
 # an observable in every build type, because the default build is Release with
 # NDEBUG and a check whose predicate is "the debug build asserted" cannot fail
 # in it.
@@ -170,10 +165,8 @@ add_test(NAME t0_executor COMMAND t0_executor)
 # The declared signature is held by the whole function type inside the
 # translation unit, so the compiler carries that half and a
 # declared-and-undefined function is a link error. What remains is the shape of
-# the loop: a wantCycles of 0 executes no exec() at all, and a wantCycles of 1
-# against a block that costs more than 1 executes exactly one. Both are read
-# from the DSP's own instruction and cycle counters, so neither depends on an
-# assertion that a release build removes.
+# the loop, read from the DSP's own instruction and cycle counters, so it does
+# not depend on an assertion that a release build removes.
 
 add_executable(t0_run_dsp_cycles_contract
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_run_dsp_cycles_contract.cpp)
@@ -184,8 +177,7 @@ add_test(NAME t0_run_dsp_cycles_contract COMMAND t0_run_dsp_cycles_contract)
 
 # ---------------- t0_run_dsp_cycles
 #
-# t0_run_dsp_cycles_contract holds the declared signature and the shape of the
-# loop; this one drives the bound over scripted block lengths that straddle the
+# This one drives the bound over scripted block lengths that straddle the
 # budget. The upper half of the bound comes from the fixture's own largest
 # measured dispatch unit, never from maxInstructionsPerBlock, which the shipped
 # configuration leaves uncapped.
@@ -216,11 +208,8 @@ add_test(NAME t0_block_table_harness COMMAND t0_block_table_harness
 
 # ---------------- t0_codec_capacity
 #
-# t0_codec_queue_surface holds the declared members and the refusal; this one
-# drives the capacity arithmetic and carries the negative cases that prove the
-# counters can fire. The sink is primed with the lookahead, without which a
-# capacity of B alone would pass every assertion and the L + B rule would go
-# untested.
+# The sink is primed with the lookahead, without which a capacity of B alone
+# would satisfy the arithmetic and the L + B rule would go unexercised.
 
 add_executable(t0_codec_capacity
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_codec_capacity.cpp)
@@ -233,7 +222,6 @@ add_test(NAME t0_codec_capacity COMMAND t0_codec_capacity)
 #
 # The test reads dsp56k::g_useJIT at run time, so the Backend::Jit case is
 # conditional on the build and the Backend::Interpreter case is unconditional.
-# The test prints the build mode in its first line.
 #
 # No library beyond g2Lib is linked: the g2Lib target carries the dsp56kEmu
 # include directories transitively, so the test reaches dsp56k::g_useJIT
@@ -286,7 +274,7 @@ add_test(NAME t0_dsp_run_gate COMMAND t0_dsp_run_gate)
 # ---------------- t0_status_contract
 #
 # The compile-time half of the contract is held by static_asserts, so a
-# violation there is a BUILD failure and this target is what carries it.
+# violation there is a build failure and this target is what carries it.
 #
 # It does not link g2Lib. status.h is a header with no compiled part and the
 # test reaches it through the include directory alone, so linking the library
@@ -444,22 +432,20 @@ set_property(TARGET t0_scheduler_state PROPERTY FOLDER "G2/test")
 add_test(NAME t0_scheduler_state COMMAND t0_scheduler_state)
 set_tests_properties(t0_scheduler_state PROPERTIES LABELS "UnitTest")
 
-# ---------------- SCH-36 - t0_state_excludes_regime
+# ---------------- t0_state_excludes_regime
 #
-# An ordinary executable. It asserts that the CODEC REGIME does not travel with
-# a saved state block: a play-regime snapshot loaded into a boot-regime machine
-# leaves the BOOT regime standing, every other state item survives the round
-# trip by value, and design section 15.6's step 4 leaves both codec queues
-# untouched when step 3 restored a snapshot.
+# An ordinary executable. The codec regime does not travel with a saved state
+# block: a play-regime snapshot loaded into a boot-regime machine leaves the
+# boot regime standing, and every other state item survives the round trip by
+# value.
 #
-# THE REGIME IS ASSERTED THROUGH WHAT A QUANTUM DOES and never through a byte
-# offset: a boot quantum emits five phases and a play quantum seven, which is
-# the separation t0_codec_regimes establishes. The source carries a known
-# positive for that instrument, so a run in which every quantum looked like a
-# boot quantum cannot pass by accident.
+# The regime is asserted through what a quantum does and never through a byte
+# offset: a boot quantum and a play quantum emit different phase sequences. The
+# source carries a known positive for that instrument, so a run in which every
+# quantum looked like a boot quantum cannot pass by accident.
 #
-# NO CASE IN THE SOURCE IS AN assert() AND NO CASE CATCHES AN EXCEPTION. Every
-# verdict is the failure counter and the process exit status.
+# Nothing in the source is an assert() and nothing in it catches an exception.
+# Every verdict is the failure counter and the process exit status.
 
 add_executable(t0_state_excludes_regime
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_state_excludes_regime.cpp)

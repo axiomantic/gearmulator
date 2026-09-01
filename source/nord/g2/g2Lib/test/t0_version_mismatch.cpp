@@ -2,13 +2,13 @@
 // firmware artifact.
 //
 // The rule is: warn and require explicit confirmation, never reinterpret
-// silently. This test drives all three rows of the policy table and asserts the
+// silently. This test drives every row of the policy table and asserts the
 // rule directly.
 //
-// The worst of the three outcomes is the silent one: a silent reinterpretation
-// of a bit-packed structure produces a wrong sound with no warning, and neither
-// the plugin nor the user is told. Case group 4 is the exhaustive sweep that
-// says no version pair can reach it.
+// The worst outcome is the silent one: a silent reinterpretation of a
+// bit-packed structure produces a wrong sound with no warning, and neither the
+// plugin nor the user is told. The exhaustive sweep below says no version pair
+// can reach it.
 //
 // The expected messages are written out in full on purpose. A test that built
 // the expected text with the same call the header uses would pass for any text
@@ -92,7 +92,7 @@ int main()
 	checkEqual(g2::versionText(1000u), "10.00", "1000 reads as release 10.00");
 
 	// -----------------------------------------------------------------------
-	// Case group 1. The VERSIONS MATCH, so the PATCH LOADS NORMALLY.
+	// Case group 1. The versions match, so the patch loads normally.
 	{
 		const g2::FirmwareVersionDecision decision =
 			g2::decideFirmwareVersion(true, 0x00A2u, 0x00A2u);
@@ -119,7 +119,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. The PATCH is NEWER THAN the MACHINE.
+	// Case group 3. The patch is newer than the machine.
 	//
 	// The same row of the table, and the two names swap slots. A message built
 	// from one version and a fixed word for the other would pass case group 2
@@ -157,19 +157,18 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. The EXHAUSTIVE SWEEP: never REINTERPRET silently.
+	// Case group 5. The exhaustive sweep: never reinterpret silently.
 	//
-	// Every pair of version words in 0 to 399 against 0 to 399, which is
-	// 160,000 pairs. The rule is asserted directly rather than by example:
+	// Every pair of version words in 0 to 399 against 0 to 399. The rule is
+	// asserted directly rather than by example:
 	//
-	//   * The patch data loads if and only if the two words are EQUAL.
+	//   * The patch data loads if and only if the two words are equal.
 	//   * A pair that differs always carries a message, always offers to load
 	//     anyway, and never reports LoadNormally.
 	//   * A pair that differs names both release numbers in its message.
 	//
-	// The third of those is what a message built from one version alone fails,
-	// and the second is the silent reinterpretation the design calls the worst
-	// of the three outcomes.
+	// The last of those is what a message built from one version alone fails,
+	// and the middle one is the silent reinterpretation.
 	{
 		bool patchFollowsEquality = true;
 		bool everyDifferenceWarns = true;

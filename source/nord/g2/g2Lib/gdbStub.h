@@ -2,24 +2,15 @@
 // socket and drives the machine through the surface the `Board` already
 // publishes.
 //
-// The stub holds a reference to a `Board` it did not create, and it holds its
-// breakpoints and its watchpoints in its own containers. A build without this
-// translation unit is byte-identical to the build without it.
-//
 // `mcf5307.h` documents the register file as 0..7 = d0..d7, 8..15 = a0..a7,
 // 16 = SR, 17 = PC, which is exactly GDB's m68k order -- so `g` and `G` are a
 // direct eighteen-register big-endian serialisation with no remapping. They
 // reach the machine through `Board::mcuReg` and `Board::setMcuReg`.
 //
-// IT OWNS NO EMULATOR STATE, AND THAT IS A PROPERTY AND NOT AN INTENTION.
-// Nothing in `g2Lib` gains a debug member for this file: the stub holds a
-// reference to a `Board` it did not create, and it holds its breakpoints and its
-// watchpoints in its OWN containers.
-//
-// One exception: `Scheduler` holds a borrowed `McuRunner*`, null in every build
-// that is not being debugged, costing one null test for each quantum. Nothing
-// else in `g2Lib` knows this file exists, and a machine with no stub attached
-// runs the same quantum it ran before.
+// It owns no emulator state: the stub holds a reference to a `Board` it did not
+// create, and it holds its breakpoints and its watchpoints in its own
+// containers. The one intrusion is the borrowed `McuRunner*` in `Scheduler`,
+// null when no stub is attached, costing one null test for each quantum.
 //
 // `Board::runMcu(1)` forwards to `mcf5307_exec(ctx, 1)`, whose loop runs while
 // `spent < maxCycles` -- so a budget of one runs exactly one instruction,
@@ -34,20 +25,18 @@
 // `MemoryMap::attach` puts something else there, so the stub interposes itself
 // and forwards. The originals are restored when the stub is destroyed.
 //
-// THE STUB IS OPT-IN AND ABSENT BY DEFAULT. `g2TestConsole --gdb <port>` starts
-// it; no test enables it, and `t1_boot` and every T0 check run exactly as they
-// do today. A debugger that changed timing when nobody was debugging would
+// The stub is opt-in and absent by default: `g2TestConsole --gdb <port>` starts
+// it. A debugger that changed timing when nobody was debugging would
 // invalidate the suite it exists to serve.
 //
-// LOOPBACK ONLY. The listening socket binds INADDR_LOOPBACK and never
+// Loopback only. The listening socket binds INADDR_LOOPBACK and never
 // INADDR_ANY. This is an unauthenticated command channel with full read and
 // write access to the emulated machine; it must not be reachable from another
 // host, and the bind is where that is decided.
 //
-// WHAT IT IS NOT. There is NO DSP56300 STUB -- that core has no stock GDB
-// target and would need its own register map and target description, which is a
-// second task and not a wider version of this one. There is no symbol loading
-// and no source-level anything: the firmware is a stripped binary.
+// There is no DSP56300 stub: that core has no stock GDB target and would need
+// its own register map and target description. There is no symbol loading and
+// no source-level anything: the firmware is a stripped binary.
 //
 // The session drives the whole machine, not the MCU alone. On every ordinary
 // boot the MCU issues a host command and busy-waits for a DSP to answer, at
@@ -56,9 +45,9 @@
 // breakpoint past the handshake would report a clean, plausible miss.
 //
 // The full-advance path is the Scheduler's and this file does not write a second
-// one. `Scheduler::runFrames` is the only site of the quantum order -- swap,
-// ingress, panel, SOF, MCU, the eight DSPs, egress. What the stub adds is the one
-// thing a quantum does not offer: a decision point between two MCU instructions,
+// one. `Scheduler::runFrames` holds the quantum order -- swap, ingress, panel,
+// SOF, MCU, the DSPs, egress. What the stub adds is the one thing a quantum
+// does not offer: a decision point between two MCU instructions,
 // where a breakpoint compare has to happen. `Scheduler::McuRunner` is that point.
 // The stub installs itself as the runner; the runner steps `Board::runMcu(1)` up
 // to the quantum's own want, checking breakpoints and watchpoints after each
@@ -116,8 +105,7 @@ namespace g2
 		GdbStub& operator=(GdbStub&&)      = delete;
 
 		/* Bind and listen on 127.0.0.1. A port of zero asks the operating system
-		 * for a free one, which is what the check uses so that two runs cannot
-		 * collide. Returns the port actually bound, and ZERO on failure -- the
+		 * for a free one, so that two runs cannot collide. Returns the port actually bound, and zero on failure -- the
 		 * caller has no listening socket in that case and nothing else here will
 		 * answer. */
 		/* Gives the session the whole machine. Without this the stub drives
@@ -134,15 +122,15 @@ namespace g2
 
 		uint16_t port() const { return m_port; }
 
-		/* Blocks in accept() until a debugger attaches. FALSE when there is no
+		/* Blocks in accept() until a debugger attaches. False when there is no
 		 * listening socket or the accept failed. */
 		bool waitForClient();
 
-		/* Read one packet, answer it, and return TRUE. FALSE when the client has
+		/* Read one packet, answer it, and return true. False when the client has
 		 * gone, when the packet loop was told to stop (`k`), or when there is no
-		 * session. It is public because the check drives the stub from its own
-		 * thread one packet at a time: that is what keeps every Board read on
-		 * one thread, between two answered packets, rather than racing a server
+		 * session. It is public so a caller can drive the stub one packet at a
+		 * time from its own thread: that is what keeps every Board read on one
+		 * thread, between two answered packets, rather than racing a server
 		 * loop. */
 		bool servePacket();
 
@@ -153,10 +141,10 @@ namespace g2
 		void close();
 
 	private:
-		/* THE WATCHPOINT WRAPPER. One of these is interposed in front of each
+		/* The watchpoint wrapper. One of these is interposed in front of each
 		 * target the memory map already holds, and it forwards every access to
 		 * that target unaltered. The offset it receives is window-relative, so it
-		 * carries the window base to report an ABSOLUTE address -- taken from the
+		 * carries the window base to report an absolute address -- taken from the
 		 * map rather than copied, for the reason board.h's FlashWindow gives:
 		 * two copies of one base agree with each other through any mutation of
 		 * either. */
@@ -202,7 +190,7 @@ namespace g2
 			bool     onWrite = false;
 		};
 
-		// What the machine stopped for. `None` is the machine still running.
+		// What the machine stopped for.
 		struct Hit
 		{
 			bool     watch      = false;

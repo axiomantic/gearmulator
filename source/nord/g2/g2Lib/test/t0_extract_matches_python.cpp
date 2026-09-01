@@ -9,7 +9,7 @@
 // Every container below is authored by this file from values it invents. The
 // test never reads NMG2_ARTIFACTS and never opens a firmware file.
 //
-// Every case has three legs:
+// Every case has these legs:
 //
 //   1. The C++ report equals the Python report, byte for byte.
 //   2. The C++ report equals an expected report this file builds itself from
@@ -106,7 +106,7 @@ namespace
 	}
 
 	// ---------------------------------------------------------------------
-	// Byte building. Every multi-byte field of the container is BIG-ENDIAN,
+	// Byte building. Every multi-byte field of the container is big-endian,
 	// because the m68k is.
 
 	void appendBe16(std::vector<uint8_t>& _out, const uint16_t _value)
@@ -180,7 +180,7 @@ namespace
 		return plain;
 	}
 
-	// Opcode 0 in the instruction state: a LITERAL RUN whose length continues
+	// Opcode 0 in the instruction state: a literal run whose length continues
 	// in an extension chain with a base of 15. The chain byte 0x00 adds 255 and
 	// 0x16 adds 22, so the count is 15 + 255 + 22 = 292 and the run is 295
 	// bytes. The stream then stops at the end marker 0x11 0x00 0x00.
@@ -203,17 +203,17 @@ namespace
 		return textBytes("ABCDEFGHABCDEFXYABCABCABCABCA");
 	}
 
-	// Four match forms and the head literal run:
+	// The match forms and the head literal run:
 	//
 	//   0x19            the first byte above 17: a literal run of 8 bytes.
-	//   0x24 0x1E 0x00  a MEDIUM match, opcode 32 to 63. Length (0x24 & 31) + 2
+	//   0x24 0x1E 0x00  a medium match, opcode 32 to 63. Length (0x24 & 31) + 2
 	//                   = 6, distance 1 + (0x001E >> 2) = 8, and the low two
-	//                   bits of the word are 2 TRAILING LITERALS.
+	//                   bits of the word are 2 trailing literals.
 	//   "XY"            those two trailing literals.
-	//   0x5C 0x01       a SHORT match, opcode 64 to 255. Length (0x5C >> 5) + 1
+	//   0x5C 0x01       a short match, opcode 64 to 255. Length (0x5C >> 5) + 1
 	//                   = 3, distance 1 + ((0x5C >> 2) & 7) + (0x01 << 3) = 16.
 	//   0x28 0x08 0x00  a medium match with length 10 and distance 3, so the
-	//                   source and the destination OVERLAP and the last three
+	//                   source and the destination overlap and the last three
 	//                   bytes repeat.
 	//   0x11 0x00 0x00  the end marker.
 	std::vector<uint8_t> codeStream()
@@ -239,9 +239,9 @@ namespace
 	// ---------------------------------------------------------------------
 	// A section that drives every instruction form the decoder carries.
 	//
-	// The two streams above leave four branches of the decoder unexercised: the
+	// The two streams above leave branches of the decoder unexercised: the
 	// short match that follows a literal run, the two-byte short match that
-	// follows trailing literals, the long-distance match, and both
+	// follows trailing literals, the long-distance match, and the
 	// extended-length chains of a match. A branch no case reaches is a branch
 	// the parity assertion says nothing about.
 	//
@@ -265,7 +265,7 @@ namespace
 
 	// One instruction's worth of expected output, written the way the
 	// instruction reads: "copy _length bytes that start _distance bytes back".
-	// This is the test STATING what each hand-written instruction means. It is
+	// This is the test stating what each hand-written instruction means. It is
 	// not a decoder: it has no opcode, no stream and no state.
 	void expectBackReference(std::vector<uint8_t>& _plain, const size_t _distance, const size_t _length)
 	{
@@ -304,7 +304,7 @@ namespace
 		stream.push_back(0xCA);
 		appendBytes(stream, lcgBytes(40000));
 
-		// 0x13 0x04 0x00: a LONG-DISTANCE match. Length (0x13 & 7) + 2 = 5;
+		// 0x13 0x04 0x00: a long-distance match. Length (0x13 & 7) + 2 = 5;
 		// the word 0x0004 gives a back of 1 above the 0x4000 base, so the
 		// distance is 16,385; the low two bits of the word are 0 trailing
 		// literals.
@@ -312,7 +312,7 @@ namespace
 		stream.push_back(0x04);
 		stream.push_back(0x00);
 
-		// 0x1B 0x09 0x00: the same form with BIT 3 of the OPCODE SET, which
+		// 0x1B 0x09 0x00: the same form with bit 3 of the opcode set, which
 		// adds 0x4000 to the back. Length 5, back 16,384 + 2, distance 32,770,
 		// and 1 trailing literal.
 		stream.push_back(0x1B);
@@ -320,12 +320,12 @@ namespace
 		stream.push_back(0x00);
 		appendText(stream, "Q");
 
-		// 0x08 0x00: the two-byte SHORT MATCH that follows trailing literals.
+		// 0x08 0x00: the two-byte short match that follows trailing literals.
 		// Length 2, distance 1 + (0x08 >> 2) = 3.
 		stream.push_back(0x08);
 		stream.push_back(0x00);
 
-		// 0x20 0x05 0x8C 0x01: a MEDIUM match whose length did not fit the
+		// 0x20 0x05 0x8C 0x01: a medium match whose length did not fit the
 		// opcode. The chain gives 31 + 5 = 36, so the length is 38; the word
 		// 0x018C gives a distance of 100.
 		stream.push_back(0x20);
@@ -333,7 +333,7 @@ namespace
 		stream.push_back(0x8C);
 		stream.push_back(0x01);
 
-		// 0x10 0x03 0x14 0x00: a LONG-DISTANCE match whose length did not fit
+		// 0x10 0x03 0x14 0x00: a long-distance match whose length did not fit
 		// the opcode. The chain gives 7 + 3 = 10, so the length is 12; the word
 		// 0x0014 gives a back of 5 and a distance of 16,389.
 		stream.push_back(0x10);
@@ -345,7 +345,7 @@ namespace
 		stream.push_back(0x02);
 		appendText(stream, "HELLO");
 
-		// 0x06 0x00: the SHORT MATCH that FOLLOWS A LITERAL RUN. The same
+		// 0x06 0x00: the short match that follows a literal run. The same
 		// opcode value after trailing literals would read as the two-byte form
 		// above, which is why the position is part of the decoder's state.
 		// Length 3, distance 0x801 + 1 = 2,050, and 2 trailing literals.
@@ -388,7 +388,7 @@ namespace
 		return stream;
 	}
 
-	// The section that is STORED. Its bytes in the image are its plain bytes.
+	// The section that is stored. Its bytes in the image are its plain bytes.
 	std::vector<uint8_t> storedPlain()
 	{
 		std::vector<uint8_t> plain;
@@ -476,7 +476,7 @@ namespace
 			appendBe32(table, entry.reserved);
 
 			// The last 12 bytes of an entry carry no meaning this project
-			// knows, and NOTHING may READ THEM. They are filled with 0xAA
+			// knows, and nothing may read them. They are filled with 0xAA
 			// rather than zero, so a walk that folded them into a field shows
 			// up as a wrong value instead of as a zero that looks plausible.
 			for(int i = 0; i < 12; ++i)
@@ -498,10 +498,10 @@ namespace
 		return image;
 	}
 
-	// The three-section container every case starts from.
+	// The container every case starts from.
 	//
 	// SRAM is compressed with an extended literal run, CODE is compressed with
-	// four match forms, and STOR is STORED.
+	// the match forms, and STOR is stored.
 	std::vector<Entry> standardEntries()
 	{
 		std::vector<Entry> entries;
@@ -693,7 +693,7 @@ with open(sys.argv[3], "wb") as handle:
 		return true;
 	}
 
-	// Not NAMED `quoted`. An argument of type std::string reaches std::quoted
+	// Not named `quoted`. An argument of type std::string reaches std::quoted
 	// through argument-dependent lookup, and the two overloads are ambiguous.
 	std::string quotedArgument(const std::string& _text)
 	{
@@ -702,9 +702,9 @@ with open(sys.argv[3], "wb") as handle:
 
 	// Runs the oracle over one image and returns its report.
 	//
-	// A non-zero exit status, a missing file or an EMPTY file is a FAILURE of
+	// A non-zero exit status, a missing file or an empty file is a failure of
 	// the case and never an empty report that would compare equal to an empty
-	// C++ report. That is leg 3 of the three legs at the top of this file.
+	// C++ report. That is leg 3 above.
 	bool oracleReport(const std::vector<uint8_t>& _image, std::vector<uint8_t>& _report, std::string& _why)
 	{
 		const std::string scriptPath = workPath("oracle.py");
@@ -758,7 +758,7 @@ with open(sys.argv[3], "wb") as handle:
 	}
 
 	// ---------------------------------------------------------------------
-	// One case: the three legs.
+	// One case: the legs above.
 
 	void runCase(const std::string& _name, const std::vector<uint8_t>& _image,
 		const std::vector<uint8_t>& _expected)
@@ -807,10 +807,9 @@ int main()
 	const std::vector<std::vector<uint8_t>> plains = {sramPlain(), codePlain(), storedPlain()};
 
 	// -----------------------------------------------------------------------
-	// Case P1. The WHOLE CONTAINER LOADS and both IMPLEMENTATIONS AGREE.
+	// Case P1. The whole container loads and both implementations agree.
 	//
-	// Three sections, two of them compressed with different instruction forms
-	// and one of them STORED.
+	// Sections compressed with different instruction forms, and one stored.
 	{
 		const std::vector<uint8_t> image = buildContainer(version, secondWord, unresolved, entries);
 		runCase("P1 the three-section container", image,
@@ -847,13 +846,13 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case P4. Every INSTRUCTION FORM the DECODER CARRIES.
+	// Case P4. Every instruction form the decoder carries.
 	//
 	// One 40,000-byte section that reaches both long-distance forms, both
 	// extended-length chains, the short match after a literal run, the two-byte
 	// match after trailing literals and the medium match; and one three-byte
 	// section that drives the `start` state's short-run branch. Without this
-	// case four branches of the decoder are never executed and the parity
+	// case those branches of the decoder are never executed and the parity
 	// assertion says nothing about them.
 	{
 		std::vector<Entry> forms;
@@ -887,7 +886,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N2. A CORRUPTED PLAIN CHECKSUM on A COMPRESSED SECTION.
+	// Case N2. A corrupted plain checksum on a compressed section.
 	{
 		std::vector<size_t> offsets;
 		std::vector<uint8_t> image = buildContainer(version, secondWord, unresolved, entries, &offsets);
@@ -904,7 +903,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N3. A CORRUPTED PLAIN CHECKSUM on A STORED SECTION.
+	// Case N3. A corrupted plain checksum on a stored section.
 	//
 	// The stored path verifies the plain checksum and nothing else, so this is
 	// the one check a stored section can fail.
@@ -924,9 +923,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N4. A DECLARED COMPRESSED EXTENT LONGER THAN the STREAM.
+	// Case N4. A declared compressed extent longer than the stream.
 	//
-	// The decompressor stops at the first end marker and IGNORES what follows,
+	// The decompressor stops at the first end marker and ignores what follows,
 	// so a declared extent that is too long decodes cleanly and passes both
 	// checksums. Only the consumed-length identity catches it.
 	{
@@ -967,7 +966,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N6. The FIXED WORD at +0x02 is WRONG.
+	// Case N6. The fixed word at +0x02 is wrong.
 	{
 		const std::vector<uint8_t> image = buildContainer(version, 0x0200u, unresolved, entries);
 		runCase("N6 a wrong fixed word at +0x02", image,
@@ -975,7 +974,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N7. An IMAGE SHORTER THAN the HEADER.
+	// Case N7. An image shorter than the header.
 	{
 		std::vector<uint8_t> image = buildContainer(version, secondWord, unresolved, entries);
 		image.resize(0x10u);
@@ -985,7 +984,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N8. A SECTION COUNT the IMAGE CANNOT CARRY.
+	// Case N8. A section count the image cannot carry.
 	{
 		std::vector<uint8_t> image = buildContainer(version, secondWord, unresolved, entries);
 		writeBe32(image, 0x10u, 4000u);
@@ -1001,7 +1000,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N9. A TAG that is not ASCII.
+	// Case N9. A tag that is not ASCII.
 	{
 		std::vector<size_t> offsets;
 		std::vector<uint8_t> image = buildContainer(version, secondWord, unresolved, entries, &offsets);
@@ -1012,7 +1011,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N10. A SECTION that REACHES PAST the END of the IMAGE.
+	// Case N10. A section that reaches past the end of the image.
 	{
 		std::vector<size_t> offsets;
 		std::vector<uint8_t> image = buildContainer(version, secondWord, unresolved, entries, &offsets);
@@ -1030,9 +1029,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N11. A STORED SECTION that REACHES PAST the END of the IMAGE.
+	// Case N11. A stored section that reaches past the end of the image.
 	//
-	// The stored path takes its length from the UNCOMPRESSED length, so its
+	// The stored path takes its length from the uncompressed length, so its
 	// range check is a different line from case N10's.
 	{
 		std::vector<size_t> offsets;
@@ -1051,12 +1050,12 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N12. A MATCH that REACHES BEFORE the START of the OUTPUT.
+	// Case N12. A match that reaches before the start of the output.
 	//
 	// The last instruction is replaced by a long-distance match with a non-zero
 	// distance, so it is no longer the end marker and it reaches back further
 	// than the output is long. The compressed checksum is recomputed, so the
-	// case reaches the DECOMPRESSOR and is not stopped by the checksum first.
+	// case reaches the decompressor and is not stopped by the checksum first.
 	{
 		std::vector<Entry> broken = entries;
 		std::vector<uint8_t> stream = codeStream();
@@ -1073,7 +1072,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N13. A STREAM with no END MARKER.
+	// Case N13. A stream with no end marker.
 	//
 	// The end marker is replaced by a literal run that reaches past the end of
 	// the declared extent.
@@ -1098,7 +1097,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N14. An EMPTY SECTION TABLE.
+	// Case N14. An empty section table.
 	//
 	// A container with no section at all is not an error, and both
 	// implementations report the header alone.
@@ -1110,7 +1109,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N15. A SECTION COUNT WHOSE 32-BIT PRODUCT WRAPS to ZERO.
+	// Case N15. A section count whose 32-bit product wraps to zero.
 	//
 	// 0x40000000 entries at the 0x2C stride is 47,244,640,256 bytes, and that
 	// product is exactly 11 times 2^32. A table-fits check computed in 32 bits
@@ -1133,10 +1132,10 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case N16. A FILE OFFSET PAST the END of the IMAGE.
+	// Case N16. A file offset past the end of the image.
 	//
-	// Cases N10 and N11 put the offset INSIDE the image and the length past the
-	// end, which is the ordinary short read. This puts the OFFSET itself past
+	// Cases N10 and N11 put the offset inside the image and the length past the
+	// end, which is the ordinary short read. This puts the offset itself past
 	// the end, so "the bytes available at that offset" is a subtraction that
 	// goes negative. Computed in unsigned arithmetic without a guard it wraps to
 	// a number larger than any length, the range check passes, and the slice

@@ -1,5 +1,4 @@
-/* t0_board_transport.cpp -- the check of the Board-to-TransportHub wiring.
- * Tier T0: no artifact, no firmware, no file outside this repository.
+/* Tier T0: no artifact, no firmware, no file outside this repository.
  *
  * The property this file exists to hold: a protocol frame a plugin originates
  * crosses the quantum boundary into the Board's USB device, and a frame the
@@ -7,11 +6,7 @@
  * as a peer of the usbip endpoint and not a path through it.
  *
  * Every case is probed from outside the thing under test. None of them reads a
- * word the Board prints about itself. Case 2 drives the exact function pointer
- * that `isp1181_create` receives and observes the result at the client. Case 3
- * observes the drain through the hub's own back-pressure, which only a real
- * drain can relieve. Case 4 drains a second, unpumped Board from this file and
- * compares bytes.
+ * word the Board prints about itself.
  *
  * Case 3 calls tickSofIfDue twice for one release because the slots a drain
  * hands out stay borrowed by the caller until the start of the following
@@ -85,7 +80,6 @@ namespace
 	}
 
 	/* --------------------------------------------------------------- alloc.
-	 * The armed global pair of t0_transport_hub.cpp and t0_internal_client.cpp.
 	 * Every object driven inside an armed window is already constructed. */
 	struct AllocStats
 	{
@@ -176,9 +170,8 @@ int main()
 
 	/* ------------------------------------------------------------- case 2.
 	 * Egress. `Board::onUsbTx` is the exact function pointer the Board hands
-	 * to isp1181_create, and this case drives that pointer: a check that drove
-	 * a private forwarding helper instead stays green when the installed
-	 * callback is reverted to a stub.
+	 * to isp1181_create, and this case drives that pointer rather than a
+	 * private forwarding helper.
 	 *
 	 * The verdict is read at the client and not at the Board. */
 	{
@@ -288,9 +281,9 @@ int main()
 		std::vector<uint8_t> objects;
 		appendObject(objects, 0x21, 15, 71u);
 		appendObject(objects, 0x4A, 64, 72u);
-		appendObject(objects, 0x5A, 40, 73u);   // named by the clean-room pass
-		appendObject(objects, 0x5B, 84, 74u);   // named by the clean-room pass
-		appendObject(objects, 0x6F, 0,  75u);   // named by the clean-room pass
+		appendObject(objects, 0x5A, 40, 73u);
+		appendObject(objects, 0x5B, 84, 74u);
+		appendObject(objects, 0x6F, 0,  75u);
 
 		const std::vector<uint8_t> file = buildContainer(objects);
 
@@ -328,8 +321,7 @@ int main()
 
 	/* ------------------------------------------------------------- case 6.
 	 * The pump allocates nothing. The drain target is the Board's own storage,
-	 * sized once with the hub, so a pump that built a vector for each quantum
-	 * is red here and green everywhere else. */
+	 * sized once with the hub. */
 	{
 		g2::InternalClient client(board.transport(), 512, 4);
 
@@ -392,26 +384,23 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 8.
-	 * THE SPLIT, AND THE PLANTED CONTROL THAT BRINGS THE DEFECT BACK.
+	 * The split, and the planted control that brings the defect back.
 	 *
-	 * WHAT IS BEING DISCRIMINATED. `Fifo.accept` in the device model refuses
-	 * for exactly two reasons -- the buffer is FULL, or the packet is LARGER
-	 * THAN THE BUFFER -- and a refusal on its own does not say which. This
-	 * case removes the first reason by construction: it is the FIRST offer
-	 * ever made to a freshly constructed Board, so that endpoint's buffer
-	 * cannot hold anything, and a refusal here can only be the size one.
+	 * `Fifo.accept` in the device model refuses for exactly two reasons -- the
+	 * buffer is full, or the packet is larger than the buffer -- and a refusal
+	 * on its own does not say which. This case removes the first reason by
+	 * construction: it is the first offer ever made to a freshly constructed
+	 * Board, so that endpoint's buffer cannot hold anything, and a refusal here
+	 * can only be the size one.
 	 *
-	 * THE TWO ARMS DIFFER IN ONE FIELD. Both push the same 169-byte frame --
+	 * The two arms differ in one field. Both push the same 169-byte frame --
 	 * the length of the first object the real `.pch2` corpus refuses, taken
 	 * from that measurement rather than chosen. The control arm sets
-	 * `usbMaxPacketBytes` above the frame, which is exactly the behaviour the
-	 * pump had before the split: one packet, whole frame, refused for size and
-	 * held for ever. Reverting the split by hand would test the same thing
-	 * once; this tests it on every run.
+	 * `usbMaxPacketBytes` above the frame: one packet, whole frame, refused for
+	 * size and held for ever.
 	 *
-	 * NOTHING HERE BOOTS A MACHINE, so nothing drains the endpoint and neither
-	 * arm can COMPLETE its frame. That is deliberate -- completion is measured
-	 * in t1_patch_running against a booted firmware. What is measured here is
+	 * Nothing here boots a machine, so nothing drains the endpoint and neither
+	 * arm can complete its frame. That is deliberate: what is measured here is
 	 * the first offer, which is the one the two arms disagree about. */
 	{
 		constexpr size_t frameBytes = 169;
@@ -419,7 +408,7 @@ int main()
 		uint8_t big[frameBytes];
 		fillPattern(big, sizeof(big), 7u);
 
-		/* THE SPLIT ARM. The first packet is a full max-packet-size piece of
+		/* The split arm. The first packet is a full max-packet-size piece of
 		 * the frame and the empty buffer takes it. */
 		{
 			g2::BoardConfig cfg;
@@ -452,7 +441,7 @@ int main()
 				"the held frame is the whole originated frame");
 		}
 
-		/* THE PLANTED CONTROL. The split is disabled by raising the packet
+		/* The planted control. The split is disabled by raising the packet
 		 * size above the frame, and the size refusal returns. */
 		{
 			g2::BoardConfig cfg;
@@ -479,12 +468,11 @@ int main()
 				"a refused packet leaves the cursor where it was, so no byte"
 				" crossed twice");
 
-			/* IT IS NOT FLOW CONTROL, AND THIS IS WHAT PROVES IT. A full
-			 * buffer is relieved by a drain; a packet larger than the buffer
-			 * never is. Nothing drains here, but the distinction is still
-			 * visible: the split arm above met the SAME buffer in the SAME
-			 * state and was accepted, so the state is not what refused this
-			 * one. */
+			/* It is not flow control. A full buffer is relieved by a drain;
+			 * a packet larger than the buffer never is. Nothing drains here,
+			 * but the distinction is still visible: the split arm above met
+			 * the same buffer in the same state and was accepted, so the
+			 * state is not what refused this one. */
 			for(uint64_t f = 1; f < 16; ++f)
 				whole.tickSofIfDue(f);
 
@@ -500,24 +488,21 @@ int main()
 	}
 
 	/* ------------------------------------------------------------- case 9.
-	 * THE ZERO-LENGTH TERMINATOR, ON A FRAME WHOSE LENGTH IS AN EXACT MULTIPLE
-	 * OF THE PACKET SIZE.
+	 * The zero-length terminator, on a frame whose length is an exact multiple
+	 * of the packet size.
 	 *
-	 * WHY THIS FRAME IS PLANTED RATHER THAN FOUND. The convention that a bulk
-	 * transfer of an exact multiple of the maximum packet size needs a
-	 * trailing empty packet applies to no other length, and t1_patch_running
-	 * computes and prints how many objects of the real corpus have such a
-	 * length. A corpus that contains none cannot exercise the path at all, so
-	 * the frame is constructed here to exactly two packets.
+	 * The convention that a bulk transfer of an exact multiple of the maximum
+	 * packet size needs a trailing empty packet applies to no other length. A
+	 * corpus that holds no object of such a length cannot exercise the path at
+	 * all, so the frame is constructed here to exactly two packets.
 	 *
-	 * WHAT IS ASSERTED AND WHAT IS NOT. This case asserts what the BOARD does:
-	 * off, the frame costs two packets; on, it costs three and the third
-	 * carries no bytes. It does NOT assert which of the two the firmware
-	 * wants. Neither ISP1362 Rev. 06 nor AN10008-01 states a bulk
-	 * exact-multiple rule -- BoardConfig records the search -- so that remains
-	 * UNKNOWN, and a case that asserted an answer would be inventing one. What
-	 * this buys is that the answer is now REACHABLE by a flag rather than by a
-	 * rewrite, and that neither setting can drift in silence. */
+	 * This case asserts what the Board does: off, the frame costs two packets;
+	 * on, it costs three and the third carries no bytes. It does not assert
+	 * which of the two the firmware wants. Neither ISP1362 Rev. 06 nor
+	 * AN10008-01 states a bulk exact-multiple rule, so that remains unknown,
+	 * and a case that asserted an answer would be inventing one. The answer is
+	 * reachable by a flag rather than by a rewrite, and neither setting can
+	 * drift in silence. */
 	{
 		g2::BoardConfig base;
 		const size_t packet = base.usbMaxPacketBytes;
@@ -527,7 +512,7 @@ int main()
 		std::vector<uint8_t> exact(packet * 2);
 		fillPattern(exact.data(), exact.size(), 8u);
 
-		/* THE TERMINATOR OFF -- the default. */
+		/* The terminator off -- the default. */
 		{
 			g2::Board off(base);
 			g2::InternalClient client(off.transport(), 4096, 4);
@@ -545,8 +530,8 @@ int main()
 			checkEqual(first.completed, 0u, "one of two packets is not a frame");
 		}
 
-		/* THE TERMINATOR ON. The frame owes a third, empty packet, so it is
-		 * NOT completed when its last byte is across. */
+		/* The terminator on. The frame owes a third, empty packet, so it is
+		 * not completed when its last byte is across. */
 		{
 			g2::BoardConfig cfg = base;
 			cfg.usbTerminateWithZeroLengthPacket = true;
@@ -567,7 +552,7 @@ int main()
 			check(u.held, "the frame is still held for its remaining packets");
 		}
 
-		/* THE FLAG CHANGES SOMETHING, AND A SHORT FRAME IS UNAFFECTED BY IT.
+		/* The flag changes something, and a short frame is unaffected by it.
 		 * A terminator applied to every frame would be the plausible wrong
 		 * implementation, and it would look identical on the case above. */
 		{

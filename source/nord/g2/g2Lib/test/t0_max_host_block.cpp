@@ -1,13 +1,11 @@
-/* t0_max_host_block.cpp -- `B`, the largest host block the plugin accepts.
+/* `B`, the largest host block the plugin accepts.
  *
- * TIER T0 AND UNGATED: no firmware artifact and no booted machine. The plugin
+ * Tier T0 and ungated: no firmware artifact and no booted machine. The plugin
  * derives B from the host's maximum block and the host's rate alone, and
  * Scheduler::create's rejection of B = 0 is a Config-only rejection.
  *
- * WHAT IT HOLDS.
- *
- * 1. B = floor(maxBlock * 96000 / hostRate) + 1, at each host rate of the
- *    design's table. THE `+1` IS DERIVED AND IS NOT MARGIN: framesForBlock in
+ * 1. B = floor(maxBlock * 96000 / hostRate) + 1, at each host rate in the
+ *    table. The `+1` is derived and is not margin: framesForBlock in
  *    g2/timebase.h answers either floor(n * r) or floor(n * r) + 1 for one
  *    block, depending on where its accumulator stands, so only the larger of
  *    the two bounds every block. The test drives framesForBlock itself over a
@@ -15,17 +13,16 @@
  *    returns -- so the +1 is checked against the accumulator's real behavior
  *    rather than against a second copy of the same arithmetic.
  *
- * 2. There is no max() against the 512-sample resampler pre-warm. At every
- *    rate in the table a 32-sample host block gives a B far below 512, so a
- *    max() against it would be visible here as a B of 513.
+ * 2. There is no max() against the 512-sample resampler pre-warm: at every
+ *    rate in the table a 32-sample host block gives a B far below 512.
  *
  * 3. Scheduler::create refuses B = 0 with Status::BadMaxHostBlock and yields
  *    no object.
  *
- * 4. A second prepareToPlay with a LARGER maximum block re-derives B and
+ * 4. A second prepareToPlay with a larger maximum block re-derives B and
  *    re-creates the Scheduler. An equal or smaller maximum changes neither,
- *    because B is a ceiling. The re-create is counted rather than booted:
- *    booting needs firmware, and what this test owns is the DECISION.
+ *    because B is a ceiling. The re-create is counted rather than booted,
+ *    because booting needs firmware.
  */
 
 #include "g2JucePlugin/g2Plugin.h"
@@ -58,7 +55,7 @@ namespace
 		++g_failures;
 	}
 
-	/* The six host rates of the design's table. */
+	/* The host rates of the table. */
 	constexpr float g_hostRates[] = { 44100.0f, 48000.0f, 88200.0f, 96000.0f, 176400.0f, 192000.0f };
 
 	/* The largest frame count framesForBlock ever answers for this block at
@@ -93,11 +90,11 @@ int main()
 {
 	/* 1 and 2. The formula, and the absence of a max() against 512.
 	 *
-	 * THE DERIVATION IS DRIVEN THROUGH THE STATIC FUNCTION HERE, over every
+	 * The derivation is driven through the static function here, over every
 	 * rate and block of the table, and the case below then holds one
 	 * prepareToPlay against that same function. Constructing a Device for each
-	 * of the pairs would build eight DSP emulators thirty-six times over to
-	 * re-check one line of arithmetic. */
+	 * pair would stand up the whole DSP set again and again to re-check one
+	 * line of arithmetic. */
 	{
 		bool bounds      = true;
 		bool tight       = true;
@@ -110,7 +107,7 @@ int main()
 				const uint32_t b     = g2::Plugin::maxHostBlockFramesFor(block, rate);
 				const uint32_t worst = observedWorstCaseFrames(block, rate);
 
-				// B MUST BOUND EVERY BLOCK, and must not be slack beyond the
+				// B must bound every block, and must not be slack beyond the
 				// one derived frame. Where the two rates are equal the
 				// accumulator never varies and the derived frame is never
 				// claimed; everywhere else the accumulator does reach
@@ -149,8 +146,8 @@ int main()
 
 		bool allMatch = true;
 
-		// HIGHEST RATE FIRST, so that every step LOWERS the host rate and
-		// therefore RAISES B. B is a ceiling, so only a rising B is written
+		// Highest rate first, so that every step lowers the host rate and
+		// therefore raises B. B is a ceiling, so only a rising B is written
 		// back; walking the table the other way would leave the first, largest
 		// figure standing and the equality below would hold vacuously.
 		for(std::size_t i = std::size(g_hostRates); i-- > 0; )

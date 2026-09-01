@@ -1,14 +1,12 @@
 /* internalClient.cpp -- g2::InternalClient.
  *
- * The hub is reached directly and through nothing else. m_hub is the only
- * collaborator in this file: attach, detach and toDevice are called on it by
- * name, and no other endpoint appears anywhere below. That is what makes this
- * client a peer of the socket and usbip attachments rather than a path through
- * one of them.
+ * The hub is reached directly and through nothing else, which is what makes
+ * this client a peer of the socket and usbip attachments rather than a path
+ * through one of them.
  *
- * The whole allocation is the two vectors in the constructor's initialiser
- * list. Nothing below resizes, pushes back, news or copies a container; the
- * inbox is a ring index over storage that already exists.
+ * All allocation is the two vectors in the constructor's initialiser list.
+ * Nothing below resizes, pushes back, news or copies a container; the inbox is
+ * a ring index over storage that already exists.
  */
 
 #include "internalClient.h"
@@ -52,8 +50,8 @@ namespace g2
 
 		const std::size_t total = 2 + _messageSize + 2;
 
-		/* THE TOTAL IS A 16-BIT FIELD AND A TRANSFER THAT OVERFLOWS IT IS
-		 * REFUSED RATHER THAN TRUNCATED. A wrapped total names a shorter
+		/* The total is a 16-bit field, and a transfer that overflows it is
+		 * refused rather than truncated. A wrapped total names a shorter
 		 * transfer than the bytes that follow it, which the device's
 		 * reassembly reads as a complete message and checksums as one. */
 		if(total > 0xFFFFu)

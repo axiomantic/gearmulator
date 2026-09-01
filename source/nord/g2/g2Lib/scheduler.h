@@ -1,81 +1,43 @@
-/* scheduler.h -- the G2 scheduler's header.
+/* The G2 scheduler's header.
  *
- * In an interpreter build no `Scheduler` can be created at all, which is the
- * correct outcome because `runDspCycles` cannot terminate in such a build (the
- * DSP's `m_cycles` counter is never written). The `Interpreter` enumerator
- * stays because the semantic cross-check harness drives `DSP::exec` directly
- * and never constructs a `Scheduler`.
- *
- * `Config::trace` carries a `TraceSink`. A null sink records nothing and is the
- * default, so a production Scheduler pays one null check for each phase of each
- * quantum. It is production surface whose only consumer is a check, and it is
- * here because the swap, the panel, the start-of-frame tick and the MCU all run
- * SERIALLY in the Scheduler, outside the Executor -- so the order they run in
- * has no other decider. The alternative was four accessors, one for each thing
- * a check must reach, and four pieces of surface that only move the wall are a
- * worse object than one seam that makes a real mutation go red.
- *
- * 1. The `Backend` enum, SCH-17's. It records which backend the binary was
- *    built with; it does not select one.
- *
- * 2. The `Scheduler::Config` struct. Every rejectable value of design section
- *    13.10.5 arrives through it, which is what makes the factory the single
- *    rejection point.
- *
- * 3. The `Scheduler::create` factory, DECLARED and not defined.
- *
- * 4. SCH-19's `TracePhase` and `TraceSink`, and the `Config::trace` member
- *    that carries one. A null sink records nothing and is the default, so a
- *    production Scheduler pays one null check for each phase of each quantum.
- *    IT IS PRODUCTION SURFACE WHOSE ONLY CONSUMER IS A CHECK, and it is here
- *    because the swap, the panel, the start-of-frame tick and the MCU all run
- *    SERIALLY in the Scheduler, outside the Executor -- so the order they run
- *    in has no other decider. Those phases and the Executor dispatch are the
- *    whole of a quantum here: the ingress and the egress are PLAY REGIME ONLY,
- *    this class carries no regime member, and SCH-22 is what adds them and
- *    their two records. The alternative was four accessors, one for each thing
- *    a check must reach, and four pieces of surface that only move the wall are
- *    a worse object than one seam that makes a real mutation go red.
- *
- * 5. SCH-19's `runFrames`, the quantum entry point, and the private
- *    constructor that wires the Executor and the Board in.
- *
- * 6. `McuRunner` and `setMcuRunner`. A null runner means the MCU phase of a
- *    quantum calls `Board::runMcu`, so a production Scheduler pays one further
- *    null check for each quantum. It exists because a debugger needs a
- *    decision point between two MCU instructions and a quantum offers none;
- *    a debugger that carried its own copy of the quantum order instead would
- *    be a second full-advance path that nothing keeps in step with this one.
- *
- * THE RULE SCH-17 OWNS, STATED IN ONE SENTENCE.
- *
- *   `Scheduler::create` succeeds only when `config.backend == Backend::Jit`
- *    AND `dsp56k::g_useJIT` is true. Any other combination returns a null
- *    `Scheduler` object.
- *
- * Design section 11.4.3 states the rule and gives the consequences: in
- * a JIT build only `Backend::Jit` is accepted; in an interpreter build no
- * `Scheduler` can be created at all, which is the correct outcome because
- * `runDspCycles` cannot terminate in such a build (the DSP's `m_cycles`
- * counter is never written); and the `Interpreter` enumerator stays because
- * the semantic cross-check harness of design section 11.4.3 drives
+ * `Scheduler::create` succeeds only when `config.backend == Backend::Jit`
+ * AND `dsp56k::g_useJIT` is true; any other combination returns a null
+ * `Scheduler` object. In a JIT build only `Backend::Jit` is accepted. In an
+ * interpreter build no `Scheduler` can be created at all, which is the
+ * correct outcome because `runDspCycles` cannot terminate in such a build
+ * (the DSP's `m_cycles` counter is never written). The `Interpreter`
+ * enumerator stays because the semantic cross-check harness drives
  * `DSP::exec` directly and never constructs a `Scheduler`.
  *
- * WHY THE IMPLEMENTATION IS NOT INLINE.
+ * Every rejectable value arrives through `Scheduler::Config`, which is what
+ * makes the factory the single rejection point.
  *
- * The alternative was an inline body, and it was the right answer while the
- * factory was one branch: a header that grows through SCH-18, SCH-19, SCH-21,
- * SCH-22, SCH-23, SCH-24, SCH-28 and SCH-30 has no business owning a
- * translation unit while its whole content is a single comparison. That
- * stopped being true at SCH-18, which lands the rejection table. The body is
- * now in `scheduler.cpp`, and SCH-18 opens that file rather than SCH-19,
- * because §7.4.2 gives a path to the FIRST WRITER IN THE DEPENDS CHAIN and
- * SCH-19 is not inside SCH-18's closure -- the edge runs the other way.
+ * `Config::trace` carries a `TraceSink`. A null sink records nothing and is
+ * the default, so a production Scheduler pays one null check for each phase
+ * of each quantum. It is production surface whose consumer is a check, and it
+ * is here because the swap, the panel, the start-of-frame tick and the MCU
+ * all run SERIALLY in the Scheduler, outside the Executor -- so the order
+ * they run in has no other decider. Those phases and the Executor dispatch
+ * are the whole of a quantum: the ingress and the egress run in the play
+ * regime only. The alternative was an accessor for each thing a check must
+ * reach, and surface that only moves the wall is a worse object than one seam
+ * that makes a real mutation go red.
  *
- * `g_useJIT` IS A `static constexpr` AT dsp.h:36, so the branch that reads it
- * folds at compile time and the interpreter build pays nothing for it. The
- * design records that one build carries one backend and that the property is
- * structural with no run-time observable.
+ * `McuRunner` and `setMcuRunner`: a null runner means the MCU phase of a
+ * quantum calls `Board::runMcu`, so a production Scheduler pays one further
+ * null check for each quantum. It exists because a debugger needs a decision
+ * point between two MCU instructions and a quantum offers none; a debugger
+ * that carried its own copy of the quantum order instead would be a second
+ * full-advance path that nothing keeps in step with this one.
+ *
+ * The factory is declared here and defined in `scheduler.cpp`. An inline body
+ * was the right answer while the factory was a single comparison; it is a
+ * rejection table now.
+ *
+ * `g_useJIT` is a `static constexpr` at dsp.h:36, so the branch that reads it
+ * folds at compile time and the interpreter build pays nothing for it. One
+ * build carries one backend, and the property is structural with no run-time
+ * observable.
  */
 
 #pragma once
@@ -105,11 +67,11 @@ namespace g2
 	/* The backend. Fixed for the whole BINARY, by dsp56300's own
 	 * `static constexpr bool g_useJIT` at dsp.h:36. This enum therefore
 	 * records which backend the binary was built with; it does not select
-	 * one. §11.4.1.
+	 * one.
 	 *
-	 * ONE RULE GOVERNS `Config::backend`, §11.4.3: create() succeeds only
-	 * when backend == Backend::Jit AND `g_useJIT` is true. Any other
-	 * combination returns a null Scheduler object. */
+	 * One rule governs `Config::backend`: create() succeeds only when
+	 * backend == Backend::Jit AND `g_useJIT` is true. Any other combination
+	 * returns a null Scheduler object. */
 	enum class Backend { Jit, Interpreter };
 
 	/* The phase tags of one quantum, in order. */
@@ -206,7 +168,7 @@ namespace g2
 			 * create() and yields no object. */
 			std::vector<unsigned> chainOrder{};
 
-			/* NULL MEANS NO RECORDING, and it is the default. */
+			/* Null means no recording, and it is the default. */
 			TraceSink*    trace                 = nullptr;
 		};
 
@@ -321,13 +283,13 @@ namespace g2
 		 * state file recorded on a fast machine must load identically on a slow
 		 * one.
 		 *
-		 * THE CODEC REGIME IS NOT PART OF IT EITHER, SCH-36. A snapshot is
-		 * necessarily a PLAY-regime snapshot, and design section 15.6 restores
-		 * one INSIDE a boot whose remaining quanta must run the BOOT regime; a
-		 * regime that travelled with the state would put those quanta in the
-		 * play regime and fill the sink part-way through the boot. `stateSave`
-		 * never writes it, so `stateLoad` leaves the loading machine's own
-		 * regime standing. scheduler.cpp's state-block comment carries the
+		 * The codec regime is not part of it either. A snapshot is necessarily
+		 * a PLAY-regime snapshot, and a boot-on-restore restores one INSIDE a
+		 * boot whose remaining quanta must run the BOOT regime; a regime that
+		 * travelled with the state would put those quanta in the play regime
+		 * and fill the sink part-way through the boot. `stateSave` never
+		 * writes it, so `stateLoad` leaves the loading machine's own regime
+		 * standing. scheduler.cpp's state-block comment carries the
 		 * measurement and the reason exclusion was chosen over refusal. */
 		size_t stateSize() const noexcept;
 		void   stateSave(void* dst) const noexcept;
@@ -398,8 +360,8 @@ namespace g2
 		 * check for each quantum and nothing else. */
 		McuRunner* m_mcuRunner = nullptr;
 
-		/* HELD BY VALUE, design section 13.10.5: the Scheduler owns exactly one
-		 * ChainAdapter. Its four constructor arguments come from the Config.
+		/* Held by value: the Scheduler owns exactly one ChainAdapter. Its
+		 * constructor arguments come from the Config.
 		 *
 		 * The callbacks it hands to the Board's ESAIs outlive it, and this
 		 * object installs no uninstaller. A destructor that cleared them would

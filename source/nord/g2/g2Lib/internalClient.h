@@ -1,5 +1,4 @@
-/* internalClient.h -- g2::InternalClient, the plugin's own attachment to the
- * transport hub.
+/* g2::InternalClient, the plugin's own attachment to the transport hub.
  *
  * A peer of the usbip endpoint, not a path through it. Three attachments --
  * this client, the forked G2-Edit over a local socket, and the usbip adapter --
@@ -10,8 +9,8 @@
  * The reason is concrete. To restore a DAW project the plugin must originate
  * protocol messages, and no editor is attached at that moment. A client that
  * routed the plugin's own messages through the USB stack would make project
- * restore depend on a component the first milestone does not have, and would be
- * impossible to test with nothing else attached.
+ * restore depend on the USB stack being present, and would be impossible to
+ * test with nothing else attached.
  *
  * It is the carriage for frames the plugin originates and for frames the device
  * sends back -- an attachment, and nothing more. It composes no message and
@@ -96,7 +95,7 @@ namespace g2
 		 * prefix bytes, and the CRC sits DIRECTLY after the body: there is no
 		 * pad, because the real wire terminates on the short last USB packet.
 		 *
-		 * THE ENVELOPE IS WRITTEN IN PLACE AND NOTHING IS COPIED. `_buffer`
+		 * The envelope is written in place and nothing is copied. `_buffer`
 		 * holds the message at offset 2 and must have room for `_messageSize`
 		 * plus four bytes; this call writes the two prefix bytes at the front
 		 * and the two CRC bytes behind the message, then originates the whole

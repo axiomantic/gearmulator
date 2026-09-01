@@ -1,8 +1,8 @@
 # Test registrations for the plugin track. Owned by the plugin track.
 #
 # Append one add_test(NAME <name> ...) for every test this track adds under
-# source/nord/g2/g2Lib/test/. THE NAME IS THE EXACT STRING THE TASK'S Check:
-# LINE PASSES TO -R. Edit no other CMake file in this tree.
+# source/nord/g2/g2Lib/test/. The NAME is the exact string passed to -R. Edit no
+# other CMake file in this tree.
 
 # ----------------- g2TestConsole's subcommand surface
 #
@@ -110,32 +110,25 @@ else()
 endif()
 
 
-# ----------------- PLG-1, the synthLib::Device subclass surface (PLG-3
-#                   absorbed as STEP 2, plan §24.6 row W3-390)
+# ----------------- the synthLib::Device subclass surface
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_device_surface$
 #
-# THE TWO TARGETS BELOW ARE DECLARED UNCONDITIONALLY AND OUTSIDE THE
-# g2TestConsole GUARD ABOVE, which is the discipline the t0_mcf5307_link
-# block in tests_board.cmake states: a registration that builds nothing when
-# a guard is off would report a green by building nothing. These two do not
-# touch g2TestConsole, so they have no reason to sit inside the guard.
+# The two targets below are declared unconditionally and outside the
+# g2TestConsole guard above: a registration that builds nothing when a guard is
+# off would report a green by building nothing. These two do not touch
+# g2TestConsole, so they have no reason to sit inside the guard.
 #
-# TIER T0 AND UNGATED. The test needs no firmware artifact: it constructs the
-# device over an empty DeviceCreateParams and reads the surface.
+# Tier T0 and ungated. The test needs no firmware artifact: it constructs the
+# device over an empty DeviceCreateParams and reads the surface. The pure
+# virtuals are bound as member pointers, which forces the compiler rather than
+# the linker.
 #
-# WHAT THE TEST HOLDS. One static_assert per each of the twelve pure virtuals
-# synthLib::Device declares (as member-pointer bindings, which force the
-# compiler rather than the linker), m_numSamplesProcessed as the subclass's
-# OWN member, getSamplerate() == 96000.0f from a constructed device, and the
-# SYNTHLIB_DEMO_MODE conditional shape asserted against the build.
-#
-# IT COMPILES ../../g2JucePlugin/g2Device.cpp DIRECTLY AND LINKS g2Lib.
-# g2Device.cpp is a g2JucePlugin source and not a g2Lib source -- exactly the
-# g2PatchLoad.cpp arrangement t0_gdb_script and t0_pch2_load already use.
-# Naming the g2JucePlugin target here would couple this test to that
-# directory's whole JUCE surface; the target build is the block's own second
-# conjunct and does not run through this test.
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
+# g2Device.cpp is a g2JucePlugin source and not a g2Lib source; naming the
+# g2JucePlugin target here would couple this test to that directory's whole
+# JUCE surface. This is the standing arrangement for the plugin-track
+# registrations below, which name only what they add to it.
 
 add_executable(t0_device_surface
 	t0_device_surface.cpp
@@ -147,19 +140,18 @@ set_property(TARGET t0_device_surface PROPERTY FOLDER "G2/test")
 add_test(NAME t0_device_surface COMMAND t0_device_surface)
 set_tests_properties(t0_device_surface PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-1 step 2 (absorbed PLG-3), the two hand-off flags
+# ----------------- the two hand-off flags
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_handoff_flags$
 #
-# TIER T0 AND UNGATED: the device is constructed, never booted, and no
-# firmware artifact is read.
+# Tier T0 and ungated: the device is constructed, never booted, and no firmware
+# artifact is read.
 #
-# THE SEQ_CST PAIRING IS WHAT THIS TEST EXISTS TO FAIL. Four of the eight
-# atomic operations of the hand-off are memory_order_seq_cst because each
-# thread stores one flag and then loads the OTHER; weaken any one of the four
-# and the two threads can each observe the other's pre-store value and both
-# proceed onto the Scheduler. The hammer runs the two halves against each
-# other and counts that outcome; the audio half is driven through the REAL
+# Four of the eight atomic operations of the hand-off are memory_order_seq_cst
+# because each thread stores one flag and then loads the other; weaken any one
+# of the four and the two threads can each observe the other's pre-store value
+# and both proceed onto the Scheduler. The hammer runs the two halves against
+# each other and counts that outcome; the audio half is driven through the real
 # processAudio. Threads is the audio thread, which lives on its own.
 
 add_executable(t0_handoff_flags
@@ -173,27 +165,18 @@ set_property(TARGET t0_handoff_flags PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_handoff_flags COMMAND t0_handoff_flags)
 
-# ----------------- PLG-7, readMidiOut
+# ----------------- readMidiOut
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_midi_out$
 #
-# TIER T0 AND UNGATED: no firmware artifact and no booted machine. The device
-# is constructed over an empty DeviceCreateParams, exactly as t0_device_surface
-# does, and the UART0 model is driven standalone, exactly as t0_uart0 does.
+# Tier T0 and ungated: no firmware artifact and no booted machine. The device is
+# constructed over an empty DeviceCreateParams and the UART0 model is driven
+# standalone.
 #
-# WHAT THE TEST HOLDS. Design section 14.5 and section 17 row 7.30:
-# readMidiOut carries ONLY what the machine originated -- no unsolicited
-# SysEx, nothing periodic, no keepalive. Case group 1 holds the no-machine
-# half (the PLG-1 state, where no Board exists yet); case group 2 drives the
-# UART0 model's TX side through the SAME setMidiOut call PLG-12 performs on
-# Board::uart0() and asserts readMidiOut carries exactly the originated
-# bytes, in order, with the Device source, and not the byte a disabled
-# transmitter withholds; case group 3 holds the no-unsolicited-SysEx half.
-# The required-red mutation plants a keepalive (a periodic event pushed into
-# the parser before every drain) and turns case group 1 red.
+# readMidiOut carries only what the machine originated -- no unsolicited SysEx,
+# nothing periodic, no keepalive.
 #
-# IT COMPILES ../../g2JucePlugin/g2Device.cpp DIRECTLY AND LINKS g2Lib,
-# the same arrangement as the two PLG-1 registrations above.
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
 
 add_executable(t0_midi_out
 	t0_midi_out.cpp
@@ -205,28 +188,26 @@ set_property(TARGET t0_midi_out PROPERTY FOLDER "G2/test")
 add_test(NAME t0_midi_out COMMAND t0_midi_out)
 set_tests_properties(t0_midi_out PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-2, the channel counts
+# ----------------- the channel counts
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_channel_counts$
 #
-# TIER T0 AND UNGATED: the device is constructed, never booted, and reads no
-# artifact file. Case group 1 clears NMG2_ARTIFACTS IN-PROCESS (the resolver's
-# empty-behaves-as-unset contract), so the invoking shell's value cannot
-# decide the no-firmware clause; case group 2 points the variable at a
-# temporary directory the test creates -- the constructor resolves firmware
-# STATE (BRD-10) and does not boot, so no artifact file is needed.
+# Tier T0 and ungated: the device is constructed, never booted, and reads no
+# artifact file. Case group 1 clears NMG2_ARTIFACTS in-process (the resolver's
+# empty-behaves-as-unset contract), so the invoking shell's value cannot decide
+# the no-firmware clause; case group 2 points the variable at a temporary
+# directory the test creates -- the constructor resolves firmware state and does
+# not boot, so no artifact file is needed.
 #
-# WHAT THE TEST HOLDS. Design sections 14.6, 14.7 and 17 rows 7.32/7.33:
-# getChannelCountIn() and getChannelCountOut() return 2 and 2, final the
-# instant the Device constructor returns -- before the firmware is loaded,
-# before the boot, whether or not any artifact was found. The Plugin queries
-# the counts exactly once (plugin.cpp:15, its member-initializer list) and
-# ResamplerInOut stores the pair as const members, so the no-firmware path is
-# the load-bearing clause. Each group asserts the FirmwareStatus state it
-# walked, so neither can pass by accident with the other outcome in view.
+# getChannelCountIn() and getChannelCountOut() are final the instant the Device
+# constructor returns -- before the firmware is loaded, before the boot, whether
+# or not any artifact was found. The Plugin queries the counts once
+# (plugin.cpp:15, its member-initializer list) and ResamplerInOut stores the
+# pair as const members, so the no-firmware path is the load-bearing clause.
+# Each group asserts the FirmwareStatus state it walked, so neither can pass by
+# accident with the other outcome in view.
 #
-# IT COMPILES ../../g2JucePlugin/g2Device.cpp DIRECTLY AND LINKS g2Lib, the
-# same arrangement as the PLG-1 registrations above.
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
 
 add_executable(t0_channel_counts
 	t0_channel_counts.cpp
@@ -238,25 +219,21 @@ set_property(TARGET t0_channel_counts PROPERTY FOLDER "G2/test")
 add_test(NAME t0_channel_counts COMMAND t0_channel_counts)
 set_tests_properties(t0_channel_counts PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-5, getState and setState: the seven-item state
+# ----------------- getState and setState: the seven-item state
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_plugin_state$
 #
-# TIER T0 AND UNGATED: no firmware artifact is read (the Device constructor
-# resolves firmware STATE, not content) and no machine is booted.
+# Tier T0 and ungated: no firmware artifact is read (the Device constructor
+# resolves firmware state, not content) and no machine is booted.
 #
-# WHAT THE TEST HOLDS. Design sections 15.5, 14.7, 17 row 7.29 and 15.8:
-# the seven-item state format round-trips through the PLUGIN layer, not the
-# Device alone -- the Plugin layer prepends its two-byte version header
-# (plugin.cpp pushes g_stateVersion and the StateType) and design row 7.29's
-# defect is a getState that assigns over it. The harness replicates the
-# Plugin's exact contract over the real g2::Device (the same
-# g2Device.cpp-direct arrangement as the PLG-1 registrations above) and adds
-# ../../g2JucePlugin/g2State.cpp, the file PLG-5 creates. The required-red
-# mutation is the planted assign() in the test-local ClobberingDevice: under
-# the plugin contract the round trip goes red, because the image then begins
-# with the device's own magic where the framework's version check demands
-# g_stateVersion, and plugin.cpp's routing refuses it.
+# The seven-item state format round-trips through the plugin layer, not the
+# Device alone: the Plugin layer prepends its two-byte version header
+# (plugin.cpp pushes g_stateVersion and the StateType), and the defect guarded
+# against is a getState that assigns over it. The harness replicates the
+# Plugin's contract over the real g2::Device and adds
+# ../../g2JucePlugin/g2State.cpp.
+#
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
 
 add_executable(t0_plugin_state
 	t0_plugin_state.cpp
@@ -268,26 +245,22 @@ set_property(TARGET t0_plugin_state PROPERTY FOLDER "G2/test")
 add_test(NAME t0_plugin_state COMMAND t0_plugin_state)
 set_tests_properties(t0_plugin_state PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-4, processAudio (PLG-4 step 1; plan section 17)
+# ----------------- processAudio
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_process_audio$
 #
-# TIER T0 AND UNGATED: the device is constructed over an empty
+# Tier T0 and ungated: the device is constructed over an empty
 # DeviceCreateParams and never booted; no firmware artifact is read.
 #
-# WHAT THE TEST HOLDS. Design sections 14.7, 13.6 and 13.10 rule 3: the
-# audio callback's choreography. The not-ready path zeroes its buffers and
+# The audio callback's choreography. The not-ready path zeroes its buffers and
 # touches the Scheduler not at all; the ready branch drives the Scheduler
-# push -> runFrames -> pull -> faulted IN ORDER -- the order that fixes both
-# codec queue capacities at L + B -- and answers a fault with the one
-# response of design section 13.10.3 step 4 (a release store of false into
-# m_ready). The order is asserted through a recorder installed through the
-# Device's own Scheduler seam, because Scheduler's methods are not virtual
-# and the property under test is the Device's choreography, not the
-# Scheduler's.
+# push -> runFrames -> pull -> faulted in order -- the order that fixes both
+# codec queue capacities at L + B -- and answers a fault with a release store of
+# false into m_ready. The order is asserted through a recorder installed through
+# the Device's own Scheduler seam, because Scheduler's methods are not virtual
+# and the property under test is the Device's choreography, not the Scheduler's.
 #
-# IT COMPILES ../../g2JucePlugin/g2Device.cpp DIRECTLY AND LINKS g2Lib, the
-# same arrangement as the PLG-1 registrations above.
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
 
 add_executable(t0_process_audio
 	t0_process_audio.cpp
@@ -301,24 +274,21 @@ set_property(TARGET t0_process_audio PROPERTY FOLDER "G2/test")
 add_test(NAME t0_process_audio COMMAND t0_process_audio)
 set_tests_properties(t0_process_audio PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-4 step 2 (absorbed PLG-6), sendMidi and the offset
-#                   conversion
+# ----------------- sendMidi and the offset conversion
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_midi_offsets$
 #
-# TIER T0 AND UNGATED: no firmware artifact, no booted machine; the counter
-# the conversion reads is advanced by driving the REAL processAudio's
-# not-ready tail.
+# Tier T0 and ungated: no firmware artifact, no booted machine; the counter the
+# conversion reads is advanced by driving the real processAudio's not-ready
+# tail.
 #
-# WHAT THE TEST HOLDS. Design sections 17 rows 7.30, 7.31 and 7.34: the
-# conversion is block-relative to ABSOLUTE
-# (offset += m_numSamplesProcessed + getExtraLatencySamples()), not the
-# reverse; the counter is the subclass's OWN member, so the acceptance
-# criterion of review finding I18 holds -- the test compiles against a
-# synthLib::Device subclass with no wLib dependency. The no-double-delivery
-# row: a reply to a host-sent message never appears in readMidiOut.
+# The conversion is block-relative to absolute
+# (offset += m_numSamplesProcessed + getExtraLatencySamples()), not the reverse;
+# the counter is the subclass's own member, so the test compiles against a
+# synthLib::Device subclass with no wLib dependency. A reply to a host-sent
+# message never appears in readMidiOut.
 #
-# IT COMPILES ../../g2JucePlugin/g2Device.cpp DIRECTLY AND LINKS g2Lib.
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
 
 add_executable(t0_midi_offsets
 	t0_midi_offsets.cpp
@@ -330,32 +300,24 @@ set_property(TARGET t0_midi_offsets PROPERTY FOLDER "G2/test")
 add_test(NAME t0_midi_offsets COMMAND t0_midi_offsets)
 set_tests_properties(t0_midi_offsets PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-8, the resampler mode
+# ----------------- the resampler mode
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_resampler_mode$
 #
-# TIER T0 AND UNGATED: the device is constructed over an empty
+# Tier T0 and ungated: the device is constructed over an empty
 # DeviceCreateParams and never booted; no firmware artifact is read.
 #
-# WHAT THE TEST HOLDS. Design sections 14.2.2, 18.2 and 24: the plugin
-# SETS the resampler mode -- synthLib::Plugin::setResamplerMode with
-# Mode::MameHq -- during construction, before the first prepareToPlay, and
-# never inherits the framework default Legacy, which is the default in two
-# places (resampler.h:30, resamplerInOut.h:43). The constructed plugin
-# reports MameHq and the framework's own observable agrees: the test drives
-# setHostSamplerate, the framework's prepareToPlay analogue, which runs
-# ResamplerInOut::recreate() and its 512-sample pre-warm with an EMPTY
-# process callback -- the Device is never invoked -- and the latency the
-# Plugin then reports differs measurably between Legacy and MameHq. The
-# required-red control is a subclass that skips the set: it stands at the
-# framework defaults and leaves the Legacy figure.
+# The plugin sets the resampler mode -- synthLib::Plugin::setResamplerMode with
+# Mode::MameHq -- during construction, before the first prepareToPlay, and never
+# inherits the framework default Legacy (resampler.h:30, resamplerInOut.h:43).
+# The test drives setHostSamplerate, the framework's prepareToPlay analogue,
+# which runs ResamplerInOut::recreate() and its 512-sample pre-warm with an
+# empty process callback -- the Device is never invoked -- and the latency the
+# Plugin then reports differs measurably between Legacy and MameHq. The control
+# is a subclass that skips the set and stands at the framework defaults.
 #
-# IT COMPILES ../../g2JucePlugin/g2Plugin.cpp DIRECTLY alongside
-# g2Device.cpp and g2State.cpp and links g2Lib, the same arrangement as the
-# other plugin-track registrations. g2Plugin.cpp is a g2JucePlugin source
-# and not a g2Lib source; naming the g2JucePlugin target here would couple
-# this test to that directory's whole surface, exactly as the PLG-1
-# registration above records for g2Device.cpp.
+# It compiles ../../g2JucePlugin/g2Plugin.cpp directly alongside g2Device.cpp
+# and g2State.cpp and links g2Lib.
 
 add_executable(t0_resampler_mode
 	t0_resampler_mode.cpp
@@ -368,37 +330,31 @@ set_property(TARGET t0_resampler_mode PROPERTY FOLDER "G2/test")
 add_test(NAME t0_resampler_mode COMMAND t0_resampler_mode)
 set_tests_properties(t0_resampler_mode PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-11, the passband ripple sweep
+# ----------------- the passband ripple sweep
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_resampler_passband_ripple$
 #
-# TIER T0 AND UNGATED: no firmware artifact, no booted machine, no Device and
-# no Plugin. The test constructs synthLib::ResamplerInOut directly, which is
-# what PLG-11 requires -- "through ResamplerInOut alone".
+# Tier T0 and ungated: no firmware artifact, no booted machine, no Device and no
+# Plugin. The test constructs synthLib::ResamplerInOut alone.
 #
-# WHAT THE TEST HOLDS. Design sections 14.2.2 and 18.2: a stepped sine sweep
-# from 20 Hz to 20 kHz at each of the six host rates of section 14.1's table,
-# against a 96 kHz device rate, in the Mode::MameHq PLG-8 adopted. The
-# reported figure is the peak-to-peak deviation from 0 dB and it is compared
-# against a COMMITTED CONSTANT in the test source -- g_committedTargetDb. No
-# code path in the test writes that target, and the test opens no file and
-# reads no environment variable at all, which is the property that
-# distinguishes this row from the one PLG-11 replaced: a check that rewrites
-# its own target passes for every possible measurement.
+# A stepped sine sweep from 20 Hz to 20 kHz at each supported host rate, against
+# a 96 kHz device rate, in Mode::MameHq. The reported figure is the peak-to-peak
+# deviation from 0 dB and it is compared against a committed constant in the
+# test source, g_committedTargetDb. No code path in the test writes that target,
+# and the test opens no file and reads no environment variable at all: a check
+# that rewrites its own target passes for every possible measurement.
 #
-# EVERY TONE IS COHERENT WITH ITS OWN CAPTURE WINDOW, so the analysis is a
+# Every tone is coherent with its own capture window, so the analysis is a
 # leak-free rectangular-window DFT bin rather than a windowed estimate with an
 # error budget. The analyzer carries its own known positive and known negative
 # on synthesized tones, so a blind analyzer cannot be mistaken for a flat
 # filter, and the permanent control sweeps the same band through the framework
-# default Mode::Legacy, whose 44.1 kHz passband edge sits at 19,845 Hz --
-# below the 20 kHz the target is stated over -- and must exceed the target.
+# default Mode::Legacy, whose 44.1 kHz passband edge sits at 19,845 Hz -- below
+# the 20 kHz the target is stated over -- and must exceed the target.
 #
-# IT LINKS g2Lib AND COMPILES NO g2JucePlugin SOURCE. Unlike the other
-# plugin-track registrations above, this test needs neither g2::Device nor
-# g2::Plugin: the object under test belongs to synthLib, which g2Lib already
-# carries. Adding g2Device.cpp here would couple the check to a device the
-# sweep must not construct.
+# It links g2Lib and compiles no g2JucePlugin source: the object under test
+# belongs to synthLib, which g2Lib already carries. Adding g2Device.cpp here
+# would couple the check to a device the sweep must not construct.
 
 add_executable(t0_resampler_passband_ripple t0_resampler_passband_ripple.cpp)
 target_link_libraries(t0_resampler_passband_ripple PRIVATE g2Lib)
@@ -407,46 +363,43 @@ set_property(TARGET t0_resampler_passband_ripple PROPERTY FOLDER "G2/test")
 add_test(NAME t0_resampler_passband_ripple COMMAND t0_resampler_passband_ripple)
 set_tests_properties(t0_resampler_passband_ripple PROPERTIES LABELS "UnitTest")
 
-# ----------------- PLG-12, the boot-on-restore sequence
+# ----------------- the boot-on-restore sequence
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t1_boot_on_restore$
 #
-# TIER T1 AND GATED. The test boots the REAL Clavia firmware through
+# Tier T1 and gated. The test boots the real Clavia firmware through
 # g2::Device::boot, so it resolves NMG2_ARTIFACTS through ArtifactResolver and
-# reports design section 18.5's skip line when it is absent. Its two CONTROLS
-# are ungated and run even on a skipped machine: they construct their own Board
-# and Scheduler and need no artifact, which is what keeps a skipped run from
-# also losing the evidence that the test's predicates discriminate.
+# reports the skip line when it is absent. Its two controls are ungated and run
+# even on a skipped machine: they construct their own Board and Scheduler and
+# need no artifact, which is what keeps a skipped run from also losing the
+# evidence that the test's predicates discriminate.
 #
-# WHAT THE TEST HOLDS. Design section 15.6's six-step order, through the
-# Device::IBootObserver seam PLG-12 adds -- the boot thread's twin of PLG-4's
-# ISchedulerDriver: (A) the cold boot's five steps in order and no stateLoad;
-# (B) step 2 leaves both codec queues EMPTY -- reset does not prime, and priming
-# the sink with L frames is step 5's job; (C) step 4 runs the BOOT codec regime,
-# so all four codec counters stand at zero afterwards and the boot cannot stall
-# on a full sink; (D) the restoring boot runs stateLoad AFTER reset and BEFORE
-# the boot quanta. The two planted controls are a REORDERED sequence, which the
-# order predicate must refuse, and a PRIMED sink reached through beginPlayPhase,
-# which the not-priming predicate must report as primed.
+# The six-step boot order, through the Device::IBootObserver seam -- the boot
+# thread's twin of ISchedulerDriver: (A) the cold boot's five steps in order and
+# no stateLoad; (B) step 2 leaves both codec queues empty -- reset does not
+# prime, and priming the sink with L frames is step 5's job; (C) step 4 runs the
+# boot codec regime, so the codec counters stand at zero afterwards and the boot
+# cannot stall on a full sink; (D) the restoring boot runs stateLoad after reset
+# and before the boot quanta. The two planted controls are a reordered sequence,
+# which the order predicate must refuse, and a primed sink reached through
+# beginPlayPhase, which the not-priming predicate must report as primed.
 #
-# IT COMPILES ../../g2JucePlugin/g2Device.cpp DIRECTLY AND LINKS g2Lib, the
-# same arrangement every other plugin-track registration above uses.
+# It compiles ../../g2JucePlugin/g2Device.cpp directly and links g2Lib.
 #
-# THE GATE VARIABLES ARE COMPUTED HERE rather than borrowed from the t1_rx_armed
+# The gate variables are computed here rather than borrowed from the t1_rx_armed
 # block above, which sits inside this file's g2TestConsole guard: a configure in
 # which that guard is off would leave them undefined. NMG2_ARTIFACTS is a cache
 # variable, so whichever site sets it first wins and the two cannot disagree.
-# The skip code is READ OUT OF gatedFixture.h by the same regex the other sites
+# The skip code is read out of gatedFixture.h by the same regex the other sites
 # use, so the spellings cannot drift.
 #
-# TIMEOUT 600, AND THE FIGURE IT GUARDS IS THE BUDGET AND NOT THE MEASUREMENT.
-# The boot's ceiling is 500,000 emulated frames, which is above the roughly
-# 425,000 t1_boot and g2TestConsole both measure to the patch browser. A healthy
-# run spends far less: the boot leaves EARLY on Scheduler::chainAttached(), the
-# machine's own signal that the DSP programs have landed, and that arrives at
-# roughly 17,000 frames -- MEASURED at 16,960 on this host, whole run 8 seconds.
-# The timeout is sized for the ceiling a firmware that never gets there would
-# spend, not for the measurement.
+# TIMEOUT 600, and the figure it guards is the budget and not the measurement.
+# The boot's ceiling is 500,000 emulated frames, above the roughly 425,000
+# measured to the patch browser. A healthy run spends far less: the boot leaves
+# early on Scheduler::chainAttached(), the machine's own signal that the DSP
+# programs have landed, measured at 16,960 frames on this host, whole run 8
+# seconds. The timeout is sized for the ceiling a firmware that never gets there
+# would spend, not for the measurement.
 
 add_executable(t1_boot_on_restore
 	t1_boot_on_restore.cpp
@@ -484,14 +437,12 @@ endif()
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_max_host_block$
 #
-# TIER T0 AND UNGATED: no firmware artifact and no booted machine. B is derived
+# Tier T0 and ungated: no firmware artifact and no booted machine. B is derived
 # from the host's maximum block and the host's rate alone, and the B = 0
 # rejection is a Config-only rejection inside Scheduler::create.
 #
-# IT COMPILES ../../g2JucePlugin/g2Plugin.cpp DIRECTLY alongside g2Device.cpp
-# and g2State.cpp and links g2Lib, the same arrangement as the other
-# plugin-track registrations: g2Plugin.cpp is a g2JucePlugin source and naming
-# that directory's target here would couple this test to its whole surface.
+# It compiles ../../g2JucePlugin/g2Plugin.cpp directly alongside g2Device.cpp
+# and g2State.cpp and links g2Lib.
 
 add_executable(t0_max_host_block
 	t0_max_host_block.cpp
@@ -508,15 +459,15 @@ set_tests_properties(t0_max_host_block PROPERTIES LABELS "UnitTest")
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_latency_formula$
 #
-# TIER T0 AND UNGATED, for the same reason: the formula reads three constants,
+# Tier T0 and ungated, for the same reason: the formula reads a few constants,
 # the chain configuration and two framework getters, and boots nothing.
 #
-# THE ASSERTION THIS REGISTRATION EXISTS FOR is the CEILING. Above 16,384
-# frames the framework clamps the latency it is handed and only logs it, so the
-# plugin would report a figure shorter than it takes and every host would
-# silently mis-compensate. The test asserts the sum against that bound both
-# arithmetically and behaviorally, through Scheduler::create's acceptance at
-# the bound and its BadLookahead one frame above it.
+# The assertion this registration exists for is the ceiling. Above 16,384 frames
+# the framework clamps the latency it is handed and only logs it, so the plugin
+# would report a figure shorter than it takes and every host would silently
+# mis-compensate. The test asserts the sum against that bound both
+# arithmetically and behaviorally, through Scheduler::create's acceptance at the
+# bound and its BadLookahead one frame above it.
 
 add_executable(t0_latency_formula
 	t0_latency_formula.cpp
@@ -528,38 +479,38 @@ set_property(TARGET t0_latency_formula PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_latency_formula COMMAND t0_latency_formula)
 set_tests_properties(t0_latency_formula PROPERTIES LABELS "UnitTest")
-# ----------------- PLG-16, the state hand-off under load
+# ----------------- the state hand-off under load
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t1_state_handoff_load$
 #        on a thread-sanitizer build (-DG2_THREAD_SANITIZER=ON).
 #
-# TIER T1 AND GATED, through the same gatedFixture.h path every other gated
+# Tier T1 and gated, through the same gatedFixture.h path every other gated
 # registration in this tree uses.
 #
-# WHAT THE TEST HOLDS. processAudio runs continuously on one thread while a
-# second thread drives getState, setState and the beginStateChange /
-# endStateChange window in a loop for 60 seconds. The assertion the run makes
-# is that NO DATA RACE IS REPORTED, plus the run's own known positives: the
-# audio half reached the shared payload, the message half completed rounds, and
-# the acknowledgement wait completed once per round.
+# processAudio runs continuously on one thread while a second thread drives
+# getState, setState and the beginStateChange / endStateChange window in a loop
+# for 60 seconds. The assertion the run makes is that no data race is reported,
+# plus the run's own known positives: the audio half reached the shared payload,
+# the message half completed rounds, and the acknowledgement wait completed once
+# per round.
 #
-# THE NEGATIVE CASE IS THE SECOND TARGET BELOW, and it is what makes the first
+# The negative case is the second target below, and it is what makes the first
 # one's green mean something. It is the same source with G2_HANDOFF_DROP_ACK
 # defined, which removes the beginStateChange call from the message half's
 # payload edit -- the acknowledgement, and the store that withdraws readiness.
 # The audio half then stays on the ready branch and touches the payload while
-# the message half writes it. Its ctest PASS condition is the SANITIZER'S OWN
-# RACE REPORT and not an exit code: a build that produced no report would fail
-# this test, which is the only way the pair proves the instrument can see the
-# thing it is looking for.
+# the message half writes it. Its ctest pass condition is the sanitizer's own
+# race report and not an exit code: a build that produced no report fails this
+# test, which is how the pair shows the instrument can see the thing it is
+# looking for.
 #
-# THE SANITIZER IS OPT-IN AND OFF BY DEFAULT. It is applied per target rather
+# The sanitizer is opt-in and off by default. It is applied per target rather
 # than to the whole tree, so g2Lib is linked uninstrumented: a race entirely
 # inside g2Lib would not be seen. Both accesses under test are in this test's
 # own translation unit and in g2Device.cpp, which the target compiles directly,
 # so both are instrumented.
 #
-# The negative target is registered ONLY on a sanitizer build, because without
+# The negative target is registered only on a sanitizer build, because without
 # the sanitizer it can never produce the report its pass condition names, and a
 # test that cannot pass is a permanent red rather than a check.
 
@@ -617,13 +568,13 @@ if(G2_THREAD_SANITIZER)
 
 	add_test(NAME t1_state_handoff_load_negative COMMAND t1_state_handoff_load_negative)
 
-	# THE PASS CONDITION IS THE REPORT AND NOT THE EXIT STATUS. halt_on_error
+	# The pass condition is the report and not the exit status. halt_on_error
 	# stops on the first race, so the run answers in seconds rather than
 	# spending its whole window after it has already answered.
 	#
-	# abort_on_error=0 AND exitcode=0 ARE LOAD-BEARING AND NOT A LOOSENING. On
+	# abort_on_error=0 and exitcode=0 are load-bearing and not a loosening. On
 	# Darwin the sanitizer raises SIGABRT on a report, and ctest scores an
-	# aborted subprocess as an exception BEFORE it consults
+	# aborted subprocess as an exception before it consults
 	# PASS_REGULAR_EXPRESSION -- so the report this test exists to see would be
 	# scored a failure. Exiting 0 hands the verdict to the regex instead, and a
 	# run that reported no race prints no such line and fails.

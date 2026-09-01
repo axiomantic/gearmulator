@@ -43,16 +43,16 @@
 // the window then reads once.
 //
 // The argmax is not certified to be an instruction -- it is the most-read
-// 16-bit location, and a hot 16-bit DATA read wins it just as legitimately. Its
-// job is to answer how large a count this counter can produce on THIS arm, so
+// 16-bit location, and a hot 16-bit data read wins it just as legitimately. Its
+// job is to answer how large a count this counter can produce on this arm, so
 // that a zero elsewhere has a scale to be read against.
 //
 // Because the known positive is the maximum, `knownPositive >= hitsTarget`
 // holds by construction for every probe in this file. No such comparison is
 // asserted below, and none would mean anything if it were.
 //
-// AND THE CONTROL THAT MAKES THE ANSWER AN ANSWER: the whole run happens TWICE
-// on the same code path, once WITHOUT a patch and once WITH one. A probe count
+// And the control that makes the answer an answer: the whole run happens twice
+// on the same code path, once without a patch and once with one. A probe count
 // that is non-zero in both runs says the routine fires anyway; non-zero only in
 // the patched run is the patch load reaching it.
 //
@@ -113,8 +113,7 @@ namespace
 	//
 	// The underruns are real and expected in the boot regime, because nothing
 	// drains the ESAIs until the codec queues arrive. This hides the repetition
-	// and nothing else. Set
-	// G2_LOG_ESAI_UNDERRUN to install no filter at all.
+	// and nothing else. Set G2_LOG_ESAI_UNDERRUN to install no filter at all.
 	const char* const g_underrunMessage = "ESAI transmit underrun";
 
 	constexpr uint64_t g_underrunLinesKept = 4;
@@ -210,7 +209,7 @@ namespace
 	// The synthetic object the known positive delivers. Its type byte is not
 	// 0x00, so a reading of it cannot be confused with the benign answer; it is
 	// also not 0x21, which is the type byte of the first object in every file
-	// of the corpus, so a reading of it cannot be confused with the PATCH's
+	// of the corpus, so a reading of it cannot be confused with the patch's
 	// either. Its whole framed length is 3 + 15 = 18 bytes, well inside the
 	// 64-byte capacity the model gives the protocol endpoint.
 	constexpr uint8_t g_probeObjectType   = 0x4Au;
@@ -235,20 +234,20 @@ namespace
 		return uint8_t(value & 0xffu);
 	}
 
-	// The largest FRAMED object in a `.pch2`, counting its 3-byte header, and
-	// how many objects it holds. Both are COMPUTED from the file this run
+	// The largest framed object in a `.pch2`, counting its 3-byte header, and
+	// how many objects it holds. Both are computed from the file this run
 	// loaded and neither is written here as a literal, so a different patch
 	// reports its own figures.
 	//
-	// IT ALSO COUNTS WHAT THE SPLIT COSTS AND WHAT THE CORPUS CANNOT ANSWER.
+	// It also counts what the split costs and what the corpus cannot answer.
 	// `_packets` is how many max-packet-size packets the whole container takes,
 	// and `_exactMultiples` is how many of its framed objects have a length
-	// that is an EXACT MULTIPLE of that packet size. The second figure is the
-	// one that decides whether this file can say anything about the trailing
-	// zero-length packet at all: the convention only ever applies to an exact
-	// multiple, so a corpus containing none of them cannot exercise it, and
-	// saying so as a computed number is the difference between a measurement
-	// and an assumption. Both are COMPUTED from the file this run loaded.
+	// that is an exact multiple of that packet size. The second figure decides
+	// whether this file can say anything about the trailing zero-length packet
+	// at all: the convention only ever applies to an exact multiple, so a
+	// corpus containing none of them cannot exercise it, and saying so as a
+	// computed number is the difference between a measurement and an
+	// assumption. Both are computed from the file this run loaded.
 	void measureObjects(const std::vector<uint8_t>& _file, unsigned& _count, size_t& _largest,
 		uint8_t& _firstType, size_t _packetSize, unsigned& _packets, unsigned& _exactMultiples)
 	{
@@ -285,7 +284,7 @@ namespace
 			if(_packetSize != 0)
 			{
 				// A frame of N bytes costs ceil(N / packetSize) packets, and a
-				// frame of ZERO bytes still costs one -- it is an empty packet,
+				// frame of zero bytes still costs one -- it is an empty packet,
 				// not an absent one.
 				_packets += unsigned(framed == 0 ? 1
 				                   : (framed + _packetSize - 1) / _packetSize);
@@ -310,7 +309,7 @@ namespace
 	constexpr uint32_t g_probeCallerB  = 0x3001DAD8u;
 	constexpr uint32_t g_probeAssembly = 0x30032254u;
 
-	// THE KNOWN NEGATIVE. An address inside the vector TABLE this file writes.
+	// The known negative. An address inside the vector table this file writes.
 	// Vectors are read as 32-bit longwords, never fetched as instruction words,
 	// so the 16-bit counter must read 0 there. It is offset 4 rather than 0 so
 	// that it is not the reset vector either.
@@ -331,10 +330,10 @@ namespace
 		{
 		}
 
-		// THE COUNTER IS A HISTOGRAM AND NOT A PROBE LIST, and that is what
-		// makes the known positive a property of the RUN. A fixed probe list can
+		// The counter is a histogram and not a probe list, and that is what
+		// makes the known positive a property of the run. A fixed probe list can
 		// only answer about addresses this file names; a histogram over every
-		// 16-bit read lets the file ASK the run which address it read most, and
+		// 16-bit read lets the file ask the run which address it read most, and
 		// take that answer as its control. One counter per 16-bit word of SDRAM.
 		struct Hottest
 		{
@@ -372,7 +371,7 @@ namespace
 		// extent of the firmware image it just read from disk.
 		//
 		// The unrestricted argmax can land past the end of the loaded image, where
-		// the machine reaches it as a 16-bit DATA read and not as an instruction
+		// the machine reaches it as a 16-bit data read and not as an instruction
 		// fetch. The probes are instruction addresses, so such a control belongs to
 		// a different population and proves only that the counter runs.
 		Hottest hottestInRange(const uint32_t _loAbsolute, const uint32_t _hiAbsolute) const
@@ -397,7 +396,7 @@ namespace
 			return best;
 		}
 
-		// Zeroes every counter, so that a window's counts are the WINDOW's and
+		// Zeroes every counter, so that a window's counts are the window's and
 		// not the boot's.
 		void resetProbes()
 		{
@@ -587,7 +586,7 @@ namespace
 	 * audioTxCallback(position) to peripherals(portOfPosition[position]), and
 	 * portOfPosition comes from the nine-entry table the firmware builds at
 	 * 0x30116970. Entry i holds the CS1 address of the port at chain position
-	 * i, and A3..A10 are eight ACTIVE-LOW one-cold selects, so the port number
+	 * i, and A3..A10 are eight active-low one-cold selects, so the port number
 	 * is the index of the single line pulled down. */
 	unsigned portOfChainPosition(g2::Board& _board, const unsigned _wanted, const unsigned _count)
 	{
@@ -667,7 +666,7 @@ namespace
 		unsigned lookaheadFrames = 0;
 
 		uint32_t windowPc       = 0;   // where the core sat when the window opened
-		uint64_t windowPcHits   = 0;   // and how often the window read THAT address
+		uint64_t windowPcHits   = 0;   // and how often the window read that address
 		uint64_t windowFetches  = 0;
 		uint64_t oddWordReads   = 0;
 
@@ -692,16 +691,16 @@ namespace
 		uint32_t crossAddr = 0;
 		uint64_t crossHits = 0;
 
-		// The three CS3 readings, in the order they are taken.
-		// THE BOARD'S OWN ACCOUNT OF WHAT THE DEVICE DID WITH THE BYTES, read
+		// The CS3 readings, in the order they are taken.
+		// The Board's own account of what the device did with the bytes, read
 		// off the Board that produced it. It is per-Board and needs no
-		// subtraction: an earlier file-scope diagnostic pooled this arm with
-		// the control arm and every reader had to undo the pooling by hand.
+		// subtraction: a file-scope diagnostic would pool this arm with the
+		// control arm and leave every reader to undo the pooling by hand.
 		g2::Board::UsbTransportStats usb;
 
 		uint8_t  peekAfterHandover = 0;  // one quantum after pch2Load returned
 		uint8_t  peekAfterWindow   = 0;  // g_observeQuanta later
-		uint8_t  peekProbeObject   = 0;  // after a SMALL object goes the same way
+		uint8_t  peekProbeObject   = 0;  // after a small object goes the same way
 		bool     probeLoaded       = false;
 
 		uint64_t hitsKnownPositive = 0;
@@ -734,8 +733,8 @@ namespace
 	// window and then walks the codec. Returns false only when the machine could
 	// not be placed at all; a machine that ran and moved nothing returns true
 	// with a result that says so, because "the machine is silent" is a
-	// MEASUREMENT and must reach the assertions rather than a bail-out.
-	// `_crossAddress` is 0 on the first arm and the FIRST arm's known positive
+	// measurement and must reach the assertions rather than a bail-out.
+	// `_crossAddress` is 0 on the first arm and the first arm's known positive
 	// on the second, so the two arms can be compared at one common address.
 	bool runOnce(const std::string& _directory, const std::vector<uint8_t>& _patch,
 		const bool _deliver, const uint32_t _crossAddress, RunResult& _r)
@@ -918,8 +917,8 @@ namespace
 			_r.hitsCallerB       = ram.hitsAt(g_probeCallerB);
 			_r.hitsAssembly      = ram.hitsAt(g_probeAssembly);
 
-			// THE SECOND READING. If the first was non-zero and this one is
-			// 0x00, the firmware TOOK the packet out during the window; if both
+			// The second reading. If the first was non-zero and this one is
+			// 0x00, the firmware took the packet out during the window; if both
 			// carry the same byte, it never did.
 			_r.peekAfterWindow = peekHeadByte(board, g2::BoardConfig{}.usbProtocolEndpoint);
 
@@ -1068,7 +1067,7 @@ namespace
 			}
 		}
 
-		// LAST, SO IT COVERS EVERY QUANTUM THIS ARM RAN. The Board is still
+		// Last, so it covers every quantum this arm ran. The Board is still
 		// alive here; the figures are its own and belong to this arm alone.
 		_r.usb = board.usbTransport();
 
@@ -1179,7 +1178,7 @@ int main()
 			return false;
 		}
 
-		// THE PACKET SIZE IS READ FROM BoardConfig AND NOT WRITTEN HERE. The
+		// The packet size is read from BoardConfig and not written here. The
 		// Board the arms below construct takes it from the same default, so a
 		// change to that default moves the expectation and the machine
 		// together instead of turning this file red.
@@ -1204,8 +1203,8 @@ int main()
 		          << " of them have a length that is an exact multiple of it"
 		          << std::endl;
 
-		// THE LARGEST OBJECT AGAINST THE PART'S OWN CEILING, ASSERTED SO THAT
-		// THE SPLIT CANNOT BE ARGUED AWAY AS AN ARTEFACT OF ONE CONFIGURATION.
+		// The largest object against the part's own ceiling, so that the split
+		// cannot be argued away as an artefact of one configuration.
 		// ISP1362 Rev. 06 Table 16 (p.52) gives a non-isochronous endpoint
 		// exactly four legal buffer sizes -- 8, 16, 32 and 64 bytes, with
 		// `0100` to `1111` reserved -- and Table 109 (p.105) states the same
@@ -1232,7 +1231,7 @@ int main()
 		// -------------------------------------------------------- the measurement
 		//
 		// The control's known positive is handed to the patched arm so the two
-		// can be read at one COMMON address. Each arm still selects its own.
+		// can be read at one common address. Each arm still selects its own.
 		RunResult patched;
 		if(!runOnce(directory, patch, true, control.knownPositiveAddr, patched))
 			return false;
@@ -1272,7 +1271,7 @@ int main()
 				+ std::to_string(run.second.knownPositiveHits));
 
 			// The one the probes are actually weighed against. The unrestricted
-			// argmax can be satisfied by a hot DATA read; this one cannot,
+			// argmax can be satisfied by a hot data read; this one cannot,
 			// because it is confined to the bytes the image supplied.
 			check(run.second.codeKnownPositiveHits >= g_sensitivityFloor,
 				label + ": KNOWN POSITIVE, in-image, the most-read address inside the loaded"
@@ -1376,20 +1375,18 @@ int main()
 			            " machine as the patch's own first object type ") + hex32(firstType) +
 			"; read " + hex32(patched.peekAfterHandover));
 
-		// ---------------------------------------- the transport loses NOTHING
+		// ---------------------------------------- the transport loses nothing
 		//
-		// THE NO-LOSS INVARIANT, ASSERTED AND NOT NARRATED. Every frame this
+		// The no-loss invariant, asserted and not narrated. Every frame this
 		// Board took out of the hub sits in the device, is still held for
-		// another offer, or is counted undeliverable; nowhere else. That is the
-		// whole content of the repair, and before it these two cases were BOTH red:
-		// the pump handed each drained frame to `isp1181_rx`, discarded the
-		// answer, and 17 of 19 frames on this arm vanished with every visible
-		// signal reading healthy.
+		// another offer, or is counted undeliverable; nowhere else. A pump that
+		// handed each drained frame to `isp1181_rx` and discarded the answer
+		// loses frames with every visible signal reading healthy.
 		//
-		// THEY ARE ASSERTED ON BOTH ARMS. A control arm that offers one frame
-		// and a patched arm that offers tens of thousands are the same
-		// invariant, and an arithmetic slip that held only for the busy arm
-		// would be a real defect.
+		// It is asserted on both arms. A control arm that offers one frame and
+		// a patched arm that offers tens of thousands are the same invariant,
+		// and an arithmetic slip that held only for the busy arm would be a
+		// real defect.
 		for(const RunResult* const arm : { &control, &patched })
 		{
 			const g2::Board::UsbTransportStats& u = arm->usb;
@@ -1399,17 +1396,15 @@ int main()
 				+ std::to_string(u.offered) + " == " + std::to_string(u.accepted)
 				+ " + " + std::to_string(u.refused));
 
-			/* THE INVARIANT READS `completed` AND NOT `accepted`, AND THAT IS
-			 * A UNIT REPAIR RATHER THAN A WEAKENING. `accepted` counts
-			 * PACKETS since pumpTransport began splitting a frame into
-			 * max-packet-size pieces, and `drained` has always counted FRAMES;
-			 * the old form compared the two directly and went red on this arm
-			 * the moment the split landed -- 19 frames left the hub against 70
-			 * accepted packets. `completed` is incremented exactly once, when a
-			 * frame's LAST packet is taken, so it is the frame-shaped figure
-			 * this equality needs. `undeliverable` is the third destination a
-			 * drained frame can reach: it left the hub and was never offered.
-			 * board.h states the same thing at the declaration. */
+			/* The invariant reads `completed` and not `accepted`, and that is a
+			 * unit repair. `accepted` counts packets, because pumpTransport
+			 * splits a frame into max-packet-size pieces, while `drained`
+			 * counts frames; comparing the two directly compares two units.
+			 * `completed` is incremented once, when a frame's last packet is
+			 * taken, so it is the frame-shaped figure this equality needs.
+			 * `undeliverable` is the third destination a drained frame can
+			 * reach: it left the hub and was never offered. board.h states the
+			 * same thing at the declaration. */
 			check(u.drained == u.completed + u.undeliverable + (u.held ? 1u : 0u),
 				std::string("NOTHING DRAINED IS LOST: ") + std::to_string(u.drained)
 				+ " frames left the hub, " + std::to_string(u.completed)
@@ -1426,20 +1421,17 @@ int main()
 				+ std::to_string(u.undeliverable));
 		}
 
-		// ------------------------------------ HOW MUCH OF THE PATCH ARRIVED
+		// ------------------------------------ how much of the patch arrived
 		//
-		// THE QUESTION THIS WHOLE CHANGE EXISTS TO ANSWER, ASSERTED WITH ITS
-		// UNIT NAMED. ONE unit here is ONE PROTOCOL FRAME the hub handed the
-		// Board -- one `.pch2` object, plus the one-object probe container the
-		// arm also loads -- and NOT one packet, one object of the file, or one
-		// byte. Before the split this arm drained 2 frames and completed 1;
-		// the other 17 objects never left the hub, because a frame the device
-		// would not take blocked the drain behind it for the rest of the run.
+		// Asserted with its unit named. One unit here is one protocol frame the
+		// hub handed the Board -- one `.pch2` object, plus the one-object probe
+		// container the arm also loads -- and not one packet, one object of the
+		// file, or one byte. A frame the device will not take blocks the drain
+		// behind it for the rest of the run.
 		//
-		// IT IS A FRACTION AND IT IS ASSERTED AS ONE. A count on its own would
-		// go green on a run that pushed fewer frames, which is the failure this
-		// project has paid for before: the denominator is what the arm really
-		// offered, read from the same struct as the numerator.
+		// It is a fraction and it is asserted as one. A count on its own would
+		// go green on a run that pushed fewer frames: the denominator is what
+		// the arm really offered, read from the same struct as the numerator.
 		{
 			const g2::Board::UsbTransportStats& u = patched.usb;
 

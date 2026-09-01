@@ -64,11 +64,9 @@ namespace g2
 	 * either way, and the guard is there so that a disabled receiver reports 0
 	 * rather than a count of calls that did nothing.
 	 *
-	 * The fixed count is exact because the scheduler is the only execRX caller.
-	 * The library's mirror call inside the receive-control-register write is
-	 * commented out upstream, receive slot phase is reset to 0 at an enable and
-	 * at an RDC change, and no second caller exists. The transmit side has one,
-	 * which is why the two are not symmetric.
+	 * The fixed count is exact because receive slot phase is reset to 0 at an
+	 * enable and at an RDC change. The transmit side has no such reset, which
+	 * is why the two are not symmetric.
 	 */
 	uint32_t receiveDspFrame(dsp56k::Esai& esai) noexcept;
 
@@ -82,7 +80,7 @@ namespace g2
 	 * changes. The for loop is a fixed count and does not hang; the guard
 	 * prevents a phase perturbation the shipped shape excludes.
 	 *
-	 * THE RETURN IS THE SLOTS ACTUALLY DRIVEN, so an early break reports
+	 * The return is the slots actually driven, so an early break reports
 	 * fewer than getRxWordCount() + 1. Returning the bound on that path
 	 * would hide the very perturbation the re-read exists to catch. */
 	uint32_t receiveDspFrame(dsp56k::Esai& esai,

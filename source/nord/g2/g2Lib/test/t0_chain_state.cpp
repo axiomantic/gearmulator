@@ -1,40 +1,30 @@
 /* The ChainAdapter state round trip.
  *
- * A state round trip over an object whose state never moves is satisfied by a
- * snapshot of zero bytes. Three things are asserted here so that this file
- * cannot have that shape: the digest taken at the save point and the digest
- * taken after the following quanta must differ, and that inequality is
- * asserted before any equality; underrunFrames, secondBusUnderrunFrames and
- * phaseErrorFrames are each driven above zero, so "identical counters" is not
- * 0 == 0; and stateSize() is strictly positive and grows strictly with the
- * ring depth.
- *
- * WHY THIS FILE CANNOT BE SATISFIED BY AN EMPTY SNAPSHOT. A state round trip
+ * Why this file cannot be satisfied by an empty snapshot. A state round trip
  * over an object whose state never moves is satisfied by a snapshot of zero
- * bytes -- the defect SCH-24's block records against its own earlier form.
- * Three things are asserted here so that this file cannot have that shape:
+ * bytes. Three things are asserted here so that this file cannot have that
+ * shape:
  *
- *   1. THE STATE MOVES. The digest taken at the SAVE point and the digest
- *      taken after the following 100 quanta must DIFFER. If they do not, the
+ *   1. The state moves. The digest taken at the save point and the digest
+ *      taken after the following quanta must differ. If they do not, the
  *      driver below is not driving anything and every later equality is
  *      vacuous, so that inequality is asserted before any equality is.
- *   2. EVERY COUNTER RISES ABOVE ZERO. underrunFrames, secondBusUnderrunFrames
+ *   2. Every counter rises above zero. underrunFrames, secondBusUnderrunFrames
  *      and phaseErrorFrames are each driven above zero by the driver's own
  *      conditions -- a withheld transmit on a cadence for each bus, and an
  *      off-window second-bus transmit -- so "identical counters" is not
  *      0 == 0.
- *   3. THE IMAGE IS SIZED BY THE STRUCTURE. stateSize() is strictly positive
+ *   3. The image is sized by the structure. stateSize() is strictly positive
  *      and grows strictly with the ring depth, so a trio that reported a
  *      zero-byte image cannot pass.
  *
- * THE OBSERVABLES ARE RETURNED VALUES AND NOTHING ELSE, so this file reports
+ * The observables are returned values and nothing else, so this file reports
  * identically with and without NDEBUG. No case here is a language assert(),
  * no case catches an exception, and the verdict is main's exit status.
  *
  * Mailbox contents are read through the adapter's own public paths. Every
  * audio mailbox and every second-bus mailbox is read through the position's
- * receive callback; the tail mailbox is read through extractCodecSink, which
- * is the only public reader of it.
+ * receive callback; the tail mailbox is read through extractCodecSink.
  *
  * The driver is a pure function of (adapter state, frame index, position).
  * Each quantum writes every ESAI's status register explicitly before firing a
@@ -293,8 +283,8 @@ namespace
 	 * fired directly -- because this file is about what survives a save and a
 	 * load and not about who calls the wrappers.
 	 *
-	 * THE THREE COUNTER CONDITIONS ARE DRIVEN ON PURPOSE AND EACH ONE IS A
-	 * DIFFERENT MECHANISM:
+	 * The counter conditions are driven on purpose and each one is a different
+	 * mechanism:
 	 *   - the audio transmit is withheld on a 5-quantum cadence, which leaves
 	 *     that position's audio flag at "no delivery" and raises
 	 *     underrunFrames;

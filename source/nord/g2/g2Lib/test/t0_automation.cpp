@@ -1,34 +1,15 @@
-/* t0_automation.cpp -- the host automation surface.
+/* The host automation surface.
  *
- * WHAT THIS CHECK OWNS:
+ * The named morph group amounts sit outside the slot pool, so the reported
+ * parameter count is the sum of the two and does not move when a patch
+ * loads.
  *
- *  1. THE POOL SIZE AND THE REPORTED COUNT, AS NUMBERS. 512 slots, built
- *     one time from a const list, plus 8 named morph group amounts outside
- *     the pool. The reported count is the sum and it does not move when a
- *     patch loads, including a patch that binds more parameters than the
- *     pool holds.
+ * Slot allocation is path-independent: a fresh surface loading X and a
+ * surface that loaded Y and then X hold identical maps. Pinning the
+ * survivors of Y would keep them at Y's slot numbers, and the two maps
+ * would differ.
  *
- *  2. REGISTRATION HAPPENS ONE TIME. Repeated calls return the same object
- *     and the build counter stays at 1. A list rebuilt per call would let a
- *     later registration disagree with the first.
- *
- *  3. THE ALLOCATION ORDER. Parameters presented in a scrambled order bind
- *     ascending slots by ascending module instance and then ascending
- *     parameter index, and duplicates bind one slot between them.
- *
- *  4. PATH INDEPENDENCE, WHICH IS THE CASE THAT STOPS SURVIVOR PINNING.
- *     A fresh surface loading X, and a surface that loaded Y and then X,
- *     hold identical maps. Pinning survivors of Y would keep them at Y's
- *     slot numbers and the two maps would differ.
- *
- *  5. EXHAUSTION. An over-full patch still allocates a full pool, the
- *     parameters the fixed order puts last are the unbound ones, and the
- *     bound and unbound counts sum to the number of distinct identities.
- *
- *  6. SLOT REUSE. A slot freed by a later load is available to the lowest
- *     free scan, so a bounded pool serves an unbounded patch sequence.
- *
- * NO ASSERTION IN THIS FILE IS A LANGUAGE assert() and nothing depends on
+ * No assertion in this file is a language assert() and nothing depends on
  * NDEBUG.
  */
 

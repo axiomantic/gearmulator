@@ -5,11 +5,7 @@
 // Tier T1: it boots the Clavia firmware and reads one file out of the artifact
 // corpus, so it skips with a reason when NMG2_ARTIFACTS names no directory.
 //
-// t1_patch_running proves a byte of a real `.pch2` sits in the device register
-// file of a machine that has really booted, and reports whether the buffer is
-// still holding it afterwards. It says nothing about how it left, because it
-// observes neither the interrupt line nor the command port. This file observes
-// both.
+// Two things are observed: the interrupt line, and the command port.
 //
 //   1. The command stream. Every byte the firmware writes to the CS3 command
 //      port, in order. The port split is the device model's own: the chip's A0
@@ -58,7 +54,7 @@
 // configuration and not a property of the part, so it discriminates nothing.
 // What does discriminate is what the firmware does with a packet: on endpoint 3
 // the boot-time stream is followed by read-interrupt-register, endpoint-3
-// status, READ endpoint 3's buffer, CLEAR endpoint 3's buffer -- the
+// status, read endpoint 3's buffer, clear endpoint 3's buffer -- the
 // authority's OUT sequence, a drain. On endpoint 2 the firmware issues nothing
 // at all. Row 6 below reads back the DcEndpointConfiguration bytes the firmware
 // itself wrote and reports EPDIR per slot, which is the same answer from the
@@ -198,15 +194,14 @@ namespace
 	constexpr int g_byteWidth = 1;
 
 	// The opcodes this file names. Every one of them is already numbered by
-	// `src/isp1181/commands.nim`; nothing here invents an opcode, and the 111
-	// bytes that file leaves `ccUnspecified` stay unspecified.
+	// `src/isp1181/commands.nim`; nothing here invents an opcode.
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
 
-	// Sixteen and not five. `0x20`..`0x2F` is the whole family ISP1362 Rev. 06
-	// section 15.1.1 states, and the recorder below files what the firmware
-	// wrote. The device model carries a buffer for only the first five of them
-	// and refuses the rest, but a refusal is the model's answer and not
+	// `0x20`..`0x2F` is the whole family ISP1362 Rev. 06 section 15.1.1 states,
+	// and the recorder below files what the firmware wrote. The device model
+	// carries a buffer for only the lowest of them and refuses the rest, but a
+	// refusal is the model's answer and not
 	// evidence about the firmware, so the recorder keeps every slot.
 	constexpr int g_configSlots = 16;
 	constexpr uint8_t g_writeIntEnable     = 0xC2u;
@@ -661,8 +656,8 @@ namespace
 	// operand is a configuration slot. Passing the endpoint number straight
 	// through selects a buffer one place low for every endpoint above 0 and the
 	// read still succeeds, so the wrong answer arrives looking exactly like the
-	// right one: endpoint 2 answered about endpoint 1's buffer, which is always
-	// empty, and the instrument reported the model's benign 0x00.
+	// right one: endpoint 2 would answer about endpoint 1's buffer, which is
+	// always empty, and the instrument would report the model's benign 0x00.
 	uint8_t peekHeadByte(g2::Board& _board, Cs3Recorder& _recorder, const int _endpoint)
 	{
 		const int slot = bufferSlotOfEndpoint(_endpoint);
@@ -1350,14 +1345,10 @@ int main()
 			std::string("ep0-small: the blanket handler this harness wrote is never entered, so the"
 			            " count above is the FIRMWARE'S handler and not an exception landing in the"
 			            " harness's own filler; counted ") + std::to_string(control0.hitsBlanket));
-		// THE ep3-patch ARM'S OWN ENTRY COUNT IS ASSERTED IN SECTION 5 AND NOT
-		// HERE, because the number it must equal is the number of complete OUT
-		// services, which section 5 is where this file computes. It used to be
-		// asserted here as `== 1` beside the control's; that literal was a
-		// property of a transport that delivered ONE packet and never the
-		// property this case is about. Nothing is dropped -- the check is
-		// stronger there, since it ties the count to a figure measured from the
-		// firmware's own command stream instead of to a constant.
+		// The ep3-patch arm's own entry count is asserted in section 5 and not
+		// here, because the number it must equal is the number of complete OUT
+		// services, which is what section 5 computes -- a figure measured from
+		// the firmware's own command stream rather than a constant.
 
 		// 4. The clearing route, and the opcode tracks the endpoint.
 		//
@@ -1378,23 +1369,17 @@ int main()
 		// 5. The order. A status read that arrived before the interrupt-register
 		//    read would not be a service of that interrupt.
 		//
-		//    THE SEQUENCE IS NOW THAT GROUP REPEATED, AND THE REPETITION IS THE
-		//    MEASUREMENT. This case used to assert the four opcodes appeared
-		//    EXACTLY ONCE, and that was true only while the endpoint took
-		//    exactly one packet: `Board::pumpTransport` offered each protocol
-		//    frame whole, endpoint 3's buffer is 64 bytes, and every frame
-		//    larger than that was refused for ever, so the firmware serviced
-		//    the endpoint once and then had nothing further to drain. Since the
-		//    pump splits a frame into max-packet-size packets the firmware
-		//    services the endpoint ONCE PER PACKET, and a one-group expectation
-		//    now measures the defect rather than the route.
+		//    The sequence is that group repeated, and the repetition is the
+		//    measurement. The pump splits a frame into max-packet-size packets,
+		//    so the firmware services the endpoint once per packet and a
+		//    one-group expectation would measure the transport rather than the
+		//    route.
 		//
-		//    IT IS NOT WEAKENED TO A PREFIX OR A SUBSTRING CHECK. Every group
+		//    It is not weakened to a prefix or a substring check. Every group
 		//    is compared in full and the length must be a whole number of
 		//    groups, so a truncated service -- a read with no clear, which is
 		//    exactly the shape that would leave the buffer locked -- is red
-		//    here. What is dropped is only the claim that there is ONE group,
-		//    which was never a property of the firmware.
+		//    here.
 		{
 			const std::vector<uint8_t> group{
 				g_readIntRegister, g_statusEndpoint3, g_readEndpoint3Out, g_clearEndpoint3Out };
@@ -1422,20 +1407,15 @@ int main()
 				+ std::to_string(seen / group.size()) + " complete services with "
 				+ std::to_string(seen % group.size()) + " left over");
 
-			/* ONE HANDLER ENTRY FOR EACH COMPLETE SERVICE, AND THIS IS WHERE
-			 * "the line DEASSERTED and the handler did not re-enter" IS NOW
-			 * SAID. The old form of that claim was `hitsIsr == 1` on this arm.
-			 * It was green only while the endpoint took one packet, and a
-			 * transport that delivers 69 packets makes 1 the wrong constant
-			 * without making the property wrong.
+			/* One handler entry for each complete service, which is where "the
+			 * line deasserted and the handler did not re-enter" is said.
 			 *
-			 * IT IS TIED TO A FIGURE FROM THE FIRMWARE'S OWN COMMAND STREAM
-			 * AND NOT TO A LITERAL, so the pair still discriminates exactly
-			 * what the literal did: a bit that never left the interrupt
-			 * register would re-enter the handler on every quantum and put
-			 * this count in the thousands against 69 services, and a handler
-			 * that stopped being entered would put it below. `> 0` would be
-			 * green in every one of those worlds. */
+			 * It is tied to a figure from the firmware's own command stream and
+			 * not to a literal: a bit that never left the interrupt register
+			 * would re-enter the handler on every quantum and put this count
+			 * far above the number of services, and a handler that stopped
+			 * being entered would put it below. `> 0` would be green in every
+			 * one of those worlds. */
 			check(real.hitsIsr == seen / group.size(),
 				std::string("ep3-patch: the service routine is entered EXACTLY ONCE for each"
 				            " complete endpoint-3 OUT service -- so the line DEASSERTED after"
@@ -1445,7 +1425,7 @@ int main()
 				+ std::to_string(g_observeQuanta) + " quanta, by the same counter that read "
 				+ std::to_string(real.hitsKnownPositive) + " at the known positive");
 
-			// THE COUNT IS REPORTED AND NOT ASSERTED. It is the packet count of
+			// The count is reported and not asserted. It is the packet count of
 			// one particular `.pch2` at one particular max packet size, and an
 			// equality on it would go red for a different patch or a differently
 			// configured endpoint -- neither of which is a fault.

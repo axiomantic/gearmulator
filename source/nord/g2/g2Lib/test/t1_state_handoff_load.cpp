@@ -1,32 +1,27 @@
 /* t1_state_handoff_load.cpp -- the state hand-off under sustained load,
  * observed by a thread sanitizer.
  *
- * WHAT THIS TEST CATCHES, AND WHAT IT DOES NOT -- MEASURED, NOT ASSUMED.
+ * A dropped acknowledgement is caught here, measured and not assumed:
+ * removing the message thread's wait lets the two threads reach the same plain
+ * memory at once, and the sanitizer reports it within seconds. The negative
+ * build below is that mutation.
  *
- * IT CATCHES A DROPPED ACKNOWLEDGEMENT. Removing the message thread's wait
- * lets the two threads reach the same plain memory at once, and the sanitizer
- * reports it within seconds. The negative build below is that mutation, and it
- * is a registered test whose pass condition is the report itself.
+ * A weakened memory order is not caught. Measured on this host, macOS arm64,
+ * over a 20-second window of this same workload: weakening the audio thread's
+ * load of m_ready to acquire leaves this run green, and so does weakening the
+ * message thread's store of m_ready to release. That is the expected behaviour
+ * of a data-race detector and not a defect in the workload -- it reports
+ * unsynchronized access to plain memory, and an atomic accessed with a weaker
+ * order is still an atomic access. What pins those orders is the source and
+ * its comments.
  *
- * IT DOES NOT CATCH A WEAKENED MEMORY ORDER. Measured on this host, macOS
- * arm64, over a 20-second window of this same workload: weakening the audio
- * thread's load of m_ready to acquire leaves this run GREEN, and so does
- * weakening the message thread's store of m_ready to release. That is the
- * expected behaviour of a data-race detector and not a defect in the workload
- * -- it reports unsynchronized access to plain memory, and an atomic accessed
- * with a weaker order is still an atomic access. So the gap t0_handoff_flags
- * records, that no runtime instrument on this host distinguishes the four
- * seq_cst operations from acquire-release, is NOT closed by this file. What
- * pins those four orders today is the source and its comments; nothing this
- * repository runs goes red when one of them changes.
+ * One thread calls the real processAudio continuously. A second thread calls
+ * the real getState and setState in a loop, and then makes one guarded edit to
+ * a payload the audio callback also touches. Both halves run for the full
+ * duration below.
  *
- * WHAT RUNS. One thread calls the REAL processAudio continuously. A second
- * thread calls the REAL getState and setState in a loop, and then makes one
- * guarded edit to a payload the audio callback also touches. Both halves run
- * for the full duration below.
- *
- * THE PAYLOAD IS THE INSTRUMENT, AND IT IS HERE BECAUSE AN UNBOOTED DEVICE
- * SHARES ALMOST NOTHING. The hand-off exists to keep the message thread off
+ * The payload is the instrument, and it is here because an unbooted device
+ * shares almost nothing. The hand-off exists to keep the message thread off
  * the Scheduler while a callback is in flight. No Scheduler is installed on
  * this device, so the audio callback and the state calls touch no common
  * non-atomic object, and a sanitizer over that alone would report nothing
@@ -37,16 +32,14 @@
  * beginStateChange/endStateChange window. Both accesses are plain, unatomic
  * memory, which is what a data-race detector can speak about.
  *
- * THE NEGATIVE CASE, WHICH IS THE POINT. Built from this same file with
- * G2_HANDOFF_DROP_ACK defined, the message half's payload edit DROPS the
- * beginStateChange call -- the acknowledgement, and the store that withdraws
- * readiness -- and keeps the closing endStateChange. Nothing else changes.
- * The audio half then stays on the ready branch and touches the payload while
- * the message half writes it, and the sanitizer reports the race. That build
- * is registered as its own test, and its pass condition is the presence of the
- * race report, so the green above is known to be able to go red.
+ * The negative case: built from this same file with G2_HANDOFF_DROP_ACK
+ * defined, the message half's payload edit drops the beginStateChange call --
+ * the acknowledgement, and the store that withdraws readiness -- and keeps the
+ * closing endStateChange. Nothing else changes. The audio half then stays on
+ * the ready branch and touches the payload while the message half writes it,
+ * and the sanitizer reports the race.
  *
- * A CLEAN RUN IS EVIDENCE OVER THE ACCESSES THAT OCCURRED, not a proof over
+ * A clean run is evidence over the accesses that occurred, not a proof over
  * all schedules.
  */
 
@@ -65,7 +58,7 @@
 
 namespace
 {
-	// The load window. The plan's floor is 60 seconds of concurrent running.
+	// The load window. The floor is 60 seconds of concurrent running.
 	// The dropped-acknowledgement build needs only enough time to be caught in
 	// the act, and a sanitizer halts on the first report, so a shorter window
 	// there costs nothing and keeps a deliberately-racing binary from running
@@ -112,7 +105,7 @@ namespace
 		return sum;
 	}
 
-	/* THE AUDIO HALF'S REACH INTO THE PAYLOAD. The Device's ready branch calls
+	/* The audio half's reach into the payload. The Device's ready branch calls
 	 * push, runFrames, pull and faulted in that order; this driver reads the
 	 * payload on each of the first three, so the shared access sits where the
 	 * production Scheduler's would. */
@@ -200,7 +193,7 @@ namespace
 		std::atomic<uint64_t> getStateFailures{0};
 		std::atomic<uint64_t> setStateFailures{0};
 
-		/* THE MESSAGE THREAD. getState and setState take the real hand-off
+		/* The message thread. getState and setState take the real hand-off
 		 * themselves; the payload edit takes it explicitly so the shared write
 		 * has a window of its own. */
 		std::thread messageThread([&]
@@ -223,7 +216,7 @@ namespace
 #endif
 
 #ifndef G2_HANDOFF_DROP_ACK
-				/* The acknowledgement. Returning from here PROVES the message
+				/* The acknowledgement. Returning from here proves the message
 				 * thread observed the callback flag clear; the count below is
 				 * the "the wait completed on every iteration" observation. */
 				device.beginStateChange();
@@ -250,7 +243,7 @@ namespace
 			setStateFailures.store(setFailures, std::memory_order_relaxed);
 		});
 
-		/* THE AUDIO THREAD is this one. The two frame buffers processAudio's
+		/* The audio thread is this one. The two frame buffers processAudio's
 		 * ready branch places on the stack are sized for the framework's
 		 * largest sub-block, and the main thread's stack holds them where a
 		 * spawned thread's default would be tight under a sanitizer. */
@@ -297,7 +290,7 @@ namespace
 
 		bool ok = true;
 
-		/* THE KNOWN POSITIVES, ASSERTED RATHER THAN ASSUMED. A run in which
+		/* The known positives, asserted rather than assumed. A run in which
 		 * either half never ran is a run whose clean sanitizer report says
 		 * nothing, so each half's evidence that it executed is a failure
 		 * condition of its own. */

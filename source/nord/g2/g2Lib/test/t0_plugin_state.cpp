@@ -1,44 +1,19 @@
-/* t0_plugin_state.cpp -- the check of task PLG-5. Design sections 15.5
- * (the seven items), 14.7, 17 row 7.29, 15.8 (BRD-11's mismatch policy).
+/* The plugin state round trip.
  *
- * WHAT THE CHECK OWNS:
+ * The round trip runs through the plugin contract and not the Device alone.
+ * The synthLib::Plugin layer prepends a two-byte header -- g_stateVersion
+ * and the StateType -- before the Device ever sees the vector, and
+ * Plugin::setState refuses an image whose first byte is not g_stateVersion,
+ * routing it to setStateFromUnknownCustomData instead. A round trip through
+ * the Device alone would pass a getState that had clobbered the header.
  *
- *  1. THE ROUND TRIP THROUGH THE PLUGIN, NOT THE DEVICE ALONE. The reason
- *     is design section 17 row 7.29's own: the synthLib::Plugin layer
- *     prepends a two-byte header -- g_stateVersion (1) and the StateType --
- *     before the Device ever sees the vector, and Plugin::setState refuses
- *     an image whose first byte is not g_stateVersion, routing it to
- *     setStateFromUnknownCustomData instead. A round trip through the
- *     Device alone would pass a getState that had clobbered the header.
- *     Instantiating a full synthLib::Plugin needs the framework's resampler
- *     and construction path, so the harness REPLICATES the Plugin's exact
- *     contract over the real g2::Device: prepend {g_stateVersion, type} on
- *     save, check and strip them on load. The replicated constant is pinned
- *     against the framework's own g_stateVersion (== 1, plugin.cpp) and the
- *     framework's routing behaviour is exercised directly: an image whose
- *     first byte is not 1 is refused as unknown data, which is exactly what
- *     a clobbering getState would produce.
+ * Instantiating a full synthLib::Plugin needs the framework's resampler and
+ * construction path, so the harness replicates the Plugin's contract over
+ * the real g2::Device: prepend {g_stateVersion, type} on save, check and
+ * strip them on load. The replicated constant is pinned against the
+ * framework's own g_stateVersion.
  *
- *  2. THE HEADER-CLOBBER RED, HELD AS A PLANTED MUTATION. A test-local
- *     subclass whose getState performs the assign() the design forbids
- *     makes the round trip RED: the Plugin-shaped load then reads the
- *     device's first byte as the version, does not recognise it, routes the
- *     image to the unknown-data path, and the state never comes back. The
- *     case observes the red and then restores the real path; the committed
- *     run is green.
- *
- *  3. THE VERSION-MISMATCH POLICY, BRD-11 THROUGH g2State. A differing
- *     firmware word loads the machine, withholds the patch data, and
- *     carries a message that names both versions; a matching word loads
- *     normally; no firmware follows design section 7.7 and carries none.
- *
- *  4. THE SEVEN ITEMS, COUNTED AS A VALUE. A serialized image holds the
- *     magic, the format version, the firmware word, the overflow count,
- *     four slot patches with four identifiers, the bindings and the
- *     performance; the reader refuses anything else. The count is asserted
- *     as a number, not as prose.
- *
- * NO ASSERTION IN THIS FILE IS A LANGUAGE assert() and nothing depends on
+ * No assertion in this file is a language assert() and nothing depends on
  * NDEBUG.
  */
 
@@ -83,7 +58,7 @@ namespace
 		++g_failures;
 	}
 
-	/* THE PLUGIN-LEVEL CONTRACT, replicated from synthLib/plugin.cpp.
+	/* The plugin-level contract, replicated from synthLib/plugin.cpp.
 	 * plugin.cpp: g_stateVersion == 1; getState pushes it then the StateType
 	 * and then calls the Device; setState needs size >= 2, checks byte 0
 	 * against g_stateVersion, erases the two bytes and calls the Device.
@@ -95,7 +70,7 @@ namespace
 	bool pluginGetState(const g2::Device& _device, std::vector<uint8_t>& _state, synthLib::StateType _type)
 	{
 		// The Plugin's own shape: push the header into the caller's vector,
-		// THEN let the device append. The Device's insert-only contract is
+		// then let the device append. The Device's insert-only contract is
 		// what keeps the header alive.
 		_state.push_back(kPluginStateVersion);
 		_state.push_back(static_cast<uint8_t>(_type));
@@ -118,8 +93,7 @@ namespace
 		return const_cast<g2::Device&>(_device).setState(payload, stateType);
 	}
 
-	/* THE PLANTED MUTATION, case group 3. The subclass the design's row
-	 * 7.29 exists to catch: getState that assigns. */
+	/* The planted mutation, case group 3: a getState that assigns. */
 	class ClobberingDevice final : public g2::Device
 	{
 	public:
@@ -128,9 +102,8 @@ namespace
 		bool getState(std::vector<uint8_t>& _state, synthLib::StateType _type) override
 		{
 			beginStateChange();
-			// THE assign() THE DESIGN FORBIDS. It overwrites whatever the
-			// Plugin layer pushed, exactly as design section 17 row 7.29
-			// describes, and reports success.
+			// The assign() the design forbids. It overwrites whatever the
+			// Plugin layer pushed, and reports success.
 			_state = {0x47, 0x32, 0x53, 0x54};	// 'G','2','S','T': the device's own magic, header gone
 			endStateChange();
 			return true;
@@ -172,13 +145,10 @@ int main()
 	const uint16_t machineVersion = g2::g_expectedFirmwareVersion;
 
 	/* ---------------------------------------------------------------
-	 * Case group 1. THE ROUND TRIP THROUGH THE PLUGIN.
-	 *
-	 * The Device holds nothing yet (PLG-12 owns the machine), so its seven
-	 * items are empty and zero -- and the round trip through the PLUGIN
-	 * contract is still the property row 7.29 exists for: the Plugin's
-	 * two-byte header must survive the Device's getState, and the image the
-	 * Device produced must be accepted again by the Plugin-shaped load. */
+	 * Case group 1. The round trip through the plugin contract: the
+	 * Plugin's two-byte header must survive the Device's getState, and the
+	 * image the Device produced must be accepted again by the Plugin-shaped
+	 * load. */
 	{
 		g2::Device device{synthLib::DeviceCreateParams{}};
 
@@ -187,14 +157,14 @@ int main()
 			"plugin-shaped getState succeeds");
 
 		// The header survived the Device: the first two bytes are still the
-		// Plugin's, which is the property row 7.29 exists for.
+		// Plugin's.
 		check(pluginImage.size() >= 2 && pluginImage[0] == kPluginStateVersion && pluginImage[1] == static_cast<uint8_t>(synthLib::StateTypeGlobal),
 			"the Plugin's two-byte version header survives the Device's getState");
 
 		// Load it back through the Plugin contract. The acceptance follows
-		// the firmware row the device is in, which the design fixes: with
-		// firmware present the matching image restores normally; with no
-		// firmware present, design section 7.7's row loads NOTHING and the
+		// the firmware row the device is in: with firmware present the
+		// matching image restores normally; with no firmware present the
+		// row loads NOTHING and the
 		// Plugin-shaped load reports false. The restore-side semantics are
 		// asserted per branch, and the device's own state is named beside
 		// the verdict so neither outcome can pass for the other.
@@ -222,14 +192,14 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case group 2. THE SEVEN ITEMS, COUNTED AS A VALUE.
+	 * Case group 2. The item values, and the image size as a number.
 	 *
 	 * The image the populated StateData produces has exactly:
 	 *   4 magic + 2 format version + 2 firmware word + 4 overflow count
 	 *   + 4 * (4 + patch + 2)
 	 *   + 4 + bindings
 	 *   + 4 + performance
-	 * and the deserializer hands back the same seven item values. */
+	 * and the deserializer hands back the same item values. */
 	{
 		const g2::StateData d = populatedData();
 		const std::vector<uint8_t> image = serializeWith(d, machineVersion);
@@ -242,7 +212,7 @@ int main()
 
 		checkEqual(image.size(), expectedSize, "the serialized image is exactly the seven items' bytes");
 
-		// The seven items round-trip as VALUES, not as a shape: each patch
+		// The items round-trip as VALUES, not as a shape: each patch
 		// blob, each identifier, the bindings, the performance, the version
 		// words and the overflow count come back identical.
 		std::vector<uint8_t> perf;
@@ -264,7 +234,7 @@ int main()
 			&& overflow == d.parameterOverflowCount;
 		check(allEqual, "every one of the seven items round-trips byte-identically");
 
-		// TRUNCATION is refused whole: cut the last byte off and the image is
+		// Truncation is refused whole: cut the last byte off and the image is
 		// refused, writing nothing.
 		std::vector<uint8_t> truncated(image.begin(), image.end() - 1);
 		std::vector<uint8_t> perf2, bind2;
@@ -278,10 +248,10 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case group 3. THE HEADER-CLOBBER RED, OBSERVED THEN RESTORED.
+	 * Case group 3. The header-clobber red, observed then restored.
 	 *
-	 * The planted mutation: a getState that assigns, the exact defect
-	 * design section 17 row 7.29 names. Under the plugin contract the
+	 * The planted mutation is a getState that assigns. Under the plugin
+	 * contract the
 	 * header the Plugin pushed is destroyed in silence; the load side then
 	 * reads the DEVICE's first byte as the version, does not recognise it,
 	 * and routes the image to the unknown-data path, which answers false.
@@ -301,7 +271,7 @@ int main()
 		check(clobberingDevice.getState(pluginImage, synthLib::StateTypeGlobal),
 			"the planted assign() getState reports success, as the silent defect does");
 
-		// THE RED: the clobbered image carries the DEVICE's first byte --
+		// The red: the clobbered image carries the DEVICE's first byte --
 		// the magic 'G' of g2State's format -- where the Plugin contract
 		// demands g_stateVersion. The Plugin refuses it as unknown data.
 		check(pluginImage.size() >= 4 && pluginImage[0] == 'G',
@@ -319,14 +289,14 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case group 4. THE VERSION-MISMATCH POLICY, BRD-11 THROUGH g2State.
+	 * Case group 4. The version-mismatch policy.
 	 *
 	 * The policy is decided over the FIRMWARE word the image carries
 	 * (item 5) against the machine's word. */
 	{
 		const g2::StateData d = populatedData();
 
-		// (c) DIFFERING VERSIONS: the machine loads, the patch data does not,
+		// (c) Differing versions: the machine loads, the patch data does not,
 		// and the message names both versions.
 		{
 			const uint16_t savedWith = static_cast<uint16_t>(machineVersion - 2);
@@ -351,8 +321,8 @@ int main()
 				"the mismatch writes NONE of the out-parameters, so a refused or unconfirmed load changes nothing");
 		}
 
-		// (d) MATCHING VERSION loads normally -- already held in case group 2;
-		// this is the explicit positive with the machine's own word.
+		// (d) A matching version loads normally: the explicit positive with
+		// the machine's own word.
 		{
 			const std::vector<uint8_t> image = serializeWith(d, machineVersion);
 			std::vector<uint8_t> perf, bindings;
@@ -365,9 +335,9 @@ int main()
 				"matching versions load with no message and nothing withheld");
 		}
 
-		// (e) NO FIRMWARE PRESENT: design section 7.7's row. The decision
-		// loads nothing, offers nothing, and carries no message here -- the
-		// text belongs to BRD-10's surface, and BRD-11's header records why.
+		// (e) No firmware present. The decision loads nothing, offers
+		// nothing, and carries no message here -- the text belongs to the
+		// firmware-state surface.
 		{
 			const std::vector<uint8_t> image = serializeWith(d, machineVersion);
 			std::vector<uint8_t> perf, bindings;
@@ -381,7 +351,7 @@ int main()
 			check(result.message.empty(), "the no-firmware row carries no message: design section 7.7 owns that text");
 		}
 
-		// A FORMAT VERSION this build does not write is refused whole: the
+		// A format version this build does not write is refused whole: the
 		// format version (item 6) is not the firmware word (item 5), and
 		// never reinterprets silently.
 		{
@@ -401,7 +371,7 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case group 5. THE FRAMEWORK HEADER CONTRACT, PINNED.
+	 * Case group 5. The framework header contract, pinned.
 	 *
 	 * The harness replicated plugin.cpp's contract; this group pins the
 	 * replicated constant against the framework's own behaviour. An image
@@ -416,8 +386,8 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case group 6. THE HAND-OFF PAIR RUNS INSIDE THE STATE METHODS.
-	 * The message-thread sequence PLG-1 built (m_ready false seq_cst, wait
+	 * Case group 6. The hand-off pair runs inside the state methods.
+	 * The message-thread sequence (m_ready false seq_cst, wait
 	 * for m_inCallback clear) is begin/endStateChange; getState and
 	 * setState run it, and the observable consequence is that a callback
 	 * concurrent with a state change cannot interleave: the spin completes

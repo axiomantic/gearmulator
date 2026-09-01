@@ -1,39 +1,35 @@
-/* t0_state_excludes_regime.cpp -- the check of SCH-36. Design sections 15.6
- * (the boot sequence's regime rule) and 13.10 rule 3.
+/* The state block excludes the codec regime.
  *
- * THE DEFECT THIS FILE PINS, AS PLG-12 MEASURED IT. Scheduler::stateSave wrote
- * the CODEC REGIME into its own limb of the state block, so stateLoad restored
- * it. A snapshot is necessarily a PLAY-regime snapshot -- a host takes one
- * through getState, which runs after the boot published the machine -- so
- * design section 15.6's step 3 put step 4 into the PLAY regime. Step 4's boot
- * quanta then touched the codec queues, the sink filled after L + B pushes, the
- * run stopped part-way through the boot and beginPlayPhase's debug assert
- * aborted. PLG-12 reported the condition through
- * BootResult::regimeRestoredFromSnapshot and could not repair it, because
- * scheduler.{h,cpp} is not on its Files: line.
+ * The defect this file pins: Scheduler::stateSave wrote the codec regime into
+ * its own limb of the state block, so stateLoad restored it. A snapshot is
+ * necessarily a PLAY-regime snapshot -- a host takes one through getState,
+ * which runs after the boot published the machine -- so a boot-on-restore's
+ * state load put the boot's run step into the PLAY regime. The boot quanta
+ * then touched the codec queues, the sink filled after L + B pushes, the run
+ * stopped part-way through the boot and beginPlayPhase's debug assert
+ * aborted.
  *
- * THE REPAIR IS EXCLUSION AT stateSave AND THIS FILE ASSERTS THE BEHAVIOUR AND
- * NOT THE FIELD. Nothing here reads a byte offset and nothing here counts the
- * block's size. Every regime claim is made through what the machine DOES with a
- * quantum, which is the only thing the class exposes: scheduler.h keeps
- * CodecRegime private and this file adds no accessor.
+ * The repair is exclusion at stateSave, and this file asserts the behaviour
+ * and not the field. Nothing here reads a byte offset and nothing here counts
+ * the block's size. Every regime claim is made through what the machine DOES
+ * with a quantum, which is the only thing the class exposes: scheduler.h
+ * keeps CodecRegime private and this file adds no accessor.
  *
- * WHAT "THE REGIME THE MACHINE REPORTS" IS, STATED ONCE. A BOOT quantum emits
- * the five unconditional phases -- swap, panel, sof, mcu, dsp -- and a PLAY
- * quantum emits seven, with the ingress at index 1 and the egress at index 6.
- * t0_codec_regimes establishes that separation; this file uses it as the
- * instrument. THE INSTRUMENT CARRIES ITS OWN KNOWN POSITIVE: case 0 observes a
- * seven-record quantum on the DONOR before the snapshot is taken, so a run in
- * which every quantum looked like a boot quantum -- a broken trace, a regime
- * that never moved -- cannot pass case 1 by accident.
+ * "The regime the machine reports" means this: a BOOT quantum emits the five
+ * unconditional phases -- swap, panel, sof, mcu, dsp -- and a PLAY quantum
+ * emits seven, with the ingress at index 1 and the egress at index 6. The
+ * instrument carries its own known positive: case 0 observes a seven-record
+ * quantum on the donor before the snapshot is taken, so a run in which every
+ * quantum looked like a boot quantum -- a broken trace, a regime that never
+ * moved -- cannot pass case 1 by accident.
  *
- * NOTHING HERE IS A LANGUAGE assert() AND NOTHING CATCHES AN EXCEPTION. Every
+ * Nothing here is a language assert() and nothing catches an exception. Every
  * verdict is the failure counter, which no build type removes. The default
  * build is Release and Release defines NDEBUG.
  *
- * NO COUNT IS TYPED. The queue capacities come from the two Config fields, the
- * DSP count from the Board's set, the boot-quantum count from the capacity, and
- * the MCU rate from a measurement of the linked core.
+ * No count is typed. The queue capacities come from the two Config fields,
+ * the DSP count from the Board's set, the boot-quantum count from the
+ * capacity, and the MCU rate from a measurement of the linked core.
  */
 
 #include "board.h"
@@ -138,9 +134,8 @@ namespace
 		uint64_t       m_frame[kMax]{};
 	};
 
-	/* THE TWO QUANTA, COPIED FROM DESIGN SECTION 13.5's ORDER. t0_codec_regimes
-	 * owns the ordering claim; this file only needs to tell one regime from the
-	 * other. */
+	/* The two quanta, in the machine's phase order. This file only needs to
+	 * tell one regime from the other. */
 	constexpr g2::TracePhase kBootQuantum[] =
 	{
 		g2::TracePhase::Swap,
@@ -167,14 +162,14 @@ namespace
 	constexpr unsigned kLookahead    = 4;   /* L */
 	constexpr unsigned kMaxHostBlock = 3;   /* B */
 
-	/* BOTH QUEUE CAPACITIES ARE L + B, design section 13.6.1, and a boot run of
+	/* Both queue capacities are L + B, and a boot run of
 	 * TWICE that is more quanta than either queue could hold -- which is what
 	 * makes "the run did not stall" a claim with teeth rather than a run too
 	 * short to fill anything. Neither figure is a literal. */
 	constexpr size_t   kCapacity   = static_cast<size_t>(kLookahead) + kMaxHostBlock;
 	constexpr unsigned kBootQuanta = static_cast<unsigned>(2 * kCapacity);
 
-	/* THE REGIME A MACHINE REPORTS, READ OFF ONE QUANTUM. The verdict is the
+	/* The regime a machine reports, read off one quantum. The verdict is the
 	 * PHASE SEQUENCE and not the record count alone: a count would be satisfied
 	 * by five records in the wrong order. */
 	enum class ObservedRegime { Boot, Play, Neither };
@@ -231,7 +226,7 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * THE FIXTURE. A Board with an SDRAM window full of one repeated
+	 * The fixture. A Board with an SDRAM window full of one repeated
 	 * instruction and a core reset into it -- the machine t0_mcu_debt and
 	 * t0_scheduler_state drive, for the same reason: it is the ONE part of a T0
 	 * Scheduler whose emulated state moves, and case 2's round trip over a
@@ -334,8 +329,8 @@ namespace
 		uint32_t pc() const { return board.mcuReg(17); }
 	};
 
-	/* ONE MACHINE AND ONE Scheduler OVER IT. THE DECLARATION ORDER IS THE
-	 * LIFETIME: the Board must outlive the Scheduler, and a member declared
+	/* One machine and one Scheduler over it. The declaration order is the
+	 * lifetime: the Board must outlive the Scheduler, and a member declared
 	 * later is destroyed first. */
 	struct Rig
 	{
@@ -357,10 +352,10 @@ namespace
 		}
 	};
 
-	/* EVERY STATE ITEM SCH-21's BLOCK CARRIES THAT A CALLER CAN READ, one field
-	 * for one item. Case 2 compares this STRUCT ITEM BY ITEM and names the item
-	 * that moved, which is what makes an over-broad exclusion -- a truncation --
-	 * red BY THE LOST ITEM rather than red in general. */
+	/* Every state item a caller can read, one field for one item. Case 2
+	 * compares this struct item by item and names the item that moved, which
+	 * is what makes an over-broad exclusion -- a truncation -- red by the lost
+	 * item rather than red in general. */
 	struct Digest
 	{
 		uint64_t              frameIndex = 0;
@@ -386,7 +381,7 @@ namespace
 			d.phaseError.push_back(_s.phaseErrorFrames(p));
 		}
 
-		/* INDEX 0 IS THE MCU AND 1 .. dspCount ARE THE DSPs. */
+		/* Index 0 is the MCU and 1 .. dspCount are the DSPs. */
 		for(unsigned i = 0; i <= _dspCount; ++i)
 		{
 			d.debt.push_back(_s.cycleDebt(i));
@@ -411,7 +406,7 @@ namespace
 			&& _a.faulted        == _b.faulted;
 	}
 
-	/* THE ITEM-BY-ITEM COMPARISON. Every message names the ITEM, so a
+	/* The item-by-item comparison. Every message names the ITEM, so a
 	 * truncation that drops one of them reports WHICH one. */
 	void checkDigestsEqual(const Digest& _observed, const Digest& _expected, const std::string& _tag)
 	{
@@ -486,8 +481,8 @@ int main()
 {
 	std::printf("t0_state_excludes_regime: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
 
-	/* THE MCU RATE IS DERIVED FROM A MEASUREMENT OF THE LINKED CORE AND NOT
-	 * WRITTEN DOWN, on t0_scheduler_state's form and for its reason: the
+	/* The MCU rate is derived from a measurement of the linked core and not
+	 * written down: the
 	 * denominator is what makes the rational accumulator move and the numerator
 	 * is what makes the cycle debt accrue, so case 2's items are items that
 	 * actually CHANGE between the save point and the load point. */
@@ -528,14 +523,14 @@ int main()
 		"accumulator holds the same phase at the save point and at the load point");
 
 	/* =====================================================================
-	 * CASE 0. THE DONOR, AND THE KNOWN POSITIVE FOR THE INSTRUMENT.
+	 * Case 0. The donor, and the known positive for the instrument.
 	 *
 	 * The donor runs its boot quanta, hands off through beginPlayPhase, and is
 	 * then OBSERVED to be in the PLAY regime by the same instrument every later
 	 * case reads. Without this the whole file could pass against a machine that
 	 * never leaves the boot regime and against a trace that emits nothing.
 	 *
-	 * ITS SNAPSHOT IS THEREFORE A PLAY-REGIME SNAPSHOT -- which is exactly what
+	 * Its snapshot is therefore a PLAY-regime snapshot -- which is exactly what
 	 * a host's getState takes, and the input the defect needed.
 	 */
 	Rig donor(mcuRate);
@@ -580,13 +575,11 @@ int main()
 	}
 
 	/* =====================================================================
-	 * CASE 1. A PLAY-REGIME SNAPSHOT LOADED INTO A BOOT-REGIME MACHINE LEAVES
-	 * THE BOOT REGIME STANDING.
+	 * Case 1. A PLAY-regime snapshot loaded into a BOOT-regime machine leaves
+	 * the boot regime standing.
 	 *
-	 * THE VERDICT IS THE REGIME THE MACHINE REPORTS. Not a byte offset, not the
-	 * block's size, not a field. REQUIRED-RED: restore the regime write in
-	 * stateSave (or the read in stateLoad) and this case goes red naming the
-	 * PLAY regime it observed where the BOOT regime was required.
+	 * The verdict is the regime the machine reports: not a byte offset, not
+	 * the block's size, not a field.
 	 */
 	{
 		Rig recipient(mcuRate);
@@ -597,7 +590,7 @@ int main()
 		{
 			g2::Scheduler& r = *recipient.scheduler;
 
-			/* A FRESH Scheduler IS BORN IN THE BOOT REGIME, and that is asserted
+			/* A fresh Scheduler is born in the boot regime, and that is asserted
 			 * rather than assumed: the case below claims the load LEFT it
 			 * standing, which says nothing unless it was standing first. */
 			const ObservedRegime before = observeRegime(r, recipient.trace);
@@ -618,8 +611,8 @@ int main()
 				"boot-regime machine leaves the BOOT regime standing -- observed " + spell(after) +
 				", phases: " + spellTrace(recipient.trace));
 
-			/* THE SAME CLAIM FROM THE OTHER SIDE, and it is the consequence
-			 * design section 15.6 cares about: a boot-regime run cannot stall
+			/* The same claim from the other side, and it is the consequence
+			 * the boot sequence cares about: a boot-regime run cannot stall
 			 * on a full sink. 2 x (L + B) quanta is more than either queue
 			 * holds, so a play regime here would stop after B + 1. */
 			const uint64_t before2 = r.frameIndex();
@@ -633,28 +626,26 @@ int main()
 	}
 
 	/* =====================================================================
-	 * CASE 2. THE EXCLUSION IS SURGICAL AND NOT A TRUNCATION.
+	 * Case 2. The exclusion is surgical and not a truncation.
 	 *
-	 * Every OTHER item SCH-21's block carries is recovered BY VALUE. The
-	 * comparison is item by item and every message names its item, so the
-	 * second REQUIRED-RED -- drop one unrelated item along with the regime --
-	 * goes red NAMING THE LOST ITEM.
+	 * Every other state item is recovered BY VALUE. The comparison is item by
+	 * item and every message names its item, so a dropped item is named rather
+	 * than reported in general.
 	 *
-	 * THE NON-VACUITY GUARD RUNS FIRST. The digest at the save point and the
+	 * The non-vacuity guard runs first. The digest at the save point and the
 	 * digest at the load point must DIFFER, and the two images must differ
 	 * byte-wise; without that, an implementation that saved nothing at all would
 	 * satisfy every equality below.
 	 *
-	 * THE PERTURBATION BETWEEN THE SAVE AND THE LOAD IS A HUNDRED QUANTA AND A
-	 * beginPlayPhase, AND THE SECOND HALF IS LOAD-BEARING RATHER THAN DECORATIVE.
-	 * MEASURED: with a hundred quanta alone, dropping the three adapter-owned
-	 * counter baselines from the block is INVISIBLE -- nothing but
-	 * beginPlayPhase and reset ever writes them, so a same-machine round trip
-	 * restores a value that never moved and an equality of two identical numbers
-	 * cannot report the loss. beginPlayPhase re-baselines all three, so the
-	 * baselines at the load point differ from the baselines at the save point and
-	 * a block that stopped carrying them is red. This is exactly the truncation
-	 * the second REQUIRED-RED plants.
+	 * The perturbation between the save and the load is a hundred quanta and a
+	 * beginPlayPhase, and the second half is load-bearing rather than
+	 * decorative. Measured: with a hundred quanta alone, dropping the
+	 * adapter-owned counter baselines from the block is INVISIBLE -- nothing
+	 * but beginPlayPhase and reset ever writes them, so a same-machine round
+	 * trip restores a value that never moved and an equality of two identical
+	 * numbers cannot report the loss. beginPlayPhase re-baselines them, so the
+	 * baselines at the load point differ from the baselines at the save point
+	 * and a block that stopped carrying them is red.
 	 */
 	{
 		Rig rig(mcuRate);
@@ -676,7 +667,7 @@ int main()
 			const Digest               later      = digestOf(s, dspCount);
 			const std::vector<uint8_t> laterImage = imageOf(s);
 
-			/* THE BASELINES REALLY MOVED, asserted rather than assumed: the
+			/* The baselines really moved, asserted rather than assumed: the
 			 * equality this case makes about them says nothing if they hold the
 			 * same value at both ends. */
 			for(unsigned p = 0; p < dspCount; ++p)
@@ -707,7 +698,7 @@ int main()
 
 			checkDigestsEqual(digestOf(s, dspCount), atSave, "case 2");
 
-			/* THE ACCUMULATORS TRAVEL THROUGH NO ACCESSOR, so the image itself
+			/* The accumulators travel through no accessor, so the image itself
 			 * is the only statement that can be made about them. A re-save that
 			 * reproduces the saved image byte for byte covers every item the
 			 * struct above cannot reach. */
@@ -722,16 +713,16 @@ int main()
 	}
 
 	/* =====================================================================
-	 * CASE 3. DESIGN SECTION 15.6, STEP 3 AND STEP 4, AND IT IS THE PROPERTY
-	 * THE DEFECT BROKE.
+	 * Case 3. The boot's step 3 and step 4, which is the property the defect
+	 * broke.
 	 *
 	 * The boot's step 2 resets, step 3 loads the host's snapshot, and step 4
-	 * runs its boot quanta. AT THE END OF STEP 4 NEITHER CODEC QUEUE HAS BEEN
-	 * TOUCHED -- asserted through the four counters PLG-12's t1_boot_on_restore
-	 * reads, and then through the two queue depths themselves.
+	 * runs its boot quanta. At the end of step 4 neither codec queue has been
+	 * touched -- asserted through the codec counters, and then through the two
+	 * queue depths themselves.
 	 *
-	 * THE FOUR COUNTERS ARE READ BEFORE THE TWO DEPTH PROBES, because both
-	 * probes mutate.
+	 * The counters are read before the depth probes, because both probes
+	 * mutate.
 	 */
 	{
 		Rig rig(mcuRate);
@@ -742,10 +733,9 @@ int main()
 		{
 			g2::Scheduler& s = *rig.scheduler;
 
-			// STEP 2. THE ENTRY-POINT SETUP FOLLOWS THE RESET AND DOES NOT
-			// PRECEDE IT: Scheduler::reset resets the Board's core, so a
-			// resetMcu written before it is erased. That is section 24.6 row
-			// W3-462's first PLG-12 finding, and this fixture obeys it.
+			// STEP 2. The entry-point setup follows the reset and does not
+			// precede it: Scheduler::reset resets the Board's core, so a
+			// resetMcu written before it is erased.
 			s.reset();
 			rig.machine.board.resetMcu(g_stackTop, g_codeBase);
 
@@ -769,11 +759,10 @@ int main()
 			checkEqual(s.droppedFrames(),   0u, "case 3: step 4 pushed no sink frame");
 			checkEqual(s.underflowFrames(), 0u, "case 3: step 4 took nothing from the sink");
 
-			/* THE TWO DEPTHS, MEASURED LAST BECAUSE BOTH PROBES MUTATE. An
+			/* The two depths, measured last because both probes mutate. An
 			 * untouched sink is EMPTY and an untouched source is EMPTY, so the
-			 * sink supplies nothing and the source accepts its whole capacity.
-			 * A counter that was never wired would pass the four above and fail
-			 * these two. */
+			 * sink supplies nothing and the source accepts its whole
+			 * capacity. */
 			{
 				std::vector<g2::Frame> out(kCapacity + 1);
 

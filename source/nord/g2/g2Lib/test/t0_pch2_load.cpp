@@ -76,8 +76,8 @@ namespace
 	 * that is really a test fault. */
 	constexpr std::size_t kMaxFrameBytes = 1u + 2u + 0xFFFFu;
 
-	/* Above the largest object count in the corpus, so the depth never binds.
-	 * `object_types.pch2` carries the most, one for each named type. */
+	/* Above the largest object count in the corpus, so the depth never
+	 * binds. */
 	constexpr std::size_t kQueueDepth = 32;
 
 	std::vector<uint8_t> readFile(const std::string& _path)
@@ -152,10 +152,9 @@ namespace
 			const unsigned    type   = frame.data[0];
 			const std::size_t length = (static_cast<std::size_t>(frame.data[1]) << 8) | frame.data[2];
 
-			/* THE DECLARED LENGTH IS CHECKED AGAINST THE FRAME THE HUB
-			 * ACTUALLY CARRIED. A load path that framed the header correctly
-			 * and copied the wrong number of payload bytes agrees with the
-			 * fixture on type and length and disagrees here. */
+			/* The declared length is checked against the frame the hub
+			 * actually carried, which the type-and-length comparison against
+			 * the fixture does not cover. */
 			check(frame.size == 3u + length,
 				"the frame the hub drained is exactly its 3-byte header plus its declared payload");
 
@@ -196,16 +195,16 @@ int main()
 	const std::string corpus  = G2_PCH2_SYNTH_CORPUS_DIR;
 	const std::string fixture = G2_PCH2_EXPECTED_SEQUENCE;
 
-	/* THE FILE LIST COMES FROM THE CORPUS'S OWN MANIFEST, NOT FROM A DIRECTORY
-	 * SCAN. `MANIFEST.tsv` is written by the generator that writes the corpus,
+	/* The file list comes from the corpus's own manifest, not from a directory
+	 * scan. `MANIFEST.tsv` is written by the generator that writes the corpus,
 	 * so a file the generator stopped emitting leaves the list at once, and a
 	 * stray `.pch2` somebody dropped into the directory cannot silently join
 	 * the run. std::filesystem is unavailable at this deployment target, so a
 	 * scan was not on offer either; the manifest is the better of the two and
 	 * not a substitute for one.
 	 *
-	 * THE CHECK HAS NO GATE. A corpus that is not there is a FAILURE of the
-	 * check and never a skip: a skipped T0 returns 0 and counts as a pass. */
+	 * The check has no gate. A corpus that is not there is a failure and never
+	 * a skip: a skip returns 0 and counts as a pass. */
 	std::vector<std::string> files;
 	{
 		const std::string manifestPath = corpus + "/MANIFEST.tsv";

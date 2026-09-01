@@ -8,14 +8,14 @@
 //
 // The bound is asserted from two sides on purpose. A bound that is never hit
 // and a bound that does not exist produce the same green, so this file drives a
-// request ABOVE the bound and asserts the count is clamped, and a request BELOW
-// the bound and asserts the count is NOT clamped. Either case alone cannot tell
+// request above the bound and asserts the count is clamped, and a request below
+// the bound and asserts the count is not clamped. Either case alone cannot tell
 // a working bound from a stuck constant.
 //
-// NO ASSERTION IN THIS FILE IS A LANGUAGE assert(). BRD-17's own block requires
-// the bound to be checked in a release build as well as a debug build, and a
-// release build removes an assertion. The production code keeps a debug
-// assertion as well; it is not this check's predicate.
+// No assertion in this file is a language assert(). The bound must be checked
+// in a release build as well as a debug build, and a release build removes an
+// assertion. The production code keeps a debug assertion as well; it is not
+// this check's predicate.
 
 #include "hdi08Adapter.h"
 
@@ -65,7 +65,7 @@ namespace
 
 	// A real DSP is required. `HDI08::writeRX`
 	// ends in `IPeripherals::setDelayCycles`, which dereferences `m_dsp`
-	// unconditionally (peripherals.cpp:118). A PeripheralsNop with no DSP
+	// unconditionally (peripherals.cpp). A PeripheralsNop with no DSP
 	// attached segfaults there, so the environment below builds the DSP that
 	// the DSP constructor attaches to both peripheral sets.
 	struct Env
@@ -82,7 +82,7 @@ namespace
 		}
 	};
 
-	// One HDI08 carries two 8192-entry rings BY VALUE, so it is heap-allocated,
+	// One HDI08 carries two 8192-entry rings by value, so it is heap-allocated,
 	// and it is rebuilt per case group. A case that inherited the previous
 	// case's ring contents could not say which clamp produced its count.
 	struct Fixture
@@ -108,7 +108,7 @@ namespace
 
 	// Compares the whole ring against the words that should be in it, and
 	// reports the first offset that differs. A count check alone would pass over
-	// a transfer that moved the right NUMBER of wrong words.
+	// a transfer that moved the right number of wrong words.
 	void checkRingHolds(const dsp56k::HDI08& _dsp, const std::vector<dsp56k::TWord>& _expected,
 		const size_t _expectedCount, const std::string& _what)
 	{
@@ -156,9 +156,7 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 1. A request below the bound is not clamped.
 	//
-	// This is the half that separates a working bound from a stuck constant. If
-	// the transfer returned the budget no matter what it was asked for, this
-	// group fails and case group 2 still passes.
+	// This is the half that separates a working bound from a stuck constant.
 	{
 		Fixture f(env);
 		const uint32_t budget = g2::hdi08QuantumWordBudget(*f.hdi08);
@@ -175,10 +173,10 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 2. A request of exactly the ring capacity is clamped.
 	//
-	// Exactly the capacity is the largest request an UNBOUNDED transfer can
+	// Exactly the capacity is the largest request an unbounded transfer can
 	// satisfy without blocking, so this group observes a removed clamp as a
-	// wrong COUNT rather than as a hang. Case group 3 drives the plan's literal
-	// over-capacity case, where a removed clamp deadlocks instead.
+	// wrong count rather than as a hang. Case group 3 drives the over-capacity
+	// case, where a removed clamp deadlocks instead.
 	{
 		Fixture f(env);
 		const uint32_t budget = g2::hdi08QuantumWordBudget(*f.hdi08);
@@ -247,7 +245,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. A ZERO-WORD QUANTUM.
+	// Case group 5. A zero-word quantum.
 	{
 		Fixture f(env);
 		const std::vector<dsp56k::TWord> data = words(1);

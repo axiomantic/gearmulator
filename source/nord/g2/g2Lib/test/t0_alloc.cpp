@@ -5,13 +5,12 @@
  * The expected sequence is computed from G2_DSP_CYCLES_PER_FRAME_NUM and
  * G2_DSP_CYCLES_PER_FRAME_DEN, and no figure is written down here. The
  * numerator is still provisional, and with the sequence written down a new
- * numerator would fail this test with no message that connects the failure to
- * the change.
+ * numerator would fail with no message that connects the failure to the
+ * change.
  *
- * A negative case pins the numerator to a scratch value and asserts the derived
- * sequence moves with it, so the derivation is known to be live rather than
- * decorative. Without that case a derivation that silently returned the same
- * answer for every numerator would pass.
+ * A negative case pins the numerator to a scratch value and holds the derived
+ * sequence against it, so the derivation is known to be live rather than
+ * decorative.
  */
 
 #include "g2/timebase.h"
@@ -69,7 +68,7 @@ namespace
 		return r.den / greatestCommonDivisor(rem, r.den);
 	}
 
-	/* The DERIVATION, stated once and used by every case below. It repeats
+	/* The derivation, stated once and used by every case below. It repeats
 	 * none of alloc()'s code: it is the closed form of the same rule.
 	 *
 	 *   whole(i) = num/den, plus one when the accumulator crosses den
@@ -175,9 +174,8 @@ namespace
 			}
 
 			/* The accumulator state is an observable of its own, so it is
-			 * held against the derivation and not merely bounded. A body
-			 * that returned the right allocation while leaving the wrong
-			 * remainder would pass a value-only check and then drift. */
+			 * held against the derivation and not merely bounded: a right
+			 * allocation left beside a wrong remainder drifts. */
 			(void) alloc(r, &replayAcc);
 			if(replayAcc != expected.acc)
 			{
@@ -209,8 +207,7 @@ namespace
 			what);
 
 		/* Both adjacent values really occur whenever the ratio is not a whole
-		 * number. Without this a body that always returned `low` would pass
-		 * every bound above for a rational whose remainder it ignored. */
+		 * number, which the bounds above do not by themselves establish. */
 		if(rem != 0u)
 		{
 			check(lowSeen, "the lower adjacent value occurs");
@@ -259,10 +256,8 @@ int main()
 
 	/* ---------------- the negative case: a scratch numerator.
 	 *
-	 * 100,000,000 is a SCRATCH FIXTURE VALUE and it names nothing about the
-	 * machine. It is here to prove the derivation above is live: if the
-	 * expected sequence were written down rather than computed, the two
-	 * sequences below would be identical and this case would fail.
+	 * 100,000,000 is a scratch fixture value and it names nothing about the
+	 * machine. It is here to show the derivation above is live.
 	 *
 	 * The scratch numerator is chosen so that its remainder against the frame
 	 * rate differs from the shipped one, which is what makes the sequences
@@ -338,10 +333,9 @@ int main()
 
 	/* ---------------- the allocation is a pure function of the state.
 	 *
-	 * Two drives from the same starting accumulator give the same sequence.
-	 * A body that read a wall clock, a frame counter of its own or any other
-	 * hidden state would not. This case is the behavioural half of the rule
-	 * that no scheduler file reads a system clock. */
+	 * Two drives from the same starting accumulator give the same sequence,
+	 * which no body carrying hidden state -- a wall clock, a frame counter of
+	 * its own -- would produce. */
 	{
 		const std::vector<uint32_t> first =
 			driveAlloc(shipped, 512u, "the first pure-function drive");

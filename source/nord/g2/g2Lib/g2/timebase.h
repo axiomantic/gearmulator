@@ -1,17 +1,11 @@
-/* g2/timebase.h -- the only definition site for the G2's timebase constants.
- * C11. Task SCH-0. Design sections 13.4.1, 13.4.3 and 14.1.1.
+/* g2/timebase.h -- the G2's timebase constants.
  *
- * THIS HEADER IS C, AND THE DOCUMENT SAYS SO BECAUSE THE ANSWER CHANGES TWO
- * SIGNATURES. It uses only #define, typedef struct and plain C functions. No
- * declaration in it may use a C++ reference parameter, a namespace, a template
- * or an overload. Both accumulator functions therefore take `uint32_t* acc`
- * and never `uint32_t& acc`, which an earlier design draft carried and which
- * does not compile in C at all. The C++ side and any future C consumer include
- * this file unchanged.
- *
- * The Nim side includes NOTHING from this header. `mcf5307_exec` takes
- * `max_cycles` as a plain uint32_t and the MCU context's rational is computed
- * on the C++ side, inside the Scheduler, before the call.
+ * This header is C11, and that choice decides two signatures. It uses only
+ * #define, typedef struct and plain C functions. No declaration in it may use
+ * a C++ reference parameter, a namespace, a template or an overload. Both
+ * accumulator functions therefore take `uint32_t* acc` and never
+ * `uint32_t& acc`, which does not compile in C at all. The C++ side and any
+ * future C consumer include this file unchanged.
  */
 
 #ifndef G2_TIMEBASE_H
@@ -20,9 +14,8 @@
 #include <stdint.h>
 
 /* This header is included unchanged from C and from C++, so the assertion
- * keyword is selected rather than assumed. `_Static_assert` is the C11
- * spelling and is what the C11 compile of t0_timebase_header.c exercises;
- * `static_assert` is the C++ one. */
+ * keyword is selected rather than assumed: `_Static_assert` is the C11
+ * spelling and `static_assert` is the C++ one. */
 #if defined(__cplusplus)
 #	define G2_STATIC_ASSERT(condition, message) static_assert(condition, message)
 #else
@@ -36,17 +29,16 @@
 /* ---------------- the DSP contexts
  *
  * At a 150 MHz DSP clock one frame is 150,000,000 / 96,000 = 1562.5 cycles.
- * THAT IS NOT AN INTEGER, so it cannot be one scalar constant. The design
- * names a rational instead, and alloc() below turns it into the sequence
- * 1562, 1563, 1562, 1563 whose mean is exactly 1562.5.
+ * That is not an integer, so it cannot be one scalar constant. A rational is
+ * named instead, and alloc() below turns it into the sequence 1562, 1563,
+ * 1562, 1563 whose mean is exactly 1562.5.
  *
- * The numerator is PROVISIONAL: measurement register row 8, owner SPK-8,
- * spike criterion (e). The denominator is fixed at the frame rate.
+ * The numerator is provisional and unmeasured. The denominator is fixed at
+ * the frame rate.
  *
- * The cadence guarantee does NOT depend on the numerator. Design section
- * 13.4.1 records why: the ESAI frame is driven by the scheduler and not by a
- * clock, so this rational decides only how many cycles a context is given for
- * each quantum.
+ * The cadence guarantee does not depend on the numerator: the ESAI frame is
+ * driven by the scheduler and not by a clock, so this rational decides only
+ * how many cycles a context is given for each quantum.
  */
 #define G2_DSP_CYCLES_PER_FRAME_NUM   150000000u /* DSP clock, Hz            */
 #define G2_DSP_CYCLES_PER_FRAME_DEN   G2_FRAME_RATE_HZ
@@ -63,22 +55,17 @@
  * internal PLL multiplies CLKIN by 3 for the core and the bus runs at CLKIN.
  *
  * The two bus symbols below are not derived here and read 0u. A source that
- * used either one would compute with a zero, so g2Lib/CMakeLists.txt FAILS THE
- * CONFIGURE STEP if any file under source/nord/g2/ names either symbol. This
- * file is the one exempt file, because it is their declaration site.
- *
- * That exemption is why their G2_STATIC_ASSERTs live here and not in
- * t0_timebase_header.c: the rule "one assertion for each declared macro" and
- * the configure guard would otherwise contradict each other, and the guard is
- * the one that must not yield.
+ * used either one would compute with a zero, so g2Lib/CMakeLists.txt fails the
+ * configure step if any file under source/nord/g2/ names either symbol. This
+ * file is exempt from that guard, because it is their declaration site.
  */
 
-/* The bus clock, BCLKO. Criterion (j) methods 1 and 2 measure THIS one.
- * NOTHING IN THE SCHEDULER MAY USE IT AS A CYCLE BUDGET.                    */
-#define G2_MCU_BUS_CLOCK_HZ           0u         /* NOT DERIVED              */
+/* The bus clock, BCLKO. Nothing in the scheduler may use it as a cycle
+ * budget.                                                                   */
+#define G2_MCU_BUS_CLOCK_HZ           0u         /* not derived              */
 
 /* PSTCLK/BCLKO. The manual permits 2, 3 or 4, and nothing else.             */
-#define G2_MCU_BUS_DIVIDER            0u         /* NOT DERIVED              */
+#define G2_MCU_BUS_DIVIDER            0u         /* not derived              */
 
 /* The core clock. This is the only one that may reach mcf5307_exec's
  * max_cycles.
@@ -91,8 +78,8 @@
  * separates them.                                                           */
 #define G2_MCU_CORE_CLOCK_HZ          162000000u
 
-/* The MCU context's rational. THE NUMERATOR IS THE CORE CLOCK, NOT THE BUS
- * CLOCK.                                                                    */
+/* The MCU context's rational. The numerator is the core clock, not the bus
+ * clock.                                                                    */
 #define G2_MCU_CYCLES_PER_FRAME_NUM   G2_MCU_CORE_CLOCK_HZ
 #define G2_MCU_CYCLES_PER_FRAME_DEN   G2_FRAME_RATE_HZ
 
@@ -101,48 +88,45 @@
  * H, the delay in 96 kHz frames that one inter-DSP hop costs. Each mailbox is
  * a ring of H + 1 frames, so a change of H deepens an array -- and it also
  * moves D_chain, and therefore the reported plugin latency and every rendered
- * sample. Provisional 1: measurement register row 9, owner SPK-3, criterion
- * (d). Inside the bit-exactness boundary, so a change invalidates the whole
- * golden set.                                                               */
-#define G2_CHAIN_HOP_FRAMES           1u         /* PROVISIONAL              */
+ * sample. Provisional 1, unmeasured. Inside the bit-exactness boundary, so a
+ * change invalidates the whole golden set.                                  */
+#define G2_CHAIN_HOP_FRAMES           1u         /* provisional              */
 
 /* ---------------- the second bus's frame divider
  *
- * THE ONLY DEFINITION SITE. Two consumers derive from it and neither carries
- * its own copy: ChainAdapter takes it as secondBusFrameDivider, and
- * Peripherals56311 takes the second ESAI's frame rate as G2_FRAME_RATE_HZ
- * divided by this value. The phase relation of design section 12.3 depends on
- * the two being derived from one symbol.
+ * ChainAdapter takes this as secondBusFrameDivider, and Peripherals56311
+ * takes the second ESAI's frame rate as G2_FRAME_RATE_HZ divided by it. The
+ * phase relation between the two buses depends on both being derived from one
+ * symbol.
  *
- * Provisional 4, from the 24 kHz control rate that AGENTS.md section 2.2
- * records against the 96 kHz frame rate. What is settled is that the machine
- * HAS a 24 kHz control rate; what is NOT settled is which bus carries it, and
- * criterion (i) is the measurement that answers that.                       */
-#define G2_SECOND_BUS_FRAME_DIVIDER   4u         /* PROVISIONAL              */
+ * Provisional 4, from the machine's 24 kHz control rate against the 96 kHz
+ * frame rate. What is settled is that the machine has a 24 kHz control rate;
+ * which bus carries it is not.                                              */
+#define G2_SECOND_BUS_FRAME_DIVIDER   4u         /* provisional              */
 
 /* ---------------- the host-block to frame mapping
  *
- * The numerator is the frame rate. THE DENOMINATOR IS THE HOST RATE, so it is
+ * The numerator is the frame rate. The denominator is the host rate, so it is
  * a run-time value and not a macro: prepareToPlay fixes it and the framework's
- * own recreate() zeroes the accumulator. Design section 14.1.1.             */
+ * own recreate() zeroes the accumulator.                                    */
 #define G2_HOST_FRAMES_NUM            G2_FRAME_RATE_HZ
 
 /* ---------------- the assertions this file owns
  *
- * The two denominators, per design section 13.4.1. Every Rational in this
- * design is built from the macros above, so the denominator is a compile-time
- * constant and the invariant check is a compile-time one. There is no
- * construction-time assertion, because a release build removes one.
+ * Every Rational in this design is built from the macros above, so the
+ * denominator is a compile-time constant and the invariant check is a
+ * compile-time one. There is no construction-time assertion, because a release
+ * build removes one.
  */
 G2_STATIC_ASSERT(G2_DSP_CYCLES_PER_FRAME_DEN != 0u,
 	"DSP rational denominator");
 G2_STATIC_ASSERT(G2_MCU_CYCLES_PER_FRAME_DEN != 0u,
 	"MCU rational denominator");
 
-/* The two unmeasured bus symbols. These assertions are HERE rather than in the
- * test because this file is the one the configure guard exempts. They also
- * make the eventual measurement a deliberate edit: when criterion (j) reports,
- * these two lines fail and force a reader to the register rows. */
+/* The unmeasured bus symbols. These assertions sit here rather than in a test
+ * because this file is what the configure guard exempts. They also make the
+ * eventual measurement a deliberate edit: giving either symbol a value fails
+ * these lines. */
 G2_STATIC_ASSERT(G2_MCU_BUS_CLOCK_HZ == 0u,
 	"BCLKO is UNMEASURED. Register row 5, owner SPK-9 criterion (j).");
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER == 0u,
@@ -164,22 +148,20 @@ G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER != 1u,
  * Lifetime    The life of the context.
  * Threading   Read-only after construction, so it crosses no thread rule.
  *
- * INVARIANT: den != 0, and num / den must not exceed UINT32_MAX, which every
- * value in this design satisfies by a wide margin. THE CHECK IS NOT INSIDE
- * alloc(), because alloc() runs once for each context for each quantum -- nine
- * times at 96 kHz -- and must carry no branch that cannot fire.
+ * Invariant: den != 0, and num / den must not exceed UINT32_MAX, which every
+ * value in this design satisfies by a wide margin. The check is not inside
+ * alloc(), because alloc() runs once for each context for each quantum and
+ * must carry no branch that cannot fire.
  *
- * NO CODE OUTSIDE Scheduler::create BUILDS A RATIONAL THAT REACHES A SHIPPING
- * CONTEXT. A test may build one directly to drive alloc() and the cycle-debt
- * loop. A Rational built at run time is checked by Scheduler::create, which
- * returns Status::BadRational and no object.
+ * A Rational built at run time is checked by Scheduler::create, which returns
+ * Status::BadRational and no object.
  */
 typedef struct {
 	uint32_t num;      /* the clock rate in Hz    */
 	uint32_t den;      /* G2_FRAME_RATE_HZ        */
 } Rational;
 
-/* alloc() is EXACT. It uses no floating point anywhere.
+/* alloc() is exact. It uses no floating point anywhere.
  *
  * Each context carries one unsigned integer accumulator and computes its
  * whole-cycle allocation for each quantum. For the DSP the sequence is 1562,
@@ -188,12 +170,11 @@ typedef struct {
  * wall-clock time, so the allocation is a pure function of the frame index and
  * the initial state.
  *
- * `acc` is a POINTER and not a C++ reference, because this header is C.
+ * `acc` is a pointer and not a C++ reference, because this header is C.
  *
- * `static inline` rather than a bare definition: design section 13.4.1 shows
- * the body in the header, and a header with an external definition included by
- * two translation units is a duplicate-symbol link error. Internal linkage
- * keeps the declared signature exactly as the design states it.
+ * `static inline` rather than a bare definition: the body lives in the header,
+ * and a header with an external definition included by two translation units
+ * is a duplicate-symbol link error.
  */
 static inline uint32_t alloc(Rational r, uint32_t* acc)
 {
@@ -204,7 +185,7 @@ static inline uint32_t alloc(Rational r, uint32_t* acc)
 }
 
 /* Whole 96 kHz frames for a block of n host samples. Exact. No floating point.
- * Identical in shape to alloc() above, WIDENED TO 64 BITS because n * num
+ * Identical in shape to alloc() above, widened to 64 bits because n * num
  * overflows 32 bits at a large block size.
  *
  * The range of m is stated exactly. Write r = num / den. For every block,
@@ -212,13 +193,13 @@ static inline uint32_t alloc(Rational r, uint32_t* acc)
  *     floor(n * r)  <=  m  <=  floor(n * r) + 1
  *
  * because acc is always below den at entry and at exit. m therefore takes one
- * of exactly TWO adjacent integer values for a given n, and the long-run mean
+ * of two adjacent integer values for a given n, and the long-run mean
  * is exactly n * r with no drift. At 44.1 kHz, r = 320/147 and n = 32, m is 69
  * or 70 and the pattern repeats every 147 blocks.
  *
- * `acc` is a POINTER, not a C++ reference, for the reason alloc() gives.
+ * `acc` is a pointer, not a C++ reference, for the reason alloc() gives.
  *
- * This accumulator sits OUTSIDE the determinism boundary: it lives in the
+ * This accumulator sits outside the determinism boundary: it lives in the
  * framework's ResamplerInOut, one layer above the Device. It decides how many
  * frames a host block asks for and never touches the value of any frame.
  */

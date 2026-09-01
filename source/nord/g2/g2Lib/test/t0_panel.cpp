@@ -116,8 +116,8 @@ int main()
 		checkEqual((latch >> 4) & 0x3u, uint32_t(0x3u),
 			"the panel latch at 0x15000000 returns bits 5:4 = 0b11, which is model code 1, the G2X");
 
-		// The plan names this failure by itself: a stub that returns zero
-		// gives panel bits 0b00, which boots and presents a plain G2.
+		// A stub that returns zero gives panel bits 0b00, which boots and
+		// presents a plain G2.
 		check(latch != 0u,
 			"the panel latch does not return zero, which would present a plain G2");
 
@@ -128,7 +128,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 2. The IDENTIFIER is A STRAP, so A WRITE CANNOT CHANGE it.
+	// Case group 2. The identifier is a strap, so a write cannot change it.
 	//
 	// Clavia's service manual records the model as two 0-ohm resistors, R79
 	// and R80, on the panel board. A model that let the firmware write over
@@ -148,7 +148,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. Every OTHER LATCH in the CS5 WINDOW is an OUTPUT LATCH.
+	// Case group 3. Every other latch in the CS5 window is an output latch.
 	//
 	// It keeps what was written. No authority records what each one drives, so
 	// the model carries no meaning for any of them and only the keeping is
@@ -170,7 +170,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. The CS4 BASE is CONFIGURATION and it is LIVE.
+	// Case group 4. The CS4 base is configuration and it is live.
 	//
 	// Two boards differ only in where the display buffer sits. Each base is
 	// asserted to answer in the board that carries it and to answer nothing in
@@ -190,9 +190,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. The DISPLAY WRITE PATH KEEPS the LAST WRITTEN CONTENTS.
+	// Case group 5. The display write path keeps the last written contents.
 	//
-	// This test asserts only that the buffer returns what this TEST wrote into
+	// This test asserts only that the buffer returns what this test wrote into
 	// it. It reads no banner, because a banner is produced by Clavia's OS
 	// image running and this is a T0 check.
 	{
@@ -229,7 +229,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. The PANEL is QUIESCENT and no POLL can SPIN for EVER.
+	// Case group 6. The panel is quiescent and no poll can spin for ever.
 	//
 	// A boot loop polls a panel until it answers. This model answers every
 	// offset of both windows, at every legal width, with a completed access.

@@ -2,15 +2,15 @@
 // running the core against the board. Tier T0: this test needs no firmware
 // artifact of any kind.
 //
-// The defect this test exists to catch. The core
-// passes `size` as A COUNT OF BYTES -- 1, 2 or 4 -- and mcf5307.h states it
-// twice, once per callback typedef. g2Lib's MemoryMap takes a WIDTH IN BITS --
-// 8, 16 or 32 -- and memoryMap.h states that. The two readings disagree on
-// EVERY access a core can make, so a board that forwards the argument
-// unconverted refuses all of them: the very first instruction fetch presents 2,
-// the decode reads 2 as a width in bits, rejects it, and the firmware executes
-// zero instructions. That is exactly what happened -- "memoryMap: SIZE_ILLEGAL
-// read of 2 bits at 0x30000400", the first fetch of the boot image.
+// The units disagree. The core passes `size` as a count of bytes -- 1, 2 or 4
+// -- and mcf5307.h states it twice, once per callback typedef. g2Lib's
+// MemoryMap takes a width in bits -- 8, 16 or 32 -- and memoryMap.h states
+// that. The two readings disagree on every access a core can make, so a board
+// that forwards the argument unconverted refuses all of them: the very first
+// instruction fetch presents 2, the decode reads 2 as a width in bits, rejects
+// it, and the firmware executes zero instructions. Observed as "memoryMap:
+// SIZE_ILLEGAL read of 2 bits at 0x30000400", the first fetch of the boot
+// image.
 //
 // A board test that supplies the width by hand supplies it in the MemoryMap's
 // unit, so it never presents the core's unit to the callbacks. A mismatch that
@@ -18,24 +18,21 @@
 // by adding more callers of the same kind; it is caught by making the real one
 // drive.
 //
-// So this test drives the real one. The Board's OWN core, reset and stepped
+// So this test drives the real one. The Board's own core, reset and stepped
 // through the Board's own methods, executes a real instruction of each of the
-// three widths, and the assertions are about what arrived at the unit and
-// what LANDED IN THE REGISTERS. A test that only checked that 1 maps to 8 would
-// be checking the conversion's arithmetic against itself; it would pass against
-// a board whose conversion is right and whose forwarding is broken, and it
-// would say nothing about the fetch that actually stopped the boot.
+// three widths, and the assertions are about what arrived at the unit and what
+// landed in the registers. Checking only that 1 maps to 8 would check the
+// conversion's arithmetic against itself and say nothing about the fetch that
+// stopped the boot.
 //
-// The negative half is not optional. A conversion that answered "8 bits" to
-// anything it did not recognise would make every case below pass while turning
-// the callbacks into a funnel that accepts every width. So the sizes the ABI
-// CANNOT produce are presented too, and each must be refused. 8, 16 and 32 are
-// among them and they are the interesting ones: they are the MemoryMap's own
-// legal widths, they are what the pre-conversion callbacks silently ACCEPTED,
-// and after the conversion they are byte counts no ColdFire transfer size
-// encodes. The set that reaches a unit is asserted to be exactly {1, 2, 4},
-// from both directions -- every member accepted, every non-member refused --
-// which is the same shape the core's own t_bus_size_unit holds on its side.
+// The negative half is not optional, or the callbacks become a funnel that
+// accepts every width. The sizes the ABI cannot produce are presented too, and
+// each must be refused. 8, 16 and 32 are among them and they are the
+// interesting ones: they are the MemoryMap's own legal widths, they are what
+// the pre-conversion callbacks accepted, and after the conversion they are byte
+// counts no ColdFire transfer size encodes. The set that reaches a unit is
+// asserted to be exactly {1, 2, 4}, from both directions -- every member
+// accepted, every non-member refused.
 //
 // Nothing here aborts and nothing here uses assert(). The default build is
 // Release and it defines NDEBUG, so an assert() would be removed and a report
@@ -88,13 +85,13 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE RECORDING UNIT.
+	// The recording unit.
 	//
-	// A BusTarget receives the width in the MemoryMap's unit, which this task
-	// does not change: a unit still sees 8, 16 or 32. Recording that number is
-	// how this test observes what came out of the conversion, and recording the
-	// OFFSET and the VALUE beside it is what makes the record a statement about
-	// the access rather than about the width alone.
+	// A BusTarget receives the width in the MemoryMap's unit: a unit sees 8, 16
+	// or 32. Recording that number is how this test observes what came out of
+	// the conversion, and recording the offset and the value beside it is what
+	// makes the record a statement about the access rather than about the width
+	// alone.
 	struct Access
 	{
 		bool     isWrite  = false;
@@ -172,10 +169,10 @@ namespace
 		const std::vector<Access>& accesses() const { return m_accesses; }
 
 	private:
-		// The unit's OWN reading of the width, kept deliberately narrow: 8, 16
+		// The unit's own reading of the width, kept deliberately narrow: 8, 16
 		// and 32 and nothing else. A width this unit does not recognise is
-		// refused rather than guessed at, so a conversion that invented a width
-		// cannot be absorbed here and reported as a success.
+		// refused rather than guessed at, so an invented width cannot be
+		// absorbed here and reported as a success.
 		static int byteCount(const int _sizeBits)
 		{
 			switch(_sizeBits)
@@ -192,17 +189,17 @@ namespace
 	};
 
 	// -----------------------------------------------------------------------
-	// THE FIXTURE.
+	// The fixture: two windows and no more.
 	//
-	// TWO WINDOWS AND NO MORE. The code and the stack live in the SDRAM window
-	// and the data the program touches lives in the CS3 window, so the CS3
-	// record holds the program's operand accesses and nothing else -- no
-	// instruction fetch, no stack traffic. That is what makes an exact-sequence
-	// assertion possible instead of a "contains" one.
+	// The code and the stack live in the SDRAM window and the data the program
+	// touches lives in the CS3 window, so the CS3 record holds the program's
+	// operand accesses and nothing else -- no instruction fetch, no stack
+	// traffic. That is what makes an exact-sequence assertion possible instead
+	// of a "contains" one.
 	//
 	// Both bases are the constants memoryMap.h ships. Every other window is
-	// left absent, so the Board's own units answer
-	// nowhere; this test asserts nothing about them.
+	// left absent, so the Board's own units answer nowhere; this test asserts
+	// nothing about them.
 	constexpr uint32_t g_codeBase  = g2::g_sdramBase;
 	constexpr uint32_t g_codeSize  = 0x1000u;
 	constexpr uint32_t g_stackTop  = g_codeBase + 0x800u;
@@ -210,11 +207,11 @@ namespace
 	constexpr uint32_t g_dataSize  = 0x10u;
 
 	// An address inside no configured window, used for the negative cases: the
-	// sizes the ABI can produce must get PAST the width check and fail on the
+	// sizes the ABI can produce must get past the width check and fail on the
 	// decode instead, and the sizes it cannot must fail on the width check.
 	constexpr uint32_t g_unmapped  = 0x20000000u;
 
-	/* THE PROGRAM. Six instructions, one word each, hand-encoded from the MOVE
+	/* The program, one word for each instruction, hand-encoded from the MOVE
 	 * format: bits 15-14 zero, bits 13-12 the size (01 byte, 11 word, 10 long),
 	 * bits 11-9 the destination register, bits 8-6 the destination mode, bits
 	 * 5-3 the source mode, bits 2-0 the source register. Mode 000 is Dn and
@@ -252,9 +249,8 @@ namespace
 	constexpr uint32_t g_storeLong = 0xCCCCCCCCu;
 
 	// The three destination registers start all-ones. A sized move into a data
-	// register replaces the low bytes and KEEPS the rest, so the preserved high
-	// bytes are themselves evidence of the width: a byte move that had been
-	// widened to a longword would wipe them.
+	// register replaces the low bytes and keeps the rest, so the preserved high
+	// bytes are themselves evidence of the width.
 	constexpr uint32_t g_regFill = 0xFFFFFFFFu;
 
 	g2::BoardConfig makeConfig()
@@ -266,9 +262,8 @@ namespace
 	}
 
 	// Every access below goes through Board::onRead and Board::onWrite, never
-	// through Board::busRead. The callbacks are the path the CORE takes, and an
-	// earlier board test that drove busRead instead passed 65 cases while the
-	// callbacks were broken.
+	// through Board::busRead. The callbacks are the path the core takes;
+	// driving busRead instead leaves them unexercised.
 	uint32_t boardRead(g2::Board& _board, const uint32_t _address, const int _size,
 	                   mcf5307_bus_status& _status)
 	{
@@ -283,11 +278,9 @@ namespace
 		g2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 
-	// A size the ABI cannot produce must be refused by the WIDTH check, before
+	// A size the ABI cannot produce must be refused by the width check, before
 	// the decode is consulted. Asserting SIZE_ILLEGAL rather than "not OK" is
-	// what separates that from the decode's own UNMAPPED answer -- a conversion
-	// that mapped an unknown size onto a legal width would report UNMAPPED here
-	// and a weaker assertion would call that a pass.
+	// what separates that from the decode's own UNMAPPED answer.
 	void checkRefused(g2::Board& _board, const int _size, const std::string& _what)
 	{
 		mcf5307_bus_status readStatus = MCF5307_BUS_OK;
@@ -301,10 +294,9 @@ namespace
 		           "a write of " + _what + " is refused as an illegal size");
 	}
 
-	// The other direction of the set equality: a size the ABI DOES produce must
+	// The other direction of the set equality: a size the ABI does produce must
 	// pass the width check, which is observable as the decode's UNMAPPED answer
-	// at an address in no window. A conversion that dropped one of the three
-	// would report SIZE_ILLEGAL here instead.
+	// at an address in no window.
 	void checkAccepted(g2::Board& _board, const int _size, const std::string& _what)
 	{
 		mcf5307_bus_status readStatus = MCF5307_BUS_OK;
@@ -372,7 +364,7 @@ int main()
 	// PART 1 -- the real core, driving the real board.
 	// ==================================================================
 	{
-		/* THE BOARD's own core is the one that runs, reached through the handle
+		/* The Board's own core is the one that runs, reached through the handle
 		 * the Board publishes. It already sits behind Board::onRead and
 		 * Board::onWrite -- they are the exact pair the Board hands to
 		 * mcf5307_create for it -- so the path under test is unchanged, and a
@@ -394,7 +386,7 @@ int main()
 		 * reaches the instruction after the last one, so the core never runs
 		 * off the end of the program into whatever a zeroed window decodes as.
 		 * The bound is what makes a core that makes no progress terminate;
-		 * the assertion after the loop is what makes it FAIL. */
+		 * the assertion after the loop is what makes it fail. */
 		int steps = 0;
 		while(steps < 64 && board.mcuReg(17) != g_codeEnd && !board.mcuHalted())
 		{
@@ -413,11 +405,8 @@ int main()
 		      "no access in the program faulted");
 
 		// ------------------------------------------------------------------
-		// WHAT ARRIVED AT THE UNIT. This is the sequence a correct conversion
-		// produces and no other conversion does: a byte transfer presents 8
-		// bits, a word transfer 16 and a longword transfer 32. A conversion
-		// that widened everything to 32 changes all six rows; one that dropped
-		// the byte case changes the first and the fourth.
+		// What arrived at the unit: a byte transfer presents 8 bits, a word
+		// transfer 16 and a longword transfer 32.
 		const std::vector<Access> expected =
 		{
 			{false, 0u, 8,  uint32_t(g_dataByte)},
@@ -434,7 +423,7 @@ int main()
 
 		// ------------------------------------------------------------------
 		// The instruction fetch itself. It is the access the defect stopped
-		// first, and it is a WORD access: the core presents 2 bytes and the
+		// first, and it is a word access: the core presents 2 bytes and the
 		// unit must see 16 bits. Asserting the first recorded code access
 		// pins that directly rather than by implication.
 		check(!code.accesses().empty(), "the code window answered at least one access");
@@ -446,11 +435,9 @@ int main()
 		}
 
 		// ------------------------------------------------------------------
-		// WHAT LANDED IN THE REGISTERS. The access record above says what width
+		// What landed in the registers. The access record above says what width
 		// the unit was asked for; these say what width the core actually
-		// CONSUMED. Both are needed: a board that reported the right width and
-		// returned the wrong number of bytes would satisfy the record and fail
-		// here.
+		// consumed. The two are independent.
 		checkEqual(board.mcuReg(0),
 		           (g_regFill & 0xFFFFFF00u) | uint32_t(g_dataByte),
 		           "the byte read replaced exactly the low byte of d0");
@@ -463,9 +450,9 @@ int main()
 		           "the longword read replaced the whole of d2");
 
 		// ------------------------------------------------------------------
-		// What the stores left behind. A byte store that had been widened
-		// would have overwritten the three bytes after it, so the untouched
-		// neighbours are as load-bearing as the written bytes.
+		// What the stores left behind. A widened byte store overwrites the
+		// three bytes after it, so the untouched neighbours are as load-bearing
+		// as the written bytes.
 		checkEqual(data.peek(0u), g_storeByte & 0xffu,       "the byte store wrote data + 0");
 		checkEqual(data.peek(1u), 0u,                        "the byte store left data + 1 alone");
 		checkEqual(data.peek(4u), (g_storeWord >> 8) & 0xffu, "the word store wrote data + 4");
@@ -488,9 +475,8 @@ int main()
 		checkAccepted(board, 4, "4 bytes");
 
 		// No non-member is. 8, 16 and 32 are here because they are the widths
-		// the MemoryMap itself calls legal: a callback that forwarded its
-		// argument unconverted accepted all three, and a conversion that let
-		// them through would be that same defect wearing the new unit.
+		// the MemoryMap itself calls legal, which is what an unconverted
+		// forward accepts.
 		checkRefused(board, 8,  "8 bytes, which is the MemoryMap's legal width in the old unit");
 		checkRefused(board, 16, "16 bytes, which is the MemoryMap's legal width in the old unit");
 		checkRefused(board, 32, "32 bytes, which is the MemoryMap's legal width in the old unit");

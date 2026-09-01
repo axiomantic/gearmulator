@@ -25,19 +25,14 @@ namespace dsp56k { class Esai; }
 
 namespace g2
 {
-	/* The two alias types the four callback factories return:
-	 *
-	 *     EsaiReadRxCallback  = std::function<void(uint64_t&, RxFrame&)>
-	 *     EsaiWriteTxCallback = std::function<void(uint64_t&, const TxFrame&)>
-	 *
-	 * The first argument is the mutable frame-index reference the library
-	 * hands every callback. Every callback this adapter installs treats that
+	/* The first argument of either callback is the mutable frame-index
+	 * reference the library hands every callback. Every callback this
+	 * adapter installs treats that
 	 * reference as read-only and never writes it: the scheduler's own virtual
 	 * frame index is the only authoritative one. */
 	using EsaiReadRxCallback  = dsp56k::Audio::ReadRxCallback;
 	using EsaiWriteTxCallback = dsp56k::Audio::WriteTxCallback;
 
-	/* The three bus topologies. */
 	enum class ChainTopology
 	{
 		Line,      /* open both ends:  N + 1 mailboxes             */
@@ -66,10 +61,7 @@ namespace g2
 		             ChainTopology secondBusTopology,
 		             unsigned secondBusFrameDivider);
 
-		/* The mailbox count for a topology: Line -> N + 1, Ring -> N,
-		 * Broadcast -> 1.
-		 *
-		 * Defined inline, not merely declared: a constexpr function must be
+		/* Defined inline, not merely declared: a constexpr function must be
 		 * defined before any use of it in a constant expression, and the
 		 * mailbox arrays are sized by exactly such a use. A declaration alone
 		 * would compile and link while failing every constant-expression
@@ -92,7 +84,7 @@ namespace g2
 		unsigned       audioMailboxCount() const noexcept;
 		unsigned       secondBusMailboxCount() const noexcept;
 
-		/* The four phases, in this order, once for each virtual frame.
+		/* The phases, in this order, once for each virtual frame.
 		 *
 		 * advanceAll is the swap point and also closes the underrun accounting
 		 * for the quantum that just ended. Audio mailboxes advance every
@@ -103,7 +95,7 @@ namespace g2
 		/*        3 run phase happens in the Scheduler, through the callbacks */
 		void extractCodecSink (Frame& out)     noexcept; /* 4 egress  */
 
-		/* ------------- The four callback factories.
+		/* ------------- The callback factories.
 		 *
 		 * Each returns a callable that borrows this ChainAdapter and is
 		 * installed on one DSP's ESAI at construction of the DSP set.
@@ -129,9 +121,8 @@ namespace g2
 		 * at the instant the callback runs the bit states whether the frame it
 		 * carries is stale.
 		 *
-		 * The DSP set calls attachEsai for every position at construction,
-		 * before it produces the four callbacks - the position's wrappers need
-		 * the Esai from the first fire.
+		 * attachEsai must run for a position before that position's callbacks
+		 * are produced - the wrappers need the Esai from the first fire.
 		 *
 		 * Nothing can set a flag outside ChainAdapter: a flag changes only
 		 * when its own transmit wrapper fires. */
@@ -149,12 +140,8 @@ namespace g2
 		uint64_t phaseErrorFrames(unsigned position) const noexcept;
 
 		/* stateSize/stateSave/stateLoad serialise the adapter's
-		 * determinism-relevant state into the Scheduler snapshot.
-		 *
-		 * stateSize/stateSave/stateLoad serialise the adapter's
-		 * determinism-relevant state into the Scheduler snapshot. CHN-14 owns
-		 * the save-and-load round trip (mailbox contents and counters);
-		 * CHN-5 declares and defines the trio so the surface links.
+		 * determinism-relevant state (mailbox contents and counters) into the
+		 * Scheduler snapshot.
 		 *
 		 * stateLoad reports Status::Ok, or Status::BadStateImage for a null
 		 * source and for an image whose geometry header describes a
@@ -212,9 +199,9 @@ namespace g2
 		std::vector<uint8_t>       m_secondWritten;
 
 		/* One uint64_t for each position for each bus. advanceAll step 1
-		 * increments m_underrun[position] on EVERY quantum when the
+		 * increments m_underrun[position] on every quantum when the
 		 * position's audio-bus written flag is clear; step 2 increments
-		 * m_secondUnderrun[position] ONLY on the second-bus window quanta
+		 * m_secondUnderrun[position] only on the second-bus window quanta
 		 * (frameIndex % secondBusFrameDivider == 0). The two are separate
 		 * storage, because the two buses advance at different rates, and
 		 * both are sized to dspCount at construction so advanceAll indexes

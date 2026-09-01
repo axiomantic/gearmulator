@@ -1,48 +1,40 @@
-/* t0_resampler_passband_ripple.cpp -- the check of task PLG-11. Design
- * sections 14.2.2 (the revised target table) and 18.2 (the "Resampler
- * passband ripple" row).
+/* A stepped sine sweep from 20 Hz to 20 kHz driven through
+ * synthLib::ResamplerInOut alone -- no firmware, no artifact, no emulated
+ * machine, no g2::Device and no g2::Plugin -- in Resampler::Mode::MameHq, at
+ * each host rate in the table. It reports the peak-to-peak deviation from 0 dB
+ * across the swept band and compares it against a committed target.
  *
- * WHAT THIS CHECK IS. A stepped sine sweep from 20 Hz to 20 kHz driven
- * through synthLib::ResamplerInOut ALONE -- no firmware, no artifact, no
- * emulated machine, no g2::Device and no g2::Plugin -- in the mode PLG-8
- * adopted (Resampler::Mode::MameHq), at each of the six host rates section
- * 14.1's table lists. It reports the PEAK-TO-PEAK deviation from 0 dB across
- * the swept band and compares it against a committed target.
+ * The target is a committed constant and nothing in this program writes it.
+ * g_committedTargetDb below is where the number lives, it is a constexpr in
+ * committed source, and only a deliberate edit changes it. This file opens no
+ * file, reads no environment variable and writes nothing anywhere: a test that
+ * rewrote its own target would pass for every possible measurement, and a
+ * measurement with no predicate is a recording, not a check. When a
+ * measurement exceeds the target the run fails and prints both figures.
  *
- * THE TARGET IS A COMMITTED CONSTANT AND NOTHING IN THIS PROGRAM WRITES IT.
- * g_committedTargetDb below is the only place the number lives, it is a
- * constexpr in committed source, and only a deliberate edit changes it. This
- * file opens no file, reads no environment variable and writes nothing
- * anywhere: a test that rewrote its own target would pass for every possible
- * measurement, which is the defect the previous revision of PLG-11's row
- * carried and which section 14.2.2's "a measurement with no predicate is a
- * recording, not a check" names. When a measurement exceeds the target the
- * run FAILS and prints BOTH figures.
+ * The hard ceiling is checked against the target itself, not only against the
+ * measurement: no committed target may sit above 0.10 dB, so an edit that
+ * raises the target past the ceiling fails here rather than passing quietly.
  *
- * THE HARD CEILING IS ALSO CHECKED, AND IT IS CHECKED AGAINST THE TARGET
- * ITSELF, not only against the measurement. PLG-11 bounds every committed
- * target at 0.10 dB, so a future edit that raises the target past the ceiling
- * must fail here rather than pass quietly; case 4 holds that.
+ * The method, stated so it is reproducible.
  *
- * THE METHOD, STATED SO IT IS REPRODUCIBLE.
- *
- *  1. One ResamplerInOut per host rate, constructed with ZERO input channels
+ *  1. One ResamplerInOut per host rate, constructed with zero input channels
  *     and two output channels. The device rate is 96 kHz, which is what
  *     g2::Device::getSamplerate() answers unconditionally. Zero input
  *     channels is deliberate and it removes nothing that is measured: the
- *     sweep is generated INSIDE the process callback, at the device rate, so
+ *     sweep is generated inside the process callback, at the device rate, so
  *     the host-to-device input resampler would only ever filter silence.
  *     Every AudioBuffer loop over an empty channel set iterates zero times
  *     and feedInput is guarded by if(m_channelCountIn), so the input half is
  *     inert rather than skipped by a special case. What is measured is the
  *     device-to-host output path -- the path every emulated sample takes.
  *
- *  2. The tones are stepped through ONE resampler in sequence, low to high,
+ *  2. The tones are stepped through one resampler in sequence, low to high,
  *     which is what makes this a sweep rather than a set of unrelated runs:
  *     the filter state carries across the step and the settle interval below
  *     is what flushes it.
  *
- *  3. EVERY TONE IS COHERENT WITH ITS OWN CAPTURE WINDOW, so the analysis is
+ *  3. Every tone is coherent with its own capture window, so the analysis is
  *     a leak-free rectangular-window DFT bin and needs no window function and
  *     no leakage budget. For a target frequency the code picks a whole number
  *     of cycles C and a capture length N with f = C * hostRate / N exactly,
@@ -59,33 +51,31 @@
  *
  *  5. The figure compared against the target is max(dB) - min(dB) over the
  *     swept band, the standard definition of passband ripple. The maximum
- *     absolute deviation is printed beside it as a diagnostic; it is NOT the
+ *     absolute deviation is printed beside it as a diagnostic; it is not the
  *     asserted figure, and it is labelled as a diagnostic where it is printed
  *     so it cannot be read as one.
  *
- * DETERMINISM. There is no random source anywhere: the tone grid is a fixed
+ * Determinism. There is no random source anywhere: the tone grid is a fixed
  * logarithmic ladder, the phases start at zero, no clock is read and no
  * thread is created. Case 3 re-runs one whole sweep and requires the second
- * run's dB figures to be BIT-IDENTICAL to the first, so the claim is checked
- * rather than asserted in a comment.
+ * run's dB figures to be bit-identical to the first.
  *
- * THE INSTRUMENT IS CALIBRATED BEFORE IT IS TRUSTED (case 1). The analyzer is
+ * The instrument is calibrated before it is trusted (case 1). The analyzer is
  * held against two synthesized tones whose amplitude is known exactly -- a
  * known positive at 1.0 (0 dB) and a known negative at 0.5 (-6.0206 dB) -- so
  * a stub analyzer that answered "0 dB" to everything would fail here. Without
  * this, a flat sweep would be indistinguishable from an analyzer that cannot
  * see anything at all.
  *
- * THE PERMANENT CONTROL (case 5). The same sweep at 44.1 kHz through
- * Mode::Legacy -- the framework default PLG-8 exists to displace -- must
- * produce a ripple figure that EXCEEDS the committed target by a wide margin.
- * That control is what proves this measurement CAN produce a failing figure,
- * so a green MameHq result is a property of the adopted filter and not of an
- * instrument that reports flat no matter what it is fed. Design section
- * 14.2.1 records why: Legacy puts the 44.1 kHz passband edge at 19,845 Hz,
+ * The permanent control (case 5). The same sweep at 44.1 kHz through
+ * Mode::Legacy -- the framework default -- must produce a ripple figure that
+ * exceeds the committed target by a wide margin. That control is what proves
+ * this measurement can produce a failing figure, so a green MameHq result is a
+ * property of the adopted filter and not of an instrument that reports flat no
+ * matter what it is fed. Legacy puts the 44.1 kHz passband edge at 19,845 Hz,
  * below the 20 kHz this sweep requires to be flat.
  *
- * NO ASSERTION IN THIS FILE IS A LANGUAGE assert() and nothing depends on
+ * No assertion in this file is a language assert() and nothing depends on
  * NDEBUG, so this file reports identically in every build type.
  */
 
@@ -115,13 +105,12 @@ namespace
 	}
 
 	/* ------------------------------------------------------------------
-	 * THE COMMITTED TARGET. Section 14.2.2's revised target table, the
-	 * "Passband ripple, to 20 kHz" row. Editing this line is the ONLY way
-	 * the target moves, and PLG-11 requires the operator to record the
-	 * evidence for a move in the same commit. No code path writes it. */
+	 * The committed target for passband ripple to 20 kHz. Editing this line
+	 * is the only way the target moves, and the evidence for a move belongs
+	 * in the same commit. No code path writes it. */
 	constexpr double g_committedTargetDb = 0.01;
 
-	/* PLG-11's hard ceiling. No committed target may sit above it; a
+	/* The hard ceiling. No committed target may sit above it; a
 	 * measurement that needs one is a defect in the resampler adoption and
 	 * not a target to raise. MameHq is adopted, so the project does not own
 	 * the filter and cannot tune it. */
@@ -130,17 +119,16 @@ namespace
 	constexpr double g_pi = 3.14159265358979323846;
 
 	/* The device rate is fixed by the machine: g2::Device::getSamplerate()
-	 * answers 96 kHz unconditionally (design section 14.1). It is written as
-	 * a literal rather than read from g2::Device because PLG-11 requires this
-	 * sweep to construct no device at all. */
+	 * answers 96 kHz unconditionally. It is written as a literal rather than
+	 * read from g2::Device because this sweep constructs no device at all. */
 	constexpr float g_deviceRate = 96000.0f;
 
-	/* Section 14.1's six host rates, in the order that table lists them. */
+	/* The host rates, in the order the table lists them. */
 	constexpr float g_hostRates[] = { 44100.0f, 48000.0f, 88200.0f, 96000.0f, 176400.0f, 192000.0f };
 	constexpr uint32_t g_hostRateCount = static_cast<uint32_t>(sizeof(g_hostRates) / sizeof(g_hostRates[0]));
 
-	/* The swept band, and the ladder across it. 41 points over three decades
-	 * is about 13.6 per decade. */
+	/* The swept band, and the logarithmic ladder across it -- roughly 13.6
+	 * points per decade. */
 	constexpr double g_bandLowHz = 20.0;
 	constexpr double g_bandHighHz = 20000.0;
 	constexpr uint32_t g_toneCount = 41;
@@ -227,8 +215,8 @@ namespace
 		double frequency = 0.0;
 		uint64_t deviceIndex = 0;
 
-		// The signal source. It runs at the DEVICE rate -- the callback is
-		// handed the resampler's device-side buffer -- and it SETS rather
+		// The signal source. It runs at the device rate -- the callback is
+		// handed the resampler's device-side buffer -- and it sets rather
 		// than accumulates, which is the contract both of the framework's
 		// two callback paths expect.
 		const synthLib::ResamplerInOut::TProcessFunc generate =
@@ -325,7 +313,7 @@ namespace
 int main()
 {
 	/* ---------------------------------------------------------------
-	 * Case 1. THE INSTRUMENT IS CALIBRATED BEFORE IT IS TRUSTED. A known
+	 * Case 1. The instrument is calibrated before it is trusted. A known
 	 * positive and a known negative on synthesized tones of exactly known
 	 * amplitude. An analyzer that answered 0 dB unconditionally -- the way a
 	 * flat sweep and a blind instrument look identical -- fails the second
@@ -356,7 +344,7 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case 2. THE SWEEP, AT EACH OF THE SIX HOST RATES. The measured ripple
+	 * Case 2. The sweep, at each host rate. The measured ripple
 	 * is held against the committed target, and a failure names both
 	 * figures. */
 	std::vector<Sweep> sweeps;
@@ -392,7 +380,7 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case 3. THE MEASUREMENT IS DETERMINISTIC, AND IT IS CHECKED. A second
+	 * Case 3. The measurement is deterministic, and it is checked. A second
 	 * run of the 44.1 kHz sweep -- the rate with the most awkward ratio to
 	 * 96 kHz -- must reproduce the first bit for bit. */
 	{
@@ -402,15 +390,15 @@ int main()
 	}
 
 	/* ---------------------------------------------------------------
-	 * Case 4. THE HARD CEILING BOUNDS THE TARGET ITSELF. PLG-11 forbids a
-	 * committed target above 0.10 dB, so an edit that raised the constant
+	 * Case 4. The hard ceiling bounds the target itself. No committed target
+	 * may sit above 0.10 dB, so an edit that raised the constant
 	 * past the ceiling must be caught here and not pass quietly. */
 	check(g_committedTargetDb > 0.0 && g_committedTargetDb <= g_hardCeilingDb,
 		"the committed target is positive and at or below PLG-11's hard ceiling of 0.10 dB");
 
 	/* ---------------------------------------------------------------
-	 * Case 5. THE PERMANENT CONTROL: THE SAME SWEEP THROUGH THE FRAMEWORK
-	 * DEFAULT MUST FAIL THE TARGET. Legacy at 44.1 kHz puts the passband
+	 * Case 5. The permanent control: the same sweep through the framework
+	 * default must fail the target. Legacy at 44.1 kHz puts the passband
 	 * edge at 19,845 Hz, below the 20 kHz this sweep requires to be flat, so
 	 * its ripple figure is far above the target. This is what proves the
 	 * measurement can produce a failing figure at all -- without it, a green

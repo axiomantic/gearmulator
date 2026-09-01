@@ -1,24 +1,23 @@
-/* CallbackTimer.cpp -- task PLG-13. Design section 18.10.
+/* CallbackTimer.cpp
  *
- * THE SINGLE FILE ON THE SCH-26 LINT EXCLUSION LIST, and the reason the file
- * lives at exactly this path. The lint searches the emulation sources for
- * the five system-clock spellings -- the chrono family, clock_gettime,
- * time(), mach_absolute_time and QueryPerformanceCounter -- and fails on a
- * hit; its exclusion list names FILES, not patterns, and holds exactly this
- * one. A system-clock call anywhere else -- including anywhere else in this
- * directory -- still fails.
+ * This file is on the system-clock lint's exclusion list, and that is why it
+ * lives at exactly this path. The lint searches the emulation sources for the
+ * system-clock spellings -- the chrono family, clock_gettime, time(),
+ * mach_absolute_time and QueryPerformanceCounter -- and fails on a hit; its
+ * exclusion list names files, not patterns. A system-clock call anywhere
+ * else, including anywhere else in this directory, still fails.
  *
  * The clock is std::chrono::steady_clock: a monotonic host clock, fit for
  * measuring elapsed host time and nothing else. No emulated value is
  * computed from it; nothing here feeds the Scheduler, the state, or any
  * buffer the machine renders.
  *
- * ALLOCATES ONCE, in the constructor: the ring AND the report scratch are
+ * Allocates once, in the constructor: the ring and the report scratch are
  * both sized there and every later call writes into storage that already
  * exists. The scratch has exactly one reader at a time -- report() and
- * reset() are non-audio-thread-only, and the sequencing the design states
- * makes concurrent report() calls undefined -- so the scratch is reused
- * rather than reallocated, and no method allocates.
+ * reset() are non-audio-thread-only, and concurrent report() calls are
+ * undefined by contract -- so the scratch is reused rather than reallocated,
+ * and no method allocates.
  */
 
 #include "CallbackTimer.h"
@@ -65,7 +64,7 @@ namespace g2
 
 	void CallbackTimer::end() noexcept
 	{
-		/* reset() TAKES EFFECT AT THE NEXT END(). The clear happens on the
+		/* reset() takes effect at the next end(). The clear happens on the
 		 * audio thread, at the head of the call whose duration is being
 		 * recorded, so the counters it clears are this thread's own and no
 		 * reporting thread ever writes them. */

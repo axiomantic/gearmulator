@@ -1,6 +1,6 @@
 /* t1_patch_load_accepted.cpp -- the patch-load framing repair.
  *
- * THE FRAMING THIS FILE HOLDS. A patch load reaches the device as
+ * The framing this file holds. A patch load reaches the device as
  *
  *   [2-byte BE total][message][2-byte BE CRC-16/XMODEM over the message]
  *
@@ -9,44 +9,27 @@
  *   [2-byte BE total][0x01][0x28+slot][0x53][0x37][0x00 0x00 0x00]
  *   [16-char entry name field][object chain][2-byte BE CRC over the body]
  *
- * Each total counts its OWN whole frame including its two prefix bytes, and
- * each CRC sits DIRECTLY after its body. There is no pad: a pad-to-64 rule was
+ * Each total counts its own whole frame including its two prefix bytes, and
+ * each CRC sits directly after its body. There is no pad: a pad-to-64 rule was
  * an artifact of a synthetic 4096-byte chunking that never produced a short USB
  * packet, and the real wire terminates on the short last packet with totals of
  * 865 and 14,664 bytes measured there.
  *
- * TWO CONJUNCTS, AND BOTH BIND.
+ * The conjuncts, and both bind:
  *
- *   1. THE ORACLE. The stream the load path composes equals the Python
- *      composer's compose_patch_load_transfer over the SAME corpus file, byte
+ *   1. The oracle. The stream the load path composes equals the Python
+ *      composer's compose_patch_load_transfer over the same corpus file, byte
  *      for byte. The Python side is a different implementation of the same
  *      measured rules, written in a different language against the captures
  *      and the reference editor's own composer; a fixture this C++ had
  *      produced would agree with it by construction and would assert nothing.
- *      The three legs are the ones the firmware-extractor check uses: the
- *      oracle's INPUT is the corpus file, its RULES are the framing above, and
- *      a missing, empty or non-zero-exit oracle run is a FAILURE of the case
- *      and never an empty report that compares equal to an empty C++ one.
+ *      The oracle's input is the corpus file, its rules are the framing above,
+ *      and a missing, empty or non-zero-exit oracle run is a failure of the
+ *      case and never an empty report that compares equal to an empty C++ one.
  *
- *   2. THE ACCEPTANCE. The firmware's message worker ACCEPTS the composed
+ *   2. The acceptance. The firmware's message worker accepts the composed
  *      load: D0 = 0 at the switch join. See the acceptance section below for
  *      what this file runs and what it does not.
- *
- * WHAT GOES RED, AND ALL THREE WERE PLANTED IN THE SOURCE AND OBSERVED.
- *
- *   the message wrapper is dropped and the object chain sent bare
- *       -> every byte from offset 2 differs; the firmware rejects with
- *          status 1.
- *   the tenth variation of a 0x65 object is one filler byte instead of a full
- *   copy of the ninth
- *       -> the composed length falls short and the firmware's bit reader walks
- *          into the FOLLOWING chunk, reading its bytes as a parameter count
- *          and overshooting the section by 37 bytes.
- *   the CRC is written after a 64-byte pad instead of directly after the body
- *       -> the total, the pad and the CRC placement all differ.
- *
- * A green run over a stream whose framing was never mutated proves only that
- * the path is quiet.
  */
 
 #include "../../g2JucePlugin/g2PatchLoad.h"
@@ -83,14 +66,14 @@
 
 namespace
 {
-	// THE ENTRY NAME IS THE FILE'S OWN STEM, which is what the reference
+	// The entry name is the file's own stem, which is what the reference
 	// editor puts in the field, and it is derived from G2_PATCH_RELATIVE_PATH
 	// rather than written a second time: a name spelled here and a file named
 	// there could drift apart and the composed field would still look valid.
 	const char* g_patchRelativePath = G2_PATCH_RELATIVE_PATH;
 
-	// THE ORACLE PROGRAM IS SPILLED TO THE BUILD TREE AT RUN TIME AND IS NOT A
-	// COMMITTED FILE, exactly as the firmware extractor's oracle driver is.
+	// The oracle program is spilled to the build tree at run time and is not a
+	// committed file.
 	const char* g_oracleProgram = R"PYTHON(
 import sys
 
@@ -139,7 +122,7 @@ with open(sys.argv[4], "wb") as handle:
 
 	// Runs the oracle over one corpus file and returns the transfer it composed.
 	//
-	// A non-zero exit status, a missing file or an EMPTY file is a FAILURE and
+	// A non-zero exit status, a missing file or an empty file is a failure and
 	// never an empty report: an empty expectation compares equal to an empty
 	// observation, which is the shape this leg exists to refuse.
 	bool oracleTransfer(const std::string& _patchPath, const std::string& _name, const std::string& _function,
@@ -190,7 +173,7 @@ with open(sys.argv[4], "wb") as handle:
 
 	// The stream the load path composes, as the hub drained it.
 	//
-	// READ OUT OF THE HUB AND NOT OUT OF THE COMPOSER'S BUFFER. A composer that
+	// Read out of the hub and not out of the composer's buffer. A composer that
 	// built the right bytes and originated nothing is green on a buffer test
 	// and red here.
 	bool composedStream(const std::vector<uint8_t>& _patch, const std::string& _name, const bool _transferLevel,
@@ -228,7 +211,7 @@ with open(sys.argv[4], "wb") as handle:
 		std::vector<g2::StampedFrame> drained(4);
 		const std::size_t got = hub.drainToDevice(drained.data(), drained.size());
 
-		// ONE TRANSFER, NOT A SEQUENCE. The repair replaces the per-object
+		// One transfer, not a sequence. The repair replaces the per-object
 		// framing rather than wrapping it, so a run that drained several frames
 		// is still originating objects one at a time.
 		if(got != 1)
@@ -299,10 +282,10 @@ int main()
 
 		// ------------------------------------------------ conjunct 1
 		//
-		// BOTH LEVELS ARE COMPARED, and the reason is that they are two
+		// Both levels are compared, and the reason is that they are two
 		// different byte streams and only one of them was measured reaching the
-		// worker's accept path. The MESSAGE is what the load path originates
-		// and what the firmware was measured accepting; the TRANSFER is the
+		// worker's accept path. The message is what the load path originates
+		// and what the firmware was measured accepting; the transfer is the
 		// same message inside a second envelope of the same shape, which the
 		// endpoint builds for the callers that carry it. A run comparing only
 		// one would leave the other free to drift.
@@ -354,7 +337,7 @@ int main()
 
 		// ------------------------------------------------ conjunct 2
 		//
-		// THE ACCEPTANCE WAS MEASURED, AND IT WAS MEASURED ON THESE BYTES.
+		// The acceptance was measured, and it was measured on these bytes.
 		// pch2ComposePatchLoad was run against the same corpus file under a
 		// booting instrument -- the firmware under an in-process debug stub,
 		// delivery through the board's own hub, the SRAM window mapped by
@@ -362,11 +345,11 @@ int main()
 		// at absolute 0x20000800, the panel hole below 0x20000000 answering
 		// zero-read and the span clear of SDRAM -- and the message worker's
 		// status word read at 0x3004C1E4, the post-`move.b d2,d0` retirement
-		// point. It read 0: ACCEPT. The composed bytes were byte-identical to
+		// point. It read 0: accept. The composed bytes were byte-identical to
 		// the instrument's own composition of the same patch, so the verdict is
 		// a verdict on this composer and not on a second one.
 		//
-		// THAT RUN IS NOT REPEATED HERE AND THIS FILE DOES NOT CLAIM IT. The
+		// That run is not repeated here and this file does not claim it. The
 		// instrument boots the machine and takes minutes; this file compares
 		// bytes and takes milliseconds, which is what makes it a regression
 		// gate rather than a measurement. What it holds is that the bytes the

@@ -1,35 +1,29 @@
-/* t1_dump_dsp_dma.cpp -- automated coverage of `g2TestConsole --boot
- * --dump-dsp-dma`, which is M4 clause 1.
+/* Drives `g2TestConsole --boot --dump-dsp-dma`.
  *
- * WHY THIS DRIVES THE BINARY AND NOT A LIBRARY CALL. The check -- the expected
+ * It drives the binary and not a library call. The check -- the expected
  * DDR2/DCO2/DCO4 triple for each chain position, the firmware's own
- * position-to-port table, and the conjunction that turns eight rows into one
- * verdict -- lives in g2TestConsole/main.cpp and in no library. A test that
- * re-implemented it would assert its own copy and would stay green while the
- * shipped one rotted, which is the whole failure this file exists to prevent.
- * So the operator-facing command is what runs, and its stdout is what is read.
+ * position-to-port table, and the conjunction that turns the rows into one
+ * verdict -- lives in g2TestConsole/main.cpp. A test that re-implemented it
+ * would assert its own copy and would stay green while the shipped one
+ * rotted. So the operator-facing command is what runs, and its stdout is what
+ * is read.
  *
- * WHAT IT DISCRIMINATES, and this is the part that is not obvious. The command
- * prints a PASS row for a position whose registers match and a FAIL row for one
- * that does not, and it prints ONE verdict line under the rows. This test
- * asserts BOTH: the eight rows AND the verdict. Asserting only `dsp-dma=PASS`
- * would pass over a run with no rows at all, and asserting only the rows would
- * pass over a verdict computed as something other than their conjunction.
- * `dspSet().dspCount()` is eight and the row count is asserted against that
- * number, so a run that printed one row and a PASS is red on cardinality before
- * any row is read.
+ * The command prints a PASS row for a position whose registers match and a
+ * FAIL row for one that does not, and it prints one verdict line under the
+ * rows. Both are asserted here: asserting only `dsp-dma=PASS` would pass over
+ * a run with no rows at all, and asserting only the rows would pass over a
+ * verdict computed as something other than their conjunction.
  *
- * IT IS TIER T1 AND GATED because it boots the firmware: the registers it reads
- * are the ones the emulated kernel programmed, which is the only state the
- * check has any meaning against. A machine without the artifacts prints the
- * section 18.5 skip line and reports NOT VERIFIED.
+ * It is tier T1 and gated because it boots the firmware: the registers it
+ * reads are the ones the emulated kernel programmed, which is the only state
+ * the check has any meaning against. A machine without the artifacts prints
+ * the skip line and reports NOT VERIFIED.
  */
 
 #include "gatedFixture.h"
 
 /* popen and pclose are spelled with a leading underscore on Windows and the
- * null device has a different name there. Both are answered here so that this
- * file does not re-open the portability hole gdbStub.cpp just closed. */
+ * null device has a different name there. Both are answered here. */
 #ifdef _WIN32
 #	define G2_POPEN  _popen
 #	define G2_PCLOSE _pclose
@@ -137,7 +131,7 @@ namespace
 		unsigned failRows = 0;
 		countRows(output, rows, failRows);
 
-		// CARDINALITY FIRST. A verdict read out of a run with no rows behind it
+		// Cardinality first. A verdict read out of a run with no rows behind it
 		// says nothing, so the row count is asserted before the rows are.
 		check(rows == 8,
 			"one row for each of the eight positions, so the verdict is not read "

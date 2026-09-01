@@ -4,8 +4,8 @@
 // writes into the 9-entry table at 0x30116970 at boot. They are written out
 // here as the expected input of a decode, not as a table the emulator carries:
 // hdi08Decode.h holds no address at all, and the exhaustive case below drives
-// all 256 line patterns, of which the nine recorded entries are nine. The nine
-// are the eight per-DSP addresses and the broadcast.
+// all 256 line patterns. The recorded entries are the per-DSP addresses and the
+// broadcast.
 //
 // The recorded values are absolute addresses. This test turns each one into a
 // CS1 offset by subtracting the base of the CS1 window the MemoryMap carries,
@@ -117,7 +117,7 @@ int main()
 	checkEqual(cs1Base, uint32_t(0x11000000u), "the CS1 window starts at the recorded base");
 
 	// -----------------------------------------------------------------------
-	// Case group 1. The NINE RECORDED ENTRIES of the EXPANDED MACHINE.
+	// Case group 1. The recorded entries of the expanded machine.
 	//
 	// The eight per-DSP entries each select exactly one port, and the ninth is
 	// the broadcast and selects all eight.
@@ -148,7 +148,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 3. The FIVE RECORDED ENTRIES of the BASE MACHINE.
+	// Case group 3. The recorded entries of the base machine.
 	//
 	// The same decode with four ports populated. The base broadcast at
 	// 0x11000780 drives A3 to A6 low and A7 to A10 high, which is exactly the
@@ -167,8 +167,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. An ADDRESS of the EXPANDED TABLE SELECTS NOTHING on A BASE
-	// MACHINE.
+	// Case group 4. An address of the expanded table selects nothing on a base
+	// machine.
 	//
 	// The four expansion addresses drive A7 to A10, and a base machine carries
 	// no port on any of them. This is what says the populated set is read.
@@ -192,8 +192,8 @@ int main()
 	// Case group 5. It is a decode and not a lookup table.
 	//
 	// Every address here drives two or more lines low at once and appears in no
-	// recorded table. A nine-entry lookup could answer none of them, and the
-	// firmware's own broadcast is the same shape.
+	// recorded table, which a lookup table could not answer; the firmware's own
+	// broadcast is the same shape.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 
@@ -206,11 +206,10 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 6. The EXHAUSTIVE CASE.
+	// Case group 6. The exhaustive case.
 	//
 	// All 256 patterns of A3 to A10, on both machines. The expected set is
-	// computed from the one-cold, active-low rule and not from any table, so a
-	// decode that answered any single pattern wrongly fails here.
+	// computed from the one-cold, active-low rule and not from any table.
 	{
 		const g2::Hdi08Decode expanded(g2::g_hdi08ExpandedPorts);
 		const g2::Hdi08Decode base(g2::g_hdi08BasePorts);
@@ -240,8 +239,8 @@ int main()
 	// and they do not reach the selects.
 	//
 	// The DSP56300 host port is eight bytes wide, so local offsets run 0 to 7.
-	// A decode that let those bits change the selected set would send one
-	// longword store to four different ports.
+	// Letting those bits change the selected set would send one longword store
+	// to four different ports.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 
@@ -258,7 +257,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. ADDRESS BITS ABOVE A10 do not REACH the SELECTS either.
+	// Case group 8. Address bits above A10 do not reach the selects either.
 	{
 		const g2::Hdi08Decode decode(g2::g_hdi08ExpandedPorts);
 

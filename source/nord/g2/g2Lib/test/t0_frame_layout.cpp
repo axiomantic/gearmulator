@@ -1,25 +1,24 @@
-/* t0_frame_layout.cpp -- the check of task SCH-4. Design section 13.10.1.
+/* t0_frame_layout.cpp
  *
  * The things asserted below fail in different ways on purpose.
  *
- * THE LAYOUT PROPERTIES are asserted by static_assert inside frame.h, at the
+ * The layout properties are asserted by static_assert inside frame.h, at the
  * declaration site, so that every consumer of the header carries them and not
  * only this test.
  *
- * THE SIGNATURES are asserted here, by taking the address of each
- * conversion overload THROUGH ITS FULLY QUALIFIED FUNCTION-POINTER TYPE. That
- * spelling is what makes a wrong signature a COMPILE error rather than a
- * silent match against some other overload: remove any one parameter from any
- * one of the types below and no overload matches, so the initialiser
- * fails. A missing definition is then a LINK error, because main() calls
- * through them all.
+ * The signatures are asserted here, by taking the address of each conversion
+ * overload through its fully qualified function-pointer type. That spelling is
+ * what makes a wrong signature a compile error rather than a silent match
+ * against some other overload: remove any one parameter from any one of the
+ * types below and no overload matches, so the initialiser fails. A missing
+ * definition is then a link error, because main() calls through them all.
  */
 
 #include "frame.h"
 
 #include <cstdio>
 
-/* ---------------- the four signatures, copied from design section 13.10.1.
+/* ---------------- the signatures.
  *
  * `reg` is a PARAMETER and not a constant because the second bus transmits on
  * TX2 while everything else uses register 0.
@@ -51,7 +50,7 @@ namespace
 	}
 
 	/* The Q23 corners. 0x800000 is -1.0 and 0x7FFFFF is just under +1.0.
-	 * 0x800000 is THE case a reinterpreting cast would have got wrong: read as
+	 * 0x800000 is the case a reinterpreting cast gets wrong: read as
 	 * an unsigned TWord it is +8,388,608, and read as Q23 it is -8,388,608. */
 	constexpr dsp56k::TWord kWords[8] =
 	{

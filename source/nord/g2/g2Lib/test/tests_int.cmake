@@ -1,8 +1,8 @@
 # Test registrations for the int track. Owned by the int track.
 #
 # Append one add_test(NAME <name> ...) for every test this track adds under
-# source/nord/g2/g2Lib/test/. THE NAME IS THE EXACT STRING THE TASK'S Check:
-# LINE PASSES TO -R. Edit no other CMake file in this tree.
+# source/nord/g2/g2Lib/test/. The name is the exact string ctest -R must
+# match. Edit no other CMake file in this tree.
 
 # ----------------- boot the firmware with a stubbed CS3
 #
@@ -21,9 +21,7 @@ set_property(TARGET t1_boot PROPERTY FOLDER "G2/test")
 
 # ----------------- t1_egress, audio through the chain: the egress arrival
 #
-# Gated exactly as t1_boot is. It boots the firmware, enters the play phase and
-# measures the frame at which a pattern injected at the codec source reappears
-# at the codec sink, against the delay the chain's own geometry predicts.
+# Gated exactly as t1_boot is.
 
 add_executable(t1_egress t1_egress.cpp)
 target_link_libraries(t1_egress PRIVATE g2Lib)
@@ -31,9 +29,7 @@ set_property(TARGET t1_egress PROPERTY FOLDER "G2/test")
 
 # ----------------- t1_chain_health, the chain-health counters
 #
-# Gated exactly as t1_boot is. It asserts the counters are zero across a golden
-# run, and it pairs every zero it asserts with a known positive that drives that
-# counter above zero.
+# Gated exactly as t1_boot is.
 
 add_executable(t1_chain_health t1_chain_health.cpp)
 target_link_libraries(t1_chain_health PRIVATE g2Lib)
@@ -41,11 +37,9 @@ set_property(TARGET t1_chain_health PROPERTY FOLDER "G2/test")
 
 # ----------------- t1_chain_order: which hardware port carries which position
 #
-# Gated exactly as t1_boot is. It boots the firmware, derives the
-# firmware's own port ordering twice by paths that share no arithmetic -- the
-# base table at 0x30116970 and the kernel's own DMA slot counts -- and asserts
-# that attachChainCallbacks puts chain position 0 on the head DSP and chain
-# position N - 1 on the tail DSP.
+# Gated exactly as t1_boot is. The firmware's own port ordering is derived
+# twice by paths that share no arithmetic: the base table at 0x30116970, and
+# the kernel's own DMA slot counts.
 
 add_executable(t1_chain_order t1_chain_order.cpp)
 target_link_libraries(t1_chain_order PRIVATE g2Lib)
@@ -54,7 +48,7 @@ set_property(TARGET t1_chain_order PROPERTY FOLDER "G2/test")
 # ----------------- the gate, made visible to ctest and satisfiable by build
 #
 # ctest reads an exit status and never a summary line. gatedFixture.h owns the
-# skip code; it is READ OUT OF THE HEADER here rather than restated, so the two
+# skip code; it is read out of the header here rather than restated, so the two
 # cannot drift, and a header that stops defining it fails the configure instead
 # of quietly restoring the exit-0 skip that ctest scores Passed.
 
@@ -108,7 +102,7 @@ else()
 	message(STATUS "g2 gated tests: no artifacts at '${NMG2_ARTIFACTS}', gated tests will report Skipped")
 endif()
 
-# t0_skip_discipline runs THIS binary to prove a skip reaches ctest as an exit
+# t0_skip_discipline runs this binary to prove a skip reaches ctest as an exit
 # code. The wiring lives here rather than in tests_repo.cmake because both
 # targets exist at this point: tests_repo.cmake is included before this file,
 # and t1_boot is not a target yet when it is read.

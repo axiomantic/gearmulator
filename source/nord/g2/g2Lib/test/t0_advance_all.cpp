@@ -1,12 +1,12 @@
-/* The four-step order, which a target build cannot see:
+/* The step order:
  *
  *   advanceAll closes the underrun accounting for the quantum that just
  *   ended, in this order, with 2 x dspCount written flags (one per position
  *   per bus):
- *     1. every quantum: for each position, if its AUDIO-bus flag is clear,
+ *     1. every quantum: for each position, if its audio-bus flag is clear,
  *        increment that position's underrunFrames.
  *     2. only when frameIndex % secondBusFrameDivider == 0: for each
- *        position, if its SECOND-bus flag is clear, increment that
+ *        position, if its second-bus flag is clear, increment that
  *        position's secondBusUnderrunFrames.
  *     3. Clear the audio-bus flags always; clear the second-bus flags only
  *        on the same quanta as step 2.
@@ -15,19 +15,11 @@
  *   The order matters, because the flags describe the quantum that ended,
  *   not the one about to start.
  *
- * A build of g2Lib tests none of this: a target compiles and links whether
- * or not advanceAll counts or clears anything, and before CHN-7 the three
- * counters returned zero from a surface task. These cases drive advanceAll
- * against real flags (set through the CHN-6 transmit wrappers, which read the
- * emulated ESAI's transmit-underrun latch) and assert the counters, the
- * clearing, and the mailbox-advance cadence.
- *
  * A flag is not kGoodDelivery for two reasons: no wrapper fired in the quantum,
- * or a wrapper fired and the frame it carried had underrun. Every non-zero
- * assertion below is the first route -- the cases attach real ESAIs and then
- * simply do not fire a wrapper. The second route is not reachable from here at
- * all, because these cases fire the wrappers by hand with a bare frame rather
- * than driving the peripheral's transmit path; t0_esai_underrun_gate owns it.
+ * or a wrapper fired and the frame it carried had underrun. Only the first
+ * route is reachable here, because these cases fire the wrappers by hand with
+ * a bare frame rather than driving the peripheral's transmit path; the
+ * stale-frame route is exercised in t0_esai_underrun_gate.
  *
  * The flags are per-position and per-bus, so a divider of 2 makes the two
  * buses' cadences differ inside one run: window quanta are even frame
@@ -60,8 +52,8 @@ namespace
 	dsp56k::DefaultMemoryValidator g_memoryValidator;
 
 	/* One chain position's two real Esai objects, plus the DSP and memory
-	 * an Esai needs to stand up. Mirrors the fixture of the CHN-5/CHN-6
-	 * tests: a real peripheral is behind every position, so the wrapper's
+	 * an Esai needs to stand up. A real peripheral is behind every
+	 * position, so the wrapper's
 	 * "no underrun outstanding" reading is a real one and not a null-Esai
 	 * default. */
 	struct PositionEsai
@@ -177,8 +169,7 @@ int main()
 	 *
 	 * Firing position 0's audio and second wrappers with no underrun
 	 * outstanding sets exactly audioWritten[0] and secondWritten[0];
-	 * position 1's flags stay clear because no wrapper fires for it, which
-	 * is the route into the counter this file owns. */
+	 * position 1's flags stay clear because no wrapper fires for it. */
 	{
 		auto audioTx0 = adapter.audioTxCallback(0u);
 		auto secondTx0 = adapter.secondTxCallback(0u);
@@ -192,7 +183,7 @@ int main()
 	check(adapter.secondWritten(0u), "setup: second flag 0 set");
 	check(!adapter.secondWritten(1u), "setup: second flag 1 clear");
 
-	/* ------------- Case 2: a NON-window advanceAll (frameIndex 1).
+	/* ------------- Case 2: a non-window advanceAll (frameIndex 1).
 	 *
 	 * Step 1 counts audio underruns from clear audio flags every quantum:
 	 * position 0 delivered (flag set, not counted) so only position 1's audio

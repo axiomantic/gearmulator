@@ -1,37 +1,26 @@
-// Task REPO-8. Tier T0: this test reads two committed text files of hashes and
-// integers. It needs no firmware artifact and no NMG2_ARTIFACTS.
-//
-// Plan section 9.2, REPO-8. Design sections 18.6, 14.3.1 and 23.1. Plan
-// sections 22.1 and 22.2.
+// Tier T0: this test reads two committed text files of hashes and integers. It
+// needs no firmware artifact and no NMG2_ARTIFACTS.
 //
 // The two manifests:
 //
-//   artifacts.sha256   the SHA-256 of every required firmware file, AND NO
-//                      PAYLOAD. The gate checks the hashes before it runs T1 or
+//   artifacts.sha256   the SHA-256 of every required firmware file, and no
+//                      payload. The gate checks the hashes before it runs T1 or
 //                      T2. A hash mismatch is a hard failure with the file name,
 //                      never a skip.
 //
-//   golden.timebase    the values the golden set was recorded under. Exactly
-//                      five, integers only, so the file is public. Plan section
-//                      22.2: a change to any of the four in-boundary values
-//                      invalidates the whole golden set.
+//   golden.timebase    the values the golden set was recorded under. Integers
+//                      only, so the file is public. A change to any of the
+//                      in-boundary values invalidates the whole golden set.
 //
-// WHAT THIS TEST IS AND IS NOT. It asserts that the two files PARSE, that they
-// carry what they are required to carry, and -- the point of the negative cases
-// -- that the parse is ABLE TO REJECT. It also compares every value the
-// committed golden.timebase records against the macro that DEFINES that value,
-// because a manifest whose shape is checked and whose values are not carries the
-// authority of a checked artifact while describing a state that has moved.
+// Every value the committed golden.timebase records is compared against the
+// macro that defines that value, because a manifest whose shape is checked and
+// whose values are not carries the authority of a checked artifact while
+// describing a state that has moved.
 //
-// It does not reach the run path: whether the Scheduler is built from those
-// macros is `t1_timebase_gate`'s question.
-//
-// A NOTE ON THE NEGATIVE CASES. The plan asks for "a manifest with four lines
-// and one with six". A parse that merely counted lines would satisfy that by
-// accident and would still accept five WRONG lines. Every case below therefore
-// asserts a NAMED failure that identifies the offending SYMBOL, and the
-// four-line and six-line cases are built by removing and adding a named symbol
-// rather than by padding a line count.
+// Every negative case asserts a named failure that identifies the offending
+// symbol, and the short and long manifests are built by removing and adding a
+// named symbol rather than by padding a line count: a parse that merely counted
+// lines would accept five wrong lines.
 
 #include <algorithm>
 #include <cctype>
@@ -66,9 +55,9 @@ namespace
 	// ------------------------------------------------------------------
 	// golden.timebase
 	//
-	// The five symbols, in the order design section 18.6 lists them. This
-	// vector is the required set: a symbol missing from the file is named, and
-	// a symbol in the file that is not here is named.
+	// The required symbols, in the order the design lists them. This vector is
+	// the required set: a symbol missing from the file is named, and a symbol in
+	// the file that is not here is named.
 
 	const std::vector<std::string> g_requiredTimebaseSymbols =
 	{
@@ -85,8 +74,8 @@ namespace
 		unsigned long long value = 0;
 	};
 
-	// The same five symbols as they are DEFINED, for the comparison against the
-	// same five as they are RECORDED.
+	// The same symbols as they are defined, for the comparison against the same
+	// symbols as they are recorded.
 	//
 	// One token becomes both columns, and that is the whole point: the number is
 	// never written here, so this table cannot become a third copy of it that
@@ -113,7 +102,7 @@ namespace
 
 #undef G2_MANIFEST_CONSTANT
 
-	// Parses golden.timebase. Returns the entries, and appends one NAMED
+	// Parses golden.timebase. Returns the entries, and appends one named
 	// failure per defect to _failures. An empty _failures means the manifest is
 	// well formed.
 	std::vector<TimebaseEntry> parseTimebase(const std::string& _text, std::vector<std::string>& _failures)
@@ -153,8 +142,8 @@ namespace
 				continue;
 			}
 
-			// Integers only. Design section 18.6: "Integers only, no Clavia
-			// data, so it is public." A value that is not an integer is the
+			// Integers only, no Clavia data, so the file is public. A value
+			// that is not an integer is the
 			// route by which something that is not an integer could enter a
 			// file this project publishes on the strength of that sentence.
 			const bool allDigits = !valueText.empty() &&
@@ -349,8 +338,8 @@ int main()
 			check(failures.empty(), "golden.timebase: the committed manifest parses with no failure" + joined(failures));
 			check(entries.size() == 5, "golden.timebase: the committed manifest holds exactly five values");
 
-			// "Exactly five lines" is asserted on the FILE and not only on the
-			// parse, because the parse skips blank lines.
+			// The line count is asserted on the file and not only on the parse,
+			// because the parse skips blank lines.
 			const size_t newlineCount = static_cast<size_t>(std::count(timebaseText.begin(), timebaseText.end(), '\n'));
 			check(newlineCount == 5, "golden.timebase: the file holds exactly five lines");
 
@@ -360,7 +349,7 @@ int main()
 				check(present, "golden.timebase: carries " + required);
 			}
 
-			// Integers only, so the file is public. Asserted on the BYTES and
+			// Integers only, so the file is public. Asserted on the bytes and
 			// not only through the parse: this is the sentence on whose
 			// strength the file is published.
 			const bool integersAndNamesOnly = std::all_of(timebaseText.begin(), timebaseText.end(), [](const unsigned char _c)
@@ -369,7 +358,7 @@ int main()
 			});
 			check(integersAndNamesOnly, "golden.timebase: every byte is a symbol character, a digit, a space or a newline");
 
-			// Every RECORDED value against the value its macro DEFINES. Both
+			// Every recorded value against the value its macro defines. Both
 			// numbers are printed whichever way the comparison goes, because a
 			// drift report that names only the symbol sends its reader back to
 			// both files to find out which side moved.
@@ -416,10 +405,9 @@ int main()
 			check(failures.empty(), "artifacts.sha256: the committed manifest parses with no failure" + joined(failures));
 			check(entries.size() == 4, "artifacts.sha256: the committed manifest holds exactly four hashes");
 
-			// AND NO PAYLOAD. The file is 4 hashes and 4 names; nothing else
-			// fits. A hard byte ceiling well under the 65,536-byte fixture
-			// ceiling makes "no payload" a measured property rather than an
-			// intention.
+			// And no payload. A hard byte ceiling well under the 65,536-byte
+			// fixture ceiling makes "no payload" a measured property rather
+			// than an intention.
 			check(artifactsText.size() < 512, "artifacts.sha256: the file is under 512 bytes, so it carries no payload");
 
 			const bool hexAndNamesOnly = std::all_of(artifactsText.begin(), artifactsText.end(), [](const unsigned char _c)
@@ -428,7 +416,7 @@ int main()
 			});
 			check(hexAndNamesOnly, "artifacts.sha256: every byte is alphanumeric, an underscore, a dot, a space or a newline");
 
-			// Four DISTINCT hashes. A manifest whose rows were copied from one
+			// Distinct hashes. A manifest whose rows were copied from one
 			// another would satisfy every shape assertion above.
 			std::vector<std::string> hashes;
 			for(const ArtifactEntry& entry : entries)
@@ -436,21 +424,16 @@ int main()
 			std::sort(hashes.begin(), hashes.end());
 			check(std::unique(hashes.begin(), hashes.end()) == hashes.end(), "artifacts.sha256: the four hashes are distinct");
 
-			// The SHA-256 of the empty input. A placeholder hash is the failure
-			// mode plan section 1.3 rule 1 forbids, and it has one well-known
-			// spelling.
+			// The SHA-256 of the empty input. A placeholder hash is a forbidden
+			// failure mode, and it has one well-known spelling.
 			const std::string emptyInputHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 			const bool anyEmpty = std::any_of(entries.begin(), entries.end(), [&](const ArtifactEntry& _e) { return _e.hash == emptyInputHash; });
 			check(!anyEmpty, "artifacts.sha256: no row carries the hash of an empty file");
 		}
 
-		// ================= THE NEGATIVE CASES
-		//
-		// "A negative case drives a manifest with four lines and one with six,
-		// and asserts a named failure for each, so the parse is known to be
-		// able to reject."
+		// ================= the negative cases
 
-		// ---- four lines: the five required symbols minus one.
+		// ---- four lines: the required symbols minus one.
 		{
 			const std::string fourLines =
 				"G2_DSP_CYCLES_PER_FRAME_NUM   150000000\n"
@@ -469,20 +452,17 @@ int main()
 				"four lines: the failure NAMES the missing symbol");
 		}
 
-		// ---- six lines: the five required symbols plus one that is not one.
+		// ---- six lines: the required symbols plus one that is not one.
 		//
-		// The extra symbol is deliberately NOT one of the two unmeasured bus
-		// symbols of measurement register rows 5 and 6. BRD-0's configure-time
-		// guard fails the build when any source under g2Lib/ carries either
-		// name, and a negative case that broke the configure step would not be
-		// a negative case.
+		// The extra symbol is deliberately not one of the two unmeasured bus
+		// symbols. The configure-time guard fails the build when any source
+		// under g2Lib/ carries either name, and a negative case that broke the
+		// configure step would not be a negative case.
 		//
-		// MEASURED, and worth recording: that guard is a plain substring match
-		// over the file text, so it fires on a COMMENT that names either symbol
+		// Measured, and worth recording: that guard is a plain substring match
+		// over the file text, so it fires on a comment that names either symbol
 		// exactly as it fires on a use. This paragraph is therefore written
-		// without the two names in it. The guard cannot tell a mention from a
-		// use, which is reported as a plan defect rather than worked around
-		// anywhere else.
+		// without the two names in it.
 		{
 			const std::string sixLines =
 				"G2_DSP_CYCLES_PER_FRAME_NUM   150000000\n"
@@ -503,11 +483,11 @@ int main()
 				"six lines: the failure NAMES the surplus symbol");
 		}
 
-		// ---- six lines by DUPLICATION.
+		// ---- six lines by duplication.
 		//
 		// A parse that only counted would call this six lines and reject it for
 		// the wrong reason. A parse that only checked the required set would
-		// accept it. Neither is what section 22.2's gate needs.
+		// accept it. Neither is what the gate needs.
 		{
 			const std::string duplicated =
 				"G2_DSP_CYCLES_PER_FRAME_NUM   150000000\n"

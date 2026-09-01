@@ -1,8 +1,8 @@
 # Test registrations for the dsp track. Owned by the dsp track.
 #
 # Append one add_test(NAME <name> ...) for every test this track adds under
-# source/nord/g2/g2Lib/test/. THE NAME IS THE EXACT STRING THE TASK'S Check:
-# LINE PASSES TO -R. Edit no other CMake file in this tree.
+# source/nord/g2/g2Lib/test/. The name is the exact string passed to -R.
+# Edit no other CMake file in this tree.
 
 # ----------------- eight DSPs attached face by face
 #
@@ -61,15 +61,14 @@ set_tests_properties(t0_chain_data_flow PROPERTIES LABELS "UnitTest" TIMEOUT 120
 
 # ----------------- dynamicFastInterrupts on every slot's JitConfig
 #
-# The observable is the program counter's position; an assertion on retired
-# instructions is satisfied by the defect.
+# The observable is the program counter's position, not retired instructions.
 #
 # The path of the committed program is passed on the command line: a path the
 # check had to guess would be a path the check could get wrong in silence.
 #
 # The registration is unconditional while the check reads dsp56k::g_useJIT at
 # run time. It has no opposite property to assert on an interpreter build, so it
-# FAILS there rather than skipping, and it prints the build mode on its first
+# fails there rather than skipping, and it prints the build mode on its first
 # line so that outcome is traceable to a configuration.
 
 add_executable(t0_dynamic_fast_interrupts t0_dynamic_fast_interrupts.cpp)

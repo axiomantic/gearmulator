@@ -4,17 +4,13 @@
 
 #include "gdbStub.h"
 
-/* THE SOCKET LAYER IS THE ONLY PLATFORM-DEPENDENT PART OF THIS FILE, and it is
- * confined to the block below and to the six wrappers under it. Winsock is
- * Berkeley sockets with four differences and no more: the handle is a UINT_PTR
- * rather than an int, the library needs starting once per process, close is
- * spelled closesocket, and the byte pointers of setsockopt, send and recv are
- * char* rather than void*. Each difference is answered once here so that the
- * protocol code below reads the same on every platform.
- *
- * The whole of g2Lib is in the windows-2022 MSVC leg of the CI matrix and
- * gdbStub.cpp is unconditionally in sources_board.cmake, so a POSIX-only
- * include block here is a broken build and not a missing feature. */
+/* The socket layer is the platform-dependent part of this file, confined to
+ * the block below and to the wrappers under it. Winsock is Berkeley sockets
+ * with these differences and no more: the handle is a UINT_PTR rather than an
+ * int, the library needs starting once per process, close is spelled
+ * closesocket, and the byte pointers of setsockopt, send and recv are char*
+ * rather than void*. Each difference is answered once here so that the
+ * protocol code below reads the same on every platform. */
 #ifdef _WIN32
 #	ifndef WIN32_LEAN_AND_MEAN
 #		define WIN32_LEAN_AND_MEAN
@@ -39,8 +35,8 @@ namespace g2
 {
 	namespace
 	{
-		// The eighteen registers GDB's m68k target expects, in its order, which
-		// is the register file's own order. mcf5307.h owns the mapping.
+		// The registers GDB's m68k target expects, in its order, which is the
+		// register file's own order. mcf5307.h owns the mapping.
 		constexpr int g_regCount = 18;
 		constexpr int g_regPc    = 17;
 
@@ -69,16 +65,16 @@ namespace g2
 		// The allowance a `c` carries: every instruction the bound permits.
 		constexpr uint64_t g_unbounded = ~uint64_t(0);
 
-		// The size a byte access presents to Board::onRead and Board::onWrite, IN
-		// THE CORE'S UNIT: mcf5307.h states it once per callback typedef, and
-		// `size` there is a COUNT OF BYTES and never a width in bits.
+		// The size a byte access presents to Board::onRead and Board::onWrite, in
+		// the core's unit: mcf5307.h states it once per callback typedef, and
+		// `size` there is a count of BYTES and never a width in bits.
 		constexpr int g_byte = 1;
 
 		// The signal a stop reply carries. SIGTRAP is what a debugger expects
 		// from a breakpoint, a watchpoint and a completed step alike.
 		const char* const g_sigTrap = "05";
 
-		/* The six wrappers. Each takes and returns the intptr_t handle
+		/* The socket wrappers. Each takes and returns the intptr_t handle
 		 * GdbStub stores, so nothing below this point names a platform
 		 * socket type. */
 
@@ -425,12 +421,12 @@ namespace g2
 	 * discarded, which is what makes the peer's own `+` and `-` transparent
 	 * here.
 	 *
-	 * A CHECKSUM MISMATCH IS NOT THE END OF THE SESSION. `-` is the
+	 * A checksum mismatch is not the end of the session. `-` is the
 	 * protocol's request to send that packet again, so the debugger answers
-	 * it with a retransmission and this loop reads that. Returning FALSE
-	 * there closed the session instead: servePacket forwards a false to
-	 * serve(), which stops the packet loop, so one corrupted byte took the
-	 * debugger down rather than costing it one round trip. FALSE is reserved
+	 * it with a retransmission and this loop reads that. Returning false
+	 * there would close the session instead: servePacket forwards a false to
+	 * serve(), which stops the packet loop, so one corrupted byte would take
+	 * the debugger down rather than cost it one round trip. False is reserved
 	 * for the client having gone, which is what a recv of anything other
 	 * than one byte means. */
 	bool GdbStub::readPacket(std::string& _payload)
@@ -501,7 +497,7 @@ namespace g2
 		return reply;
 	}
 
-	/* Eighteen registers, big-endian, read from the core on every call. There is
+	/* The register block, big-endian, read from the core on every call. There is
 	 * no cached copy and there must not be one: a debugger asks `g` precisely
 	 * because the machine has moved, and a copy would answer where it used to
 	 * be. */
@@ -516,9 +512,9 @@ namespace g2
 	}
 
 	/* The program counter is read-only through setMcuReg, and that is the core's
-	 * rule and not this file's: mcf5307.h states it at index 17 and machine.nim's
-	 * regFileSet has no branch for it. The value is offered and the core keeps
-	 * its own, so a `G` carrying a PC is accepted and changes nothing. */
+	 * rule and not this file's: mcf5307.h states it at index 17. The value is
+	 * offered and the core keeps its own, so a `G` carrying a PC is accepted and
+	 * changes nothing. */
 	std::string GdbStub::writeRegisters(const std::string& _hex)
 	{
 		if(_hex.size() < size_t(g_regCount) * 8u)

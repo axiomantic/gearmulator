@@ -39,18 +39,15 @@
 //
 // What is not here:
 //
-//   * The plan's Check line also names a case in which masking the source in
-//     IMR at MBAR+$044 suppresses the presentation without disturbing TER.
-//     THAT CASE IS NOT IMPLEMENTED AND IT IS NOT SILENTLY DROPPED.
-//     InterruptController models three register groups and IMR is not one of
-//     them -- interruptController.h names $006 (IRQPAR), $04B (AVR) and
-//     $04C..$057 (the internal control block), and its writeRegister ignores
-//     every other offset. A mask between a source's pending bit and the
-//     arbiter is new arbitration in the CONTROLLER, and BRD-34's own second
-//     property forbids exactly that ("THIS TASK ADDS NO ARBITRATION, NO
-//     PENDING BIT AND NO PRIORITY DECISION") while its Files: line carries no
-//     controller file. The case is therefore a task for whoever adds IMR to
-//     BRD-3's class, and it is recorded here rather than faked.
+//   * A case in which masking the source in IMR at MBAR+$044 suppresses the
+//     presentation without disturbing TER is not implemented, and it is not
+//     silently dropped. InterruptController models a fixed set of register
+//     groups and IMR is not one of them -- interruptController.h names $006
+//     (IRQPAR), $04B (AVR) and $04C..$057 (the internal control block), and
+//     its writeRegister ignores every other offset. A mask between a source's
+//     pending bit and the arbiter is new arbitration in the controller. The
+//     case therefore belongs to whoever adds IMR to that class, and it is
+//     recorded here rather than faked.
 //
 //   * Anything about the boot spin at 0x30055FBC.
 
@@ -167,7 +164,7 @@ namespace
 	constexpr uint32_t kIcrBase = 0x04Cu;   // ICR0, UM Table 8-2
 	constexpr uint32_t kIrqpar  = 0x006u;   // IRQPAR, UM Table 8-1
 	// The AVR register byte, the base of the longword group that contains it,
-	// and one Reserved byte of that group. All three from MCF5307 UM Table
+	// and one Reserved byte of that group, from MCF5307 UM Table
 	// B-1, which lists `MBAR+$04B AVCR 8 AUTOVECTOR CONTROL REGISTER` and
 	// gives $048, $049 and $04A no row at all. This file owns its own copies
 	// so the two sides move independently.
@@ -233,7 +230,7 @@ namespace
 
 extern "C"
 {
-	/* ANSWERS 1, WHICH IS "THE RUNTIME IS USABLE". mcf5307.h states the status
+	/* Answers 1, which is "the runtime is usable". mcf5307.h states the status
 	 * is a truth value and not a POSIX error code, and 0 is reserved for a
 	 * one-time latch that was abandoned. This fake has no latch and no runtime
 	 * to stall, so 1 is the only answer it can honestly give. */
@@ -597,7 +594,7 @@ int main()
 	// and names the first three Reserved -- so $048 is the group base and $04B
 	// is the register byte. Both firmware images agree: BOOT:0x320E and
 	// CODE:0x3005827E / CODE:0x30058522 each load $1000004B into a0 and touch
-	// the byte there, and no ALIGNED reference to $10000048 exists in either
+	// the byte there, and no aligned reference to $10000048 exists in either
 	// image. This group writes where the firmware writes.
 	{
 		g2::Board board(mbarOnlyConfig());

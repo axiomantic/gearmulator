@@ -1,12 +1,10 @@
 # Test registrations for the proto track. Owned by the proto track.
 #
 # Append one add_test(NAME <name> ...) for every test this track adds under
-# source/nord/g2/g2Lib/test/. THE NAME IS THE EXACT STRING THE TASK'S Check:
-# LINE PASSES TO -R. Edit no other CMake file in this tree.
+# source/nord/g2/g2Lib/test/. The name is the exact string ctest -R must
+# match. Edit no other CMake file in this tree.
 
 # ----------------- The CRC
-#
-# Check: ctest --test-dir build --no-tests=error -R ^t0_crc16$
 #
 # The test compiles ../crc16.cpp directly and links no library: the checksum is
 # free-standing arithmetic over a caller's bytes and needs nothing g2Lib links.
@@ -89,9 +87,8 @@ set_tests_properties(t0_board_transport PROPERTIES LABELS "UnitTest")
 # file, and it compiles the same one extra source for the same reason:
 # g2PatchLoad.cpp lives in g2JucePlugin and is not a g2Lib source.
 #
-# t0_board_transport stops at the hub. This target observes the device side of
-# the Board's isp1181_rx call, at the CS3 data port, through the same bus
-# callback the MCU core drives.
+# This target observes the device side of the Board's isp1181_rx call, at the
+# CS3 data port, through the same bus callback the MCU core drives.
 
 add_executable(t0_usb_ingress_byte
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_usb_ingress_byte.cpp
@@ -155,12 +152,10 @@ endif()
 # Gated: it boots the Clavia firmware and reads one file out of the artifact
 # corpus, so it skips with a reason when NMG2_ARTIFACTS names no directory.
 #
-# t1_patch_running observes the CS3 data port and the instruction-fetch stream.
-# It observes neither the interrupt line nor the CS3 command port. This target
-# records every command byte the firmware writes to the command port, samples
-# the interrupt controller's presented level once per quantum, and counts
-# instruction fetches at the address the CODE image installs as its level-3
-# handler.
+# This target records every command byte the firmware writes to the command
+# port, samples the interrupt controller's presented level once per quantum,
+# and counts instruction fetches at the address the CODE image installs as its
+# level-3 handler.
 #
 # g2PatchLoad.cpp lives in g2JucePlugin and is not a g2Lib source, so this
 # target compiles it directly. crc16 and InternalClient arrive through the
@@ -193,29 +188,25 @@ endif()
 
 # ----------------- The 0x01/0x37 patch-load framing repair
 #
-# TIER T1, gated exactly as t1_patch_running is: it reads one file out of the
-# artifact corpus, so it SKIPS with a reason when NMG2_ARTIFACTS names no
-# directory. It boots no firmware, which is why it carries no TIMEOUT of the
-# size the booting targets above need.
+# Tier T1, gated: it reads one file out of the artifact corpus, so it skips
+# with a reason when NMG2_ARTIFACTS names no directory. It boots no firmware,
+# which is why it carries no TIMEOUT of the size the booting targets above
+# need.
 #
-# IT COMPILES ONE SOURCE DIRECTLY, for the reason stated above:
-# g2PatchLoad.cpp lives in g2JucePlugin and is not a g2Lib source. crc16 and
-# InternalClient arrive THROUGH the library, because sources_proto.cmake
-# appends both.
+# It compiles one source directly: g2PatchLoad.cpp lives in g2JucePlugin and
+# is not a g2Lib source. crc16 and InternalClient arrive through the library.
 #
-# THE PATCH IS NAMED RELATIVE TO NMG2_ARTIFACTS AND NEVER COPIED INTO THIS
-# TREE, exactly as t1_patch_running names it and for the same reason: it is
-# Clavia-derived and a copy under source/ would put those bytes in the
-# repository. THE ENTRY NAME IS DERIVED FROM THIS PATH BY THE TEST and is not
-# defined a second time here.
+# The patch is named relative to NMG2_ARTIFACTS and never copied into this
+# tree: it is Clavia-derived and a copy under source/ would put those bytes in
+# the repository. The entry name is derived from this path by the test and is
+# not defined a second time here.
 #
-# IT NEEDS THE PYTHON ORACLE, because the composed stream is compared against
-# nmg2-tools' own composer byte for byte. The three definitions below are the
-# same ones tests_board.cmake hands t0_extract_matches_python, and they are in
-# scope because that file is included before this one. AN ORACLE THAT IS NOT
-# THERE IS A FAILURE OF THE CHECK AND NEVER A SKIP: only a missing artifact
-# directory skips, and an oracle-less machine that scored Passed would report a
-# framing this run never compared.
+# It needs the Python oracle, because the composed stream is compared against
+# nmg2-tools' own composer byte for byte. The definitions below are in scope
+# because tests_board.cmake is included before this file. An oracle that is
+# not there is a failure of the check and never a skip: only a missing
+# artifact directory skips, and an oracle-less machine that scored Passed
+# would report a framing this run never compared.
 
 add_executable(t1_patch_load_accepted
 	${CMAKE_CURRENT_SOURCE_DIR}/t1_patch_load_accepted.cpp
@@ -242,23 +233,16 @@ endif()
 
 # ----------------- The host automation surface: the slot pool and allocation
 #
-# THE TEST COMPILES ../../g2JucePlugin/g2Parameters.cpp DIRECTLY AND LINKS NO
-# LIBRARY. That file is not a g2Lib source, and the task that writes it does
-# not declare g2JucePlugin/CMakeLists.txt, so the source does not reach this
-# target through either library. The dependency is real either way: the pool
-# is slot bookkeeping over a caller's parameter identities and needs nothing
-# the emulator links.
+# The test compiles ../../g2JucePlugin/g2Parameters.cpp directly and links no
+# library. That file is not a g2Lib source, and the dependency is real either
+# way: the pool is slot bookkeeping over a caller's parameter identities and
+# needs nothing the emulator links.
 #
-# TIER T0 AND UNGATED: no artifact is read and no machine is booted.
+# Tier T0 and ungated: no artifact is read and no machine is booted.
 #
-# WHAT THE TEST HOLDS. The pool size and the reported parameter count as
-# numbers, the const list built one time, the fixed allocation order,
-# exhaustion leaving the last identities unbound while the pool and the
-# reported count stay fixed, slot reuse, and the map of one patch being
-# identical whether or not another patch loaded first -- which is the case
-# that goes red if survivor pinning is reintroduced. Every case reports
-# through the test's own failure counter, so NDEBUG changes none of them:
-# nothing in the file is an assert() and nothing catches an exception.
+# Every case reports through the test's own failure counter, so NDEBUG changes
+# none of them: nothing in the file is an assert() and nothing catches an
+# exception.
 
 add_executable(t0_automation
 	${CMAKE_CURRENT_SOURCE_DIR}/t0_automation.cpp

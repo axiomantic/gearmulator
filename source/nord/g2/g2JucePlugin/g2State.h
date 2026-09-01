@@ -1,39 +1,32 @@
-/* g2State.h -- the seven-item plugin state format. Task PLG-5.
+/* g2State.h -- the plugin state format.
  *
- * Plan section 17, PLG-5. Design sections 15.5 (the seven items, the single
- * definition site), 14.7, 17 row 7.29, and 15.8 through BRD-11's
- * g2Lib/firmwareVersion.h, which this task wires in.
+ * The serialization surface the plugin track owns. The Device's
+ * getState/setState overrides (g2Device.cpp) delegate here; the hand-off pair
+ * -- m_ready false, wait for m_inCallback clear -- runs in the Device before
+ * either delegate, so this file does not restate it.
  *
- * WHAT THIS FILE IS. The serialization surface the plugin track owns. The
- * Device's getState/setState overrides (g2Device.cpp) delegate here; the
- * hand-off pair -- m_ready false, wait for m_inCallback clear, design
- * section 13.10 rule 3 -- runs in the Device BEFORE either delegate, because
- * the hand-off is PLG-1's mechanism and this file reuses it rather than
- * restating it.
- *
- * THE SEVEN ITEMS, design section 15.5, exhaustive, the single definition
- * site. No other section may add one; the resampler's block accumulator is
- * deliberately absent (it lives in the framework's ResamplerInOut, above the
- * Device, and section 15.6 re-creates it rather than saving it):
+ * The state items, exhaustive, defined here and nowhere else. The resampler's
+ * block accumulator is deliberately absent: it lives in the framework's
+ * ResamplerInOut, above the Device, and is re-created rather than saved.
  *
  *   1. The performance: all four slots, plus the global settings.
  *   2. Each slot's patch, as the protocol's own byte blob.
- *   3. A patch identifier for each slot (section 16.4: a hash of the patch's
- *      module and cable lists -- not the patch name).
+ *   3. A patch identifier for each slot (a hash of the patch's module and
+ *      cable lists -- not the patch name).
  *   4. The parameter-slot bindings.
- *   5. The firmware version word (section 7.3 step 6), RAW, 16-bit.
+ *   5. The firmware version word, raw, 16-bit.
  *   6. A state format version.
- *   7. The parameter overflow count (section 16.2.1).
+ *   7. The parameter overflow count.
  *
- * THE OVERRIDE CONTRACT the whole file exists to keep: getState APPENDS to
- * the vector it is given, through insert() and push_back(), and NEVER
+ * The override contract the whole file exists to keep: getState appends to
+ * the vector it is given, through insert() and push_back(), and never
  * assigns it. The synthLib::Plugin layer prepends its own header (plugin.cpp
  * pushes g_stateVersion and the StateType) before the Device is called; an
  * assign() overwrites that header in silence and the corrupted state then
  * loads as a different format version or fails, with no error at the point
  * of the defect.
  *
- * THE WIRE FORMAT. One little-endian byte layout, not a struct dump:
+ * The wire format. One little-endian byte layout, not a struct dump:
  *
  *   u8x4 magic 'G','2','S','T'
  *   u16  stateFormatVersion            -- item 6, g_stateFormatVersion below
@@ -46,14 +39,13 @@
  *
  * A reader refuses an image whose headers do not check out -- wrong magic,
  * a format version it does not write, a geometry that overruns or leaves
- * bytes over -- WHOLE, before any output value is written, so a refused load
+ * bytes over -- whole, before any output value is written, so a refused load
  * changes nothing.
  *
- * THE VERSION-MISMATCH POLICY is design section 15.8's, decided through
- * BRD-11's decideFirmwareVersion(): matching versions load normally;
- * differing versions load the machine, withhold the patch data, and return
- * a message naming both versions with an offer to load anyway; no firmware
- * present follows design section 7.7. Never reinterpreted silently.
+ * The version-mismatch policy, decided through decideFirmwareVersion():
+ * matching versions load normally; differing versions load the machine,
+ * withhold the patch data, and return a message naming both versions with an
+ * offer to load anyway. Never reinterpreted silently.
  */
 
 #pragma once
@@ -73,24 +65,24 @@ namespace g2
 	/* The magic the image opens with, checked before any length arithmetic. */
 	constexpr uint8_t g_stateMagic[4] = {'G', '2', 'S', 'T'};
 
-	/* The performance's four slots, design section 15.5 item 1. */
+	/* The performance's slots, item 1. */
 	constexpr size_t g_stateSlotCount = 4;
 
 	/* What one restoration parsed and decided.
 	 *
-	 * The five payload members hold what the image contained, whatever the
+	 * The payload members hold what the image contained, whatever the
 	 * version decision was; `patchDataWithheld` says whether the caller may
-	 * APPLY the patch-shaped ones. On a firmware-version mismatch the
+	 * apply the patch-shaped ones. On a firmware-version mismatch the
 	 * machine is loaded and the patch data is not -- the caller applies the
 	 * payload only after the user takes the offer, and the withheld flag is
 	 * what stops a silent application. */
 	struct StateLoadResult
 	{
-		bool machineLoaded = false;       // BRD-11: loadMachine
-		bool patchLoaded = false;         // BRD-11: loadPatchData
-		bool offerToLoadAnyway = false;   // BRD-11: offerToLoadAnyway
+		bool machineLoaded = false;
+		bool patchLoaded = false;
+		bool offerToLoadAnyway = false;
 		bool patchDataValid = false;      // the image parsed whole
-		bool patchDataWithheld = false;   // parsed but NOT applied -- the mismatch row
+		bool patchDataWithheld = false;   // parsed but not applied -- the mismatch row
 
 		std::vector<uint8_t> performance;               // item 1
 		std::vector<std::vector<uint8_t>> slotPatches;  // item 2
@@ -98,16 +90,14 @@ namespace g2
 		std::vector<uint8_t> parameterBindings;         // item 4
 		uint32_t parameterOverflowCount = 0;            // item 7
 
-		/* Empty except on a mismatch, where it is BRD-11's message naming
-		 * both versions. The no-firmware row carries no message here:
-		 * design section 7.7 owns that text and BRD-10's surface carries
-		 * it -- two texts for one state are two texts that drift. */
+		/* Empty except on a mismatch, where it names both versions. The
+		 * no-firmware row carries no message here: that text is owned
+		 * elsewhere, and two texts for one state are two texts that
+		 * drift. */
 		std::string message;
 	};
 
-	/* The data the Device holds behind the seven items. The emulated machine
-	 * arrives with PLG-12's boot; until then these hold empty and zero, and
-	 * the round trip through the format is still exact. */
+	/* The data the Device holds behind the state items. */
 	struct StateData
 	{
 		std::vector<uint8_t> performance;
@@ -117,11 +107,11 @@ namespace g2
 		uint32_t parameterOverflowCount = 0;
 	};
 
-	/* Serializes the seven items and APPENDS them to _state.
+	/* Serializes the state items and appends them to _state.
 	 *
-	 * THE CONTRACT, design section 17 row 7.29: this function never assigns
-	 * _state. The Plugin layer has already pushed its header into it; the
-	 * first write here is push_back and every later one is an append.
+	 * The contract: this function never assigns _state. The Plugin layer has
+	 * already pushed its header into it; the first write here is push_back
+	 * and every later one is an append.
 	 *
 	 * Returns false when the slot vectors do not hold exactly
 	 * g_stateSlotCount entries -- a caller asking to save a shape the format
@@ -134,17 +124,17 @@ namespace g2
 		uint16_t _firmwareVersionWord,
 		uint32_t _parameterOverflowCount);
 
-	/* Parses an image the serializer wrote and decides the load per BRD-11.
+	/* Parses an image the serializer wrote and decides the load.
 	 *
-	 * The out-parameters are written ONLY when every header checked out and
+	 * The out-parameters are written only when every header checked out and
 	 * the versions matched: a refusal or a mismatch writes none of them, so
 	 * a refused load changes nothing. On a mismatch the parsed payload
 	 * travels in the returned result instead, marked withheld.
 	 *
 	 * _firmwarePresent and _machineFirmwareVersionWord come from the
-	 * FirmwareStatus the Device resolved once at construction (BRD-10);
-	 * decideFirmwareVersion owns the three-row decision and owns the
-	 * mismatch message. */
+	 * FirmwareStatus the Device resolved once at construction;
+	 * decideFirmwareVersion owns the version decision and the mismatch
+	 * message. */
 	StateLoadResult deserializeState(const std::vector<uint8_t>& _state,
 		std::vector<uint8_t>& _performance,
 		std::vector<std::vector<uint8_t>>& _slotPatches,

@@ -1,10 +1,10 @@
 # Test registrations for the repo track. Owned by the repo track.
 #
 # Append one add_test(NAME <name> ...) for every test this track adds under
-# source/nord/g2/g2Lib/test/. THE NAME IS THE EXACT STRING THE TASK'S Check:
-# LINE PASSES TO -R. Edit no other CMake file in this tree.
+# source/nord/g2/g2Lib/test/. The name is the exact string passed to -R.
+# Edit no other CMake file in this tree.
 
-# ----------------- REPO-5, the ArtifactResolver interface
+# ----------------- the ArtifactResolver interface
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_artifact_resolver$
 
@@ -15,14 +15,11 @@ set_property(TARGET t0_artifact_resolver PROPERTY FOLDER "G2")
 add_test(NAME t0_artifact_resolver COMMAND t0_artifact_resolver)
 set_tests_properties(t0_artifact_resolver PROPERTIES LABELS "UnitTest")
 
-# ----------------- REPO-7, the skip discipline
+# ----------------- the skip discipline
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_skip_discipline$
 #
-# The test builds its own gated subjects through gatedFixture.h. Measured at
-# this task's completion: the build carries ZERO gated tests, so a clause
-# quantified over "every gated test the build carries" would be vacuously true.
-# t0_skip_discipline.cpp states the measurement and the reason in full.
+# The test builds its own gated subjects through gatedFixture.h.
 
 add_executable(t0_skip_discipline t0_skip_discipline.cpp)
 target_link_libraries(t0_skip_discipline PRIVATE g2Lib)
@@ -31,7 +28,7 @@ set_property(TARGET t0_skip_discipline PROPERTY FOLDER "G2")
 add_test(NAME t0_skip_discipline COMMAND t0_skip_discipline)
 set_tests_properties(t0_skip_discipline PROPERTIES LABELS "UnitTest")
 
-# ----------------- REPO-8, artifacts.sha256 and golden.timebase
+# ----------------- artifacts.sha256 and golden.timebase
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_manifest_parses$
 #

@@ -1,11 +1,11 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// The Scheduler calls Board::tickSofIfDue(frameIndex) on EVERY frame,
+// The Scheduler calls Board::tickSofIfDue(frameIndex) on every frame,
 // unconditionally, and passes the authoritative virtual frame index. The Board
 // owns the test: it divides by 96 itself and issues one USB start-of-frame tick
 // on each due frame. This test drives the method one quantum at a time and
 // records the frame index of every tick the Board issued, so the assertion is
-// over WHICH frames ticked and not only over how many ticks there were.
+// over which frames ticked and not only over how many ticks there were.
 //
 // A count alone cannot separate a divisor that fires twice on one boundary and
 // misses the next from one that fires once on each: the two produce the same
@@ -13,34 +13,32 @@
 // sequence against the whole expected sequence, so a double and a miss no
 // longer cancel.
 //
-// The two numeric cases bracket the boundary. 1,000 quanta tick 11 times and
-// 960 quanta tick 10, because frame 0 satisfies the divisor and the multiples
-// of 96 below 1,000 are 0, 96, ... 960. Only an implementation that skipped
-// frame 0 would answer 10 for 1,000, so both cases are asserted here.
+// The two numeric cases bracket the boundary. Frame 0 satisfies the divisor,
+// so the due frames below 1,000 are 0, 96, ... 960 and the two quanta counts
+// straddle the last of them.
 //
 // How the tick is observed, and why the target links no library. This
 // executable compiles board.cpp together with this file and supplies its own
 // definitions of the mcf5307 C entry points board.cpp uses. That makes
 // isp1181_tick observable without adding a test-only accessor to the shipped
-// Board, and it is the reason tests_board.cmake names ../board.cpp as a source
-// rather than linking g2Lib. Defining isp1181_tick while ALSO linking
-// libmcf5307.a is a duplicate-symbol link error the moment anything in the link
-// pulls the archive member that defines it, so the seam is taken by owning the
-// whole link line instead. The Board creates and destroys its USB device, so
-// isp1181_create and isp1181_destroy are supplied here too.
+// Board. Defining isp1181_tick while also linking libmcf5307.a is a
+// duplicate-symbol link error the moment anything in the link pulls the archive
+// member that defines it, so the seam is taken by owning the whole link line
+// instead. The Board creates and destroys its USB device, so isp1181_create and
+// isp1181_destroy are supplied here too.
 //
 // How this file models handle identity. The isp1181_create below hands back a
-// DISTINCT, non-null handle on every call, drawn from a token pool this file
+// distinct, non-null handle on every call, drawn from a token pool this file
 // never clears -- so no two handles in the whole process are equal. That is
-// what separates the assertion "the tick reached the CORRECT handle" from the
-// strictly weaker "the tick reached a CONSTANT handle": a permanently nil
-// handle passes "constant" and fails "correct".
+// what separates "the tick reached the correct handle" from the strictly weaker
+// "the tick reached a constant handle": a permanently nil handle passes
+// "constant" and fails "correct".
 //
 // The negative case drives a wrong handle through the same predicate. Two
-// Boards are alive at once, each with its own device, and the ONE predicate
+// Boards are alive at once, each with its own device, and the one predicate
 // everyTickOfBoardCarried is run twice against the first Board's ticks: once
-// with that Board's own handle, which must hold, and once with the OTHER
-// Board's handle, which must NOT. Without the second run the predicate is never
+// with that Board's own handle, which must hold, and once with the other
+// Board's handle, which must not. Without the second run the predicate is never
 // observed to reject anything.
 //
 // The modulus appears here as this file's own literal. board.cpp derives it
@@ -122,7 +120,7 @@ namespace
 	// handle stays live and distinct for the whole run.
 	//
 	// It is never cleared, and that is deliberate. Every handle this file hands
-	// out is distinct across the WHOLE process, so a Board that cached a handle
+	// out is distinct across the whole process, so a Board that cached a handle
 	// belonging to an earlier run is caught instead of excused by an address
 	// the allocator happened to reuse.
 	std::deque<int> g_usbTokens;
@@ -140,11 +138,9 @@ namespace
 		g_destroys.clear();
 	}
 
-	// TRUE when every tick recorded for Board `_tag` carried `_handle`, over a
-	// NON-EMPTY set of ticks. The emptiness clause is not decoration: without
-	// it the predicate is vacuously true for a Board that never ticked, and
-	// both the positive and the negative case below would pass against a Board
-	// that ticks never.
+	// True when every tick recorded for Board `_tag` carried `_handle`, over a
+	// non-empty set of ticks. The emptiness clause is not decoration: without
+	// it the predicate is vacuously true for a Board that never ticked.
 	//
 	// This is the one predicate both cases run. The negative case exists to
 	// watch it return false, which is the only thing that establishes it can.
@@ -220,7 +216,7 @@ namespace
 		}
 	}
 
-	// The frames a correct divisor ticks on, computed by STRIDING rather than
+	// The frames a correct divisor ticks on, computed by striding rather than
 	// by testing a remainder, so this file does not restate the shipped
 	// expression in the shipped expression's own shape.
 	std::vector<uint64_t> expectedSofIndices(const uint64_t _quanta)
@@ -255,7 +251,7 @@ namespace
 // observable and no library is linked. The signatures are include/mcf5307.h's.
 extern "C"
 {
-	/* ANSWERS 1, WHICH IS "THE RUNTIME IS USABLE". mcf5307.h states the status
+	/* Answers 1, which is "the runtime is usable". mcf5307.h states the status
 	 * is a truth value and not a POSIX error code, and 0 is reserved for a
 	 * one-time latch that was abandoned. This fake has no latch and no runtime
 	 * to stall, so 1 is the only answer it can honestly give. */
@@ -315,7 +311,7 @@ extern "C"
 	{
 	}
 
-	/* A DISTINCT, NON-NULL handle on every call, and never a repeat. This is
+	/* A distinct, non-null handle on every call, and never a repeat. This is
 	 * the whole reason the assertions below can say "correct" rather than only
 	 * "constant" -- see the file header. */
 	isp1181_ctx* isp1181_create(void* const user, isp1181_irq_fn,
@@ -382,31 +378,28 @@ extern "C"
 
 int main()
 {
-	// The plan's arithmetic, pinned against the plan's own two literals. The
-	// count is floor((N - 1) / 96) + 1 because frame 0 is due.
+	// The count is floor((N - 1) / 96) + 1 because frame 0 is due.
 	check((1000u - 1u) / 96u + 1u == 11u,
 	      "floor((1000 - 1) / 96) + 1 is 11");
 	check((960u - 1u) / 96u + 1u == 10u,
 	      "floor((960 - 1) / 96) + 1 is 10");
 
-	// The two cases the plan names.
+	// The two named cases.
 	checkCase(1000, 11);
 	checkCase(960, 10);
 
-	// The boundary one frame either side of the first period, so that an
-	// implementation which ticked on frame 96 but not on frame 0, or on both
-	// 95 and 96, is separated from a correct one.
+	// The boundary one frame either side of the first period.
 	checkCase(1, 1);
 	checkCase(95, 1);
 	checkCase(96, 1);
 	checkCase(97, 2);
 
-	// A Board that is never driven issues nothing. Without this case a tick
-	// that fires on construction would be invisible to every case above.
+	// A Board that is never driven issues nothing, which the cases above do not
+	// by themselves establish.
 	checkCase(0, 0);
 
 	// Every tick advances the device by exactly one SOF frame, every tick
-	// reaches the handle the Board's OWN isp1181_create returned, and that
+	// reaches the handle the Board's own isp1181_create returned, and that
 	// handle is created once and destroyed once around them.
 	{
 		const auto indices = sofIndicesOver(1000);
@@ -426,16 +419,13 @@ int main()
 			if(call.sofFrames != 1u)
 				allOneFrame = false;
 		// The emptiness clause is not decoration. The loop above ranges over
-		// g_sofCalls, so the flag stays true when no tick was issued at all,
-		// and without this clause a Board that ticks NEVER passes the case.
+		// g_sofCalls, so the flag stays true when no tick was issued at all.
 		check(!g_sofCalls.empty() && allOneFrame,
 		      "every tick advanced the device by exactly one SOF frame, over a non-empty run");
 
-		// THE STRENGTHENED ASSERTION. It read "every tick of one run reached
-		// the SAME device handle", which a permanently nil handle satisfies
-		// exactly as well as a correct one -- the Board exposed no correct
-		// handle to compare against, so constancy was all there was to assert.
-		// It now names the handle isp1181_create returned for THIS Board.
+		// The assertion names the handle isp1181_create returned for this
+		// Board, not merely a constant one: a permanently nil handle satisfies
+		// constancy exactly as well as a correct handle does.
 		check(owned != nullptr && everyTickOfBoardCarried(0, owned),
 		      "every tick reached the handle isp1181_create returned for this Board");
 
@@ -445,9 +435,8 @@ int main()
 		check(owned != nullptr && destroyCountOf(owned) == 1u,
 		      "the handle the Board was given was destroyed exactly once");
 
-		// The ticks sit strictly inside the device's lifetime. Without this a
-		// create that ran after the ticks, or a destroy that ran before them,
-		// satisfies every assertion above.
+		// The ticks sit strictly inside the device's lifetime, which the
+		// assertions above do not by themselves establish.
 		bool insideLifetime = !g_sofCalls.empty() && g_creates.size() == 1u
 		                      && g_destroys.size() == 1u;
 		if(insideLifetime)
@@ -459,8 +448,8 @@ int main()
 		      "every tick happened after the create and before the destroy");
 	}
 
-	// TWO BOARDS ALIVE AT ONCE. Each owns its own device, and the NEGATIVE
-	// case drives a wrong handle through the same predicate the positive case
+	// Two Boards alive at once. Each owns its own device, and the negative case
+	// drives a wrong handle through the same predicate the positive case
 	// trusts. This is the pair that makes "correct handle" mean more than
 	// "constant handle": with one Board in the process there is only one
 	// handle, and every wrong answer that is constant looks right.
@@ -486,17 +475,15 @@ int main()
 		const isp1181_ctx* const handleB =
 			g_creates.size() == 2u ? g_creates[1].ctx : nullptr;
 
-		// Distinctness is ASSERTED and not assumed of the stub. If the two
-		// handles were equal every negative case below would be vacuous, and
-		// the test would report a strength it does not have.
+		// Distinctness is asserted and not assumed of the stub. If the two
+		// handles were equal every negative case below would be vacuous.
 		check(handleA != nullptr && handleB != nullptr && handleA != handleB,
 		      "the two Boards were given two different non-null handles");
 
 		// Each Board registered itself as its device's owner. The user pointer
-		// is what the irq and tx callbacks are handed, so a Board that
-		// registered null or its neighbour would deliver another Board's
-		// interrupts. That defect is invisible in the tick record, which
-		// carries only the handle.
+		// is what the irq and tx callbacks are handed, so registering null or a
+		// neighbour delivers another Board's interrupts -- a defect invisible
+		// in the tick record, which carries only the handle.
 		check(g_creates.size() == 2u && g_creates[0].user == addrA,
 		      "Board A registered itself as its device's user pointer");
 		check(g_creates.size() == 2u && g_creates[1].user == addrB,
@@ -507,11 +494,10 @@ int main()
 		check(everyTickOfBoardCarried(1, handleB),
 		      "positive: every tick of Board B reached Board B's own handle");
 
-		// THE NEGATIVE CASES. Same predicate, same recorded ticks, a WRONG
+		// The negative cases. Same predicate, same recorded ticks, a wrong
 		// handle -- and the predicate must reject. A predicate nobody has
 		// watched return false cannot be known to distinguish the correct
-		// handle from any other, which is the exact weakness this test was
-		// strengthened to remove.
+		// handle from any other.
 		check(!everyTickOfBoardCarried(0, handleB),
 		      "negative: Board A's ticks do NOT match Board B's handle");
 		check(!everyTickOfBoardCarried(1, handleA),

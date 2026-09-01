@@ -1,10 +1,4 @@
-/* g2Plugin.cpp -- the synthLib::Plugin subclass body. Task PLG-8.
- *
- * Design sections 14.2.2, 18.2 and 24. See g2Plugin.h for the full
- * statement of the ordering (set before any prepareToPlay), the side
- * effect PLG-15's fixture must plan for, and the observable.
- *
- * prepareToPlay is the host's one moment, and it is here rather than in the
+/* prepareToPlay is the host's one moment, and it is here rather than in the
  * Device because it is the moment the host's block size and rate first exist.
  * It derives B and the reported latency together from that one pair, and it is
  * the call site that wires the host to the Device's boot.
@@ -24,14 +18,13 @@ namespace g2
 	Plugin::Plugin(synthLib::Device* _device, CallbackDeviceInvalid _callbackDeviceInvalid)
 		: synthLib::Plugin(_device, std::move(_callbackDeviceInvalid))
 	{
-		// THE ONE LINE THE DESIGN EXISTS FOR. The base constructor has run no
-		// resampler work (both samplerates are 0, recreate() early-returns),
-		// so this set is a pure member write; the 512-sample pre-warm runs
+		// The base constructor has run no resampler work (both samplerates
+		// are 0, recreate() early-returns), so this set is a pure member write; the 512-sample pre-warm runs
 		// later, at the first setHostSamplerate, with the mode already
 		// MameHq. Legacy is the framework default in two places
 		// (resampler.h:30, resamplerInOut.h:43); inheriting it is the
 		// two-line defect this one-line call forecloses.
-		// ONE statement, deliberately: the record and the set are the same
+		// One statement, deliberately: the record and the set are the same
 		// act. Deleting either half of it deletes the other, so the
 		// reported mode cannot outlive the call that made it true.
 		setResamplerMode(m_resamplerMode = synthLib::Resampler::Mode::MameHq);
@@ -74,7 +67,7 @@ namespace g2
 		if(_maxHostBlockSamples == 0 || _hostSamplerate <= 0.0f)
 			return false;
 
-		// BEFORE THE TWO DERIVATIONS, AND IN THIS ORDER. setHostSamplerate
+		// Before the two derivations, and in this order. setHostSamplerate
 		// runs the resampler pre-warm, which is what fixes D_resampler(R);
 		// setBlockSize then updates the framework's own latency figures
 		// against it. Reading either derived figure between the two calls
@@ -87,7 +80,7 @@ namespace g2
 
 		const uint32_t b = maxHostBlockFramesFor(_maxHostBlockSamples, _hostSamplerate);
 
-		// B IS A CEILING, so only growth costs anything. An equal or smaller
+		// B is a ceiling, so only growth costs anything. An equal or smaller
 		// maximum block fits the queues that are already allocated and the
 		// running machine keeps rendering.
 		if(b > m_maxHostBlockFrames)
@@ -100,7 +93,7 @@ namespace g2
 		// D_total(R) = ceil((L + D_chain + D_codec) * R / G2_FRAME_RATE_HZ)
 		//              + D_resampler(R).
 		//
-		// THE ceil IS DELIBERATE. The figure the host is told must be a whole
+		// The ceil is deliberate. The figure the host is told must be a whole
 		// number of samples, and rounding down would claim less delay than the
 		// plugin takes -- the direction that misaligns the host's delay
 		// compensation. The sum in frames is bounded by Scheduler::create,
@@ -125,8 +118,7 @@ namespace g2
 			return false;
 
 #if SYNTHLIB_DEMO_MODE == 0
-		// THE SEVEN STATE ITEMS, AND THE MACHINE SNAPSHOT WITH THEM. getState
-		// takes the snapshot inside the Device's hand-off window, which is the
+		// getState takes the snapshot inside the Device's hand-off window, which is the
 		// only place it can be taken, and boot() destroys the Scheduler that
 		// snapshot came from -- so it has to happen first. The snapshot is
 		// empty on the first call, and boot() reads an empty one as "no state

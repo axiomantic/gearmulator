@@ -2,9 +2,7 @@
 #
 # Append every source name this track adds under source/nord/g2/g2Lib/ to
 # G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
-# file in this tree. See plan section 7.4.2.
-#
-# Created empty by task BRD-0.
+# file in this tree.
 
 list(APPEND G2LIB_SOURCES memoryMap.cpp)
 list(APPEND G2LIB_SOURCES sim.cpp)
@@ -57,29 +55,21 @@ list(APPEND G2LIB_SOURCES
 #
 # Both files are listed: the header for the IDE source group, and the
 # translation unit because a build that compiles the test without compiling this
-# source fails at the LINK step on g2::writePMem.
+# source fails at the link step on g2::writePMem.
 #
-# The pair is the lint's only allow-list. `.github/workflows/track-board.yml`
-# fails when any other file under source/nord/g2/ names a P-memory write, so
-# moving either name out of this directory moves the allow-list with it.
+# `.github/workflows/track-board.yml` fails when any other file under
+# source/nord/g2/ names a P-memory write, so moving either name out of this
+# directory moves the allow-list with it.
 
 list(APPEND G2LIB_SOURCES
 	pmemFunnel.h
 	pmemFunnel.cpp
 )
 
-# ----------------- BRD-21, the Board class
+# ----------------- the Board class
 #
-# board.h declares the six-method surface the Scheduler uses -- runMcu,
-# faulted, tickSofIfDue, stateSize, stateSave and stateLoad -- and carries the
-# five static_asserts that make "concrete, not copyable, not movable" a
-# COMPILE-TIME property. board.cpp carries the lifetime, the bodies and the one
-# G2_MCU_CORE_CLOCK_HZ placeholder line that t0_board_surface counts.
-#
-# THE TRANSLATION UNIT IS LISTED HERE AND NOT ONLY THE HEADER. board.cpp
-# defines every method t0_board_surface calls, so a build that compiles the
-# test without compiling this source fails at the LINK step on g2::Board. BRD-22
-# extends board.cpp with the real tickSofIfDue and adds no name to this list.
+# The translation unit is listed and not only the header: a build that compiles
+# the test without compiling this source fails at the link step on g2::Board.
 
 list(APPEND G2LIB_SOURCES
 	board.h
@@ -89,7 +79,7 @@ list(APPEND G2LIB_SOURCES
 # ----------------- the M-Bus controller and the MAX1039 slave
 #
 # Both translation units are listed: a build that compiles the test without
-# compiling them fails at the LINK step on g2::MBus and g2::Max1039.
+# compiling them fails at the link step on g2::MBus and g2::Max1039.
 
 list(APPEND G2LIB_SOURCES
 	mbus.h
@@ -101,7 +91,7 @@ list(APPEND G2LIB_SOURCES
 # ----------------- the MCF5307 general-purpose timers
 #
 # One Timer is one of the two general-purpose timer modules the MCF5307
-# carries, at MBAR+$140 and MBAR+$180. The Sim owns both and routes the ten
+# carries, at MBAR+$140 and MBAR+$180. The Sim owns both and routes their
 # register addresses to them; the Board advances them from the cycles runMcu
 # actually ran.
 
@@ -112,9 +102,9 @@ list(APPEND G2LIB_SOURCES
 
 # ----------------- the GDB remote stub
 #
-# The translation unit is listed and not only the header: `g2TestConsole` links
-# `g2Lib` and nothing else, so a build that compiled the header alone would fail
-# at the link step on `g2::GdbStub` when `--gdb` reaches it.
+# The translation unit is listed and not only the header: a build that compiled
+# the header alone would fail at the link step on `g2::GdbStub` when `--gdb`
+# reaches it.
 
 list(APPEND G2LIB_SOURCES
 	gdbStub.h

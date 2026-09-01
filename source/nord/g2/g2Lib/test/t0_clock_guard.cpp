@@ -7,12 +7,12 @@
  * Case 1, the core clock's domain. The MCF5307 has two clock domains and the
  * User's Manual section 4.2 documents no divide-by-one option, so PSTCLK is
  * the bus clock times 2, 3 or 4 and the two can never be equal. The hazard
- * this case exists to close is therefore a SUBSTITUTION: a bus-domain figure
+ * this case exists to close is therefore a substitution: a bus-domain figure
  * standing in the symbol that reaches a core-cycle budget.
  *
  * The predicate binds to the symbol and not to a literal, and the difference
  * decides the outcome in both directions. A tree-wide ban on one number
- * forbids RECORDING A MEASUREMENT -- the bus clock is a real derived figure
+ * forbids recording a measurement -- the bus clock is a real derived figure
  * and it has to be writable somewhere -- while saying nothing at all about
  * what the core-clock symbol carries. Bound to the symbol instead, the same
  * intent reads: every definition of the core-clock symbol carries a frequency
@@ -22,53 +22,52 @@
  * The domain floor is derived and its two halves are named at the constant.
  * The bus-clock interval comes from the firmware and the divider floor from
  * the manual; neither is invented here and neither is a catalog speed grade.
- * The forbidden region therefore CONTAINS the whole bus-clock interval, so
+ * The forbidden region therefore contains the whole bus-clock interval, so
  * the substitution case is a corollary of the floor rather than a second
  * rule.
  *
  * A definition is the predicate's subject, not a mention. What a symbol
  * carries is decided at `#define SYM value` and at `SYM = value`, so those
  * two shapes are what the scan matches. A static assertion or a fixture that
- * PINS the number is a mechanism that goes red on its own when the definition
+ * pins the number is a mechanism that goes red on its own when the definition
  * moves, and turning those red from here would only duplicate them.
  *
  * A single-spelling scan is a check that a one-character edit walks around,
- * and that was MEASURED rather than argued: a fixed-string search for the
- * plain decimal form matched a header holding it and matched NEITHER the
- * digit-separator form, which the compiler reads as the same number, NOR the
- * exponent form. So a value is RENDERED into every spelling a compiler
- * accepts, and the scan and
- * the parser are driven through each rendering in turn.
+ * and that was measured rather than argued: a fixed-string search for the
+ * plain decimal form matched a header holding it and matched neither the
+ * digit-separator form, which the compiler reads as the same number, nor the
+ * exponent form. So a value is rendered into every spelling a compiler
+ * accepts, and the scan and the parser are driven through each rendering in
+ * turn.
  *
  * Every spelling carries its own controls, and each one closes a way the case
  * could pass while proving nothing:
  *
  *   FLAGGED    the core symbol defined as an out-of-domain frequency. The
  *              scan must find it and the parser must read the value back
- *              EXACTLY. Without this, a pattern with a typo reports "absent"
+ *              exactly. Without this, a pattern with a typo reports "absent"
  *              for ever and the case can never fail.
  *   IN DOMAIN  the core symbol defined as a legal core frequency. The scan
  *              must find it and the predicate must stay silent. Without this,
  *              a predicate that flagged every definition would pass.
  *   BUS SYMBOL the bus-clock symbol defined as the derived bus clock. The
  *              scan must not find it at all.
- *   SAME VALUE the core symbol defined as that SAME derived bus clock. The
+ *   SAME VALUE the core symbol defined as that same derived bus clock. The
  *              scan must find it and the predicate must flag it. This is the
- *              control that isolates the SYMBOL as the discriminator: without
+ *              control that isolates the symbol as the discriminator: without
  *              it, the bus-symbol control could be passing because the
  *              spelling went unmatched rather than because the symbol did.
  *
- * WHAT NO SCAN CAN CATCH is a value COMPUTED from other constants, and this
- * file does not pretend otherwise. The scan is the cheap half. Measurement
- * register row 7's rule -- that the core clock has no derived value until
- * criterion (j) reports -- is the half that does the work.
+ * What no scan can catch is a value computed from other constants, and this
+ * file does not pretend otherwise. The scan is the cheap half. The rule that
+ * the core clock has no derived value until criterion (j) reports is the half
+ * that does the work.
  *
- * CASE 2, the configure-time guard. The two MCU BUS symbols are both 0u and
+ * Case 2, the configure-time guard. The two MCU bus symbols are both 0u and
  * neither is derived, so a source that used either would compute with a zero.
- * BRD-0 installs a guard in g2Lib/CMakeLists.txt that fails the configure
- * step and names the symbol. Section 7.4.2 gives that file to BRD-0, so THIS
- * TASK DOES NOT EDIT IT: BRD-0 installs the mechanism and this task drives the
- * negative case that proves it fires.
+ * A guard in g2Lib/CMakeLists.txt fails the configure step and names the
+ * symbol. This file does not edit that guard; it drives the negative case
+ * that proves the guard fires.
  *
  * The negative case adds a scratch use and asserts the configure step fails
  * naming the symbol. A control run without the scratch file asserts the guard
@@ -80,11 +79,11 @@
  *
  *   1. Case 1 scans every file in this repository with no exclusion list, so
  *      a file that spelled a guarded definition out in full would match
- *      ITSELF, the case could never pass, and the usual repair -- excluding
+ *      itself, the case could never pass, and the usual repair -- excluding
  *      this file from its own scan -- would open exactly the hole the case
  *      exists to close.
- *   2. THIS FILE LIVES UNDER source/nord/g2/, WHICH IS THE TREE BRD-0's GUARD
- *      SCANS. A file that spelled either guarded symbol out in full would
+ *   2. This file lives under source/nord/g2/, which is the tree the guard
+ *      scans. A file that spelled either guarded symbol out in full would
  *      make the guard fire on the very test that proves it fires, and the
  *      whole project would stop configuring. The two symbols are therefore
  *      built from a shared prefix and a suffix and are never contiguous in
@@ -142,13 +141,13 @@ namespace
 
 	/* ---------------- the core clock's domain, and where each half comes from
 	 *
-	 * THE BUS-CLOCK INTERVAL IS READ OUT OF THE FIRMWARE, not assumed. The
+	 * The bus-clock interval is read out of the firmware, not assumed. The
 	 * SDRAM refresh control field pins the refresh period to a whole number of
 	 * bus clocks, and at the JEDEC row interval that fixes the bus clock to a
 	 * band about one part in fifty wide. An independent UART divider lands
 	 * inside the same band from a MIDI baud rate, which is what makes it a
 	 * derivation rather than a coincidence. Spike criterion (j) owns the
-	 * figure; measurement register rows 5 and 6 carry it.
+	 * figure.
 	 *
 	 * The divider floor is 2 because 2 holds under both readings of the part.
 	 * The MCF5307 manual's section 4.2 permits 2, 3 or 4 and no divide-by-one;
@@ -156,7 +155,7 @@ namespace
 	 * is the weaker of the two claims and is therefore the one the floor is
 	 * built from, so the floor does not move when the part identity settles.
 	 *
-	 * The product is a FLOOR and never an estimate: no core clock this part
+	 * The product is a floor and never an estimate: no core clock this part
 	 * can run at is below it, and the bus-clock band lies entirely underneath
 	 * it, so a bus figure in the core symbol is caught by the floor without a
 	 * second rule.
@@ -205,7 +204,7 @@ namespace
 
 	/* ---------------- running a child process and reading everything it says
 	 *
-	 * The exit code is read EXPLICITLY and never through a truthiness test. A
+	 * The exit code is read explicitly and never through a truthiness test. A
 	 * scan that could not run at all must report "unproven", never "passed".
 	 */
 	struct CommandResult
@@ -317,12 +316,12 @@ namespace
 
 	/* ---------------- what is not source, and how it is found
 	 *
-	 * The scan must not read build output, and A directory name is not A
-	 * Reliable way to tell. This was measured rather than argued.
+	 * The scan must not read build output, and a directory name is not a
+	 * reliable way to tell. This was measured rather than argued.
 	 *
 	 * The scan covers this repository's tracked files plus its untracked,
 	 * non-ignored ones. `.gitignore` ignores /build/, so a build tree at that
-	 * one path is out of scope -- and a build tree at ANY OTHER PATH is not.
+	 * one path is out of scope -- and a build tree at any other path is not.
 	 * A CTest log quotes the output of the tests it ran, and this case's own
 	 * diagnostic quotes the definition line it objects to. So a second build
 	 * tree, at any name but `build`, puts that line into
@@ -381,7 +380,7 @@ namespace
 
 	/* ---------------- the spellings
 	 *
-	 * A spelling is a WAY OF WRITING A FREQUENCY, so it is a renderer and not
+	 * A spelling is a way of writing a frequency, so it is a renderer and not
 	 * a fixed string. The controls render three different values through every
 	 * spelling and the scan reads each rendering back, which is what makes the
 	 * spelling coverage a round trip rather than a claim.
@@ -418,7 +417,7 @@ namespace
 		return "an unnamed spelling";
 	}
 
-	/* THE TABLE IS THE ENUMERATION and not a second list beside it. A hand-kept
+	/* The table is the enumeration and not a second list beside it. A hand-kept
 	 * list can lose a row to an edit and go on passing with less coverage than
 	 * it claims, and nothing in the run would say so. */
 	std::vector<SpellingRow> buildSpellingTable()
@@ -527,7 +526,7 @@ namespace
 			break;
 		}
 
-		/* NO FALL-THROUGH TO A NEIGHBOUR'S RENDERING. A spelling with no case
+		/* No fall-through to a neighbour's rendering. A spelling with no case
 		 * of its own renders as a value no control asked for, so the exact
 		 * read-back turns red instead of quietly repeating another spelling's
 		 * coverage under a new name. */
@@ -536,9 +535,9 @@ namespace
 
 	/* ---------------- reading a rendered frequency back
 	 *
-	 * The parser is EXACT and uses no floating point: an exponent form is
+	 * The parser is exact and uses no floating point: an exponent form is
 	 * folded into the mantissa by powers of ten, and a mantissa that does not
-	 * fold to a whole number is REFUSED rather than rounded. A frequency this
+	 * fold to a whole number is refused rather than rounded. A frequency this
 	 * check cannot read exactly is a frequency it must not judge.
 	 */
 	bool readFrequency(const std::string& text, size_t position,
@@ -654,9 +653,9 @@ namespace
 
 	/* ---------------- what the scan looks for
 	 *
-	 * The two shapes that DEFINE what a symbol carries, and no other. The
+	 * The two shapes that define what a symbol carries, and no other. The
 	 * value alternatives are a superset of the spellings above: git grep
-	 * decides which LINES to report and readFrequency above is the authority
+	 * decides which lines to report and readFrequency above is the authority
 	 * on what a reported line actually says.
 	 */
 	std::string definitionPattern(const std::string& symbol)
@@ -739,7 +738,7 @@ int main(const int argc, const char* const* const argv)
 {
 	/* ---------------- the arguments, checked before anything runs.
 	 *
-	 * A check that cannot obtain its inputs REPORTS that. It does not pass
+	 * A check that cannot obtain its inputs reports that. It does not pass
 	 * vacuously. */
 	static const char* const kArgumentNames[] =
 	{
@@ -938,7 +937,7 @@ int main(const int argc, const char* const* const argv)
 			}
 
 			/* ---- SAME VALUE: that same bus clock in the core symbol. It is
-			 * what isolates the SYMBOL as the discriminator, because the value
+			 * what isolates the symbol as the discriminator, because the value
 			 * and the spelling are held fixed against the control above. */
 			{
 				const uint64_t value = derivedBusClockHz();
@@ -972,13 +971,13 @@ int main(const int argc, const char* const* const argv)
 
 		/* ---- the real scan.
 		 *
-		 * THE SCOPE IS STATED. `git grep` here searches this repository's own
-		 * tracked files plus its untracked, non-ignored ones. It does NOT
+		 * The scope is stated. `git grep` here searches this repository's own
+		 * tracked files plus its untracked, non-ignored ones. It does not
 		 * recurse into submodules and it does not read ignored paths, so the
 		 * build tree at the ignored path is out of scope and a build tree at
 		 * any other path is excluded by the property below.
 		 *
-		 * The exclusions are REPORTED with the result, so the scope is never
+		 * The exclusions are reported with the result, so the scope is never
 		 * invisible to whoever reads it. */
 		const std::vector<std::string> exclusions =
 			buildTreeExclusions(repositoryRoot, gitExecutable);
@@ -1007,7 +1006,7 @@ int main(const int argc, const char* const* const argv)
 
 		const CommandResult scan = runCommand(repositoryRoot, scanArguments);
 
-		/* git grep exits 0 when it MATCHED, 1 when it did not, and above 1 on
+		/* git grep exits 0 when it matched, 1 when it did not, and above 1 on
 		 * an error. Both 0 and 1 are outcomes here -- a tree with no core-clock
 		 * definition at all has nothing out of domain -- so the codes are read
 		 * explicitly rather than through a test that would score an error as a
@@ -1048,7 +1047,7 @@ int main(const int argc, const char* const* const argv)
 	/* ================ case 2: the configure-time guard fires */
 	{
 		/* A scratch project whose whole content is one add_subdirectory of
-		 * g2Lib. It configures the REAL g2Lib/CMakeLists.txt, which is where
+		 * g2Lib. It configures the real g2Lib/CMakeLists.txt, which is where
 		 * the guard lives, and it configures nothing else -- so the case costs
 		 * about a second and it needs no build of its own. */
 		const std::string projectDirectory = join(workDirectory, "project");
@@ -1064,10 +1063,10 @@ int main(const int argc, const char* const* const argv)
 		/* The MCF5307 link is turned off for the scratch configure.
 		 *
 		 * G2_LINK_MCF5307 is on by default, and g2Lib then
-		 * either adds a subdirectory the ROOT CMakeLists.txt points it at or
-		 * calls FetchContent_MakeAvailable(mcf5307) against details the ROOT
+		 * either adds a subdirectory the root CMakeLists.txt points it at or
+		 * calls FetchContent_MakeAvailable(mcf5307) against details the root
 		 * declares. This scratch project is not that root, so the fetch has no
-		 * details and the configure fails BEFORE it reaches the guard -- which
+		 * details and the configure fails before it reaches the guard -- which
 		 * makes both the control run and the negative run fail for a reason
 		 * that has nothing to do with the guard.
 		 *
@@ -1150,7 +1149,7 @@ int main(const int argc, const char* const* const argv)
 			/* The message must name the symbol and the file, so a configure
 			 * that failed for some other reason cannot be read as a pass. The
 			 * guard's explanation names both symbols, so the form matched here
-			 * is the one that names the symbol that FIRED it. */
+			 * is the one that names the symbol that fired it. */
 			check(contains(negative.output, "uses " + symbol),
 				"the guard's message names " + symbol + " as the symbol that "
 					"fired it:\n" + negative.output);

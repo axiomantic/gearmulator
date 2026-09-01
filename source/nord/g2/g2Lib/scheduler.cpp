@@ -7,31 +7,20 @@
  * one.
  *
  * A Config can fail more than one row, and then the reported status is
- * whichever comparison runs first. Testing the lookahead bound early was
- * rejected because the bound reads a value the DSP-count row has not yet
- * vetted: `D_chain` is `(N - 1) * hopFrames` over the unsigned members
- * ChainAdapter holds, so a count of 0 makes the subtraction WRAP, the chain
+ * whichever comparison runs first. The alternative considered was to test the
+ * lookahead bound early, on the ground that it is the most expensive mistake to
+ * ship; it was rejected because the bound reads a value the DSP-count row has
+ * not yet vetted. `D_chain` is `(N - 1) * hopFrames` over the unsigned members
+ * ChainAdapter holds, so a count of 0 makes the subtraction wrap, the chain
  * delay enormous and the bound exceeded -- and a factory that tested the bound
  * first would answer BadLookahead for a Config whose actual defect is the
  * count. Running the table in order means every value the later rows read has
- * already been vetted by an earlier one. A caller reading one status back
- * learns the FIRST defect and not the only one.
+ * already been vetted by an earlier one.
  *
- *   A Config can fail more than one row, and then the reported status is
- *   whichever comparison runs first. The alternative considered was to test the
- *   lookahead bound early, on the ground that it is the most expensive mistake
- *   to ship; it was rejected because the bound reads a value the DSP-count row
- *   has not yet vetted. `D_chain` is `(N - 1) * hopFrames` over the unsigned
- *   members ChainAdapter holds, so a count of 0 makes the subtraction WRAP, the
- *   chain delay enormous and the bound exceeded -- and a factory that tested the
- *   bound first would answer BadLookahead for a Config whose actual defect is
- *   the count. Running the table in order means every value the later rows read
- *   has already been vetted by an earlier one.
- *
- *   WHAT THAT DOES NOT ESTABLISH: it fixes the reported status for a Config
- *   that fails several rows, and it says nothing about which single row a
- *   caller's Config was meant to fail. A caller reading one status back learns
- *   the FIRST defect and not the only one.
+ * What that does not establish: it fixes the reported status for a Config that
+ * fails several rows, and says nothing about which single row a caller's Config
+ * was meant to fail. A caller reading one status back learns the first defect
+ * and not the only one.
  *
  * Nothing in this file throws, and `create` uses no assertion: a release build
  * removes an assertion, so every rejection has to survive NDEBUG. The return
@@ -60,16 +49,15 @@
 namespace g2
 {
 	/* The DSP job body lives in dspJob.cpp and no header declares it. The
-	 * declaration is here rather than in a new header because this is its only
-	 * production caller: the job array below is the one place a pointer to it is
-	 * taken. */
+	 * declaration is here rather than in a new header because the job array
+	 * below is where the pointer to it is taken. */
 	void dspJob(JobContext* _ctx) noexcept;
 
 	namespace
 	{
 		/* Above this the framework silently truncates the reported latency and
-		 * logs that audio will be out of sync. The bound is on the
-		 * SUM, and `D_codec` is written as a named term rather than folded away
+		 * logs that audio will be out of sync. The bound is on the sum, and
+		 * `D_codec` is written as a named term rather than folded away
 		 * so that a future decision to model the converter has one place to
 		 * change. */
 		constexpr uint64_t kMaxTotalLookaheadFrames = 16384;
@@ -78,7 +66,7 @@ namespace g2
 		/* The job array holds the DSP contexts only and is fixed at
 		 * `kJobCount`; the panel and the MCU run serially in the Scheduler,
 		 * outside the Executor. Every other count is rejected, including the
- * 4-DSP machine that is a real configuration. */
+		 * 4-DSP machine that is a real configuration. */
 		constexpr unsigned kFixedDspCount = static_cast<unsigned>(kJobCount);
 
 		/* A value above 1 would give one transmit callback per frame with a
@@ -105,7 +93,7 @@ namespace g2
 		/* A hop of zero collapses the hop whatever the override says. Every
 		 * mailbox is a delay line of `hopFrames + 1` frames, so a frame written
 		 * in one quantum would be taken back in that same quantum and the
- * rule that no job may observe another job's state would break inside
+		 * rule that no job may observe another job's state would break inside
 		 * the very object the override exists to exercise. */
 		if(_config.hopFrames == 0)
 		{
@@ -113,7 +101,7 @@ namespace g2
 			return nullptr;
 		}
 
-		/* The divider is a DIVISOR. dspContext.h's comment on that member
+		/* The divider is a divisor. dspContext.h's comment on that member
 		 * states this rejection as the reason its modulo cannot divide by
 		 * zero, so the override must not be able to hand a zero through. */
 		if(_config.secondBusFrameDivider == 0)
@@ -164,12 +152,12 @@ namespace g2
 		 *
 		 * The sum is accumulated in 64 bits and not in `unsigned`, and that is a
 		 * decision rather than habit. A 32-bit sum of a wrapped delay and a
-		 * small lookahead wraps a SECOND time and lands back under the bound, so
+		 * small lookahead wraps a second time and lands back under the bound, so
 		 * a Config that ought to be refused would be accepted here -- a check
 		 * that passes for the wrong reason, and one whose silence would look
 		 * exactly like a correct answer.
 		 *
-		 * A wrapped delay is not the only way past 32 BITS. The count row bounds
+		 * A wrapped delay is not the only way past 32 bits. The count row bounds
 		 * `dspCount`, but nothing bounds `hopFrames` or `lookaheadFrames` once
 		 * the override is taken, so those two terms alone carry the sum over 32
 		 * bits while every earlier row is satisfied and no subtraction has
@@ -240,20 +228,19 @@ namespace g2
 
 	/* The Scheduler drives the Board's own DSP set and constructs none.
 	 *
-	 *   1. The Board's set is the BRIDGED one -- board.cpp holds the only
-	 *      production call of attachHdi08Bridges -- and a bridge carries the
-	 *      landed flag the run gate borrows.
-	 *   2. attachHdi08Bridges REFUSES a second attach, so a second set could
+	 *   1. The Board's set is the bridged one, and a bridge carries the landed
+	 *      flag the run gate borrows.
+	 *   2. attachHdi08Bridges refuses a second attach, so a second set could
 	 *      not be bridged after the fact.
 	 *   3. dspSet.h answers NULL for a slot with no bridge, and the run gate
-	 *      reads NULL as NOT LANDED -- so every slot of a Scheduler-owned set
+	 *      reads NULL as not landed -- so every slot of a Scheduler-owned set
 	 *      would stay shut for the life of the program while every check here
 	 *      stayed green.
 	 *
-	 * The chain callbacks are installed here and nowhere else, because this is
-	 * the one object that holds BOTH ends of that wire: the ChainAdapter it
-	 * owns and the set it drives. The Board attaches the HDI08 bridges and does
-	 * not touch the chain callbacks. */
+	 * The chain callbacks are installed here because this object holds both
+	 * ends of that wire: the ChainAdapter it owns and the set it drives. The
+	 * Board attaches the HDI08 bridges and does not touch the chain
+	 * callbacks. */
 	Scheduler::Scheduler(const Config& _config, Executor& _executor, Board& _board)
 		: m_executor(_executor)
 		, m_board(_board)
@@ -299,7 +286,7 @@ namespace g2
 			/* The run gate's pointer, borrowed and never copied. The producer
 			 * sets its own flag when the download completes, and a value taken
 			 * here could never see it. NULL for a slot with no bridge, which
-			 * the gate already reads as NOT LANDED. */
+			 * the gate already reads as not landed. */
 			c.programLanded         = set.programLanded(i);
 
 			c.secondBusFrameDivider = _config.secondBusFrameDivider;
@@ -432,8 +419,8 @@ namespace g2
 	 * scheduler stops part-way through the boot: CodecSink::push refuses when
 	 * full and this loop stops when it does.
 	 *
-	 * THE PANEL AND THE MCU RUN SERIALLY HERE, OUTSIDE THE EXECUTOR, which is
-	 * why the job array holds the eight DSP contexts and nothing else.
+	 * The panel and the MCU run serially here, outside the Executor, which is
+	 * why the job array holds the DSP contexts and nothing else.
 	 *
 	 * No allocation happens in this function. The adapter, the contexts, the
 	 * job array and both codec queues are all built once, at construction, and
@@ -688,9 +675,7 @@ namespace g2
 	uint64_t Scheduler::underflowFrames() const noexcept { return m_sink.underflowFrames();  }
 
 	/* Index 0 is the MCU and 1 .. dspCount are the DSPs. This is the context
-	 * index and not the run order: the two differ, and an implementation that
-	 * used the run order would answer for the panel at index 0 and be off by
-	 * one everywhere above it. */
+	 * index and not the run order; the two differ. */
 	int64_t Scheduler::cycleDebt(const unsigned _contextIndex) const noexcept
 	{
 		if(_contextIndex == 0)
@@ -798,13 +783,11 @@ namespace g2
 
 	/* The block is flat and it is a composition, in this fixed order:
 	 *
-	 * THE BLOCK IS FLAT AND IT IS A COMPOSITION OF FOUR. In this fixed order:
-	 *
-	 *   1. THIS OBJECT'S OWN STATE -- the version word first, then
-	 *      the virtual frame index, the MCU context's rational accumulator,
-	 *      cycle debt and long-dispatch counter, the same three for every DSP
-	 *      context, the sticky fault latch and its disjunction, and the
-	 *      adapter-owned counter baselines.
+	 *   1. This object's own state -- the version word first, then the virtual
+	 *      frame index, the MCU context's rational accumulator, cycle debt and
+	 *      long-dispatch counter, the same three for every DSP context, the
+	 *      sticky fault latch and its disjunction, and the adapter-owned counter
+	 *      baselines.
 	 *   2. Board::stateSave
 	 *   3. ChainAdapter::stateSave
 	 *   4. DspSet::stateSave
@@ -838,32 +821,32 @@ namespace g2
 	 * Scheduler left holding a detached set would have every run gate shut for
 	 * the life of the object with no diagnostic anywhere.
 	 *
-	 * WHAT THE BLOCK DOES NOT COVER, AND WHY. THE CODEC REGIME -- SCH-36, and
-	 * it is listed first because it is the one exclusion that is a REPAIR and
-	 * not an original limit. A snapshot is necessarily taken in the PLAY
-	 * regime, and design section 15.6 step 4 runs its boot quanta in the BOOT
-	 * regime so that neither codec queue is touched and the boot cannot stall
-	 * on a full sink. A regime that travelled through the block put step 4 in
-	 * the play regime whenever step 3 restored a snapshot -- the exact merge
-	 * 15.6 forbids -- and the sink then filled part-way through the boot. The
-	 * repair is EXCLUSION at stateSave and not a refusal at stateLoad: a field
-	 * that is never written cannot be restored by a future caller who has not
-	 * read this comment, whereas a refusal is a rule a later edit can quietly
-	 * drop. THE REGIME IS THEREFORE THE LOADING MACHINE'S OWN AND SURVIVES A
-	 * LOAD UNCHANGED, which is what makes a restore legal inside a boot.
+	 * What the block does not cover, and why.
 	 *
-	 * CallbackTimer, because it carries
-	 * no emulated state and a state file recorded on a fast machine must load
-	 * identically on a slow one -- the row states that one. The RECORDED OWNING
-	 * THREAD, for the same reason: it is a property of the process that took the
-	 * snapshot and not of the machine. And BOTH CODEC QUEUES, which is the one
-	 * omission a reader could mistake for an oversight: SCH-15's two queues
-	 * expose no way to read a ring without consuming it and no way to restore a
-	 * counter, so covering them needs new surface on codecQueues.h, which is
-	 * SCH-15's file and not this task's. THE CONSEQUENCE IS STATED: a snapshot
-	 * taken in the PLAY regime restores a machine whose queues hold whatever the
-	 * load left in them. The boot regime is unaffected, because a boot quantum
-	 * touches neither queue.
+	 * The codec regime, and it is listed first because it is the one exclusion
+	 * that is a repair and not an original limit. A snapshot is necessarily
+	 * taken in the play regime, and the boot sequence runs its boot quanta in
+	 * the boot regime so that neither codec queue is touched and the boot cannot
+	 * stall on a full sink. A regime that travelled through the block put those
+	 * boot quanta in the play regime whenever a snapshot had been restored --
+	 * the exact merge the boot sequence forbids -- and the sink then filled
+	 * part-way through the boot. The repair is exclusion at stateSave and not a
+	 * refusal at stateLoad: a field that is never written cannot be restored by
+	 * a future caller who has not read this comment, whereas a refusal is a rule
+	 * a later edit can quietly drop. The regime is therefore the loading
+	 * machine's own and survives a load unchanged, which is what makes a restore
+	 * legal inside a boot.
+	 *
+	 * CallbackTimer, because it carries no emulated state and a state file
+	 * recorded on a fast machine must load identically on a slow one. The
+	 * recorded owning thread, for the same reason: it is a property of the
+	 * process that took the snapshot and not of the machine. And both codec
+	 * queues, which is the one omission a reader could mistake for an oversight:
+	 * the queues expose no way to read a ring without consuming it and no way to
+	 * restore a counter, so covering them needs new surface on codecQueues.h.
+	 * The consequence: a snapshot taken in the play regime restores a machine
+	 * whose queues hold whatever the load left in them. The boot regime is
+	 * unaffected, because a boot quantum touches neither queue.
 	 *
 	 * Every field moves through memcpy. The destination is a caller-supplied
 	 * void* with no alignment guarantee, so a typed store into it would be
@@ -871,16 +854,16 @@ namespace g2
 	 */
 	namespace
 	{
-		/* The version of THIS class's own block. It is not the Board's and not
+		/* The version of this class's own block. It is not the Board's and not
 		 * the chain's; each limb versions or guards itself.
 		 *
-		 * VERSION 2 IS SCH-36's EXCLUSION OF THE CODEC REGIME. The word moved
-		 * because the LAYOUT moved: version 1 carried a regime word between the
-		 * version word and the frame index, so a version-1 image read by this
-		 * build would take that regime word as the low half of the frame index
-		 * and every field after it would be shifted. A layout change that left
-		 * the word at 1 would be accepted and misread -- silently -- which is
-		 * the one outcome the word exists to prevent. */
+		 * The word moved to 2 because the layout moved: version 1 carried a
+		 * regime word between the version word and the frame index, so a
+		 * version-1 image read by this build would take that regime word as the
+		 * low half of the frame index and every field after it would be
+		 * shifted. A layout change that left the word at 1 would be accepted
+		 * and misread -- silently -- which is the one outcome the word exists
+		 * to prevent. */
 		constexpr uint32_t g_schedulerStateVersion = 2u;
 
 		void put32(uint8_t*& _cursor, const uint32_t _value) noexcept
@@ -956,8 +939,8 @@ namespace g2
 
 		auto* cursor = static_cast<uint8_t*>(_dst);
 
-		/* THE CODEC REGIME IS NOT WRITTEN. SCH-36, and the block comment above
-		 * carries the reason. */
+		/* The codec regime is not written; the block comment above carries the
+		 * reason. */
 		put32(cursor, g_schedulerStateVersion);
 		put64(cursor, m_frameIndex);
 
@@ -1004,9 +987,9 @@ namespace g2
 		if(get32(cursor) != g_schedulerStateVersion)
 			return Status::BadStateImage;
 
-		/* m_regime IS UNTOUCHED HERE BECAUSE NOTHING WROTE IT. The loading
-		 * machine keeps the regime it was in, which is what lets design
-		 * section 15.6 step 3 run inside a boot. */
+		/* m_regime is untouched here because nothing wrote it. The loading
+		 * machine keeps the regime it was in, which is what lets a restore run
+		 * inside a boot. */
 		m_frameIndex = get64(cursor);
 
 		m_mcu.acc                = get32 (cursor);

@@ -1,44 +1,40 @@
-/* t0_midi_out.cpp -- the check of task PLG-7. Design sections 14.5 and
- * 17 row 7.30.
+/* t0_midi_out.cpp
  *
- * WHAT THE CHECK OWNS: readMidiOut carries ONLY what the machine originated.
- * The source is the emulated UART0 transmit register -- a byte the firmware
- * writes to UTB is delivered through Uart0's MidiOutFn callback to the
- * Device's parser, and readMidiOut drains the completed events. Design
- * section 14.5: "There is no unsolicited SysEx. Nothing is periodic. There is
- * no keepalive. The emulated MIDI port has nothing to volunteer."
+ * readMidiOut carries only what the machine originated. The source is the
+ * emulated UART0 transmit register: a byte the firmware writes to UTB is
+ * delivered through Uart0's MidiOutFn callback to the Device's parser, and
+ * readMidiOut drains the completed events. There is no unsolicited SysEx,
+ * nothing is periodic, there is no keepalive -- the emulated MIDI port has
+ * nothing to volunteer.
  *
- * THE THREE CASE GROUPS:
+ * The case groups:
  *
  *  1. With no machine running -- the state every device is in between
- *     construction and PLG-12's boot -- readMidiOut appends nothing, however
- *     many times it is called. Nothing is periodic, so repeated calls must
- *     not grow the output either.
+ *     construction and boot -- readMidiOut appends nothing, however many
+ *     times it is called. Nothing is periodic, so repeated calls must not
+ *     grow the output either.
  *
- *  2. The UART0 model's TX side is driven exactly the way the machine would
- *     drive it: Uart0::setMidiOut installs the Device's own callback
- *     (uart0MidiOut, the very function pointer PLG-12 hands
- *     Board::uart0().setMidiOut), the transmitter is enabled, and bytes are
- *     written to UTB through Uart0's bus interface, as t0_uart0 case group 5
- *     does. readMidiOut must then carry exactly those bytes, as completed
- *     SMidiEvents, in order, with the Device source -- and NOTHING ELSE. A
- *     byte written while the transmitter is disabled is not machine output
- *     (Uart0 withholds it, UM 14.4.1.3 TxRDY), so readMidiOut must not
+ *  2. The UART0 model's TX side is driven the way the machine would drive it:
+ *     Uart0::setMidiOut installs the Device's own callback (uart0MidiOut, the
+ *     function pointer the boot hands Board::uart0().setMidiOut), the
+ *     transmitter is enabled, and bytes are written to UTB through Uart0's
+ *     bus interface. readMidiOut must then carry exactly those bytes, as
+ *     completed SMidiEvents, in order, with the Device source, and nothing
+ *     else. A byte written while the transmitter is disabled is not machine
+ *     output (Uart0 withholds it, UM 14.4.1.3 TxRDY), so readMidiOut must not
  *     carry it either.
  *
- *  3. THE NO-KEEPALIVE PROPERTY IS TESTED, NOT STATED. The required-red
- *     mutation plants a keepalive -- one extra event pushed into the parser
- *     before every drain -- and case group 1 turns red: readMidiOut called
- *     repeatedly with no UART traffic must return an empty vector every
- *     time, so any periodic source the implementation volunteers shows up
- *     here and not in production.
+ *  3. The no-keepalive property is tested, not stated: readMidiOut called
+ *     repeatedly with no UART traffic must return an empty vector every time,
+ *     so any periodic source the implementation volunteers shows up here and
+ *     not in production.
  *
- * THE HARNESS reaches readMidiOut through the subclass route the plan's
- * qualification names, because readMidiOut is protected. The same harness
- * exposes the uart0MidiOut sink, so case group 2 installs the real function
- * pointer the boot task will install, not a private copy of it.
+ * The harness reaches readMidiOut through a subclass, because readMidiOut is
+ * protected. The same harness exposes the uart0MidiOut sink, so case group 2
+ * installs the real function pointer the boot installs, not a private copy of
+ * it.
  *
- * NO ASSERTION IN THIS FILE IS A LANGUAGE assert() and nothing here depends
+ * No assertion in this file is a language assert() and nothing here depends
  * on NDEBUG.
  */
 
@@ -103,7 +99,7 @@ namespace
 	constexpr uint8_t kCrEnableTransmitter = (0x01u << 2);
 
 	// UM section 14.3.7: every UART register is accessed as a byte, and this
-	// model's width unit is BITS, not bytes -- 8 is the byte access.
+	// model's width unit is bits, not bytes -- 8 is the byte access.
 	constexpr int g_byteWidth = 8;
 
 	mcf5307_bus_status g_status = MCF5307_BUS_OK;
@@ -117,9 +113,9 @@ namespace
 
 int main()
 {
-	/* ------------- Case group 1. NO MACHINE, NOTHING ORIGINATED. A device
-	 * between construction and boot (the PLG-1 state) volunteers nothing, on
-	 * the first call and on every call after it. */
+	/* ------------- Case group 1. No machine, nothing originated. A device
+	 * between construction and boot volunteers nothing, on the first call and
+	 * on every call after it. */
 	{
 		MidiHarness device;
 
@@ -140,10 +136,10 @@ int main()
 		check(!grew, "repeated readMidiOut calls with no machine volunteer nothing (nothing is periodic, no keepalive)");
 	}
 
-	/* ------------- Case group 2. THE UART0 TRANSMIT REGISTER IS THE SOURCE.
-	 * The sink is installed on the UART0 model through setMidiOut, the
-	 * exact call PLG-12 performs on Board::uart0(); the bytes enter through
-	 * UTB bus writes, the path the firmware takes. */
+	/* ------------- Case group 2. The UART0 transmit register is the source.
+	 * The sink is installed on the UART0 model through setMidiOut, the call
+	 * the boot performs on Board::uart0(); the bytes enter through UTB bus
+	 * writes, the path the firmware takes. */
 	{
 		MidiHarness device;
 
@@ -184,7 +180,7 @@ int main()
 		device.readMidiOut(again);
 		check(again.empty(), "a drained event is not delivered twice");
 
-		// A byte the transmitter never sent is NOT machine-originated. Uart0
+		// A byte the transmitter never sent is not machine-originated. Uart0
 		// refuses to deliver it (UM section 14.4.1.3, TxRDY), so readMidiOut
 		// must not carry it either.
 		MidiHarness silent;
@@ -197,10 +193,10 @@ int main()
 			"a byte written while the transmitter is disabled never reaches readMidiOut");
 	}
 
-	/* ------------- Case group 3. NO UNSOLICITED SYSEX. A machine-originated
-	 * SysEx dump IS carried (design 14.5: the G2 sends SysEx on the DIN
-	 * port), but one the machine did not originate is not: a device that
-	 * inserts its own SysEx into the stream shows up here. */
+	/* ------------- Case group 3. No unsolicited SysEx. A machine-originated
+	 * SysEx dump is carried -- the G2 sends SysEx on the DIN port -- but one
+	 * the machine did not originate is not: a device that inserts its own
+	 * SysEx into the stream shows up here. */
 	{
 		MidiHarness device;
 

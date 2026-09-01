@@ -1,47 +1,17 @@
-/* g2Device.h -- the synthLib::Device subclass. Task PLG-1, which also
- * absorbed PLG-3 (plan section 17, step 2; §24.6 row W3-390).
+/* g2Device.h -- the synthLib::Device subclass.
  *
- * Design sections 13.10 rule 3, 14.7 and 26.
+ * This subclass is the whole of this project's contact with the synthLib
+ * framework: it presents the pure virtuals synthLib::Device declares, and it
+ * holds the two hand-off flags.
  *
- * WHAT THIS CLASS IS. The whole of the design's contact with the synthLib
- * framework is this subclass. It presents the twelve pure virtuals
- * synthLib::Device declares, at device.h lines 54, 70, 73, 74, 78, 79, 81,
- * 82, 83, 91, 92 and 93, and it holds the two hand-off flags of design
- * section 13.10 rule 3.
+ * The two conditional virtuals. synthLib's device.h wraps getState, setState
+ * and setStateFromUnknownCustomData in #if SYNTHLIB_DEMO_MODE == 0, of which
+ * only the first two are pure virtuals. A subclass that marks those two
+ * `override` unconditionally will not compile under SYNTHLIB_DEMO_MODE, so
+ * the two overrides below carry the same guard.
  *
- * THE TWO CONDITIONAL VIRTUALS. device.h:72 opens #if SYNTHLIB_DEMO_MODE == 0
- * and the guard wraps three declarations -- getState, setState and
- * setStateFromUnknownCustomData -- of which only the first two are pure
- * virtuals. Under SYNTHLIB_DEMO_MODE the count is ten, and a subclass that
- * marks those two `override` unconditionally will not compile. The two
- * overrides below carry the same guard.
- *
- * THREE OF THE TWELVE ARE PROTECTED: readMidiOut, processAudio and sendMidi.
- * Nothing outside the class hierarchy calls them; a test harness that wants
- * to call them goes through a subclass of this one, which is what
- * t0_handoff_flags does.
- *
- * THE OWNERS OF WHAT IS NOT HERE YET, so that nobody reads a stub body as a
- * finished behaviour. PLG-2 has landed: the channel counts are the final 2
- * and 2, final the instant the constructor returns, pinned by
- * t0_channel_counts. PLG-4 HAS LANDED (merged with PLG-6, §24.6 row W3-390):
- * processAudio's full choreography and sendMidi's offset conversion are in,
- * pinned by t0_process_audio and t0_midi_offsets. PLG-5 HAS LANDED:
- * the seven-item state format of design section 15.5 lives in g2State.{h,cpp}
- * and the two overrides delegate to it (see that header for the format and
- * the BRD-11 mismatch policy); PLG-12 owns the boot thread, the Scheduler
- * construction, and every OTHER Scheduler-touching line -- this class borrows
- * the Scheduler through m_scheduler and drives only push, runFrames, pull,
- * queueMidi and faulted, the audio thread's rows of docs/threading.md's map.
- * PLG-1's own
- * surface is the flags, isValid(), getSamplerate(), m_numSamplesProcessed,
- * the firmware wiring, and the two hand-off sequences, which the later bodies
- * are required to reuse rather than restate. PLG-7 has since landed
- * readMidiOut (see the m_midiOutParser block below); its Board half waits on
- * PLG-12.
- *
- * THE HAND-OFF PAIRING, STATED HERE BECAUSE THE MEMORY ORDERS ARE THE
- * DELIVERABLE AND NOT A COMMENT (plan section 17, step 2):
+ * The hand-off pairing, stated here because the memory orders are the
+ * deliverable:
  *
  *   audio thread, in processAudio:      m_inCallback.store(true, seq_cst);
  *                                       load m_ready (seq_cst); on false,
@@ -55,15 +25,15 @@
  *                                       touch the Scheduler; then
  *                                       m_ready.store(true, release).
  *
- * FOUR of those operations must be memory_order_seq_cst, because each thread
- * stores one atomic and then loads the OTHER: an acquire load does not order
- * a store-load pair, and without seq_cst both threads can observe the other's
+ * The store-then-load operations must be memory_order_seq_cst, because each
+ * thread stores one atomic and then loads the other: an acquire load does not
+ * order a store-load pair, and without seq_cst both threads can observe the other's
  * pre-store value and both proceed -- exactly the interleaving the pairing
  * exists to exclude. The two closing false stores stay release. The wait is
  * unbounded by design; a debug build asserts a generous bound.
  *
  * wLib::Device was considered as a base class and rejected. It would supply
- * m_numSamplesProcessed for free, but wLib/wDevice.h:22 declares a pure
+ * m_numSamplesProcessed for free, but wLib/wDevice.h declares a pure
  * virtual getDspEsxiClock() returning dsp56k::EsxiClock*, and the design
  * requires that this project constructs zero EsaiClock objects. See
  * docs/divergence.md. Do not re-open it.
@@ -101,7 +71,7 @@ namespace g2
 	public:
 		explicit Device(const synthLib::DeviceCreateParams& _params);
 
-		/* DECLARED HERE AND DEFINED IN THE .cpp because m_sdram holds an
+		/* Declared here and defined in the .cpp because m_sdram holds an
 		 * incomplete type: a destructor the compiler generated here could
 		 * not see Sdram's definition. */
 		~Device() override;
@@ -118,8 +88,7 @@ namespace g2
 		uint32_t getDspClockPercent() const override;
 		uint64_t getDspClockHz() const override;
 
-		/* The firmware state BRD-10's surface reports, resolved EXACTLY ONCE at
-		 * construction -- requirement 4 of design section 7.7 is that the plugin
+		/* The firmware state, resolved exactly once at construction: the plugin
 		 * does not retry, so the constructor asks once and never again. */
 		const g2::FirmwareStatus& firmwareStatus() const noexcept { return m_firmwareStatus; }
 
@@ -129,51 +98,47 @@ namespace g2
 		 * reads: the absent row answers NoFirmware before the words are
 		 * compared.
 		 *
-		 * IT IS THE EXPECTED WORD AND NOT ONE READ OUT OF THE BINARY, and the
+		 * It is the expected word and not one read out of the binary, and the
 		 * constructor is why: it resolves the firmware without booting, so
 		 * there is no machine to ask. resolveFirmwareState decides presence
 		 * from the artifact directory alone and never opens the image. A user
 		 * who supplies a firmware of another version is therefore recorded
 		 * here as g_expectedFirmwareVersion, and the mismatch that comparison
-		 * exists to catch is a mismatch between two SAVED states rather than
+		 * exists to catch is a mismatch between two saved states rather than
 		 * between the state and the bytes on disk. Reading the real word
 		 * requires the boot this constructor deliberately does not perform. */
 		uint16_t firmwareVersionWord() const noexcept { return m_firmwareVersionWord; }
 
 		/* ---------------------------------------------------------------
-		 * PLG-12. THE BOOT-ON-RESTORE SEQUENCE. Design section 15.6, plan
-		 * block PLG-12. Every step below runs on the CALLING thread, which
-		 * is the boot thread, and the last of them publishes the whole
-		 * booted machine to the audio thread with one release store.
+		 * The boot-on-restore sequence. Every step below runs on the calling
+		 * thread, which is the boot thread, and the last of them publishes
+		 * the whole booted machine to the audio thread with one release
+		 * store.
 		 *
-		 * THE SIX STEPS ARE AN ORDER AND NOT A LIST, and BootStep is what
-		 * makes the order observable from outside without a second
-		 * implementation of it. Steps 4 and 5 are the two that must not
-		 * merge: step 4 runs the BOOT codec regime -- a Scheduler is born
-		 * in it (scheduler.h, CodecRegime) and beginPlayPhase is the only
-		 * thing that leaves it -- so the boot touches neither codec queue
-		 * and cannot stall on a full sink. */
+		 * The steps are an order, not a list, and BootStep is what makes the
+		 * order observable from outside without a second implementation of
+		 * it. Steps 4 and 5 must not merge: step 4 runs the boot codec
+		 * regime -- a Scheduler is born in it (scheduler.h, CodecRegime) and
+		 * beginPlayPhase is what leaves it -- so the boot touches neither
+		 * codec queue and cannot stall on a full sink. */
 		enum class BootStep
 		{
 			Create,          // 1. Scheduler::create
-			Reset,           // 2. Scheduler::reset -- it does NOT prime
+			Reset,           // 2. Scheduler::reset -- it does not prime
 			StateLoad,       // 3. Scheduler::stateLoad, only when restoring
 			RunFrames,       // 4. the boot quanta, in the boot codec regime
 			BeginPlayPhase,  // 5. Scheduler::beginPlayPhase
 			Publish          // 6. the release store of true into m_ready
 		};
 
-		/* THE OBSERVER SEAM, and it is the boot-thread twin of
-		 * ISchedulerDriver: that interface makes the AUDIO thread's four
-		 * calls observable, this one makes the BOOT thread's six steps
-		 * observable. Each notification is delivered AFTER its step has
-		 * completed and carries the Scheduler the step acted on, so an
-		 * observer reads the state the step left behind (a null Scheduler
-		 * means step 1 produced none).
+		/* The observer seam: the boot thread's twin of ISchedulerDriver.
+		 * Each notification is delivered after its step has completed and
+		 * carries the Scheduler the step acted on, so an observer reads the
+		 * state the step left behind (a null Scheduler means step 1 produced
+		 * none).
 		 *
 		 * Read-only observation. An observer that drove the Scheduler would
-		 * be a second boot thread, which design section 15.6's first safety
-		 * statement forbids. */
+		 * be a second boot thread, which is forbidden. */
 		class IBootObserver
 		{
 		public:
@@ -181,18 +146,16 @@ namespace g2
 			virtual void onBootStep(BootStep _step, Scheduler* _scheduler) noexcept = 0;
 		};
 
-		/* WHAT THE BOOT WAS ASKED FOR.
+		/* What the boot was asked for.
 		 *
-		 * `machineSnapshot` NULL OR EMPTY MEANS A COLD BOOT and step 3 does
-		 * not run. Non-empty means RESTORING, and the bytes are the flat
+		 * `machineSnapshot` null or empty means a cold boot and step 3 does
+		 * not run. Non-empty means restoring, and the bytes are the flat
 		 * block Scheduler::stateSave wrote (scheduler.h's state trio). They
-		 * are NOT design section 15.5's seven-item image: that format
-		 * carries patch and performance data and no machine snapshot, so a
-		 * snapshot travels only within one session, through
-		 * machineSnapshot() below. See the boot() comment in the .cpp for
-		 * what that leaves undone and who owns it.
+		 * are not the plugin state image: that format carries patch and
+		 * performance data and no machine snapshot, so a snapshot travels
+		 * only within one session, through machineSnapshot() below.
 		 *
-		 * `frameBudget` bounds step 4. The boot ends EARLY on the machine's
+		 * `frameBudget` bounds step 4. The boot ends early on the machine's
 		 * own signal -- Scheduler::chainAttached(), which turns true on the
 		 * first quantum after the DSP programs land -- and the budget is
 		 * the ceiling that keeps a firmware which never gets there from
@@ -204,7 +167,7 @@ namespace g2
 			uint64_t                    frameBudget     = 500000;
 		};
 
-		/* WHAT THE BOOT DID, and every field is a measurement rather than a
+		/* What the boot did. Every field is a measurement rather than a
 		 * claim: a caller that wants to know whether the machine actually
 		 * booted reads `chainAttached`, not `booted`. */
 		struct BootResult
@@ -214,44 +177,38 @@ namespace g2
 			bool     chainAttached = false;  // the DSP programs landed
 			bool     faulted       = false;
 
-			/* TRUE WHEN STEP 3 PUT STEP 4 IN THE WRONG CODEC REGIME, which is
-			 * a condition PLG-12 can report and cannot fix. boot()'s own
-			 * comment at the site carries the measurement and names the file
-			 * that owns the repair. */
+			/* True when step 3 put step 4 in the wrong codec regime, a
+			 * condition boot() can report and cannot fix. */
 			bool     regimeRestoredFromSnapshot = false;
 			uint64_t framesRun     = 0;
 			g2::Status status       = g2::Status::Unset;
 			std::string why;                 // empty on success
 		};
 
-		/* THE ENTRY POINT. It constructs the Board, loads the firmware
-		 * image, and runs design section 15.6's six steps in order.
+		/* The entry point. It constructs the Board, loads the firmware
+		 * image, and runs the boot steps in order.
 		 *
-		 * NOT CALLED FROM THE CONSTRUCTOR, and that is deliberate: design
-		 * section 15.6 boots during setStateInformation and prepareToPlay,
-		 * both message-thread moments, and a constructor that booted would
-		 * make every Device construction -- including the ungated T0 tests
-		 * that construct one to read its surface -- run a firmware boot. */
+		 * Not called from the constructor, and that is deliberate: the boot
+		 * belongs to setStateInformation and prepareToPlay, both
+		 * message-thread moments, and a constructor that booted would make
+		 * every Device construction run a firmware boot. */
 		BootResult boot(const BootRequest& _request);
 
-		/* THE MACHINE SNAPSHOT THIS DEVICE HOLDS. getState refreshes it
+		/* The machine snapshot this Device holds. getState refreshes it
 		 * from Scheduler::stateSave while the audio thread is held off, and
 		 * boot() takes it back through BootRequest::machineSnapshot. */
 		const std::vector<uint8_t>& machineSnapshot() const noexcept { return m_machineSnapshot; }
 
 		void installBootObserver(IBootObserver* _observer) noexcept { m_bootObserver = _observer; }
 
-		/* THE SCHEDULER DRIVER, AND THE SEAM IT PROVIDES. The audio thread's
-		 * half of the Scheduler surface is exactly four calls -- push,
-		 * runFrames, pull, and a read of faulted() -- and this nested
-		 * interface is that contract, and nothing more. The production
-		 * driver forwards each call to the real Scheduler PLG-12 installs;
-		 * the harness driver records them. THE CALL ORDER IS THE
-		 * DELIVERABLE of PLG-4 step 1 (it is what fixes both codec queue
-		 * capacities at L + B, design section 13.6), so the contract is
+		/* The scheduler driver, and the seam it provides. The audio thread's
+		 * half of the Scheduler surface is push, runFrames, pull, and a read
+		 * of faulted(), and this nested interface is that contract and
+		 * nothing more. The production driver forwards each call to the real
+		 * Scheduler; a harness driver records them. The call order is what
+		 * fixes both codec queue capacities at L + B, so the contract is
 		 * spelled at one place and every caller drives it through here.
-		 * Public: a harness implements it, and the test's access to it is
-		 * read-only observation of the order. */
+		 * Public so a harness can implement it. */
 		class ISchedulerDriver
 		{
 		public:
@@ -262,7 +219,7 @@ namespace g2
 			virtual bool faulted() const noexcept = 0;
 		};
 
-		/* THE PRODUCTION DRIVER. Forwards to the Scheduler the boot thread
+		/* The production driver. Forwards to the Scheduler the boot thread
 		 * installed; a null m_scheduler makes every call inert, which is the
 		 * pre-boot state and unreachable on this path because the ready
 		 * branch reads m_ready only after the boot thread has stored the
@@ -293,7 +250,7 @@ namespace g2
 			Scheduler* m_scheduler;
 		};
 
-		/* THE OWNING DRIVER. The Device owns exactly one; the constructor
+		/* The owning driver. The Device owns exactly one; the constructor
 		 * points m_driver at it, and a harness that replaces m_driver
 		 * through installDriver() leaves this one alive underneath. */
 		SchedulerDriver m_owningDriver{nullptr};
@@ -303,81 +260,63 @@ namespace g2
 		void processAudio(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs, size_t _samples) override;
 		bool sendMidi(const synthLib::SMidiEvent& _ev, std::vector<synthLib::SMidiEvent>& _response) override;
 
-		/* PLG-12's boot thread creates the Scheduler and installs it here --
+		/* The boot thread creates the Scheduler and installs it here --
 		 * construct, reset, boot runFrames, beginPlayPhase -- and its final
-		 * act is the release store of true into m_ready (design section
-		 * 15.6's six steps). Until that installation the pointer is null,
-		 * and processAudio's ready branch cannot run, because m_ready is
-		 * false until the same thread stores it AFTER the installation.
+		 * act is the release store of true into m_ready. Until that
+		 * installation the pointer is null, and processAudio's ready branch
+		 * cannot run, because m_ready is false until the same thread stores
+		 * it after the installation.
 		 *
 		 * Borrowed, not owned: the Scheduler borrows its Board and the
-		 * Board outlives it (scheduler.h), and the Device owns the pair.
-		 * PLG-12 owns the construction and the teardown. */
+		 * Board outlives it (scheduler.h), and the Device owns the pair. */
 		void installScheduler(Scheduler* _scheduler) noexcept
 		{
 			m_scheduler = _scheduler;
 		}
 
-		/* THE MESSAGE THREAD'S HALF OF THE HAND-OFF, shared by getState and
-		 * setState (PLG-5 builds on it). beginStateChange() stores m_ready
-		 * false with seq_cst and spins until the audio callback is observed
-		 * clear; the caller then touches the Scheduler and finishes with
-		 * endStateChange().
+		/* The message thread's half of the hand-off, shared by getState and
+		 * setState. beginStateChange() stores m_ready false with seq_cst and
+		 * spins until the audio callback is observed clear; the caller then
+		 * touches the Scheduler and finishes with endStateChange().
 		 *
-		 * THE WAIT IS UNBOUNDED BY DESIGN: a callback that never returns is a
+		 * The wait is unbounded by design: a callback that never returns is a
 		 * host already broken in a way a timeout would convert from a hang
 		 * into silent state corruption. A debug build asserts a generous
 		 * bound so the condition is loud in development. */
 		void beginStateChange() noexcept;
 		void endStateChange() noexcept;
 
-		/* THE TEST SEAM. PLG-4's t0_process_audio must observe the ready
-		 * branch's call ORDER without a real booted machine, so the harness
-		 * subclass replaces the driver. The hook is protected, only this
-		 * class and its subclasses reach it, and the production value is
-		 * always the owning SchedulerDriver over m_scheduler. */
+		/* The test seam. A harness subclass replaces the driver to observe
+		 * the ready branch's call order without a real booted machine. The
+		 * hook is protected, so only this class and its subclasses reach it,
+		 * and the production value is the owning SchedulerDriver over
+		 * m_scheduler. */
 		void installDriver(ISchedulerDriver* _driver) noexcept { m_driver = _driver; }
 		ISchedulerDriver* driver() const noexcept { return m_driver; }
 
-		/* PLG-12. THE BOOTED MACHINE, FOR EVIDENCE AND FOR NOTHING ELSE.
-		 * t1_boot_on_restore reads the display cells through Board::onRead
-		 * to show that the machine this Device booted composed a banner --
-		 * a claim that cannot be made from the Scheduler's counters alone.
-		 * PROTECTED, so the evidence path is a subclass and not the whole
-		 * plugin: nothing outside this hierarchy may reach the Board.
-		 * NULL until boot() has built one. */
+		/* The booted machine, for evidence and for nothing else. Protected,
+		 * so the evidence path is a subclass and not the whole plugin:
+		 * nothing outside this hierarchy may reach the Board. Null until
+		 * boot() has built one. */
 		Board* board() const noexcept { return m_board.get(); }
 
 		uint32_t m_numSamplesProcessed = 0;
 
-		/* PLG-7. The byte stream the emulated UART0 transmitter originates.
-		 * Uart0 delivers each byte the firmware writes to UTB through the
+		/* The byte stream the emulated UART0 transmitter originates. Uart0
+		 * delivers each byte the firmware writes to UTB through the
 		 * MidiOutFn callback installed on it (g2Lib/uart0.h), and the static
 		 * sink below feeds that stream into this parser; readMidiOut drains
-		 * the parser's completed events into _midiOut. The Board that owns
-		 * the Uart0 arrives with PLG-12's boot; until then the parser never
-		 * receives a byte and readMidiOut appends nothing. */
+		 * the parser's completed events into _midiOut. */
 		std::vector<uint8_t> m_midiOutBuffer;
 		synthLib::MidiBufferParser m_midiOutParser{synthLib::MidiEventSource::Device};
 
-		/* PLG-4 step 2 (with PLG-6's conversion). THE STAGED QUEUE.
-		 * sendMidi only stamps and enqueues (design section 17 row 7.31a);
-		 * the converted events wait here and processAudio delivers them, at
-		 * the top of the callback and before runFrames, which is what makes
-		 * the offset sample-accurate against the machine's own frame index.
+		/* The staged queue. sendMidi only stamps and enqueues; the converted
+		 * events wait here and processAudio delivers them, at the top of the
+		 * callback and before runFrames, which is what makes the offset
+		 * sample-accurate against the machine's own frame index.
 		 * Single-producer single-consumer on the audio thread itself -- the
 		 * framework calls sendMidi on the same thread that will run
-		 * processAudio (synthLib/device.cpp:35-50), so no lock is involved.
-		 *
-		 * THE DELIVERABLE TARGET: design row 7.31 says the result lands in
-		 * Scheduler::queueMidi(uint64_t frameIndex, ...). queueMidi is part
-		 * of the Scheduler's FINISHED surface (design section 13.10.5;
-		 * W3-415 records it as declared nowhere in g2Lib yet), so this file
-		 * stages into m_pendingMidi and the delivery site -- PLG-12's boot
-		 * wiring, which owns every other Scheduler-touching line -- calls
-		 * queueMidi through it when it lands. The staging is the device's
-		 * half of the contract: the conversion arithmetic, the ordering, and
-		 * the no-double-delivery property are all observable here. */
+		 * processAudio (synthLib/device.cpp), so no lock is involved. */
 		std::vector<synthLib::SMidiEvent> m_pendingMidi;
 
 		/* The Uart0 MidiOutFn sink. Static because MidiOutFn is a plain
@@ -385,18 +324,17 @@ namespace g2
 		static void uart0MidiOut(void* _user, uint8_t _byte);
 
 	private:
-		/* PLG-12. THE MACHINE THIS DEVICE OWNS, AND THE DECLARATION ORDER IS
-		 * THE DESTRUCTION ORDER REVERSED, which is the whole reason these
-		 * four are here in this sequence. The Scheduler borrows the Board's
-		 * DSP set and installs chain callbacks into ESAIs the Board owns,
-		 * and the Board reads its firmware out of the SDRAM store, so the
-		 * Scheduler must die first and the store last. Members destruct in
-		 * reverse declaration order, so the order below is: Scheduler,
-		 * Executor, Board, SDRAM.
+		/* The machine this Device owns. The declaration order is the
+		 * destruction order reversed, which is the whole reason for this
+		 * sequence: the Scheduler borrows the Board's DSP set and installs
+		 * chain callbacks into ESAIs the Board owns, and the Board reads its
+		 * firmware out of the SDRAM store, so the Scheduler must die first
+		 * and the store last. Members destruct in reverse declaration order,
+		 * so the order below is: Scheduler, Executor, Board, SDRAM.
 		 *
 		 * Sdram is defined in the .cpp: the Board leaves Region::Sdram with
-		 * no target on purpose (board.cpp, plan §24.6 row W3-115) and the
-		 * store is the composing party's to supply. */
+		 * no target on purpose (board.cpp) and the store is the composing
+		 * party's to supply. */
 		class Sdram;
 
 		std::unique_ptr<Sdram>          m_sdram;
@@ -412,9 +350,10 @@ namespace g2
 
 		void notifyBootStep(BootStep _step, Scheduler* _scheduler) noexcept;
 
-		/* PLG-12 installs it, the audio thread drives it, and the hand-off
-		 * pairing (below) is what makes the transfer total: the pointer is
-		 * written only while m_ready is false and no callback is in flight. */
+		/* The boot thread installs it, the audio thread drives it, and the
+		 * hand-off pairing (below) is what makes the transfer total: the
+		 * pointer is written only while m_ready is false and no callback is
+		 * in flight. */
 		Scheduler* m_scheduler = nullptr;
 
 		/* The active driver. It is the SchedulerDriver over m_scheduler in
@@ -422,7 +361,7 @@ namespace g2
 		 * installDriver(). */
 		ISchedulerDriver* m_driver = nullptr;
 
-		/* The two hand-off flags. NEITHER CAN DO THE OTHER'S JOB.
+		/* The two hand-off flags. Neither can do the other's job.
 		 * m_ready publishes the booted machine from the boot thread to the
 		 * audio thread; m_inCallback is the acknowledgement the reverse
 		 * direction needs, because a release store on m_ready cannot suspend a
@@ -437,15 +376,13 @@ namespace g2
 		 * above says why it is the expected word and not a read one. */
 		uint16_t m_firmwareVersionWord = 0;
 
-		/* PLG-5. The seven-item state of design section 15.5, held between
-		 * serializeState and deserializeState. The emulated machine arrives
-		 * with PLG-12's boot; until then these are the empty and zero values
-		 * the format round-trips exactly. */
+		/* The plugin state items, held between serializeState and
+		 * deserializeState. */
 		g2::StateData m_stateData;
 
-		/* The type pin of the three members the plan requires, instantiated
-		 * once from g2Device.cpp. The members are protected and private by
-		 * design, so the pin lives where the access exists. */
+		/* The type pin, instantiated once from g2Device.cpp. The pinned
+		 * members are protected and private by design, so the pin lives
+		 * where the access exists. */
 		struct MemberPin;
 	};
 }

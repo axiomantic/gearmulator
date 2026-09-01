@@ -1,19 +1,5 @@
 // The no-firmware path. Tier T0: this test needs no firmware artifact.
 //
-// Four requirements for the case where the plugin loads in the host and finds
-// no OS update file:
-//
-//   1. The plugin loads. It does not crash.
-//   2. It produces silence, and it reports its state clearly.
-//   3. It shows a message that names the exact file it needs, gives the version
-//      it expects, and says where to get it.
-//   4. It does not retry silently and it does not fail quietly.
-//
-// The fourth is the one a test usually misses. "Does not retry silently" is a
-// statement about how many times the surface asks, so case group 5 counts the
-// calls a counting resolver receives. A surface that looped inside itself would
-// answer the same and be caught by nothing else in this file.
-//
 // The test owns the environment variable rather than assuming it: a developer
 // who has NMG2_ARTIFACTS set would otherwise drive the opposite case and see a
 // green run. Every case sets or clears the variable itself.
@@ -93,9 +79,8 @@ namespace
 		std::string m_directory;
 	};
 
-	// The expected message is written out in full on purpose. A test that built
-	// the expected text with the same pieces the header uses would pass for a
-	// message that named none of the three things.
+	// The expected message is written out in full on purpose: building it from
+	// the same pieces the header uses would make the comparison tautological.
 	const char* g_expectedMessage =
 		"firmware artifact not available (NMG2_ARTIFACTS unset). "
 		"This plugin needs Clavia's own Nord Modular G2 OS update file: "
@@ -129,18 +114,9 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 1. The message carries each of the three things requirement 3
-	// names.
-	//
-	// Case group 0 compares the whole text, which is the stronger assertion.
-	// These restate the requirement itself, so that a later edit which dropped
-	// one of the three fails against the requirement rather than against a
-	// diff.
-	//
-	// The text comes from the surface and not from the literal above. A case
-	// group that searched its own expected string would report the same result
-	// for every possible implementation, including one that produced no message
-	// at all.
+	// Case group 1. The message is searched for the things the requirement
+	// names. The text comes from the surface and not from the literal above:
+	// searching the expected string would be tautological.
 	{
 		setArtifacts(nullptr);
 
@@ -161,9 +137,6 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 2. NMG2_ARTIFACTS naming a directory that is there reports
 	// Present.
-	//
-	// Without this case the state could be hardwired to Absent and every other
-	// case in this file would still pass.
 	{
 		setArtifacts(".");
 
@@ -188,8 +161,6 @@ int main()
 	// Case group 3. NMG2_ARTIFACTS naming a directory that is not there gets a
 	// distinct message from unset.
 	//
-	// There are three failure messages: one for unset, one for a path that is
-	// not a directory, and one for a directory that lacks the named artifact.
 	// The unset case and the missing-directory case are different inputs and
 	// get different messages, so that an operator with a wrong path sees the
 	// path they typed rather than a message that sends them to look at the
@@ -203,10 +174,8 @@ int main()
 
 		check(status.state == g2::FirmwareState::Absent,
 			"a directory that is not there reports the firmware absent");
-		// The status.message opens with the resolver's message (message 2
-		// here) and then carries the requirement-3 text. Both messages start
-		// with "firmware artifact not available (" and that is the only
-		// overlap.
+		// The status.message opens with the resolver's message and then
+		// carries the requirement text.
 		check(status.message.find(
 			"firmware artifact not available (NMG2_ARTIFACTS names no directory: "
 			+ missingDir + ")") == 0,
@@ -216,7 +185,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 4. It does not FAIL QUIETLY.
+	// Case group 4. It does not fail quietly.
 	//
 	// Neither state may leave the caller with nothing to show. The absent state
 	// carries both a report and a message; the present state carries a report.
@@ -236,12 +205,10 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. It does not RETRY in SILENCE.
+	// Case group 5. It does not retry in silence.
 	//
-	// The surface asks the resolver ONCE for each call it is given, and never
-	// more. A surface that looped inside itself -- waiting, polling, or trying
-	// a second location -- would report the same state and would be caught by
-	// nothing else in this file.
+	// The surface asks the resolver once for each call it is given, and never
+	// more.
 	//
 	// A caller that wants to look again calls again, which is what makes the
 	// second look the caller's decision and therefore visible to the user.
@@ -264,8 +231,7 @@ int main()
 
 	// -----------------------------------------------------------------------
 	// Case group 6. It produces silence. The buffer is filled with a pattern
-	// that is not silence first, so that a fill which wrote nothing at all
-	// fails here.
+	// that is not silence first.
 	{
 		std::vector<int32_t> samples(64, 0x0055AA33);
 
@@ -283,10 +249,8 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. A COUNT of ZERO WRITES NOTHING.
-	//
-	// The bytes on either side of the range are left alone, so a fill that ran
-	// off its own end is caught rather than tolerated.
+	// Case group 7. A count of zero writes nothing, and the samples on either
+	// side of the range are left alone.
 	{
 		std::vector<int32_t> samples(4, 0x0055AA33);
 
@@ -298,7 +262,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 8. A FILL WRITES only the RANGE it was GIVEN.
+	// Case group 8. A fill writes only the range it was given.
 	{
 		std::vector<int32_t> samples(6, 0x0055AA33);
 

@@ -14,22 +14,12 @@
 // falls inside the COMPRESSED LENGTH whose zero names the stored form. Storing
 // "QRY" at those offsets would corrupt the exact container the loader parses to
 // find the OS. The firmware reads the same offsets through two paths and real
-// hardware separates them ONLY BY MODE, so the 0x0098 write is the MODE
-// SELECTOR and not a write to be accepted and ignored.
+// hardware separates them only by mode, so the 0x0098 write is the mode
+// selector and not a write to be accepted and ignored.
 //
-// What this test proves, and why each part is here.
-//   1. The transition, not the bytes. A CFI response is bytes that look like
-//      data, so a test that only reads them back proves STORAGE. Every case
-//      below pins the mode BEFORE the command and AFTER it, and case 5 reads
-//      the container header back byte for byte after the reset command: a model
-//      that stored the signature into the image cannot pass that one.
-//   2. Per-instance state. Case 7 puts one Flash in query mode and asserts a
-//      second Flash in the same process is unaffected. A file-local static in
-//      flash.cpp would be process-global and would fail here.
-//   3. The entry point the firmware will actually use. Cases 1 to 8 drive the
-//      Flash model directly. Case 9 drives Board::onRead and Board::onWrite --
-//      the function pointers handed to the MCF5307 core -- because a test can
-//      pass while exercising a neighbouring entry point.
+// The cases assert the transition and not the bytes: a CFI response is bytes
+// that look like data, so each case pins the mode before the command and
+// after it, and the mode is per Flash instance rather than per process.
 //
 // The Primary Vendor Command Set ID this model returns is 2, AMD/Fujitsu
 // Standard. The source is flash.cpp's own comment -- "the erased state of an
@@ -119,8 +109,7 @@ namespace
 	// the branch it takes when the ID reads 1 -- a branch this model never
 	// selects, because it answers 2. An AMD part does not reset on 0xFF, and a
 	// model that answered to a command set it does not advertise would hide a
-	// firmware taking the wrong branch. Case 6 asserts the refusal, so the
-	// decision is checked rather than merely stated.
+	// firmware taking the wrong branch.
 	constexpr uint16_t kIntelReadArrayCommand = 0x00FFu;
 
 	// The floor's own offsets, byte-absolute within the CS2 window.
@@ -150,7 +139,7 @@ namespace
 	// the same address answers in query mode wherever the layout allows it, so
 	// the mode transition is provable per byte and not only per block.
 	//
-	// THE 0xFF HAZARD IS AVOIDED DELIBERATELY. An unloaded CS2 image is 0xFF
+	// The 0xFF hazard is avoided deliberately. An unloaded CS2 image is 0xFF
 	// fill, so a test asserting against 0xFF cannot separate "the model
 	// answered" from "nothing was ever loaded". Every asserted header byte
 	// below is neither 0xFF nor a value the CFI table returns at that offset.
@@ -318,15 +307,14 @@ int main()
 
 	// The two expected blocks must differ, or every mode assertion below would
 	// pass against a model that never changed mode at all. This is a check on
-	// the TEST and it runs first.
+	// the test itself and it runs first.
 	check(containerBlock != queryBlock,
 		"the container block and the CFI block differ, so a mode assertion can fail");
 
 	// ---------------- case 1: out of query mode, the container header answers
 	//
 	// The addresses the CFI probe reads answer their ORDINARY CONTENT when the
-	// device is not in query mode. This is the half a storage model gets wrong
-	// in the other direction.
+	// device is not in query mode.
 
 	g2::Flash flash(kCs0Base, kCs0Size, kCs2Base, kCs2Size);
 	flash.loadCs2(makeContainerImage());
@@ -371,8 +359,7 @@ int main()
 
 	// ---------------- case 4: query mode does not swallow the rest of the map
 	//
-	// A model that answered CFI everywhere would pass cases 2 and 3 and be
-	// useless. The bytes just below the floor's window must still be the image.
+	// The bytes just below the floor's window must still be the image.
 
 	checkEqual(uint32_t(flash.read8(kCs2Base + 0x1Cu)), uint32_t(0x00u),
 		"in query mode CS2 + 0x1C is still the container's uncompressed length");
@@ -383,9 +370,8 @@ int main()
 
 	// ---------------- case 5: the reset command EXITS, and the image survived
 	//
-	// The second assertion is the one a storage model cannot pass. If the model
-	// had written "QRY" and the ID into the image, the container header would
-	// be destroyed and this comparison would fail.
+	// The container header is compared byte for byte after the reset command:
+	// a signature written into the image would have destroyed it.
 
 	flash.write16(kCs2Base, kResetCommand);
 	check(!flash.cs2InQueryMode(),
@@ -395,8 +381,7 @@ int main()
 
 	// ---------------- case 6: the address is part of the command
 	//
-	// 0x0098 written anywhere else must not enter query mode. Without this a
-	// model that entered query mode on any write at all would pass case 2.
+	// 0x0098 written anywhere else must not enter query mode.
 
 	flash.write16(kCs2Base + kQueryEnterOffset + 2u, kQueryEnterCommand);
 	check(!flash.cs2InQueryMode(),
@@ -408,8 +393,8 @@ int main()
 
 	// ---------------- case 7: the Intel read-array command is NOT honoured
 	//
-	// The decision this file's header states, made checkable. This model
-	// advertises AMD/Fujitsu Standard, so 0xFF is not one of its commands.
+	// This model advertises AMD/Fujitsu Standard, so 0xFF is not one of its
+	// commands.
 
 	flash.write16(kCs2Base + kQueryEnterOffset, kQueryEnterCommand);
 	check(flash.cs2InQueryMode(),
@@ -423,8 +408,8 @@ int main()
 
 	// ---------------- case 8: the mode is PER INSTANCE
 	//
-	// The reason flash.h had to be admitted. A file-local static in flash.cpp
-	// would be process-global and both objects would report the same mode.
+	// A file-local static in flash.cpp would be process-global, and both
+	// objects would report the same mode.
 
 	{
 		g2::Flash first (kCs0Base, kCs0Size, kCs2Base, kCs2Size);
@@ -460,10 +445,9 @@ int main()
 
 	// ---------------- case 10: the entry points the CORE uses
 	//
-	// Cases 1 to 9 drive the Flash model. The firmware drives Board::onRead and
-	// Board::onWrite. A test that only drove the model could pass while the
-	// routing dropped the command, so the whole sequence is repeated here
-	// through the callbacks the core is given.
+	// The firmware drives Board::onRead and Board::onWrite, so the whole
+	// sequence is repeated here through the callbacks the core is given and
+	// not only against the model, where the routing could drop the command.
 
 	{
 		g2::Board board(makeBoardConfig());

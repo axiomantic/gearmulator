@@ -1,14 +1,5 @@
-// The Board is the MCU substrate the Scheduler runs on, and it is the one
-// object that every CS0 to CS5 device and the TransportHub eventually hang
-// off.
-//
-// The surface the Scheduler uses is exactly six methods, and the Scheduler
-// never touches anything else on the Board:
-//
-//     runMcu(uint32_t) -> uint32_t    one quantum of the MCU context
-//     faulted()                       TRUE when an instruction TRAPPED
-//     tickSofIfDue(uint64_t)          the 1 kHz USB start-of-frame tick
-//     stateSize / stateSave / stateLoad
+// The Board is the MCU substrate the Scheduler runs on. Every CS0 to CS5
+// device and the TransportHub hang off it.
 //
 // The Board is concrete, and that is a requirement, not an accident. The
 // Scheduler's job array and the ChainAdapter's callbacks point into it, so it
@@ -16,35 +7,19 @@
 // the static_asserts below make that a compile-time property rather than a
 // convention.
 //
-// The Board logs one line at construction naming G2_MCU_CORE_CLOCK_HZ and
-// stating that the value 45,000,000 is a placeholder -- the lowest in-spec
-// catalog speed grade. No golden reference and no capture may be recorded
-// until the real value is measured.
+// G2_MCU_CORE_CLOCK_HZ's 45,000,000 is a placeholder -- the lowest in-spec
+// catalog speed grade -- and the Board logs one line at construction saying so.
+// No golden reference and no capture may be recorded until the real value is
+// measured.
 
-// THE COMPOSITION, ADDED BY TASK INT-1 UNDER PLAN SECTION 24.6 ROW W3-115.
-// The bus callbacks below used to accept every access and return zero, and the
-// comment that described that shape is rewritten rather than left standing: the
-// board now routes every access through the BRD-1 MemoryMap to the seven units
-// W3-115 names. INT-1's scope in this file is the composition and nothing else.
-//
-// WHERE EVERY WINDOW COMES FROM. FOUR bases are recorded by AGENTS.md section
-// 2.2 and live as constants in memoryMap.h: CS1, CS3, CS5 and the SDRAM. CS0's,
-// CS2's and CS4's bases are recorded by NO AUTHORITY, and NO AUTHORITY RECORDS
-// A SIZE FOR ANY WINDOW. Plan section 1.3 rule 1 therefore makes every base and
-// every size CONFIGURATION, and BoardConfig below is how a caller supplies it.
-// THIS FILE INVENTS NO ADDRESS AND SHIPS NO DEFAULT LAYOUT, for the reason
-// memoryMap.h already gives: three of the eight bases have nothing to take a
-// default from. A default-constructed Board therefore answers NOWHERE, which is
-// the honest answer for a board nobody has configured.
-//
-// THE MBAR WINDOW IS SHARED AND THE MemoryMap ATTACHES ONE TARGET PER REGION,
-// so a small router sits between the units that answer it. The SIM-and-UART
-// split is not a choice made here: sim.cpp's DIVERGENCE note states it. The SIM
-// answers MBAR+0x1D0 because the firmware reads it as a model strap and BRD-2's
-// check requires it, and BRD-4 "owns every other UART offset". The M-Bus module
-// answers its own register block, whose bound mbus.h carries. The interrupt
-// controller answers its three register groups, whose bounds
-// interruptController.h carries.
+// Where every window comes from. The CS1, CS3, CS5 and SDRAM bases are recorded
+// in AGENTS.md and live as constants in memoryMap.h. CS0's, CS2's and CS4's
+// bases are recorded by no authority, and no authority records a size for any
+// window. Every base and every size is therefore configuration, and BoardConfig
+// below is how a caller supplies it. This file invents no address and ships no
+// default layout, for the reason memoryMap.h already gives: some bases have
+// nothing to take a default from. A default-constructed Board therefore answers
+// nowhere, which is the honest answer for a board nobody has configured.
 
 #pragma once
 
@@ -112,22 +87,22 @@ namespace g2
 		 * authority; none has been taken. */
 		int usbProtocolEndpoint = 3;
 
-		/* THE MAXIMUM PACKET SIZE OF THAT ENDPOINT, IN BYTES -- the largest
+		/* The maximum packet size of that endpoint, in bytes -- the largest
 		 * single packet the Board may hand to `isp1181_rx`.
 		 *
-		 * IT IS A WIRE CONSTRAINT AND THE BOARD IS THE SIDE OF THE WIRE THAT
-		 * MUST HONOUR IT. On a real G2 the PC's host controller splits a bulk
+		 * It is a wire constraint and the Board is the side of the wire that
+		 * must honour it. On a real G2 the PC's host controller splits a bulk
 		 * transfer into max-packet-size packets and the firmware reassembles
 		 * them; the peripheral never sees a packet larger than the buffer it
 		 * configured. This Board stands where that host controller stands, so
 		 * the split belongs here -- above the device, below the protocol.
 		 *
-		 * WHY IT IS CONFIGURATION AND NOT A CONSTANT THIS FILE INVENTS. The
-		 * size is a field of a register the FIRMWARE writes. ISP1362 Rev. 06
+		 * Why it is configuration and not a constant this file invents: the
+		 * size is a field of a register the firmware writes. ISP1362 Rev. 06
 		 * Table 110 (p.107) puts `FFOSZ[3:0]` in bits 3 to 0 of the byte
 		 * `0x20+n` writes, and Table 111 on the same page says it "Selects the
 		 * buffer memory size according to Table 16". Table 15 (p.51) then says
-		 * WHICH endpoints that reaches: endpoint 0 is "64 (fixed)" in both
+		 * which endpoints that reaches: endpoint 0 is "64 (fixed)" in both
 		 * directions and endpoints 1 to 14 are "programmable", with no
 		 * per-endpoint limit of their own. The same page states the
 		 * consequence outright -- "The size of the buffer memory determines
@@ -137,83 +112,81 @@ namespace g2
 		 * again. A literal compiled into pumpTransport would be wrong the
 		 * moment either changed.
 		 *
-		 * 64 IS ALSO THE CEILING, WHICH IS WHY THE DEFAULT CANNOT BE RAISED.
-		 * Table 16 (p.52) gives the non-isochronous column exactly four legal
+		 * 64 is also the ceiling, which is why the default cannot be raised.
+		 * Table 16 (p.52) gives the non-isochronous column these legal
 		 * settings -- `0000` 8 bytes, `0001` 16, `0010` 32, `0011` 64 -- and
 		 * marks `0100` through `1111` reserved. Table 109 (p.105) says the
 		 * same thing from the data-flow side: "isochronous: N <= 1023 bytes /
-		 * interrupt/bulk: N <= 64 bytes". A bulk endpoint on this part CANNOT
+		 * interrupt/bulk: N <= 64 bytes". A bulk endpoint on this part cannot
 		 * be given a buffer larger than 64 bytes, so no configuration makes
 		 * the 862-byte object of a real `.pch2` deliverable whole, and the
 		 * split below is not a workaround for one image.
 		 *
-		 * THE DOCUMENT CONTRADICTS ITSELF ONCE, AND IT IS RECORDED RATHER THAN
-		 * RESOLVED. Section 15.2.1 (p.113) writes the same bound as
+		 * The document contradicts itself once, and it is recorded rather than
+		 * resolved. Section 15.2.1 (p.113) writes the same bound as
 		 * "bulk/interrupt endpoint: N <= 32". That is half of what Table 16
 		 * and Table 109 give, it was read on the rendered page and is not an
 		 * extraction artefact, and nothing here decides which is right. It
 		 * matters only if this default is ever raised on the strength of one
-		 * citation: 64 is used because TWO tables agree on it, and a reader
+		 * citation: 64 is used because two tables agree on it, and a reader
 		 * who finds 32 elsewhere has found the contradiction, not an error
 		 * here.
 		 *
-		 * WHERE THE DEFAULT COMES FROM, AND THE DUPLICATION IT IS. 64 is also
+		 * Where the default comes from, and the duplication it is. 64 is also
 		 * what the device model configures for endpoint 3: `fifoShape` in
 		 * `src/isp1181/isp1181.nim` gives that endpoint `(64, 1)`, and that
 		 * row is itself recorded there as a measurement of the emulated
-		 * firmware rather than a property of the part. The model exposes NO
+		 * firmware rather than a property of the part. The model exposes no
 		 * query for it -- `mcf5307.h` declares no `isp1181_max_packet` -- so
-		 * this figure is DUPLICATED from a table this repository cannot read.
+		 * this figure is duplicated from a table this repository cannot read.
 		 * The durable repair is a query on that ABI; until it exists, the two
-		 * numbers are kept in step by hand and the drift fails LOUDLY rather
+		 * numbers are kept in step by hand and the drift fails loudly rather
 		 * than quietly, which is the only reason the duplication is tolerable:
 		 *
-		 *   TOO LARGE  every packet past the buffer's size is refused for
+		 *   Too large  every packet past the buffer's size is refused for
 		 *              size, forever. `Fifo.accept` answers false on
 		 *              `data.len > capacityBytes` whatever the occupancy, so
 		 *              no amount of draining clears it, the frame is held, and
 		 *              pumpTransport's stall line fires every 255 ms of
 		 *              emulated time. That is exactly the defect this split
 		 *              repairs, so its return is unmistakable.
-		 *   TOO SMALL  every packet is short. It is NOT the harmless direction:
+		 *   Too small  every packet is short. It is not the harmless direction:
 		 *              a firmware that ends a transfer on the first short
 		 *              packet would take the first fragment as a whole
 		 *              message. Nothing here can detect that, which is why the
 		 *              figure is stated rather than derived downwards. */
 		std::size_t usbMaxPacketBytes = 64;
 
-		/* WHETHER A FRAME WHOSE LENGTH IS AN EXACT MULTIPLE OF
-		 * `usbMaxPacketBytes` IS FOLLOWED BY A ZERO-LENGTH PACKET.
+		/* Whether a frame whose length is an exact multiple of
+		 * `usbMaxPacketBytes` is followed by a zero-length packet.
 		 *
-		 * THE ANSWER IS UNKNOWN AND THE DEFAULT IS THE ONE THAT INVENTS
-		 * NOTHING. Terminating such a transfer with a zero-length packet is a
-		 * USB BULK CONVENTION and it is stated here as a convention: neither
+		 * The answer is unknown and the default is the one that invents
+		 * nothing. Terminating such a transfer with a zero-length packet is a
+		 * USB bulk convention and it is stated here as a convention: neither
 		 * ISP1362 Rev. 06 nor AN10008-01 contains it. The string "zero-length"
 		 * does not appear in the data sheet at all, and nothing in either
 		 * document describes an exact-multiple bulk transfer. AN10008-01 p.74
 		 * and p.88 do describe sending an empty packet, but only on the
-		 * CONTROL IN endpoint and only to end a control read -- a different
+		 * control IN endpoint and only to end a control read -- a different
 		 * endpoint, a different direction and a different transfer type, so it
 		 * is not evidence about this one.
 		 *
-		 * WHAT THE DATA SHEET DOES SAY IS ABOUT DMA AND NOT ABOUT FRAMING.
+		 * What the data sheet does say is about DMA and not about framing.
 		 * Section 12.4.3.1 (p.56) and Table 20 (p.57) make a short packet an
-		 * END-OF-TRANSFER condition for a DMA-driven OUT endpoint, gated by
+		 * end-of-transfer condition for a DMA-driven OUT endpoint, gated by
 		 * SHORTP in DcDMAConfiguration (p.111). That is a mechanism the
 		 * firmware may or may not have enabled, and this Board cannot see
 		 * which. If the firmware ends a message on the first short packet,
 		 * then an exact-multiple frame delivered without a trailing empty
 		 * packet never ends; if instead it counts bytes from the object's own
 		 * 2-byte length header, the trailing empty packet is a spurious
-		 * packet. The two readings want OPPOSITE defaults, which is exactly
+		 * packet. The two readings want opposite defaults, which is exactly
 		 * why this is a flag and not a decision taken in silence.
 		 *
-		 * `false` SENDS NO EXTRA PACKET. It is the default because the whole
-		 * corpus is reachable without one -- see the measurement in
-		 * `t1_patch_running` -- and because a packet the firmware did not ask
-		 * for is traffic this project invented. The flag exists so the
-		 * question can be MEASURED rather than argued: t1_patch_running plants
-		 * an exact-multiple frame and drives it both ways. */
+		 * `false` sends no extra packet. It is the default because the whole
+		 * corpus is reachable without one, and because a packet the firmware
+		 * did not ask for is traffic this project invented. The flag exists so
+		 * the question can be measured rather than argued. */
 		bool usbTerminateWithZeroLengthPacket = false;
 	};
 
@@ -253,13 +226,13 @@ namespace g2
 		 * method would make the debt identically zero. */
 		uint32_t runMcu(uint32_t wantCycles) noexcept;
 
-		/* TRUE when the MCF5307 core stopped because an instruction TRAPPED --
+		/* True when the MCF5307 core stopped because an instruction trapped --
 		 * a bus error, an illegal instruction word, an illegal effective address
 		 * for the opcode, an illegal operand size or a divide by zero.
 		 *
 		 * Fault and halt are different flags and this method reports the fault.
 		 * mcf5307.h is the authority: a valid
-		 * opcode with no implemented semantics halts WITHOUT faulting, and a
+		 * opcode with no implemented semantics halts without faulting, and a
 		 * faulted core is always also halted. mcuHalted() below is the wider
 		 * condition. */
 		bool faulted() const noexcept;
@@ -270,13 +243,13 @@ namespace g2
 		 * mcuReg and setMcuReg take the register file's own index: 0 to 7 are
 		 * d0 to d7, 8 to 15 are a0 to a7, 16 is the status register and 17 is
 		 * the program counter. mcf5307.h owns that mapping and this class
-		 * restates none of it. setMcuReg answers FALSE for an out-of-range index
+		 * restates none of it. setMcuReg answers false for an out-of-range index
 		 * and for a nil core, which is what the C call already answers. */
 		void     resetMcu(uint32_t initialSp, uint32_t initialPc) noexcept;
 		uint32_t mcuReg(int index) const noexcept;
 		bool     setMcuReg(int index, uint32_t value) noexcept;
 
-		/* TRUE when the core will run no further instruction until the next
+		/* True when the core will run no further instruction until the next
 		 * reset. It is the strictly wider condition of the two the core reports:
 		 * every faulted core is halted and a halted core need not be faulted, so
 		 * this is the one a caller asking "may I run more" must ask, and
@@ -284,13 +257,11 @@ namespace g2
 		 * ask. */
 		bool mcuHalted() const noexcept;
 
-		/* The 1 kHz USB start-of-frame tick of design section 9.4. The Board
-		 * owns the test: the Scheduler calls this on every frame,
-		 * unconditionally, passing the authoritative virtual frame index, and
-		 * the Board tests frameIndex % 96 == 0 itself. THE REAL TICK IS TASK
-		 * BRD-22's (its Check is t0_sof_tick) and task BRD-22 owns board.cpp's
-		 * body of this method. On each due frame it advances m_usb by exactly
-		 * one SOF frame. */
+		/* The 1 kHz USB start-of-frame tick. The Board owns the test: the
+		 * Scheduler calls this on every frame, unconditionally, passing the
+		 * authoritative virtual frame index, and the Board tests
+		 * frameIndex % 96 == 0 itself. On each due frame it advances m_usb by
+		 * exactly one SOF frame. */
 		void tickSofIfDue(uint64_t frameIndex) noexcept;
 
 		/* The MCU context's determinism-relevant state, embedded in the
@@ -315,13 +286,12 @@ namespace g2
 		 * The bus targets attached to this board are not zeroed by this call:
 		 * the flash images, the SDRAM window, the latches, the panel surface,
 		 * the MBAR block and the USB device all keep what they held. BusTarget
-		 * declares read and write and nothing else, MemoryMap hands out a
-		 * BusTarget* and offers no walk over the attached set, and no unit in
-		 * this tree carries a reset of its own. A caller that needs a cleared
-		 * SDRAM must still reconstruct the board. */
+		 * declares read and write and nothing else, and MemoryMap hands out a
+		 * BusTarget* and offers no walk over the attached set. A caller that
+		 * needs a cleared SDRAM must still reconstruct the board. */
 		void reset() noexcept;
 
-		/* THE BUS, AS THE MEMORY MAP SEES IT. onRead and onWrite forward here,
+		/* The bus, as the memory map sees it. onRead and onWrite forward here,
 		 * so this is the routing itself; a caller may drive it without running
 		 * a program.
 		 *
@@ -334,8 +304,7 @@ namespace g2
 
 		/* The installed callbacks, public on purpose: these are the exact
 		 * function pointers handed to mcf5307_create, so they are the path the
-		 * CORE takes, and a test that drives busRead instead cannot see whether
-		 * the forwarding happens at all.
+		 * core takes.
 		 *
 		 * They are not a second route into the Board. Each one forwards to
 		 * busRead or busWrite and converts the one argument whose unit differs
@@ -343,17 +312,17 @@ namespace g2
 		 *
 		 * `size` here is a count of BYTES -- 1, 2 or 4 -- because that is what
 		 * mcf5307.h hands an mcf5307_read_fn and an mcf5307_write_fn, and these
-		 * two ARE that pair. busRead and busWrite above take bits, and the
+		 * two are that pair. busRead and busWrite above take bits, and the
 		 * conversion between the two units happens here and nowhere else. A
 		 * caller that drives these directly must therefore supply 1, 2 or 4; any
 		 * other value is refused as MCF5307_BUS_SIZE_ILLEGAL, 8, 16 and 32
-		 * included, because those are legal widths in the OTHER unit. */
+		 * included, because those are legal widths in the other unit. */
 		static uint32_t onRead(void* user, uint32_t addr, int size,
 		                       mcf5307_bus_status* status);
 		static void     onWrite(void* user, uint32_t addr, int size,
 		                        uint32_t value, mcf5307_bus_status* status);
 
-		/* The Board's transport hub. The three attachments -- the internal
+		/* The Board's transport hub. The attachments -- the internal
 		 * client, the forked G2-Edit socket and the usbip adapter -- share one
 		 * hub. It is a member and not a pointer, so there is no state in which
 		 * a Board has no hub and no order in which an attachment can reach one
@@ -373,53 +342,49 @@ namespace g2
 		 * its own so that a check can drive one quantum's transport without
 		 * driving a SOF tick.
 		 *
-		 * IT ALLOCATES NOTHING. The drain target is sized once, with the hub,
+		 * It allocates nothing. The drain target is sized once, with the hub,
 		 * in the constructor's member initialiser list.
 		 *
-		 * A FRAME THE DEVICE REFUSES IS HELD AND RE-OFFERED, NOT DISCARDED.
+		 * A frame the device refuses is held and re-offered, not discarded.
 		 * `isp1181_rx` answers 0 for a NAK, and mcf5307.h states what that
 		 * costs: "THE PACKET IS GONE IN EVERY ONE OF THOSE CASES - a refusal
 		 * here is a dropped packet and not a deferred one". So the deferral
-		 * has to live on THIS side of the call, and it does: the refused
+		 * has to live on this side of the call, and it does: the refused
 		 * bytes are copied into Board-owned storage and offered again at the
 		 * next quantum, ahead of anything still queued. usbTransport() is how
 		 * a caller reads what that cost. */
 		void pumpTransport() noexcept;
 
-		/* WHAT THE DEVICE DID WITH THE BYTES THIS BOARD HANDED IT, PER BOARD.
+		/* What the device did with the bytes this Board handed it, per Board.
 		 *
-		 * IT IS A MEMBER AND NOT A FILE-SCOPE TALLY, AND THAT IS THE WHOLE
-		 * POINT. A diagnostic that counted at file scope pooled two Boards in
-		 * one process into one figure, and every reader of it had to subtract
-		 * one arm from the other by hand before the number meant anything.
-		 * These counters belong to the Board that earned them.
+		 * These are members and not a file-scope tally: a file-scope counter
+		 * pools two Boards in one process into one figure, and a reader has to
+		 * subtract one arm from the other by hand before the number means
+		 * anything.
 		 *
-		 * THE UNIT OF `offered`, `accepted` AND `refused` IS ONE PACKET, AND
-		 * IT USED TO BE ONE FRAME. Since pumpTransport splits a frame into
-		 * max-packet-size packets, one drained frame can cost many offers, so
-		 * these three no longer count frames and no arithmetic on them may
-		 * assume they do. They still partition exactly:
-		 * `offered == accepted + refused`, and they still count RE-offers of
-		 * one held frame as well as first offers.
+		 * The unit of `offered`, `accepted` and `refused` is one packet and not
+		 * one frame. Since pumpTransport splits a frame into max-packet-size
+		 * packets, one drained frame can cost many offers, so no arithmetic on
+		 * them may assume they count frames. They partition exactly:
+		 * `offered == accepted + refused`, and they count re-offers of one held
+		 * frame as well as first offers.
 		 *
-		 * `completed` IS THE FRAME-SHAPED COUNTER AND IT IS THE ONE THE
-		 * NO-LOSS INVARIANT USES. A frame is completed when its LAST packet is
+		 * `completed` is the frame-shaped counter and the one the no-loss
+		 * invariant uses. A frame is completed when its last packet is
 		 * accepted, so `drained == completed + undeliverable + (held ? 1 : 0)`
-		 * holds at every quantum boundary and IS the no-loss invariant: nothing
+		 * holds at every quantum boundary and is the no-loss invariant: nothing
 		 * this Board takes out of the hub can go anywhere except into the
-		 * device, into the hold, or into `undeliverable`. Asserting the old form
-		 * against `accepted` after the split would compare a packet count with a
-		 * frame count and go red for the wrong reason.
+		 * device, into the hold, or into `undeliverable`.
 		 *
 		 * `undeliverable` is that third destination and it is a defect report
 		 * rather than a mode: a frame too large for the hold buffer left the
 		 * hub and can never be offered. The hub refuses such a frame before
-		 * the drain, so a non-zero reading means THAT guarantee broke. It is
+		 * the drain, so a non-zero reading means that guarantee broke. It is
 		 * not subtracted from `drained`, because the frame did leave the hub,
 		 * and it is not `refused`, because the device never saw it.
 		 *
-		 * `heldOffset` IS HOW MANY BYTES OF THE HELD FRAME THE DEVICE HAS
-		 * ALREADY TAKEN, so a partly-delivered frame is visible as a partly-
+		 * `heldOffset` is how many bytes of the held frame the device has
+		 * already taken, so a partly-delivered frame is visible as a partly-
 		 * delivered frame rather than as an undelivered one. `heldSize` is
 		 * that frame's whole length. Both are 0 when nothing is held.
 		 *
@@ -443,12 +408,9 @@ namespace g2
 
 		UsbTransportStats usbTransport() const noexcept;
 
-		/* THE DEVICE'S TRANSMIT CALLBACK, PUBLIC FOR THE REASON onRead AND
-		 * onWrite ABOVE ARE PUBLIC: it is the exact function pointer handed to
-		 * isp1181_create, so a check that drives THIS drives the path the
-		 * DEVICE takes. A check that drove a private forwarding helper instead
-		 * would stay green with a null callback installed, which is the defect
-		 * measured for the bus pair and recorded above.
+		/* The device's transmit callback, public for the reason onRead and
+		 * onWrite above are public: it is the exact function pointer handed to
+		 * isp1181_create, so it is the path the device takes.
 		 *
 		 * `endpoint` is accepted and not filtered. The hub carries bytes and
 		 * names no endpoint, the protocol's framing is in the payload itself,
@@ -493,7 +455,7 @@ namespace g2
 		/* One Flash object answers two windows, so it cannot be a BusTarget
 		 * itself: a BusTarget is attached to a single region and receives a
 		 * window-relative offset, while Flash addresses its two images
-		 * ABSOLUTELY and tells them apart by address. This adapter is the join.
+		 * absolutely and tells them apart by address. This adapter is the join.
 		 *
 		 * It holds a reference to the MemoryMap rather than its own copy of the
 		 * base. The decode has already subtracted the window base to make the
@@ -538,16 +500,16 @@ namespace g2
 			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
 
 		private:
-			// TRUE when the offset belongs to UART0's model rather than the
+			// True when the offset belongs to UART0's model rather than the
 			// SIM's. The one strap offset the SIM answers is excluded here and
 			// nowhere else, so the rule has a single site.
 			static bool isUartOwned(uint32_t _offset);
 
-			// TRUE when the offset belongs to the M-Bus module. The bound comes
+			// True when the offset belongs to the M-Bus module. The bound comes
 			// from mbus.h, so this file states no register address of its own.
 			static bool isMbusOwned(uint32_t _offset);
 
-			/* True when the offset is one of the three register groups the
+			/* True when the offset is one of the register groups the
 			 * interrupt controller answers -- IRQPAR, AVR and the internal
 			 * control block. Every bound comes from interruptController.h, so
 			 * this file states no register address of its own.
@@ -595,16 +557,14 @@ namespace g2
 		static constexpr uint32_t g_simUartStrapOffset = 0x1D0u;
 
 		/* Attach every unit to the region it answers. It is called from the
-		 * constructor and takes nothing: an ABSENT window (size zero) decodes
+		 * constructor and takes nothing: an absent window (size zero) decodes
 		 * to no region at all, so attaching unconditionally is what makes a
 		 * default-constructed Board answer nowhere without a second code path
 		 * that could disagree with this one. */
 		void attachUnits();
 
-		/* onRead and onWrite are declared in the public section above, with the
-		 * measured reason they are reachable. The acknowledge callback stays
-		 * private: only the core drives it, and its body says why it clears
-		 * nothing. */
+		/* The acknowledge callback stays private: only the core drives it, and
+		 * its body says why it clears nothing. */
 		static void     onInterruptAck(void* user, int level, uint8_t vector);
 
 		/* The controller's present callback hands the whole current state to
@@ -621,8 +581,8 @@ namespace g2
 		static void     onInterruptPresent(void* user, int level, uint8_t vector,
 		                                   int autovector);
 
-		/* DECLARATION ORDER IS INITIALISATION ORDER AND IT IS LOAD-BEARING
-		 * HERE. m_memory is declared before the adapters because they bind
+		/* Declaration order is initialisation order and it is load-bearing
+		 * here. m_memory is declared before the adapters because they bind
 		 * references to it, and the units are declared before the adapters
 		 * that forward to them.
 		 *
@@ -644,7 +604,7 @@ namespace g2
 		Sim          m_sim;
 		Uart0        m_uart0;
 
-		/* The slave is declared BEFORE the controller that points at it, for
+		/* The slave is declared before the controller that points at it, for
 		 * the same reason the units are declared before the adapters: the
 		 * controller binds its address at construction. */
 		Max1039      m_adc;
@@ -654,30 +614,29 @@ namespace g2
 		FlashWindow  m_flashCs2;
 		MbarRouter   m_mbar;
 
-		/* Declared BEFORE m_usb, so it is constructed while that handle is
+		/* Declared before m_usb, so it is constructed while that handle is
 		 * still null. It binds a reference to the handle rather than copying
 		 * it, which is what makes the order harmless: the assignment in the
 		 * constructor body is what every later read sees. Storing the handle
 		 * by value here would capture the null instead. */
 		Isp1181Window m_usbCs3;
 
-		/* The ISP1181 USB device this Board owns. Design sections 5.2 and 9.4
-		 * put it on the Board, and tickSofIfDue is what advances it. The Board
-		 * creates it in the constructor and destroys it in the destructor, so
-		 * its lifetime is exactly the Board's; task BRD-22 owns both. */
+		/* The ISP1181 USB device this Board owns; tickSofIfDue is what advances
+		 * it. The Board creates it in the constructor and destroys it in the
+		 * destructor, so its lifetime is exactly the Board's. */
 		isp1181_ctx* m_usb;
 
 		/* The endpoint pumpTransport delivers on, taken from BoardConfig
 		 * because no authority records it. */
 		int          m_usbProtocolEndpoint;
 
-		/* THE WIRE CONSTRAINT, HELD AS A MEMBER SO THAT NO LITERAL APPEARS IN
+		/* The wire constraint, held as a member so that no literal appears in
 		 * pumpTransport. BoardConfig::usbMaxPacketBytes carries the whole
 		 * argument for the figure and for the flag beside it. */
 		size_t       m_usbMaxPacketBytes;
 		bool         m_usbZeroLengthTerminator;
 
-		/* THE HUB, AND THE DRAIN TARGET IT FILLS. Both are sized in the
+		/* The hub, and the drain target it fills. Both are sized in the
 		 * constructor's member initialiser list and neither grows again:
 		 * pumpTransport runs on the scheduler thread inside a quantum boundary,
 		 * where allocation is forbidden. m_drained holds kMaxEndpoints x
@@ -687,32 +646,32 @@ namespace g2
 		TransportHub              m_transport;
 		std::vector<StampedFrame> m_drained;
 
-		/* THE ONE REFUSED FRAME THIS BOARD STILL OWNS, AND ITS OWN COPY OF
-		 * THE BYTES. It cannot be a pointer into the hub: transportHub.h
+		/* The one refused frame this Board still owns, and its own copy of
+		 * the bytes. It cannot be a pointer into the hub: transportHub.h
 		 * gives a drained frame a lifetime that ends at the NEXT drain, and
 		 * pumpTransport drains on every quantum whether it takes a frame or
 		 * not, so a held pointer would dangle exactly one quantum later. The
 		 * buffer is sized with the hub in the constructor's member
-		 * initialiser list and never grows, because design section 13.10
-		 * rule 1 forbids allocation at a quantum boundary. */
+		 * initialiser list and never grows, because allocation at a quantum
+		 * boundary is forbidden. */
 		std::vector<uint8_t> m_heldBytes;
 		size_t               m_heldSize     = 0;
 		bool                 m_heldValid    = false;
 		uint64_t             m_heldAttempts = 0;
 
-		/* HOW MANY BYTES OF THE HELD FRAME THE DEVICE HAS ALREADY TAKEN. It is
+		/* How many bytes of the held frame the device has already taken. It is
 		 * the cursor the split runs on: the next packet starts here, and the
 		 * frame is finished when this reaches m_heldSize (and, when the
 		 * zero-length terminator is enabled and the length was an exact
 		 * multiple, when that final empty packet has been taken too).
 		 *
-		 * IT IS A BYTE OFFSET AND NOT A PACKET INDEX, because the last packet
+		 * It is a byte offset and not a packet index, because the last packet
 		 * of a frame is usually short and a packet index could not express
 		 * where it ends. */
 		size_t               m_heldOffset   = 0;
 
-		/* TRUE WHEN THE ONLY THING LEFT TO SEND FOR THE HELD FRAME IS THE
-		 * TERMINATING EMPTY PACKET. Without this flag `m_heldOffset ==
+		/* True when the only thing left to send for the held frame is the
+		 * terminating empty packet. Without this flag `m_heldOffset ==
 		 * m_heldSize` would mean two different states -- "finished" and "all
 		 * the bytes are across but the terminator is not" -- and a frame in
 		 * the second would be reported completed while a packet it still owes
@@ -726,7 +685,7 @@ namespace g2
 
 		/* Last, and that position is destruction order and not construction
 		 * order. The set borrows nothing at construction -- the bridges are
-		 * attached from the constructor BODY, after every member exists -- but
+		 * attached from the constructor body, after every member exists -- but
 		 * `~Hdi08Bridge` uninstalls through the host port it was handed, so a
 		 * set destroyed after m_hdi08 would dereference a dead port once per
 		 * slot. Members are destroyed in reverse declaration order, so any

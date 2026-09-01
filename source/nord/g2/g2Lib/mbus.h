@@ -4,7 +4,7 @@
 //
 // The status register is not storage. MBB tracks the MSTA transitions in MBCR
 // and MIF tracks byte completions, because the firmware requires MBB to read
-// CLEAR after a STOP and SET after the next START, and MIF to be re-settable
+// clear after a STOP and set after the next START, and MIF to be re-settable
 // after each software clear. No constant satisfies either requirement.
 //
 // A not-acknowledge is not a fault. The firmware never inspects RXAK, so a NACK
@@ -21,7 +21,7 @@
 
 namespace g2
 {
-	/* A byte-level two-wire slave. The seam is a BYTE and not a bit because the
+	/* A byte-level two-wire slave. The seam is a byte and not a bit because the
 	 * M-Bus module is a byte-level master: the firmware hands it whole bytes
 	 * through MBDR and reads whole bytes back, and no part of this model sees a
 	 * clock edge. */
@@ -30,10 +30,10 @@ namespace g2
 	public:
 		virtual ~BusSlave() = default;
 
-		// The address phase. Returns TRUE when the slave acknowledges.
+		// The address phase. Returns true when the slave acknowledges.
 		virtual bool start(uint8_t _address7, bool _read) = 0;
 
-		// One transmitted byte. Returns TRUE when the slave acknowledges.
+		// One transmitted byte. Returns true when the slave acknowledges.
 		virtual bool write(uint8_t _byte) = 0;
 
 		// One received byte.
@@ -107,7 +107,7 @@ namespace g2
 		bool m_interrupt     = false;   // MIF
 		bool m_notAcknowledged = false; // RXAK
 
-		// TRUE between a START and the address byte that follows it.
+		// True between a START and the address byte that follows it.
 		bool m_addressPhase = false;
 
 		std::vector<std::string> m_log;

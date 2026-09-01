@@ -1,13 +1,8 @@
-// board.cpp owns the Board's lifetime and its six-method surface.
-//
-// mcf5307_create installs read/write/ack callbacks. These accept every access
-// and report MCF5307_BUS_OK, which is what a board that models no fault does;
-// the routing to the CS0 to CS5 devices comes later.
+// board.cpp owns the Board's lifetime and its public surface.
 //
 // stateSave/stateLoad serialise the Board's own determinism-relevant state
 // only. The core's mcf5307_state_* and isp1181_state_* blocks are not folded
-// in here yet: doing so fixes a snapshot layout across two repositories, and
-// the Board does not own an isp1181 handle to snapshot in the first place.
+// in: doing so fixes a snapshot layout across two repositories.
 //
 // The routing. onRead and onWrite forward to busRead and busWrite, which hand
 // the access to the MemoryMap. The decode turns the address into a region and a
@@ -24,8 +19,8 @@
 //
 // The SDRAM gets no target on purpose. Main memory is not one of the units
 // this Board composes; the harness supplies it (see main.cpp). A region with
-// no target answers exactly as a
-// region with no window does -- see the unmapped note below.
+// no target answers exactly as a region with no window does -- see the
+// unmapped note below.
 //
 // memoryMap.cpp already fixes what an address in no window does: an access that
 // decodes to no region, or to a region with no target, reports
@@ -34,20 +29,8 @@
 // that is definitely wrong, because it makes an unmapped access
 // indistinguishable from a device that legitimately answered zero.
 //
-// THE STATE METHODS AND THE MISSING NIM BLOCKS, STATED RATHER THAN HIDDEN.
-// Design section 13.10 says stateSize/stateSave/stateLoad "embed the Nim
-// mcf5307_state_* and isp1181_state_* blocks of section 5.2". The pinned core
-// commit exports none of those C symbols. This task therefore serialises the
-// Board's own determinism-relevant state and documents the deviation rather
-// than stubbing a call to a symbol that would not link -- the same
-// documented-deviation route BRD-23 took for mcf5307_exec earlier in this
-// track. The Nim blocks are appended here the day a cpu task exports them.
-//
-// The MCU core clock line. The Board logs one line at construction that names
-// G2_MCU_CORE_CLOCK_HZ, states that the value is DERIVED -- the schematic's
-// CLKIN label times the PLL multiplier, agreeing with the MCF5407CAI162 speed
-// grade -- and not scope-measured, and names spike criterion (j) as its owner.
-// It is emitted to standard output so the surface test can capture and count it.
+// The pinned core commit exports no mcf5307_state_* or isp1181_state_* C
+// symbol, so there is nothing to embed here.
 
 #include "board.h"
 
@@ -64,11 +47,11 @@ namespace g2
 {
 	namespace
 	{
-		/* The unit conversion of the bus `size` argument, and the only place it
-		 * happens. mcf5307.h's `size` is a count of BYTES -- 1, 2 or 4 -- which
-		 * is what a ColdFire SIZ[1:0] transfer size encodes; memoryMap.h's
-		 * `_size` is a width in BITS -- 8, 16 or 32. The two readings disagree
-		 * on EVERY access a core can make, so forwarding the argument
+		/* The unit conversion of the bus `size` argument. mcf5307.h's `size` is
+		 * a count of bytes -- 1, 2 or 4 -- which is what a ColdFire SIZ[1:0]
+		 * transfer size encodes; memoryMap.h's `_size` is a width in bits --
+		 * 8, 16 or 32. The two readings disagree on every access a core can
+		 * make, so forwarding the argument
 		 * unconverted refuses all of them: the first instruction fetch presents
 		 * 2, the decode reads it as 2 bits, and the firmware executes nothing.
 		 *
@@ -96,13 +79,13 @@ namespace g2
 
 		// The version word of the Board's own snapshot block. It exists so that
 		// a state file from a different revision is a named mismatch rather
-		// than a silent acceptance -- design section 18.10. The value is chosen
-		// here and has no other meaning.
+		// than a silent acceptance. The value is chosen here and has no other
+		// meaning.
 		constexpr uint32_t g_boardStateVersion = 1u;
 
 		// The flat snapshot the Board serialises. It is a fixed-size, plain-old
 		// data struct with no pointer inside, so a state file cannot carry a
-		// dangling address. The core's own state blocks are not folded in here.
+		// dangling address.
 		struct BoardState
 		{
 			uint32_t version;
@@ -116,7 +99,7 @@ namespace g2
 		// ISP1181 the owner of the millisecond.
 		constexpr uint64_t g_sofFrameRateHz = 1000u;
 
-		// The quanta in one SOF frame, DERIVED from the frame rate rather than
+		// The quanta in one SOF frame, derived from the frame rate rather than
 		// written out, so the relation moves with the one symbol that fixes it.
 		constexpr uint64_t g_quantaPerSofFrame =
 			G2_FRAME_RATE_HZ / g_sofFrameRateHz;
@@ -133,7 +116,7 @@ namespace g2
 	uint32_t Board::FlashWindow::absolute(const uint32_t _offset) const
 	{
 		/* The base comes from the decode that produced the offset: the MemoryMap
-		 * subtracted window(_region).base to make _offset and this adds the SAME
+		 * subtracted window(_region).base to make _offset and this adds the same
 		 * expression back. A second copy of the base in this object would stay
 		 * self-consistent with the first after either one moved. */
 		return m_map.window(m_region).base + _offset;
@@ -166,7 +149,7 @@ namespace g2
 		const uint32_t address = absolute(_offset);
 
 		/* The Flash model is read-only and its own write entry points log the
-		 * rejection. They report no status, so the bus CYCLE completes and the
+		 * rejection. They report no status, so the bus cycle completes and the
 		 * device ignores it, which is what a board that models no fault does. */
 		switch(_size)
 		{
@@ -224,8 +207,7 @@ namespace g2
 
 	bool Board::MbarRouter::isUartOwned(const uint32_t _offset)
 	{
-		// The one offset the SIM answers inside the UART block, encoded here and
-		// nowhere else.
+		// The one offset the SIM answers inside the UART block.
 		if(_offset == g_simUartStrapOffset)
 			return false;
 
@@ -274,7 +256,7 @@ namespace g2
 			return m_interrupts.readRegister(_offset);
 		}
 
-		// The offset is already MBAR-relative and BOTH units expect it that
+		// The offset is already MBAR-relative and both units expect it that
 		// way, so nothing is adjusted here.
 		return select(_offset).read(_offset, _size, _status);
 	}
@@ -368,7 +350,7 @@ namespace g2
 		 * receiver. */
 	}
 
-	/* The unconfigured Board. It DELEGATES rather than repeating the body, so
+	/* The unconfigured Board. It delegates rather than repeating the body, so
 	 * there is one construction path and the core-clock line below cannot be
 	 * emitted twice or differ between the two forms. A default BoardConfig
 	 * leaves every window absent, so this Board answers at no address. */
@@ -378,7 +360,7 @@ namespace g2
 
 	namespace
 	{
-		/* The two sizes TransportHub cannot derive for itself, supplied here
+		/* The sizes TransportHub cannot derive for itself, supplied here
 		 * because the Board is what constructs the hub.
 		 *
 		 * g_transportMaxFrameBytes is derived and not measured. The wire
@@ -392,8 +374,9 @@ namespace g2
 		 * the object count does not refuse the load cleanly: pass 2 stops at
 		 * the first frame the hub declines, and the frames already accepted are
 		 * delivered at the next boundary, so the device is left holding a
-		 * prefix. A patch in the artifact corpus carries 18 objects, so a depth
-		 * of 16 refuses every real patch with PCH2-SEND-REFUSED. */
+		 * prefix. Real patches in the artifact corpus carry more objects than a
+		 * depth of 16 holds, and such a depth refuses them with
+		 * PCH2-SEND-REFUSED. */
 		constexpr size_t g_transportMaxFrameBytes = 1u + 2u + 65535u;
 		constexpr size_t g_transportQueueDepth    = 32u;
 	}
@@ -432,7 +415,7 @@ namespace g2
 		 * both modules. */
 		m_sim.setInterruptController(&m_interrupts);
 
-		/* The DSP side of the host ports, attached from the constructor BODY
+		/* The DSP side of the host ports, attached from the constructor body
 		 * rather than from the initialiser list: the call takes both members by
 		 * reference and each one has to be fully built first. */
 		attachHdi08Bridges(m_hdi08, m_dspSet);
@@ -451,21 +434,11 @@ namespace g2
 		 * service request reaches the machine's one interrupt controller.
 		 *
 		 * Both G2 images install the USB handler at level 3, autovectored,
-		 * vector 27 at VBR+0x6C, by two independent encodings that agree; both
+		 * vector 27 at VBR+0x6C, by independent encodings that agree; both
 		 * leave IRQPAR unwritten; and both enable the device's own interrupts
 		 * unconditionally during USB bring-up (DcInterruptEnable = 0x00001F07,
 		 * then Mode bit 3). So the wired callback is a path the firmware will
-		 * exercise.
-		 *
-		 * `src/isp1181/isp1181.nim` stores the tx callback at construction and
-		 * calls it from nowhere: no line of that model invokes `m.tx`. So the
-		 * wire is installed and correct and the device cannot yet drive it.
-		 *
-		 * That model does call the stored irq callback, from `updateIrq`,
-		 * whenever the masked interrupt register changes state. What no
-		 * implemented command does is set a bit of that register:
-		 * `raiseInterrupt` is the only writer and nothing calls it, because
-		 * that model has no event-to-bit assignment yet. */
+		 * exercise. */
 		m_usb = isp1181_create(this, &Board::onUsbIrq, &Board::onUsbTx);
 
 		/* The handle is moved off the Stub deliberately and here. The Stub is
@@ -514,8 +487,8 @@ namespace g2
 	{
 		++m_usbStats.pumps;
 
-		/* ONE FRAME PER QUANTUM, AND THE DEVICE'S SHAPE IS WHY. The endpoint
-		 * the firmware configures carries a SINGLE buffer, and ISP1362 Rev. 06
+		/* One frame per quantum, and the device's shape is why. The endpoint
+		 * the firmware configures carries a single buffer, and ISP1362 Rev. 06
 		 * section 12.1.2 step 3 (p.49) says what the second packet of a
 		 * quantum meets: "If the endpoint is enabled, the SIE checks the
 		 * contents of the ESR. If the endpoint is empty, the data from USB is
@@ -523,23 +496,19 @@ namespace g2
 		 * handshake is sent." Section 15.2.5 (p.115) says how long that
 		 * lasts: "Any subsequent packets are refused by returning a NAK
 		 * condition, until the buffer is unlocked". So offering a second
-		 * frame before the firmware has cleared the first CANNOT succeed --
-		 * and the run that motivated this code measured exactly that, 17
-		 * refusals in one quantum, every one of them reporting a buffer that
-		 * held 1 of 1.
+		 * frame before the firmware has cleared the first cannot succeed.
 		 *
-		 * ONE DRAIN, AT THE BOUNDARY, STILL. transportHub.h makes the count of
+		 * One drain, at the boundary, still. transportHub.h makes the count of
 		 * drains the quantum count -- "drainToDevice runs exactly once for
 		 * each quantum" -- so a second drain in one quantum would advance the
 		 * hub's frame index past the machine's and stamp two frames that
-		 * crossed together with different indices. The drain therefore ALWAYS
+		 * crossed together with different indices. The drain therefore always
 		 * happens; what changes with back-pressure is the `max` it is given,
 		 * and a max of 0 leaves every queued frame where it is. */
-		/* A BOARD WITH NO DEVICE NOW TAKES NOTHING OUT OF THE HUB EITHER, AND
-		 * THAT IS THE SAME RULE AND NOT A SECOND ONE. The old body drained the
-		 * whole queue and then returned without offering any of it, so a null
-		 * handle discarded every frame in silence -- the identical defect at a
-		 * different address. A max of 0 leaves them queued, and the producer
+		/* A Board with no device takes nothing out of the hub either, and that
+		 * is the same rule and not a second one: draining the whole queue and
+		 * then returning without offering any of it discards every frame in
+		 * silence. A max of 0 leaves them queued, and the producer
 		 * learns through TransportHub::toDevice's false when the queue fills.
 		 * m_usbStats.pumps still counts these quanta, so a Board that is
 		 * pumping and delivering nothing is visible rather than inferred. */
@@ -554,20 +523,19 @@ namespace g2
 
 		if(drained != 0)
 		{
-			/* THE BYTES ARE COPIED AND NOTHING HERE READS ONE. Design section
-			 * 15.3: "the emulator does not implement the protocol by hand,
-			 * the firmware implements it; the emulator only carries the
-			 * bytes." A Board that inspected a frame here would be a second
-			 * implementation of the protocol. The copy is a LIFETIME
-			 * requirement and not an inspection: the hub's pointer dies at the
-			 * next drain and this frame may outlive several. */
+			/* The bytes are copied and nothing here reads one: the firmware
+			 * implements the protocol and this Board only carries the bytes,
+			 * so a Board that inspected a frame here would be a second
+			 * implementation of it. The copy is a lifetime requirement and not
+			 * an inspection: the hub's pointer dies at the next drain and this
+			 * frame may outlive several. */
 			const ProtocolFrame& frame = m_drained[0].frame;
 
-			/* A FRAME TOO LARGE TO HOLD IS REPORTED, NEVER TRUNCATED. The hub
+			/* A frame too large to hold is reported, never truncated. The hub
 			 * makes this unreachable -- TransportHub::toDevice refuses a frame
 			 * larger than maxFrameBytes and this buffer is sized to the same
 			 * figure from the same constant -- so the branch exists to make
-			 * the ONE way that guarantee could ever break audible rather than
+			 * the one way that guarantee could ever break audible rather than
 			 * to handle a case that occurs. A silent clamp here would hand the
 			 * firmware a short frame that looked delivered. */
 			if(frame.size > m_heldBytes.size())
@@ -579,21 +547,20 @@ namespace g2
 					frame.size, m_heldBytes.size());
 				++m_usbStats.stallReports;
 
-				/* THE FRAME IS COUNTED WHERE IT WENT, so the no-loss invariant
+				/* The frame is counted where it went, so the no-loss invariant
 				 * stays total. This is the one path on which a drained frame
 				 * reaches neither the device nor the hold, and leaving it
 				 * uncounted would put `drained` one ahead of
 				 * `accepted + held` with nothing naming the difference. It is
 				 * not subtracted from `drained` either: the frame did leave
 				 * the hub, and a counter that said otherwise would hide the
-				 * loss in the same silence this function was rewritten to
-				 * remove. */
+				 * loss. */
 				++m_usbStats.undeliverable;
 				return;
 			}
 
-			/* A PACKET SIZE OF ZERO CANNOT SPLIT ANYTHING, AND IT IS REPORTED
-			 * FOR THE SAME REASON THE BRANCH ABOVE IS. The cursor below
+			/* A packet size of zero cannot split anything, and it is reported
+			 * for the same reason the branch above is. The cursor below
 			 * advances by the packet size, so a zero would hold this frame
 			 * for ever while the stall line blamed the device. That is a
 			 * configuration fault in BoardConfig::usbMaxPacketBytes and it is
@@ -618,19 +585,17 @@ namespace g2
 			m_heldAttempts = 0;
 			m_heldOffset   = 0;
 
-			/* WHETHER THIS FRAME OWES A TRAILING EMPTY PACKET, DECIDED ONCE,
-			 * WHEN THE FRAME IS TAKEN.
+			/* Whether this frame owes a trailing empty packet, decided once,
+			 * when the frame is taken.
 			 *
-			 * THE FIRST CLAUSE IS NOT THE CONVENTION AND MUST NOT BE FOLDED
-			 * INTO THE SECOND. A frame of zero bytes IS one empty packet --
-			 * that is the whole frame, not a terminator after it -- and the
-			 * pump offered exactly that before the split existed. Deleting
+			 * The first clause is not the convention and must not be folded
+			 * into the second. A frame of zero bytes is one empty packet --
+			 * that is the whole frame, not a terminator after it. Deleting
 			 * this clause would make a zero-length frame vanish whenever the
 			 * flag is off, which is a behaviour removed rather than a case
 			 * simplified.
 			 *
-			 * THE SECOND CLAUSE IS THE CONVENTION, AND BoardConfig RECORDS
-			 * THAT NEITHER DOCUMENT STATES IT. Its default is off. */
+			 * The second clause is the convention. Its default is off. */
 			m_heldNeedsZlp = (m_heldSize == 0) ||
 				(m_usbZeroLengthTerminator &&
 					(m_heldSize % m_usbMaxPacketBytes) == 0);
@@ -639,9 +604,9 @@ namespace g2
 		if(!m_heldValid)
 			return;
 
-		/* ONE PACKET, NOT ONE FRAME. THIS IS THE SPLIT.
+		/* One packet, not one frame. This is the split.
 		 *
-		 * WHY IT IS HERE AND NOT IN THE PRODUCER OR IN THE DEVICE. On a real
+		 * Why it is here and not in the producer or in the device: on a real
 		 * G2 the PC's host controller cuts a bulk transfer into
 		 * max-packet-size packets and the firmware reassembles them; the
 		 * peripheral is never handed a packet larger than the buffer it
@@ -654,17 +619,17 @@ namespace g2
 		 * inside the device model would give the part a fragmentation it does
 		 * not have and would hide the overflow the real firmware must handle.
 		 *
-		 * WHY THE FRAME BOUNDARY SURVIVES ANYWAY. TransportHub still carries
+		 * The frame boundary survives anyway. TransportHub still carries
 		 * one protocol message per frame, `pch2Load` still originates one
 		 * frame per object, and the hub's stamping is untouched -- the drain
 		 * still happens exactly once per quantum and still takes at most one
 		 * frame. The only new thing is that a frame now leaves this Board over
 		 * several quanta instead of one.
 		 *
-		 * ONE PACKET PER QUANTUM, FOR THE REASON ONE FRAME PER QUANTUM WAS
-		 * ALREADY THE RULE. Endpoint 3 is single-buffered, so a second packet
+		 * One packet per quantum, for the reason one frame per quantum was
+		 * already the rule. Endpoint 3 is single-buffered, so a second packet
 		 * offered before the firmware has emptied the first meets a NAK; the
-		 * comment at the head of this function carries the two citations. */
+		 * comment at the head of this function carries the citations. */
 		const bool   bytesRemain = m_heldOffset < m_heldSize;
 		const size_t remaining   = bytesRemain ? m_heldSize - m_heldOffset : 0u;
 		const size_t packetSize  = remaining < m_usbMaxPacketBytes
@@ -673,32 +638,30 @@ namespace g2
 		++m_usbStats.offered;
 		++m_heldAttempts;
 
-		/* THE RETURN IS READ. `isp1181_rx` answers 1 when an OUT buffer holds
+		/* The return is read. `isp1181_rx` answers 1 when an OUT buffer holds
 		 * the packet and 0 for the NAK, and the header marks it
-		 * MCF5307_MUST_USE so this call cannot go back to discarding it
-		 * without a compiler diagnostic. Discarding it is the defect this
-		 * function was rewritten to remove. */
+		 * MCF5307_MUST_USE so a call that discarded it is a compiler
+		 * diagnostic. */
 		if(isp1181_rx(m_usb, m_usbProtocolEndpoint,
 			m_heldBytes.data() + m_heldOffset, packetSize) == 1)
 		{
 			++m_usbStats.accepted;
 			m_heldAttempts = 0;
 
-			/* THE CURSOR ADVANCES ONLY ON ACCEPTANCE, WHICH IS WHAT MAKES A
-			 * NAK COST NOTHING. A refused packet leaves the cursor where it
+			/* The cursor advances only on acceptance, which is what makes a
+			 * NAK cost nothing. A refused packet leaves the cursor where it
 			 * was and the same bytes are offered again at the next quantum,
-			 * so the retry the previous change introduced now retries a
-			 * PACKET rather than a whole frame -- the identical guarantee at
-			 * a finer grain, and no byte crosses twice. */
+			 * so a retry costs one packet rather than a whole frame, and no
+			 * byte crosses twice. */
 			if(bytesRemain)
 				m_heldOffset += packetSize;
 			else
 				m_heldNeedsZlp = false;
 
-			/* THE FRAME IS COMPLETED WHEN ITS LAST PACKET IS TAKEN, AND
-			 * `completed` IS COUNTED HERE AND NOWHERE ELSE. `accepted` above
-			 * counts packets, so the no-loss invariant reads THIS counter;
-			 * board.h states why the two cannot be the same number. */
+			/* The frame is completed when its last packet is taken. `accepted`
+			 * above counts packets, so the no-loss invariant reads this
+			 * counter; board.h states why the two cannot be the same
+			 * number. */
 			if(!bytesRemain || m_heldOffset >= m_heldSize)
 			{
 				if(!m_heldNeedsZlp)
@@ -713,18 +676,18 @@ namespace g2
 
 		++m_usbStats.refused;
 
-		/* THE FRAME IS NOT DROPPED, AND THE STALL IS NOT SILENT.
+		/* The frame is not dropped, and the stall is not silent.
 		 *
-		 * WHY IT IS NEVER DROPPED. Back-pressure already has an end-to-end
+		 * Why it is never dropped: back-pressure already has an end-to-end
 		 * path: a held frame stops the drain, the hub's queue fills, and
 		 * TransportHub::toDevice answers false to the producer -- a refusal
 		 * the producer already has to handle. Nothing in that chain has to
 		 * throw a frame away, so nothing does.
 		 *
-		 * WHY IT STILL SHOUTS, AND WHERE THE NUMBER COMES FROM. A frame the
+		 * Why it still reports, and where the number comes from. A frame the
 		 * firmware never takes would otherwise stall this Board in perfect
 		 * silence, which is the same failure shape in a new place. The
-		 * threshold is the LARGEST NAK retry window the ISP1362 can be
+		 * threshold is the largest NAK retry window the ISP1362 can be
 		 * programmed with: Table 108 (p.104) gives HcATLPTDDoneThresholdTimeOut
 		 * the field PTDDoneTimeOut[7:0], the "Maximum allowable time in ms for
 		 * the host controller to retry a transaction with NAK returned", so
@@ -732,8 +695,8 @@ namespace g2
 		 * time-out that register can express is, on the datasheet's own scale,
 		 * no longer flow control.
 		 *
-		 * THE SCOPE OF THAT CITATION IS NOT STRETCHED. Section 14.9.9 is the
-		 * ISP1362's HOST controller, not the peripheral the G2 carries, and
+		 * The scope of that citation is not stretched. Section 14.9.9 is the
+		 * ISP1362's host controller, not the peripheral the G2 carries, and
 		 * the host retrying a NAKed transaction here is the PC's stack rather
 		 * than that register. It is quoted for the one thing it settles and
 		 * the only thing this code needs: what a NAK obliges a host to do, and
@@ -742,7 +705,7 @@ namespace g2
 		 * millisecond figure and the SOF frame rather than chosen as a number
 		 * of tries.
 		 *
-		 * IT REPEATS. A stall that outlives one window is reported again at
+		 * It repeats. A stall that outlives one window is reported again at
 		 * every further window, so a reader who joins late still sees it. */
 		constexpr uint64_t g_nakRetryCeilingMs = 255u;
 
@@ -752,20 +715,18 @@ namespace g2
 		{
 			++m_usbStats.stallReports;
 
-			/* stderr THROUGH fprintf AND NOT std::cout. This function is
+			/* stderr through fprintf and not std::cout. This function is
 			 * noexcept and runs at a quantum boundary; a stream insertion that
 			 * threw here would call std::terminate. */
-			/* IT REPORTS WHAT THIS SIDE KNOWS AND NAMES WHO KNOWS THE REST.
-			 * `isp1181_rx` answers one bit, and mcf5307.h lists seven distinct
-			 * conditions behind it -- a full buffer and an oversized packet
-			 * among them. The Board cannot tell them apart and must not guess:
-			 * an earlier draft of this line asserted the firmware was not
-			 * clearing the buffer, and the device's own log then reported the
-			 * buffer EMPTY and the packet too LONG for it. The cause lives in
-			 * that log, one line per refusal, and the line below sends the
-			 * reader there rather than inventing an answer. */
-			/* IT NAMES THE PACKET AND THE FRAME IT SITS IN, BECAUSE THE TWO
-			 * ARE NO LONGER THE SAME THING. A line that reported only the
+			/* It reports what this side knows and names who knows the rest.
+			 * `isp1181_rx` answers one bit, and mcf5307.h lists several
+			 * distinct conditions behind it -- a full buffer and an oversized
+			 * packet among them. The Board cannot tell them apart and must not
+			 * guess. The cause lives in the device's own log, one line per
+			 * refusal, and the line below sends the reader there rather than
+			 * inventing an answer. */
+			/* It names the packet and the frame it sits in, because the two
+			 * are no longer the same thing. A line that reported only the
 			 * frame length would say "862-byte frame" while the device was
 			 * refusing a 64-byte packet, which is the wrong figure to take to
 			 * the device's log; and one that reported only the packet would
@@ -910,7 +871,7 @@ namespace g2
 		 * Scheduler calls this on every frame, unconditionally, and passes the
 		 * authoritative virtual frame index; the 96:1 relation is a property of
 		 * the USB device model rather than of the scheduler, so it is tested
-		 * here. Design section 9.4.
+		 * here.
 		 *
 		 * The transport is pumped first, and this method is where it happens
 		 * because scheduler.cpp calls this on every frame, unconditionally,

@@ -1,20 +1,18 @@
 /* g2PatchLoad.h -- the `.pch2` load path.
  *
  * The plugin parses the file, then drives the same protocol messages that an
- * editor would drive. This module is the whole of it: there is no second,
- * private load path, so there is one set of bugs. What it originates goes
- * through g2::InternalClient, a peer of the usbip endpoint rather than a path
- * through it -- to restore a DAW project the plugin must originate protocol
- * messages and no editor is attached at that moment.
+ * editor would drive. What it originates goes through g2::InternalClient, a
+ * peer of the usbip endpoint rather than a path through it -- to restore a DAW
+ * project the plugin must originate protocol messages and no editor is
+ * attached at that moment.
  *
  * The container is an ASCII header ended by a NUL, a 2-byte binary header,
  * then objects of [1-byte type][2-byte big-endian length][payload], then a
  * 2-byte stored CRC-16/XMODEM covering the binary header and every object.
  * The meaning of an object type is not derived and nothing here reads a
  * payload: this module carries an object's bytes and never interprets one.
- * The firmware implements the protocol; the emulator only carries the bytes.
  *
- * A file refused BY VALIDATION originates nothing. The whole container is
+ * A file refused by validation originates nothing. The whole container is
  * checked before the first frame leaves, so a malformed file cannot leave the
  * device holding half a patch. That is why this module has two passes and not
  * one.
@@ -98,19 +96,18 @@ namespace g2
 	 *   [2-byte BE total][0x01][0x28+slot][0x53][0x37][0x00 0x00 0x00]
 	 *   [entry name][object chain][2-byte BE CRC-16/XMODEM over the body]
 	 *
-	 * where the total counts the WHOLE frame including its own two prefix
-	 * bytes and the CRC sits DIRECTLY after the body -- there is no pad. A
-	 * pad-to-64 rule was an artifact of a synthetic 4096-byte chunking that
-	 * never produced a short USB packet; the real wire terminates on the short
-	 * last packet, and totals of 865 and 14,664 bytes were measured there.
+	 * where the total counts the whole frame including its own two prefix
+	 * bytes and the CRC sits directly after the body -- there is no pad. The
+	 * wire terminates on the short last packet, and totals of 865 and 14,664
+	 * bytes were measured there.
 	 *
-	 * THE OBJECT CHAIN CARRIES NO PER-OBJECT CHECKSUM. One CRC covers the whole
+	 * The object chain carries no per-object checksum. One CRC covers the whole
 	 * body, so a checksum after each object would be bytes the firmware's chain
 	 * walk reads as payload.
 	 *
-	 * TWO PAYLOADS ARE TRANSFORMED ON THE WAY OUT, and both are the variation
-	 * count that reads 9 in a file and 10 on the wire. A 0x65 payload that
-	 * decodes through the nine-variation bit layout gains a FULL tenth
+	 * The payloads transformed on the way out carry the variation count, which
+	 * reads 9 in a file and 10 on the wire. A 0x65 payload that
+	 * decodes through the nine-variation bit layout gains a full tenth
 	 * variation -- a copy of the last, 297 bytes for the measured file. A
 	 * single filler byte does not work: the firmware's reader walks a
 	 * continuous bit stream whose per-variation footprint is an 8-bit index,
@@ -127,7 +124,7 @@ namespace g2
 		uint8_t* _out, std::size_t _outCapacity, Pch2LoadResult& _result) noexcept;
 
 	/* Validates `_file`, composes its patch-load message and originates it as
-	 * ONE transfer through `_client`.
+	 * one transfer through `_client`.
 	 *
 	 * `_scratch` holds the message at offset 2 so that InternalClient can write
 	 * the transfer envelope around it in place, which is why the buffer must

@@ -110,9 +110,9 @@ namespace
 	// -----------------------------------------------------------------------
 	// The fixture's electrical values. Every one is a power of two so that
 	// volts * 256 / reference is an exact integer for every channel below.
-	// NONE of them is a claim about the machine: the schematic's 3.033 V is a
+	// None of them is a claim about the machine: the schematic's 3.033 V is a
 	// configuration argument and this fixture deliberately does not use it, so
-	// that a model which hardcoded it would fail here.
+	// a hardcoded reference cannot pass.
 	constexpr float g_externalReferenceVolts = 4.0f;
 	constexpr float g_supplyVolts            = 8.0f;
 	constexpr float g_internalReferenceVolts = 1.0f;
@@ -147,7 +147,7 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// THE MEASURED BYTES. Each one is read from the firmware disassembly and
+	// The measured bytes. Each one is read from the firmware disassembly and
 	// each is named rather than written as a literal at its use site.
 	constexpr uint8_t g_addressWrite = 0xCAu;   // 0x65 << 1, R/W clear
 	constexpr uint8_t g_addressRead  = 0xCBu;   // 0x65 << 1, R/W set
@@ -320,9 +320,9 @@ namespace
 	}
 
 	// -----------------------------------------------------------------------
-	// The board fixture for the routing cases. Only the MBAR window is populated: the
-	// clause is about the router, and a window this test never drives would
-	// only add ways for it to fail for another task's reason.
+	// The board fixture for the routing cases. Only the MBAR window is
+	// populated: the clause is about the router, and a window this test never
+	// drives would only add ways for it to fail for an unrelated reason.
 	constexpr uint32_t g_mbarBase = 0x16000000u;
 
 	constexpr int g_byte = 1;
@@ -354,7 +354,7 @@ namespace
 int main()
 {
 	// ==================================================================
-	// CLAUSE 5 CASE 1 -- THE ADDRESS DISCRIMINATES. Written first because a
+	// Clause 5 case 1 -- the address discriminates. Written first because a
 	// slave that answers every address passes every other case in this file.
 	// ==================================================================
 	{
@@ -409,7 +409,7 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 5 CASE 1, THROUGH THE CONTROLLER. RXAK carries the slave's
+	// Clause 5 case 1, through the controller. RXAK carries the slave's
 	// answer, so a wrong address is visible on the bus and not only in the
 	// slave's own return value.
 	// ==================================================================
@@ -430,9 +430,8 @@ int main()
 		check(mbsrBit(bus, g2::MBus::g_rxak),
 		      "an address byte for 0x64 is not acknowledged and RXAK is set");
 
-		// A controller with no slave behind it must report the same NACK. A
-		// model that reported an acknowledge unconditionally would make an
-		// absent slave indistinguishable from a present one.
+		// A controller with no slave behind it must report the same NACK, or
+		// an absent slave is indistinguishable from a present one.
 		g2::MBus empty(nullptr);
 		wr(empty, g2::MBus::g_mbcr, uint8_t(g2::MBus::g_men | g2::MBus::g_mtx));
 		setBits(empty, g2::MBus::g_mbcr, g2::MBus::g_msta);
@@ -442,8 +441,8 @@ int main()
 	}
 
 	// ==================================================================
-	// CLAUSE 1 -- THE BUSY BIT IS DYNAMIC. The two named cases first, then
-	// the six conditions the measured firmware imposes.
+	// Clause 1 -- the busy bit is dynamic. The two named cases first, then the
+	// conditions the measured firmware imposes.
 	// ==================================================================
 	{
 		g2::Max1039 adc(makeAdcConfig());
@@ -526,7 +525,7 @@ int main()
 		      "the MBSR busy bit responds to a write of MBCR");
 		clearBits(bus, g2::MBus::g_mbcr, g2::MBus::g_msta);
 
-		// ... and to NOTHING ELSE on the module. The same bit pattern written
+		// ... and to nothing else on the module. The same bit pattern written
 		// to the two registers that carry no control bits must leave it clear.
 		wr(bus, g2::MBus::g_madr, g2::MBus::g_msta);
 		check(!mbsrBit(bus, g2::MBus::g_mbb),
@@ -610,8 +609,8 @@ int main()
 
 	// ==================================================================
 	// The router reaches the new unit and still reaches the older two. Every
-	// access goes through the installed callback, because that is
-	// the path the core takes.
+	// access goes through the installed callback, because that is the path the
+	// core takes.
 	// ==================================================================
 	{
 		g2::Board board(makeBoardConfig());
@@ -621,7 +620,7 @@ int main()
 		// byte: the SIM models no register in this range and would store a
 		// written byte and hand it back, so a write-then-read of one offset
 		// would pass against the SIM answering. Writing MSTA to MBCR and
-		// reading the busy bit out of MBSR is a behaviour ONLY the M-Bus model
+		// reading the busy bit out of MBSR is a behaviour only the M-Bus model
 		// produces.
 		busWrite(board, g_mbarBase + g2::MBus::g_mbcr, g_byte, g2::MBus::g_msta, status);
 		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
@@ -639,7 +638,7 @@ int main()
 		checkEqual(uint32_t(wideStatus), uint32_t(MCF5307_BUS_SIZE_ILLEGAL),
 		           "a 16-bit read of an M-Bus register is rejected by the M-Bus");
 
-		// Every one of the five registers is reachable.
+		// Every register is reachable.
 		for(uint32_t offset = g2::MBus::g_madr; offset <= g2::MBus::g_mbdr; offset += 4u)
 		{
 			mcf5307_bus_status regStatus = MCF5307_BUS_OK;
@@ -648,9 +647,9 @@ int main()
 			           "MBAR+" + hex32(offset) + " reaches a modelled M-Bus register");
 		}
 
-		// THE WINDOW BOUND. Both units answer zero at an offset neither
-		// models, so the VALUE cannot say which one replied. Each writes its
-		// own UNMODELLED line instead, and the two logs are what separate them.
+		// The window bound. Both units answer zero at an offset neither models,
+		// so the value cannot say which one replied. Each writes its own
+		// UNMODELLED line instead, and the two logs are what separate them.
 		const uint32_t belowModule = g2::MBus::g_madr - 4u;
 		const uint32_t aboveModule = g2::MBus::g_mbdr + 4u;
 
@@ -681,8 +680,8 @@ int main()
 		          + hex32(g2::MBus::g_madr + 1u)},
 		         "an unmodelled offset inside the module window reaches the M-Bus");
 
-		// The two regression cases. A case that only exercised the new offsets
-		// would pass against a router that had broken both existing arms.
+		// The regression cases: the pre-existing arms are driven too, not only
+		// the new offsets.
 		busWrite(board, g_mbarBase + 0x080u, g_word, 0xA6A6u, status);
 		checkEqual(busRead(board, g_mbarBase + 0x080u, g_word, status), 0xA6A6u,
 		           "the SIM still answers CSAR0 at MBAR+0x080");
@@ -764,10 +763,10 @@ int main()
 
 	// ==================================================================
 	// This firmware's actual order is measured, so the test asserts it: setup
-	// first, then configuration, in two SEPARATE
-	// transactions, each opened by its own address byte and closed by its own
-	// STOP. The model must accept either order because the part does; the
-	// firmware happens to send this one.
+	// first, then configuration, in two separate transactions, each opened by
+	// its own address byte and closed by its own STOP. The model must accept
+	// either order because the part does; the firmware happens to send this
+	// one.
 	// ==================================================================
 	{
 		g2::Max1039 adc(makeAdcConfig());
@@ -793,17 +792,17 @@ int main()
 		check(adc.singleEnded(),
 		      "the measured configuration byte selects single-ended conversion");
 
-		// The required-RED companion of case 2, inherited by 2b: a model that
-		// ignored the configuration byte and always returned channel 0 must
-		// turn this red. The scan below is driven on a channel other than 0.
+		// The companion of case 2, inherited by 2b: the scan below is driven on
+		// a channel other than 0, so ignoring the configuration byte cannot
+		// pass.
 		checkBytes(adc.scanChannels(), {0u, 1u, 2u, 3u, 4u, 5u, 6u},
 		           "the measured configuration byte asks for channels 0 through 6");
 	}
 
 	// ==================================================================
-	// CH11 is the reference pin, not an unwired channel.
-	// With SEL1 set it is excluded from a multichannel scan, and a DIRECT
-	// single-ended selection of it returns GND.
+	// CH11 is the reference pin, not an unwired channel. With SEL1 set it is
+	// excluded from a multichannel scan, and a direct single-ended selection of
+	// it returns GND.
 	// ==================================================================
 	{
 		g2::Max1039 adc(makeAdcConfig());
@@ -884,9 +883,10 @@ int main()
 
 	{
 		// SEL[2:0] = 000 -- the supply is the reference and AIN11/REF is an
-		// ordinary analogue input. BOTH the reference source and the AIN11
+		// ordinary analogue input. Both the reference source and the AIN11
 		// handling must change, which is what forces the model to decode SEL
-		// rather than hardcoding the external reference this firmware selects.
+		// rather than hardcoding the external reference this firmware
+		// selects.
 		constexpr uint8_t supplyReferenceSetup  = 0x82u;   // SEL=000, CLK=0, RST=1
 		constexpr uint8_t internalReferenceSetup = 0xC2u;  // SEL=100, CLK=0, RST=1
 		constexpr uint8_t sweepToEleven          = 0x17u;
@@ -930,8 +930,8 @@ int main()
 
 	// ==================================================================
 	// The clock mode is decoded, and external clock mode is what this firmware
-	// selects. The wrong model is the plausible one:
-	// internal clock is the part's power-on default.
+	// selects. The wrong model is the plausible one: internal clock is the
+	// part's power-on default.
 	// ==================================================================
 	{
 		g2::Max1039 external(makeAdcConfig());
@@ -956,19 +956,18 @@ int main()
 	}
 
 	// ==================================================================
-	// The read side supplies bytes indefinitely and is never
-	// not-acknowledged. The firmware clears TXAK unconditionally with
-	// no index test, never writes the state variable back, and issues NO STOP
-	// for the read transaction. The consequence of getting this wrong is not
-	// a wrong value; it is a hang.
+	// The read side supplies bytes indefinitely and is never not-acknowledged.
+	// The firmware clears TXAK unconditionally with no index test, never writes
+	// the state variable back, and issues no STOP for the read transaction. The
+	// consequence of getting this wrong is not a wrong value; it is a hang.
 	// ==================================================================
 	{
 		g2::Max1039 adc(makeAdcConfig());
 		driveChannels(adc);
 		g2::MBus bus(&adc);
 
-		// Ten whole scans and a fraction, read through the controller exactly
-		// as state 3 reads them, with no STOP anywhere in it.
+		// Whole scans and a fraction, read through the controller exactly as
+		// state 3 reads them, with no STOP anywhere in it.
 		constexpr unsigned bytesRead = g_measuredScanLength * 10u + 3u;
 
 		const Interlock observed = replayFirmware(bus, bytesRead);
@@ -1015,8 +1014,8 @@ int main()
 	}
 
 	{
-		// A different CS moves the LENGTH of the sequence. A model that
-		// emitted a fixed count regardless of CS passes the case above.
+		// A different CS moves the length of the sequence, which the case above
+		// does not by itself establish.
 		g2::Max1039 adc(makeAdcConfig());
 		driveChannels(adc);
 

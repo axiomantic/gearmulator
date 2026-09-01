@@ -6,15 +6,12 @@
  * than a silent match against something else, and a missing definition a link
  * error, because taking the address of a member function odr-uses it.
  *
- * The one behavioural property this row owns: CodecSink::push refuses when full
+ * The behavioural property: CodecSink::push refuses when full
  * and the frame already in the queue is unchanged afterwards. Overwriting would
  * silently discard a frame the host has already been told to expect, which
  * changes the real latency mid-session while the reported figure stays
  * constant. Refusing makes it observable, and droppedFrames() > 0 is a defect
  * report and not a tolerance.
- *
- * A build of the target tests neither the surface nor the refusal, so both live
- * in a registered program that runs.
  */
 
 #include "codecQueues.h"
@@ -80,7 +77,7 @@ namespace
 	}
 }
 
-/* ================ the SURFACE
+/* ================ the surface
  *
  * Every declared method of both queues, by its fully qualified
  * member-function-pointer type. Remove a parameter, change a return type, drop
@@ -125,7 +122,7 @@ static_assert(!std::is_convertible_v<size_t, g2::CodecSink>,
 
 int main()
 {
-	/* The capacity is lookaheadFrames + B for both QUEUES, and both figures
+	/* The capacity is lookaheadFrames + B for both queues, and both figures
 	 * come from this fixture. B is the largest host block in 96 kHz frames and
 	 * the Device cannot see it: synthLib::Device has no prepareToPlay and no
 	 * block-size accessor, and synthLib::Plugin::setBlockSize keeps the value
@@ -191,9 +188,9 @@ int main()
 			"supplied a whole request");
 	}
 
-	/* ---------------- CodecSink::push REFUSES when FULL and never OVERWRITES.
+	/* ---------------- CodecSink::push refuses when full and never overwrites.
 	 *
-	 * This is the property this row owns. The queue is filled with frames
+	 * The queue is filled with frames
 	 * whose contents are known, a further push is made, and every frame
 	 * already in the queue is asserted unchanged afterwards -- not the oldest
 	 * alone, because an overwrite of any one of them is the same defect. */
@@ -215,7 +212,7 @@ int main()
 		checkEqual(sink.droppedFrames(), 0u,
 			"a sink filled exactly to its capacity dropped nothing");
 
-		/* The REFUSAL. */
+		/* The refusal. */
 		const g2::Frame intruder = frameFor(999);
 
 		check(!sink.push(intruder),
@@ -228,8 +225,7 @@ int main()
 			"a refused push does not change the queue's size");
 
 		/* And nothing in the queue moved. Every frame is pulled and held
-		 * against what was pushed. A body that overwrote the oldest frame
-		 * would pass a size check and fail here. */
+		 * against what was pushed. */
 		for(size_t i = 0; i < capacityFrames; ++i)
 		{
 			g2::Frame out[1];
@@ -266,11 +262,11 @@ int main()
 
 	/* ---------------- CodecSource::push refuses when full, and counts it.
 	 *
-	 * A refused frame is HOST AUDIO INPUT and it is DROPPED. There is no retry
+	 * A refused frame is host audio input and it is dropped. There is no retry
 	 * and no recovery, and the audible consequence is a gap of that many
 	 * frames in the input path. The capacity rule makes it unreachable in a
-	 * correct build, which is why the design counts it rather than handling
-	 * it, but the behaviour is asserted so that nobody reads "unreachable" as
+	 * correct build, which is why it is counted rather than handled, but the
+	 * behaviour is asserted so that nobody reads "unreachable" as
 	 * "harmless". */
 	{
 		g2::CodecSource source(capacityFrames);
@@ -309,12 +305,11 @@ int main()
 		checkEqual(source.size(), 0u, "the source empties in order");
 	}
 
-	/* ---------------- an empty source returns a ZERO frame and counts the
+	/* ---------------- an empty source returns a zero frame and counts the
 	 * starve.
 	 *
 	 * The counter exists because a starve and an overflow are the two
-	 * symmetric failures of the input side, and an earlier draft counted only
-	 * one of them. */
+	 * symmetric failures of the input side. */
 	{
 		g2::CodecSource source(capacityFrames);
 
@@ -346,17 +341,15 @@ int main()
 	/* ---------------- a short pull is counted as an underflow.
 	 *
 	 * underflowFrames is the number by which a pull's return fell short of its
-	 * request. It is the sink's under-supply counter, and an earlier draft had
-	 * none: the source counted both starvation and overflow while the sink
-	 * counted only overflow, so the one quadrant an under-sized sink capacity
-	 * actually lands in was the quadrant nothing watched. */
+	 * request. It is the sink's under-supply counter: without it, the quadrant
+	 * an under-sized sink capacity lands in is the one nothing watches. */
 	{
 		g2::CodecSink sink(capacityFrames);
 
 		check(sink.push(frameFor(1)), "the sink accepts one frame");
 		check(sink.push(frameFor(2)), "the sink accepts a second frame");
 
-		/* The buffer is pre-filled with A sentinel, and that is not tidiness.
+		/* The buffer is pre-filled with a sentinel, and that is not tidiness.
 		 * An uninitialised buffer that happens to be zero makes the silence
 		 * assertion below pass whether or not pull() writes anything -- a
 		 * check that cannot fail. This was measured: with the zeroing removed
@@ -411,7 +404,7 @@ int main()
 	 *
 	 * Both queues are driven well past their capacity in a push-and-consume
 	 * cycle, so the index arithmetic is exercised rather than assumed. A ring
-	 * that wrapped wrongly would return the right COUNT and the wrong FRAME,
+	 * that wrapped wrongly would return the right count and the wrong frame,
 	 * which is why every frame is held against its seed. */
 	{
 		g2::CodecSource source(capacityFrames);
