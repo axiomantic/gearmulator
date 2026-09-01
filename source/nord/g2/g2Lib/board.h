@@ -67,9 +67,8 @@ namespace g2
 		void tickSofIfDue(uint64_t frameIndex) noexcept;
 
 		/* The MCU context's determinism-relevant state, embedded in the
-		 * Scheduler snapshot. This serialises the Board's own state only: the
-		 * pinned core commit exports no Nim mcf5307_state_* or isp1181_state_*
-		 * block, and those are appended once it does.
+		 * Scheduler snapshot. This serialises the Board's own state only; the
+		 * core's mcf5307_state_* and isp1181_state_* blocks are not folded in.
 		 *
 		 * stateLoad deliberately returns void rather than g2::Status: that type
 		 * does not exist yet. It is reconciled once status.h exists. */

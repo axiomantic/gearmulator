@@ -4,11 +4,10 @@
 // and report MCF5307_BUS_OK, which is what a board that models no fault does;
 // the routing to the CS0 to CS5 devices comes later.
 //
-// The pinned core commit exports mcf5307_create, mcf5307_destroy,
-// mcf5307_reset, mcf5307_exec and mcf5307_runtime_init, and no state_* or
-// isp1181_* symbol. stateSave/stateLoad therefore serialise the Board's own
-// determinism-relevant state, rather than calling a symbol that would not
-// link. The Nim blocks are appended here the day a cpu task exports them.
+// stateSave/stateLoad serialise the Board's own determinism-relevant state
+// only. The core's mcf5307_state_* and isp1181_state_* blocks are not folded
+// in here yet: doing so fixes a snapshot layout across two repositories, and
+// the Board does not own an isp1181 handle to snapshot in the first place.
 //
 // The MCU-clock placeholder line is emitted to standard output so a test can
 // capture and count it.
@@ -34,8 +33,7 @@ namespace g2
 
 		// The flat snapshot the Board serialises. It is a fixed-size, plain-old
 		// data struct with no pointer inside, so a state file cannot carry a
-		// dangling address. The Nim mcf5307_*/isp1181_* blocks join it once a
-		// cpu task exports them.
+		// dangling address. The core's own state blocks are not folded in here.
 		struct BoardState
 		{
 			uint32_t version;
