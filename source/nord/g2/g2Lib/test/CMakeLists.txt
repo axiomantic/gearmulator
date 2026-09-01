@@ -68,6 +68,31 @@ include(tests_perf.cmake)
 include(tests_int.cmake)
 
 # ---------------------------------------------------------------------------
+# Registration guard. An infrastructure test, registered here rather than by a
+# track because it guards the tracks: it reads this directory's committed CMake
+# and fails when a test source is named by none of it.
+#
+# It is registered ABOVE the block below so that block's late-declaration check
+# does not see it as a test added after the guard.
+
+add_test(NAME t0_test_sources_registered
+	COMMAND ${CMAKE_COMMAND}
+		-DG2_TEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/t0_test_sources_registered.cmake)
+
+set_tests_properties(t0_test_sources_registered PROPERTIES LABELS "Infrastructure")
+
+# A test that compiles its subject at test time owns no build artifact, so the
+# build fixture below would gate it on a build it does not use -- and a red
+# fixture reports it ***Not Run, which is silence from the one test whose
+# subject is a build that may not work. A track declares its own script test
+# here; the exemption is the property of having no executable, not of being
+# named in a list.
+set_property(DIRECTORY APPEND PROPERTY G2_SCRIPT_ONLY_TESTS
+	t0_test_sources_registered
+	t0_timebase_header)
+
+# ---------------------------------------------------------------------------
 # Stale-artifact guard. It must sit after every add_executable this directory
 # declares, and the compile-failure guard below must follow it and be last.
 #
@@ -342,7 +367,19 @@ if(_g2_test_executables AND _g2_registered_tests)
 	# it silently deletes any fixture a track already required on its own test.
 	# The APPEND form preserves both; the PROPERTIES form drops the track's own
 	# fixture with configure exit 0 and no diagnostic.
-	set_property(TEST ${_g2_registered_tests} APPEND PROPERTY FIXTURES_REQUIRED g2_test_executables_built)
+	# Script-only tests are held back. Requiring the fixture of a test that owns
+	# no build artifact buys nothing and costs its report whenever the fixture is
+	# red, which is when its report is worth most.
+	get_property(_g2_script_only_tests DIRECTORY PROPERTY G2_SCRIPT_ONLY_TESTS)
+	set(_g2_fixture_tests ${_g2_registered_tests})
+
+	if(_g2_script_only_tests)
+		list(REMOVE_ITEM _g2_fixture_tests ${_g2_script_only_tests})
+	endif()
+
+	if(_g2_fixture_tests)
+		set_property(TEST ${_g2_fixture_tests} APPEND PROPERTY FIXTURES_REQUIRED g2_test_executables_built)
+	endif()
 elseif(_g2_registered_tests AND NOT G2_GUARD_ALLOW_SCRIPT_ONLY_TESTS)
 	message(FATAL_ERROR
 		"COMPILE-FAILURE GUARD: this directory registers tests but declares no executable,\n"
@@ -359,3 +396,5 @@ unset(_g2_target_type)
 unset(_g2_test_targets)
 unset(_g2_test_executables)
 unset(_g2_registered_tests)
+unset(_g2_script_only_tests)
+unset(_g2_fixture_tests)
