@@ -81,7 +81,6 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -311,13 +310,6 @@ namespace
 	constexpr uint32_t g_probeCallerB  = 0x3001DAD8u;
 	constexpr uint32_t g_probeAssembly = 0x30032254u;
 
-	// SCAFFOLD (temporary, reverted after the measurement). 0x300039C8 is the
-	// `beqs` the scan at 0x30003982 takes when the ring is empty; every register
-	// the scan was handed is live at its fetch. 0x302A2700 is the longword the
-	// four call sites push as the descriptor pointer.
-	constexpr uint32_t g_ringProbePc = 0x300039C8u;
-	constexpr uint32_t g_ringGlobal  = 0x302A2700u;
-
 	// THE KNOWN NEGATIVE. An address inside the vector TABLE this file writes.
 	// Vectors are read as 32-bit longwords, never fetched as instruction words,
 	// so the 16-bit counter must read 0 there. It is offset 4 rather than 0 so
@@ -328,18 +320,7 @@ namespace
 	// findings name a 4000-tick deferred rebuild timer as the scheduler of the
 	// routine under test, so a window shorter than that could report a routine
 	// that had not been given the chance to run. This is more than ten times it.
-	// SCAFFOLD (temporary, reverted after the measurement): the window length is
-	// read from the environment so the same binary can be run at several window
-	// sizes. Absent the variable it is the committed 50000.
-	inline uint32_t observeQuantaFromEnv()
-	{
-		const char* const v = std::getenv("G2_OBSERVE_QUANTA");
-		if(v == nullptr || *v == '\0')
-			return 50000u;
-		return uint32_t(std::strtoul(v, nullptr, 10));
-	}
-
-	const uint32_t g_observeQuanta = observeQuantaFromEnv();
+	constexpr uint32_t g_observeQuanta = 50000u;
 
 	class Ram final : public g2::BusTarget
 	{
@@ -347,69 +328,8 @@ namespace
 		explicit Ram(const size_t _size)
 			: m_bytes(_size, 0u)
 			, m_wordHits(_size / 2u, 0u)
-			, m_firstQuantum(_size / 2u, 0u)  // SCAFFOLD
 		{
 		}
-
-		// SCAFFOLD (temporary): the window's quantum index, stepped by the
-		// observation loop, so a first fetch can be dated. 0 means "never".
-		uint32_t scaffoldQuantum = 0;
-
-		// SCAFFOLD: the longword at an absolute SDRAM address, read straight
-		// out of the backing store WITHOUT touching the histogram, so that
-		// reading a pointer table cannot alter the measurement it qualifies.
-		uint32_t peekLong(const uint32_t _absolute) const
-		{
-			if(_absolute < g2::g_sdramBase)
-				return 0u;
-			const size_t off = size_t(_absolute - g2::g_sdramBase);
-			if(off + 4u > m_bytes.size())
-				return 0u;
-			return (uint32_t(m_bytes[off]) << 24) | (uint32_t(m_bytes[off + 1]) << 16)
-			     | (uint32_t(m_bytes[off + 2]) << 8) | uint32_t(m_bytes[off + 3]);
-		}
-
-		// SCAFFOLD: the 16-bit word at an absolute SDRAM address, same backing
-		// store, same no-histogram rule as peekLong above.
-		uint32_t peekWord(const uint32_t _absolute) const
-		{
-			if(_absolute < g2::g_sdramBase)
-				return 0u;
-			const size_t off = size_t(_absolute - g2::g_sdramBase);
-			if(off + 2u > m_bytes.size())
-				return 0u;
-			return (uint32_t(m_bytes[off]) << 8) | uint32_t(m_bytes[off + 1]);
-		}
-
-		uint32_t peekByte(const uint32_t _absolute) const
-		{
-			if(_absolute < g2::g_sdramBase)
-				return 0u;
-			const size_t off = size_t(_absolute - g2::g_sdramBase);
-			if(off >= m_bytes.size())
-				return 0u;
-			return m_bytes[off];
-		}
-
-		// SCAFFOLD: the DATA probe. When the core fetches the instruction word
-		// at m_ringProbePc the machine's registers already hold everything the
-		// scan at 0x30003982 was handed, so this is the moment the ring
-		// descriptor and the key are both live. The snapshot is formatted here
-		// and printed after the window; nothing is printed from inside the bus
-		// callback.
-		const g2::Board* scaffoldBoard = nullptr;
-
-		void armRingProbe(const uint32_t _pc, const uint32_t _globalPtr, const size_t _maxSnaps)
-		{
-			m_ringProbePc     = _pc;
-			m_ringProbeGlobal = _globalPtr;
-			m_ringProbeMax    = _maxSnaps;
-			m_ringLog.clear();
-			m_ringHits = 0;
-		}
-
-		uint64_t ringHits() const { return m_ringHits; }
-		const std::vector<std::string>& ringLog() const { return m_ringLog; }
 
 		// THE COUNTER IS A HISTOGRAM AND NOT A PROBE LIST, and that is what
 		// makes the known positive a property of the RUN. A fixed probe list can
@@ -477,35 +397,11 @@ namespace
 			return best;
 		}
 
-		// SCAFFOLD (temporary, reverted after the measurement). Writes every
-		// 16-bit SDRAM word inside [lo, hi) that was fetched at least once in
-		// the window, as "absolute hits", one per line. The unit is one 16-bit
-		// SDRAM word fetched at least once inside the window.
-		void dumpExecuted(const std::string& _file, const uint32_t _loAbsolute, const uint32_t _hiAbsolute) const
-		{
-			std::ofstream out(_file);
-			if(!out)
-				return;
-
-			const size_t lo = (size_t(_loAbsolute - g2::g_sdramBase) + 1u) >> 1;
-			const size_t hi = std::min(size_t(_hiAbsolute - g2::g_sdramBase) >> 1, m_wordHits.size());
-
-			for(size_t index = lo; index < hi; ++index)
-			{
-				if(m_wordHits[index] == 0u)
-					continue;
-				out << (g2::g_sdramBase + uint32_t(index << 1)) << ' '
-				    << uint64_t(m_wordHits[index]) << ' '
-				    << m_firstQuantum[index] << '\n';
-			}
-		}
-
 		// Zeroes every counter, so that a window's counts are the WINDOW's and
 		// not the boot's.
 		void resetProbes()
 		{
 			std::fill(m_wordHits.begin(), m_wordHits.end(), 0u);
-			std::fill(m_firstQuantum.begin(), m_firstQuantum.end(), 0u);  // SCAFFOLD
 			m_wordFetches  = 0;
 			m_oddWordReads = 0;
 		}
@@ -552,16 +448,8 @@ namespace
 					const size_t index = size_t(_offset) >> 1;
 					if(index < m_wordHits.size())
 					{
-						// SCAFFOLD: date the FIRST fetch of this word.
-						if(m_wordHits[index] == 0u)
-							m_firstQuantum[index] = scaffoldQuantum;
 						++m_wordHits[index];
 					}
-
-					// SCAFFOLD: the data probe fires on the instruction fetch
-					// at the armed PC and reads the backing store only.
-					if(m_ringProbePc != 0u && (g2::g_sdramBase + _offset) == m_ringProbePc)
-						captureRing();
 				}
 			}
 
@@ -628,84 +516,8 @@ namespace
 		uint64_t contentWrites() const { return m_contentWrites; }
 
 	private:
-		// SCAFFOLD (temporary, reverted after the measurement). One snapshot of
-		// the ring the scan at 0x30003982 was handed, taken at the fetch of the
-		// armed PC. Register indices are the register FILE's own: 9 is a1, 10 is
-		// a2, 12 is a4, 7 is d7 -- board.h states that mapping and this restates
-		// none of it beyond the four it reads.
-		void captureRing()
-		{
-			++m_ringHits;
-
-			if(scaffoldBoard == nullptr || m_ringLog.size() >= m_ringProbeMax)
-				return;
-
-			const uint32_t a1 = scaffoldBoard->mcuReg(9);
-			const uint32_t a2 = scaffoldBoard->mcuReg(10);
-			const uint32_t a4 = scaffoldBoard->mcuReg(12);
-			const uint32_t d7 = scaffoldBoard->mcuReg(7);
-
-			const uint32_t head = peekWord(a2 + 0u);
-			const uint32_t tail = peekWord(a2 + 2u);
-			const uint32_t size = peekWord(a2 + 4u);
-			const uint32_t endP = peekLong(a2 + 6u);
-			const uint32_t bufP = peekLong(a2 + 10u);
-
-			std::ostringstream o;
-			o << "ring q=" << scaffoldQuantum
-			  << " a2=" << hex32(a2)
-			  << " a4=" << hex32(a4)
-			  << " key=" << hex32(a4 & 0xffffu)
-			  << " a1=" << hex32(a1)
-			  << " d7=" << hex32(d7)
-			  << " head=" << head
-			  << " tail=" << tail
-			  << " size=" << size
-			  << " end=" << hex32(endP)
-			  << " buf=" << hex32(bufP)
-			  << " global[" << hex32(m_ringProbeGlobal) << "]=" << hex32(peekLong(m_ringProbeGlobal))
-			  // SELF-CONSISTENCY POSITIVE, and it comes from the firmware's own
-			  // arithmetic at 0x30003A16..0x30003A24: end == buf + size*12. If
-			  // this does not hold, a2 is not a ring descriptor and every field
-			  // above is a misread rather than a measurement.
-			  << " end==buf+size*12:" << ((bufP + size * 12u) == endP ? "yes" : "no");
-
-			// The ring's contents. The unit is ONE 12-BYTE RING SLOT; the loop
-			// at 0x300039D8 compares slot word0 against the key, so word0 is
-			// printed for every slot and the full 12 bytes for each.
-			const uint32_t slots = size <= 64u ? size : 64u;
-			for(uint32_t i = 0; i < slots; ++i)
-			{
-				const uint32_t slot = bufP + i * 12u;
-				o << "\n  slot[" << i << "] @" << hex32(slot)
-				  << " word0=" << hex32(peekWord(slot))
-				  << " bytes=";
-				for(uint32_t b = 0; b < 12u; ++b)
-				{
-					static const char* const digits = "0123456789abcdef";
-					const uint32_t v = peekByte(slot + b);
-					o << digits[(v >> 4) & 0xfu] << digits[v & 0xfu];
-					if(b == 3u || b == 7u)
-						o << ' ';
-				}
-				const bool live = (head <= tail) ? (i >= head && i < tail)
-				                                 : (i >= head || i < tail);
-				o << (i == head ? " <-head" : "") << (i == tail ? " <-tail" : "")
-				  << (live ? " LIVE" : "");
-			}
-
-			m_ringLog.push_back(o.str());
-		}
-
-		uint32_t m_ringProbePc     = 0;   // SCAFFOLD
-		uint32_t m_ringProbeGlobal = 0;   // SCAFFOLD
-		size_t   m_ringProbeMax    = 0;   // SCAFFOLD
-		uint64_t m_ringHits        = 0;   // SCAFFOLD
-		std::vector<std::string> m_ringLog;  // SCAFFOLD
-
 		std::vector<uint8_t>  m_bytes;
 		std::vector<uint32_t> m_wordHits;
-		std::vector<uint32_t> m_firstQuantum;  // SCAFFOLD
 		uint64_t             m_oddWordReads  = 0;
 		uint64_t             m_wordFetches   = 0;
 		uint32_t             m_watchBase     = 0;
@@ -966,13 +778,6 @@ namespace
 
 		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
 
-		// SCAFFOLD (temporary, reverted after the measurement). The probe reads
-		// the register file, so it needs the machine; the Board outlives the Ram
-		// in this scope and neither owns the other.
-		ram.scaffoldBoard = &board;
-		if(std::getenv("G2_RING_PROBE") != nullptr)
-			ram.armRingProbe(g_ringProbePc, g_ringGlobal, 6u);
-
 		board.resetMcu(g_entrySp, g_entryPc);
 
 		if(!board.setMcuReg(g_regVbr, g_vectorTableBase))
@@ -1080,70 +885,10 @@ namespace
 			// windows in different places.
 			_r.windowPc = board.mcuReg(g_regPc);
 
-			// SCAFFOLD (temporary): the BOOT-INCLUSIVE histogram, dumped before
-			// the clear. A region absent from the post-boot window is not
-			// thereby a region that never ran; the clear masks boot by
-			// construction. This is the unmasked companion.
-			if(const char* const prefix = std::getenv("G2_EXEC_DUMP"))
-			{
-				ram.dumpExecuted(std::string(prefix) + (_deliver ? ".bootpatched" : ".bootcontrol"),
-					g_entryPc, g_entryPc + uint32_t(code.size()));
-			}
-
-			// SCAFFOLD (temporary): the ISP1181 per-endpoint callback table the
-			// ISR dispatches through, READ AFTER BOOT, straight out of the
-			// backing store so the read does not disturb the histogram. Sixteen
-			// longwords from 0x30119C62; entry k is endpoint k+1, so endpoint 3
-			// is 0x30119C6A. Two same-read known positives accompany it.
-			if(std::getenv("G2_CALLBACK_TABLE") != nullptr)
-			{
-				const char* const arm = _deliver ? "patched" : "control";
-
-				for(uint32_t k = 0; k < 16u; ++k)
-				{
-					const uint32_t addr = 0x30119C62u + 4u * k;
-					std::cout << "cbtable " << arm << " entry[" << k << "] endpoint " << (k + 1)
-					          << " at " << hex32(addr) << " = " << hex32(ram.peekLong(addr))
-					          << std::endl;
-				}
-
-				// KNOWN POSITIVE 1, same read path, same image: the operand of
-				// the `pea 0x30053C38` that installs the handler. If this does
-				// not read back as the ISR's own entry address, the read is
-				// looking at the wrong address space and a table of zeros
-				// proves nothing.
-				std::cout << "cbtable " << arm << " KNOWN POSITIVE handler-install operand at "
-				          << hex32(0x30055BF8u) << " = " << hex32(ram.peekLong(0x30055BF8u))
-				          << " (expect " << hex32(0x30053C38u) << ")" << std::endl;
-
-				// KNOWN POSITIVE 2: the first longword of the image, which this
-				// run itself placed from CODE_30000400.bin.
-				uint32_t head = 0;
-				for(int b = 0; b < 4; ++b)
-					head = (head << 8) | (b < int(code.size()) ? code[size_t(b)] : 0u);
-				std::cout << "cbtable " << arm << " KNOWN POSITIVE image head at "
-				          << hex32(g_entryPc) << " = " << hex32(ram.peekLong(g_entryPc))
-				          << " (expect " << hex32(head) << ")" << std::endl;
-			}
-
-			// SCAFFOLD: the BOOT-INCLUSIVE reading, reported before the window's
-			// arming clears it.
-			if(std::getenv("G2_RING_PROBE") != nullptr)
-			{
-				const char* const arm = _deliver ? "patched" : "control";
-				std::cout << "ringboot " << arm << " scanEntries=" << ram.ringHits() << std::endl;
-				for(const auto& line : ram.ringLog())
-					std::cout << "ringboot " << arm << " " << line << std::endl;
-			}
-
 			ram.resetProbes();
-
-			if(std::getenv("G2_RING_PROBE") != nullptr)
-				ram.armRingProbe(g_ringProbePc, g_ringGlobal, 24u);
 
 			for(uint32_t i = 0; i < g_observeQuanta; ++i)
 			{
-				ram.scaffoldQuantum = i + 1u;  // SCAFFOLD: 1-based; 0 means never
 				scheduler->runFrames(1);
 			}
 
@@ -1154,13 +899,6 @@ namespace
 
 			_r.imageBase = g_entryPc;
 			_r.imageEnd  = g_entryPc + uint32_t(code.size());
-
-			// SCAFFOLD (temporary, reverted after the measurement).
-			if(const char* const prefix = std::getenv("G2_EXEC_DUMP"))
-			{
-				ram.dumpExecuted(std::string(prefix) + (_deliver ? ".patched" : ".control"),
-					_r.imageBase, _r.imageEnd);
-			}
 
 			const Ram::Hottest inImage = ram.hottestInRange(_r.imageBase, _r.imageEnd);
 
@@ -1179,43 +917,6 @@ namespace
 			_r.hitsCallerA       = ram.hitsAt(g_probeCallerA);
 			_r.hitsCallerB       = ram.hitsAt(g_probeCallerB);
 			_r.hitsAssembly      = ram.hitsAt(g_probeAssembly);
-
-			// SCAFFOLD (temporary, reverted after the measurement).
-			if(std::getenv("G2_RING_PROBE") != nullptr)
-			{
-				const char* const arm = _deliver ? "patched" : "control";
-
-				std::cout << "ring " << arm << " scanEntries=" << ram.ringHits() << std::endl;
-				for(const auto& line : ram.ringLog())
-					std::cout << "ring " << arm << " " << line << std::endl;
-
-				// The scan's neighbourhood, as instruction-fetch counts inside
-				// the window. The unit is ONE 16-BIT WORD FETCHED. Every one of
-				// these is an address disassembled from the image this run
-				// loaded, not a guess: the four call sites, the loop's match
-				// target, the loop's no-match exit, and the caller's two arms.
-				static const struct { uint32_t addr; const char* what; } probes[] =
-				{
-					{0x30003982u, "scanEntry"},
-					{0x300039C8u, "scanEmptyBranch"},
-					{0x300039D8u, "scanLoopHead"},
-					{0x300039F0u, "scanLoadWord0"},
-					{0x300039F6u, "scanMatchBranch"},
-					{0x30003A2Eu, "scanMatchTarget"},
-					{0x30003A0Au, "scanNoMatchExit"},
-					{0x30004D5Eu, "callSite_4D5E"},
-					{0x30004DAEu, "callSite_4DAE"},
-					{0x30004E04u, "callSite_4E04"},
-					{0x30004ED4u, "callSite_4ED4"},
-					{0x30004E0Au, "caller4E04_afterCall"},
-					{0x30004E12u, "caller4E04_foundArm"},
-					{0x30004E1Eu, "caller4E04_allocArm"},
-				};
-
-				for(const auto& p : probes)
-					std::cout << "ringfetch " << arm << " " << p.what << " " << hex32(p.addr)
-					          << " hits=" << ram.hitsAt(p.addr) << std::endl;
-			}
 
 			// THE SECOND READING. If the first was non-zero and this one is
 			// 0x00, the firmware TOOK the packet out during the window; if both
