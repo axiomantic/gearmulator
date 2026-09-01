@@ -1,0 +1,151 @@
+# The board track's reusable workflow. Task REPO-6 creates it EMPTY; the
+# board track fills it.
+#
+# A per-track unit is a reusable workflow and it contributes a JOB, not a step.
+# Nothing outside a callee workflow can insert a step into it, so this track
+# adds its steps inside this job, in this file, and touches `ci.yml` in zero
+# places.
+#
+# This job asserts one thing: the `pmem-funnel-lint` step below.
+
+name: track-board
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  board-lints:
+    name: board-lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Every P-memory write in the G2 goes through g2::writePMem, and that
+      # function is the only one that tells the just-in-time compiler a program
+      # word changed. A second write path leaves the compiler running code the
+      # firmware has already overwritten: nothing faults, nothing logs, and the
+      # wrong code just runs. This step is what stops the second path being
+      # added.
+      #
+      # The predicate matches calls, not mentions. Each pattern requires an
+      # open parenthesis, so prose that discusses the funnel by name is not a
+      # violation. A mention is not a write path.
+      #
+      # The scope is `source/nord/g2/` and that is deliberate. The other device
+      # libraries in this repository (mqLib, xtLib, virusLib, nord/n2x) and the
+      # vendored `source/dsp56300` each carry their own P-memory write path and
+      # are not this track's to govern. A repository-wide rule would fail on
+      # code this task has no claim over.
+      #
+      # The allow-list is two paths and not a directory. Widening it to a
+      # directory would let any new file in that directory write P memory,
+      # which is the rule inverted.
+      #
+      # Test harnesses assemble synthetic programs through
+      # dsp56k::DSP::memWriteP, which notifies the compiler itself, so the
+      # invariant's purpose holds for them.
+      #
+      # The exemption cannot become the hole the lint exists to close, and the
+      # reason is that it reaches ONE pattern. `notifyProgramMemWrite` and a
+      # direct `set(MemArea_P, ...)` are the two calls that write a program word
+      # without telling the compiler, and both stay forbidden everywhere in
+      # scope, tests included. Only `memWriteP` -- the path that notifies -- is
+      # exempt, and only under a `test/` directory.
+      #
+      # Every check below is an absence test, so each one carries a control. A
+      # grep that could not see the tree returns exactly what a clean tree
+      # returns.
+      - name: pmem-funnel-lint
+        run: |
+          set -u
+
+          SCOPE="source/nord/g2"
+          FUNNEL_H="source/nord/g2/g2Lib/pmemFunnel.h"
+          FUNNEL_C="source/nord/g2/g2Lib/pmemFunnel.cpp"
+
+          PAT_NOTIFY='notifyProgramMemWrite[[:space:]]*\('
+          PAT_MEMSET='[.>]set[[:space:]]*\(.*MemArea_P'
+          PAT_MEMWRITEP='memWriteP[[:space:]]*\('
+
+          # A harness is a file under a `test/` directory inside the scope. The
+          # trailing `[^/:]*:` pins the match to the grep prefix -- `path:line:`
+          # -- so a source line that merely contains the text `/test/` cannot
+          # exempt itself.
+          PAT_HARNESS="^$SCOPE/[^:]*/test/[^/:]*:"
+
+          status=0
+
+          # `grep -r` over a missing directory prints an error and yields
+          # nothing, and `|| true` below turns that into the same empty string a
+          # clean tree gives.
+          if [ ! -d "$SCOPE" ]; then
+            echo "pmem-funnel-lint: the scope $SCOPE does not exist, so nothing was searched."
+            status=1
+          fi
+
+          for f in "$FUNNEL_H" "$FUNNEL_C"; do
+            if [ ! -f "$f" ]; then
+              echo "pmem-funnel-lint: the funnel file $f does not exist."
+              echo "Either it moved, or the one write path this lint protects is gone."
+              status=1
+            fi
+          done
+
+          # grep -r AND NOT git grep. git grep does not read untracked files,
+          # so its empty result is indistinguishable from an absence, and a
+          # lint whose silence can mean "did not look" is not a lint.
+          direct=$(grep -rnE "$PAT_NOTIFY|$PAT_MEMSET" "$SCOPE" \
+            | grep -v "^$FUNNEL_H:" \
+            | grep -v "^$FUNNEL_C:" || true)
+
+          if [ -n "$direct" ]; then
+            echo "pmem-funnel-lint: P memory is written outside the funnel."
+            echo "Only $FUNNEL_C may call notifyProgramMemWrite or set MemArea_P."
+            echo "$direct"
+            status=1
+          fi
+
+          # The funnel is the known positive of its own lint: it is excluded
+          # from `direct` above, so if the patterns have stopped naming what the
+          # funnel does, `direct` is empty because the instrument is dead and
+          # not because the tree is clean.
+          for p in "$PAT_NOTIFY" "$PAT_MEMSET"; do
+            if ! grep -qE "$p" "$FUNNEL_C" 2>/dev/null; then
+              echo "pmem-funnel-lint: the pattern $p matches nothing in $FUNNEL_C."
+              echo "The funnel is this lint's known positive. A pattern that no longer"
+              echo "names what the funnel does reports a clean tree it never inspected."
+              status=1
+            fi
+          done
+
+          memwritep=$(grep -rnE "$PAT_MEMWRITEP" "$SCOPE" \
+            | grep -v "^$FUNNEL_H:" \
+            | grep -v "^$FUNNEL_C:" || true)
+
+          new_memwritep=$(printf '%s\n' "$memwritep" | grep -vE "$PAT_HARNESS" || true)
+
+          if [ -n "$new_memwritep" ]; then
+            echo "pmem-funnel-lint: DSP::memWriteP is a second P-memory write path."
+            echo "Call g2::writePMem instead. A test harness under a test/ directory may"
+            echo "call it; production code under $SCOPE may not."
+            echo "$new_memwritep"
+            status=1
+          fi
+
+          # The harnesses are the only callers of memWriteP, so a zero here
+          # means the API was renamed and the check above proved nothing.
+          if [ -z "$memwritep" ]; then
+            echo "pmem-funnel-lint: $PAT_MEMWRITEP matches nothing under $SCOPE."
+            echo "Every known caller is a test harness. A zero means the API was renamed"
+            echo "and this check is looking for a name nothing carries."
+            status=1
+          fi
+
+          if [ "$status" -eq 0 ]; then
+            echo "pmem-funnel-lint: g2::writePMem is the only P-memory write path."
+          fi
+
+          exit "$status"

@@ -1,0 +1,28 @@
+# Source list for the chain track. Owned by the chain track.
+#
+# Append every source name this track adds under source/nord/g2/g2Lib/ to
+# G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
+# file in this tree.
+
+# ----------------- SlotWriteView
+#
+# Header-only. Listed here for the IDE source group, like anomalyLog.h.
+
+list(APPEND G2LIB_SOURCES slotWriteView.h)
+
+
+# ----------------- the mailbox delay line
+#
+# The whole allocation of the ring happens once, in the constructor, so the
+# compiled part is a single translation unit.
+list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
+
+# ----------------- ChainTopology + the ChainAdapter class
+#
+# Both stay in the same source group so the IDE shows them together.
+list(APPEND G2LIB_SOURCES chainAdapter.h chainAdapter.cpp)
+
+# Which hardware port carries which chain position. The firmware chooses it and
+# it is not the identity, so nothing may assume it; chainOrder.h carries the
+# derivation and why it cannot be answered before the firmware has run.
+list(APPEND G2LIB_SOURCES chainOrder.h chainOrder.cpp)
