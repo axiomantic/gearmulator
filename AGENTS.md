@@ -63,9 +63,7 @@ cmake -S . -B <build> \
 	-Dgearmulator_SYNTH_XENIA=OFF \
 	-Dgearmulator_SYNTH_NODALRED2X=OFF \
 	-Dgearmulator_SYNTH_JE8086=OFF \
-	-Dgearmulator_SYNTH_G2=ON \
-	-DG2_MCF5307_SOURCE_DIR=<path to the mcf5307 checkout> \
-	-DG2_NMG2_TOOLS_SOURCE_DIR=<path to the nmg2-tools checkout>
+	-Dgearmulator_SYNTH_G2=ON
 cmake --build <build> --parallel --target g2_test_executables_all
 ctest --test-dir <build>/source/nord/g2/g2Lib/test --no-tests=error --output-on-failure
 ```
@@ -99,8 +97,7 @@ ctest --preset full
 The raw form:
 
 ```bash
-cmake -S . -B <build> \
-	-DG2_MCF5307_SOURCE_DIR=<path> -DG2_NMG2_TOOLS_SOURCE_DIR=<path>
+cmake -S . -B <build>
 cmake --build <build> --parallel
 ctest --test-dir <build> --no-tests=error --output-on-failure
 ```
@@ -117,13 +114,66 @@ narrow tree never builds — this project has already been bitten by a
 compiler-flag change that broke a consumer no narrow run touched. Run the full
 build for anything below the G2.
 
+### The source-dir overrides, and why the default is the pin
+
+`G2_MCF5307_SOURCE_DIR` and `G2_NMG2_TOOLS_SOURCE_DIR` replace a fetch of a
+pinned commit with a sibling checkout. **Neither belongs in a build you will
+report, record, or act on.** Build against the pin: leave both unset, and the
+configure fetches exactly what the tree declares.
+
+**An override substitutes whatever the sibling happens to be sitting on, which
+is usually neither the pin nor the commit you meant to test.** A sibling
+checkout is left wherever its last piece of work left it. Nothing about the
+build says which tree it read, so every result from it is a statement about a
+third tree wearing the authority of a statement about the pin. Both shapes have
+been paid for here in the same day:
+
+- A checkout a couple of commits past the pin produced findings about the
+  MCF5307 ABI that described neither the pin nor the bump target. All of them
+  were retracted.
+- A checkout on a branch that carries no Nord tooling made
+  `t0_extract_matches_python` fail with `ModuleNotFoundError: No module named
+  'nmg2_tools.container'`. That was reported up as a cross-repo breakage caused
+  by a restructure. It was a local misconfiguration: the same test passes
+  against the pin, and flipping only that one variable in one build tree flips
+  the verdict.
+
+The second shape is the expensive one, because the error is plausible. A
+`ModuleNotFoundError` naming a module that really was moved reads as an upstream
+deletion, and nothing in it points at the flag that caused it.
+
+**When an override is appropriate:** iterating on this repository and a
+dependency together, where the point of the build is to exercise an
+uncommitted or unpinned change in the sibling. That is a real workflow and the
+flags exist for it.
+
+**When it is not:** anything whose output leaves your terminal. A test verdict,
+a bisect, a bug report, a PR comment, a decision about whether to advance a pin.
+Re-run those against the pin before believing them.
+
+**A result obtained under an override is labelled, not reported bare.** Say
+which override was set and what the pointed-at tree's HEAD was. A result whose
+tree is unstated is not a measurement.
+
+The configure guards both flags rather than trusting this section:
+
+- `G2_NMG2_TOOLS_SOURCE_DIR` at a tree with no `nmg2_tools/container.py` is a
+  FATAL configure error naming the likely cause.
+- `G2_MCF5307_SOURCE_DIR` at a tree whose HEAD is not `G2_MCF5307_GIT_TAG`, or
+  whose working tree is dirty, is a FATAL configure error until you pass
+  `-DG2_MCF5307_SOURCE_DIR_IS_NOT_THE_PIN=ON`. That flag is the label: after it,
+  the configure warns on every run that the build does not describe the pin.
+
+Both fire only when the override is set. The default path reaches neither.
+
 ### Gotchas of the G2 test run
 
 - **Without `G2_MCF5307_SOURCE_DIR` and `G2_NMG2_TOOLS_SOURCE_DIR` the configure
   clones two repositories from GitHub** at the commits pinned in the root
-  `CMakeLists.txt` and in `source/nord/g2/g2Lib/test/tests_board.cmake`. Point
-  both at sibling checkouts when they exist. Until a flag points at a sibling, a
-  local change in that sibling is not what the tests measure.
+  `CMakeLists.txt` and in `source/nord/g2/g2Lib/test/tests_board.cmake`. **That
+  is the default and it is what you want.** Leave both unset unless you have a
+  reason named in **The source-dir overrides, and why the default is the pin**
+  above.
 - **The G2 tests write into the SOURCE tree.** `t0_clock_guard` plants a scratch
   header under `source/nord/g2/`, runs a nested configure and removes it again.
   Two ctest runs over this repository at the same time collide **whatever build
