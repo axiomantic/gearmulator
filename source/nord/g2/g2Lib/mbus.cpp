@@ -104,6 +104,8 @@ namespace g2
 
 	uint8_t MBus::readRegister(const uint32_t _offset)
 	{
+		++m_traffic.registerReads;
+
 		switch(_offset)
 		{
 		case g_madr:
@@ -127,6 +129,8 @@ namespace g2
 
 	void MBus::writeRegister(const uint32_t _offset, const uint8_t _value)
 	{
+		++m_traffic.registerWrites;
+
 		switch(_offset)
 		{
 		case g_madr:
@@ -166,6 +170,7 @@ namespace g2
 		 * SET, so the transition and not the level is what this model keys on. */
 		if(!wasMaster && isMaster)
 		{
+			++m_traffic.starts;
 			m_busBusy      = true;
 			m_addressPhase = true;
 			return;
@@ -191,11 +196,16 @@ namespace g2
 		if(m_addressPhase)
 		{
 			m_addressPhase = false;
+			++m_traffic.addressPhases;
 			m_notAcknowledged = !(m_slave && m_slave->start(uint8_t(_value >> 1),
 			                                                (_value & 0x01u) != 0u));
+
+			if(!m_notAcknowledged)
+				++m_traffic.acknowledged;
 		}
 		else
 		{
+			++m_traffic.bytesWritten;
 			m_notAcknowledged = !(m_slave && m_slave->write(_value));
 		}
 
@@ -217,6 +227,7 @@ namespace g2
 		 * that would end the transfer. */
 		if((m_mbcr & g_msta) != 0u && (m_mbcr & g_mtx) == 0u)
 		{
+			++m_traffic.bytesRead;
 			m_received  = m_slave ? m_slave->read() : 0xffu;
 			m_interrupt = true;
 		}

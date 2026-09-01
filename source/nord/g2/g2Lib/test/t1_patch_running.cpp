@@ -411,9 +411,107 @@ namespace
 		{0x3001B4C2u, "rung: jsr 0x3001b674"},
 		{0x3001B526u, "rung: jsr 0x3005e68c"},
 		{0x3001B544u, "rung: jsr 0x3005e568 (the rung before the loop launch)"},
+		// ---- the rung that never returns, opened up ------------------------
+		// FUN_30055F28 is reached by `jsr 0x30055f28` at 0x3001B480. Its three
+		// arguments are pushed at 0x3001B474..0x3001B47A in the order
+		//   clrl -(sp) ; pea 0x3e8 ; pea 0x30132ac0
+		// so the LAST push is the buffer pointer and it lands at fp@(8). The
+		// callee reads `movel %fp@(8),%d0` (0x30055F34) and stores d0 into
+		// 0x302A0DA8 at 0x30055F48, `movew %fp@(14),%d5` (=0x03E8=1000), and
+		// `moveal %fp@(16),%a2` (=0, the null callback that makes both
+		// `tstl %a2` guards fall through). Verified off the disassembly of the
+		// call site, not inherited: the push order decides which cell is the
+		// pointer, and reading it backwards would have named the wrong address.
+		//
+		// The straight line then is: memset the 0x202-byte buffer, seed four
+		// state words, poke the DSP host port, write 100 into the buffer's first
+		// word, and spin on that word until it reads zero.
+		{0x30055F28u, "FUN_30055f28 entry (the rung that never returns)"},
+		{0x30055F56u, "jsr 0x300d8ce0 -- the pre-spin call"},
+		// FUN_300D8CE0 is NOT an arming call. Disassembled in full it is a
+		// memset: it fills a1 (=arg1, the buffer) with byte arg2 (=0) for arg3
+		// (=0x202) bytes, longword-at-a-time with a byte tail, and returns arg1
+		// in d0. It has 62 longword references across the image, which is what a
+		// libc-shaped routine looks like. Probed anyway, entry AND exit, because
+		// "entered and never left" is a finding no amount of reading can rule out.
+		{0x300D8CE0u, "memset FUN_300d8ce0 ENTRY"},
+		{0x300D8D42u, "memset EXIT join (sole path to the epilogue)"},
+		{0x300D8D4Au, "memset rts"},
+		// The real arming call. `pea 0x80 ; jsr 0x3005c164` at 0x30055F76.
+		// FUN_3005C164 reads the byte at 0x302AA5D4 -- the dspCount byte this
+		// file already probes -- subtracts one, uses it to index the pointer
+		// table at 0x30116970, writes a longword to that object's +4, spins on
+		// bit 7 of its +1, then writes 0xD5 to +1. That is a host-port command
+		// write to a DSP. Its entry, its busy-poll and its rts are all probed:
+		// if the poll at 0x3005C1B8 is hot the stall is here and not at 0x30055FBA.
+		{0x30055F7Au, "jsr 0x3005c164 -- the DSP host-port poke"},
+		{0x3005C164u, "FUN_3005c164 ENTRY (DSP host port write)"},
+		{0x3005C1B8u, "FUN_3005c164 busy-poll on bit 7 of the DSP object"},
+		{0x3005C1D6u, "FUN_3005c164 rts"},
+		{0x30055F86u, "STORE 100 into *0x30132AC0 (movew 0x302a0da0,%a0@)"},
+		{0x30055FB4u, "spin arm: moveal 0x302a0da8,%a0"},
+		// The instruction the spin falls through to. It is the ONLY exit from
+		// `bnes 0x30055fba`, so a zero here is the hang stated positively.
+		{0x30055FBEu, "SPIN EXIT -- jsr %a3@ (0x30056062); zero = never left the spin"},
+		{0x30056062u, "FUN_30056062 entry (the post-spin analysis, a3)"},
+		// The other dereference sites of 0x302A0DA8. Derived by scanning the
+		// image for the longword 0x302A0DA8: it occurs exactly nine times, at
+		// 0x30055F4A, 0x30055F82, 0x30055FB6, 0x30056006, 0x30056042, 0x30056070,
+		// 0x300560C6, 0x300561EE and 0x3005620A. Those are OPERAND addresses; the
+		// instruction begins two bytes earlier. 0x30055F48 is the store, the
+		// other eight are loads, and six of them lie past the spin.
+		{0x30056004u, "deref 0x302a0da8 -- clrw %a0@+ after the sample loop"},
+		{0x30056040u, "deref 0x302a0da8 -- movew %d5,%a0@"},
+		{0x3005606Eu, "deref 0x302a0da8 -- FUN_30056062's own read of the word"},
+		{0x300560C4u, "deref 0x302a0da8 -- indexed read at +2"},
+		{0x300561ECu, "deref 0x302a0da8 -- late site in FUN_30056062"},
+		{0x30056208u, "deref 0x302a0da8 -- last site in FUN_30056062"},
+		// ---- the agent that is supposed to zero the word --------------------
+		// Found by following the OTHER user of the same 514-byte buffer. The
+		// longword 0x30132AC0 occurs twice in the image: at 0x3001B47C (the pea
+		// before the jsr to FUN_30055f28) and at 0x3001B280, a
+		// `pea 0x30132ac0 ; pea 0x3 ; jsr 0x30056254` on the init's alternate
+		// branch. FUN_30056254 caches that pointer in 0x30119E88 (a cell with
+		// exactly two references, 0x30056260 and 0x30056582) and then drives
+		// MBAR+0x288/0x28C -- MBCR and MBSR of the MCF5307 M-Bus, per mbus.h's
+		// own MCF5307UM Table 15-1 constants.
+		//
+		// 0x30119E88 is read back at 0x30056580, inside FUN_30056442. That
+		// function writes 0xCB to MBAR+0x290 (MBDR) at 0x300564CE -- an address
+		// register write, `moveb #-53,%a0@`, which is why a search for the
+		// absolute-addressed form finds nothing -- and 0xCB is the MAX1039's
+		// 0x65 address with the read bit set, exactly as the 2026-08-27 note
+		// says. At 0x30056592 it increments histogram bin d3 at ptr+2, and at
+		// 0x300565A0 it stores ptr[0]-1 back with a `movew`. THAT is the
+		// countdown FUN_30055F28 spins on, and this probe is the measurement
+		// that says so rather than the disassembly that predicts it.
+		{0x3001B286u, "call site of the M-Bus arming call (alternate branch)"},
+		{0x30056254u, "FUN_30056254 entry -- caches 0x30132AC0 into 0x30119E88"},
+		{0x30056442u, "M-Bus service FUN_30056442 entry"},
+		{0x300564CEu, "moveb #0xCB into MBAR+0x290 (MBDR) -- the MAX1039 read address"},
+		{0x30056580u, "M-Bus service reads the shared buffer pointer 0x30119E88"},
+		{0x300565A0u, "THE DECREMENT: movew %d0,%a0@ -- ptr[0] = ptr[0] - 1"},
 	};
 
 	constexpr size_t g_probeCount = sizeof(g_probes) / sizeof(g_probes[0]);
+
+	// Where the init ladder ends in the probe list. The ladder printout walks a
+	// range of the array, so appending probes after it must not silently enrol
+	// them as rungs. Named and asserted rather than left as a literal in the loop.
+	constexpr size_t g_ladderBegin = 21;
+	constexpr size_t g_ladderEnd   = 36;
+
+	static_assert(g_probes[g_ladderBegin].addr == 0x3001B09Cu,
+		"the init ladder no longer begins where the printout thinks it does (index 21 is FUN_3001b09c's entry)");
+	static_assert(g_probes[g_ladderEnd - 1].addr == 0x3001B544u,
+		"the init ladder no longer ends where the printout thinks it does");
+	static_assert(g_probeCount > g_ladderEnd,
+		"the probes added after the ladder are missing");
+	// The first probe past the ladder is the rung's callee. The write-watch
+	// reading divides by this probe's count, so the index is asserted and not
+	// spelled as a literal at the point of use.
+	static_assert(g_probes[g_ladderEnd].addr == 0x30055F28u,
+		"probe g_ladderEnd is no longer FUN_30055f28's entry");
 
 	// A zero from an address the counter never sees is not a reading. The counter
 	// buckets only EVEN 16-bit reads and only inside the loaded image, so both
@@ -446,13 +544,50 @@ namespace
 	// They are state and not control flow, so a count would say nothing: what
 	// decides is the value each one holds once the machine has been given its
 	// chance to run.
-	// The lifetime counter's own known positive. A zero from a counter that is
-	// incremented only at four named addresses looks exactly like a counter
-	// that was never wired up, so one more address is tracked the same way:
-	// the in-image most-read address a prior run of this file measured at
-	// ~4.55 million. A lifetime count near that proves the mechanism; a zero
-	// there condemns the four zeros above as an artefact rather than a finding.
-	constexpr uint32_t g_probeLifePositive = 0x30055FBAu;
+	// The lifetime counter's own known positive.
+	//
+	// It USED to be 0x30055FBA, chosen because a prior run measured it as the
+	// most-read address in the image. That was the wrong control and it was
+	// wrong in the worst direction: 0x30055FBA is the `movew %a0@,%d0` of the
+	// two-instruction busy-wait at 0x30055FBA/0x30055FBC. Its millions of hits
+	// were not "the busiest code in the firmware", they were "the machine is
+	// parked here". A control that is large exactly because the run is stuck
+	// certifies the counter and flatters the run at the same time.
+	//
+	// The replacement is 0x30055F86, `movew 0x302a0da0,%a0@` -- the store that
+	// puts 100 into the polled word. It is sound for three reasons that the
+	// spin address had none of:
+	//  * it is on the straight-line path INTO the routine, before any loop, so
+	//    a non-zero count means forward progress rather than repetition;
+	//  * it is corroborated by a SECOND and INDEPENDENT mechanism -- if it ran,
+	//    the 16-bit word at 0x30132AC0 was set to 100, and this file now reads
+	//    that word back and counts every write to it. A fetch counter and a
+	//    memory value are different instruments; agreeing, they are evidence;
+	//  * its expected count is small and known (once per call of FUN_30055F28),
+	//    so an inflated reading is as visible as a zero one.
+	// Magnitude is not abandoned: the histogram argmax EXCLUDING the two spin
+	// words is reported below as a separate control.
+	constexpr uint32_t g_probeLifePositive = 0x30055F86u;
+
+	// The polled word itself, and the buffer it heads. FUN_30055F28 is handed
+	// 0x30132AC0 as arg1 (pushed last at 0x3001B47A), memsets 0x202 bytes there
+	// through 0x300D8CE0, writes 100 into the first word at 0x30055F86, and then
+	// spins at 0x30055FBA until that word reads zero. The address is above the
+	// image extent, so it is plain SDRAM and every access to it passes through
+	// the Ram below -- which is what makes a write count meaningful.
+	constexpr uint32_t g_spinWord       = 0x30132AC0u;
+	constexpr uint32_t g_spinBufferSize = 0x202u;
+
+	// What the firmware's OWN writes to that buffer come to, so that "somebody
+	// else wrote here" is a subtraction and not an impression. The memset writes
+	// g_spinBufferSize bytes; the store at 0x30055F86 writes 2 more. Per call.
+	constexpr uint64_t g_spinBufferOwnWritesPerCall = g_spinBufferSize + 2u;
+	constexpr uint64_t g_spinWordOwnWritesPerCall   = 2u + 2u;
+
+	// How many writes to the polled word's high byte are recorded value-by-value.
+	// A count says how often it was written; the trace says WITH WHAT, which is
+	// what separates "the writer disagrees about the value" from "nobody wrote".
+	constexpr size_t g_spinTraceMax = 12u;
 
 	// Where the drain keeps the pointer to the receive descriptor it accumulates
 	// into. Read at the close of the window and dereferenced, not counted: what
@@ -568,6 +703,39 @@ namespace
 
 				best.hits     = uint64_t(m_wordHits[index]);
 				best.absolute = g2::g_sdramBase + uint32_t(index << 1);
+			}
+
+			return best;
+		}
+
+		// The same argmax with one half-open address range struck out. The
+		// unrestricted in-image argmax lands on the busy-wait, which is the one
+		// address whose size proves nothing: it is large BECAUSE the run is
+		// stuck. Excluding the two words of that wait asks the histogram for the
+		// busiest address that is not the parking spot.
+		Hottest hottestExcluding(const uint32_t _loAbsolute, const uint32_t _hiAbsolute,
+			const uint32_t _exLo, const uint32_t _exHi) const
+		{
+			Hottest best;
+
+			if(_hiAbsolute <= _loAbsolute || _loAbsolute < g2::g_sdramBase)
+				return best;
+
+			const size_t lo = (size_t(_loAbsolute - g2::g_sdramBase) + 1u) >> 1;
+			const size_t hi = std::min(size_t(_hiAbsolute - g2::g_sdramBase) >> 1, m_wordHits.size());
+
+			for(size_t index = lo; index < hi; ++index)
+			{
+				const uint32_t absolute = g2::g_sdramBase + uint32_t(index << 1);
+
+				if(absolute >= _exLo && absolute < _exHi)
+					continue;
+
+				if(uint64_t(m_wordHits[index]) <= best.hits)
+					continue;
+
+				best.hits     = uint64_t(m_wordHits[index]);
+				best.absolute = absolute;
 			}
 
 			return best;
@@ -701,6 +869,30 @@ namespace
 				else if(absolute == g_probeSuspend) ++m_writesSuspend;
 				else if(absolute == g_probeDepth)   ++m_writesDepth;
 
+				// The write watch on the polled word and on the buffer it heads.
+				// Counted per BYTE, because the poll is a `movew` and a byte
+				// write to the low half would leave it non-zero: "written" and
+				// "cleared" are not the same event and this separates them.
+				if(absolute >= g_spinWord && absolute < g_spinWord + g_spinBufferSize)
+				{
+					++m_writesSpinBuffer;
+
+					if(absolute == g_spinWord)
+					{
+						++m_writesSpinHi;
+						if(m_spinTrace < g_spinTraceMax)
+						{
+							m_spinTraceSize[m_spinTrace]  = uint8_t(_size);
+							m_spinTraceValue[m_spinTrace] = byte;
+							++m_spinTrace;
+						}
+					}
+					else if(absolute == g_spinWord + 1u)
+					{
+						++m_writesSpinLo;
+					}
+				}
+
 				m_bytes[index] = byte;
 			}
 		}
@@ -713,6 +905,12 @@ namespace
 		uint64_t lifePositive() const { return m_lifePositive; }
 
 		uint64_t writesDspCount() const { return m_writesDspCount; }
+		uint64_t writesSpinBuffer() const { return m_writesSpinBuffer; }
+		uint64_t writesSpinHi() const     { return m_writesSpinHi; }
+		uint64_t writesSpinLo() const     { return m_writesSpinLo; }
+		size_t   spinTrace() const        { return m_spinTrace; }
+		uint8_t  spinTraceSize(const size_t _i) const  { return _i < m_spinTrace ? m_spinTraceSize[_i] : 0u; }
+		uint8_t  spinTraceValue(const size_t _i) const { return _i < m_spinTrace ? m_spinTraceValue[_i] : 0u; }
 		uint64_t writesSuspend() const  { return m_writesSuspend; }
 		uint64_t writesDepth() const    { return m_writesDepth; }
 
@@ -742,6 +940,12 @@ namespace
 		uint64_t             m_writesDspCount = 0;
 		uint64_t             m_writesSuspend  = 0;
 		uint64_t             m_writesDepth    = 0;
+		uint64_t             m_writesSpinBuffer = 0;
+		uint64_t             m_writesSpinHi     = 0;
+		uint64_t             m_writesSpinLo     = 0;
+		size_t               m_spinTrace        = 0;
+		uint8_t              m_spinTraceSize[g_spinTraceMax]  = {};
+		uint8_t              m_spinTraceValue[g_spinTraceMax] = {};
 		uint32_t             m_watchBase     = 0;
 		uint32_t             m_watchLength   = 0;
 		uint64_t             m_contentWrites = 0;
@@ -951,6 +1155,23 @@ namespace
 		uint64_t writesDspCount = 0;
 		uint64_t writesSuspend  = 0;
 		uint64_t writesDepth    = 0;
+
+		// The write watch on the polled word.
+		bool     spinInRam         = false;
+		uint64_t writesSpinBuffer  = 0;
+		uint64_t writesSpinHi      = 0;
+		uint64_t writesSpinLo      = 0;
+		uint32_t spinWordValue     = 0;
+		size_t   spinTraceCount    = 0;
+		uint8_t  spinTraceSize[g_spinTraceMax]  = {};
+		uint8_t  spinTraceValue[g_spinTraceMax] = {};
+
+		// The argmax with the two words of the busy-wait struck out.
+		uint32_t offSpinPositiveAddr = 0;
+		uint64_t offSpinPositiveHits = 0;
+
+		// How far the firmware drove the M-Bus module the MAX1039 hangs off.
+		g2::MBus::Traffic mbus;
 
 		uint8_t byteDspCount = 0;
 		uint8_t byteSuspend  = 0;
@@ -1207,6 +1428,32 @@ namespace
 			_r.writesSuspend  = ram.writesSuspend();
 			_r.writesDepth    = ram.writesDepth();
 
+			_r.spinInRam        = ram.covers(g_spinWord)
+			                   && ram.covers(g_spinWord + g_spinBufferSize - 1u);
+			_r.writesSpinBuffer = ram.writesSpinBuffer();
+			_r.writesSpinHi     = ram.writesSpinHi();
+			_r.writesSpinLo     = ram.writesSpinLo();
+			_r.spinWordValue    = _r.spinInRam
+			                    ? (uint32_t(ram.byteAt(g_spinWord)) << 8) | ram.byteAt(g_spinWord + 1u)
+			                    : 0u;
+			_r.spinTraceCount   = ram.spinTrace();
+
+			for(size_t i = 0; i < _r.spinTraceCount && i < g_spinTraceMax; ++i)
+			{
+				_r.spinTraceSize[i]  = ram.spinTraceSize(i);
+				_r.spinTraceValue[i] = ram.spinTraceValue(i);
+			}
+
+			{
+				const Ram::Hottest offSpin = ram.hottestExcluding(
+					_r.imageBase, _r.imageEnd, 0x30055FBAu, 0x30055FBEu);
+
+				_r.offSpinPositiveAddr = offSpin.absolute;
+				_r.offSpinPositiveHits = offSpin.hits;
+			}
+
+			_r.mbus = board.mbus().traffic();
+
 			// The second reading. If the first was non-zero and this one is
 			// 0x00, the firmware took the packet out during the window; if both
 			// carry the same byte, it never did.
@@ -1436,7 +1683,63 @@ namespace
 		}
 
 		std::cout << _label << ": SAME-COUNTER KNOWN POSITIVE "
-		          << hex32(g_probeLifePositive) << " = " << _r.lifePositive << std::endl;
+		          << hex32(g_probeLifePositive) << " = " << _r.lifePositive
+		          << "  (the store of 100 into *0x30132AC0; NOT the busy-wait)" << std::endl;
+		std::cout << _label << ": ARGMAX EXCLUDING THE BUSY-WAIT [30055FBA..30055FBE) "
+		          << hex32(_r.offSpinPositiveAddr) << " = " << _r.offSpinPositiveHits
+		          << "  (magnitude control from a population that is not the parking spot)"
+		          << std::endl;
+
+		// ---- the write watch on the polled word -----------------------------
+		//
+		// What the numbers mean, stated before they are printed so the reading is
+		// not reconstructed afterwards. The firmware's OWN writes to the buffer
+		// are known exactly: 0x202 bytes from the memset plus 2 from the store of
+		// 100, per call of FUN_30055F28. Anything above that came from somewhere
+		// else. Anything at or below it means nothing in this system ever touched
+		// the word the machine is waiting on.
+		{
+			const uint64_t calls = _r.life[g_ladderEnd];   // FUN_30055f28 entry
+			const uint64_t own   = calls * g_spinBufferOwnWritesPerCall;
+			const uint64_t ownHi = calls * (g_spinWordOwnWritesPerCall / 2u);
+
+			std::cout << _label << ": SPIN WORD " << hex32(g_spinWord)
+			          << " final 16-bit value = " << _r.spinWordValue
+			          << (_r.spinInRam ? "" : "  (OUTSIDE THIS RAM: an absence, not a reading)")
+			          << std::endl;
+			std::cout << _label << ": SPIN WRITE WATCH bufferBytes=" << _r.writesSpinBuffer
+			          << " highByte=" << _r.writesSpinHi
+			          << " lowByte=" << _r.writesSpinLo
+			          << " | FUN_30055f28 entered " << calls << " time(s)"
+			          << ", so the firmware's own writes account for "
+			          << own << " buffer bytes and " << ownHi
+			          << " high-byte writes" << std::endl;
+			std::cout << _label << ": SPIN READING = "
+			          << (!_r.spinInRam
+			                  ? "UNMEASURED -- the address is outside the RAM this run gave the machine"
+			              : _r.writesSpinBuffer <= own
+			                  ? "NOTHING OUTSIDE THE FIRMWARE EVER WROTE THE BUFFER"
+			                  : "SOMETHING OTHER THAN THE FIRMWARE WROTE INSIDE THE BUFFER")
+			          << std::endl;
+
+			for(size_t i = 0; i < _r.spinTraceCount && i < g_spinTraceMax; ++i)
+				std::cout << _label << ": spin word high-byte write #" << i
+				          << " size=" << unsigned(_r.spinTraceSize[i])
+				          << " byte=" << unsigned(_r.spinTraceValue[i]) << std::endl;
+		}
+
+		// ---- the M-Bus, because a note named the MAX1039 as the clearing agent -
+		std::cout << _label << ": MBUS TRAFFIC registerReads=" << _r.mbus.registerReads
+		          << " registerWrites=" << _r.mbus.registerWrites
+		          << " starts=" << _r.mbus.starts
+		          << " addressPhases=" << _r.mbus.addressPhases
+		          << " acknowledged=" << _r.mbus.acknowledged
+		          << " bytesWritten=" << _r.mbus.bytesWritten
+		          << " bytesRead=" << _r.mbus.bytesRead
+		          << "  -- the MAX1039 is attached to this module by Board's own"
+		             " constructor, so zero here is 'the firmware never asked',"
+		             " not 'no device answered'"
+		          << std::endl;
 
 		// The reading, derived here so the run states it rather than leaving it
 		// to be reconstructed. Two halves, and the pair that separates them is the
@@ -1503,14 +1806,14 @@ namespace
 				// so the highest index with a non-zero count names how far the
 				// init got before it stopped.
 				size_t last = 0;
-				for(size_t p = 21; p < g_probeCount; ++p)
+				for(size_t p = g_ladderBegin; p < g_ladderEnd; ++p)
 					if(_r.life[p] != 0)
 						last = p;
 				std::cout << _label << ": INIT LADDER last rung fetched = "
 				          << (last == 0 ? "NONE -- FUN_3001b09c itself never ran"
 				                        : g_probes[last].what)
-				          << " (" << hex32(g_probes[last ? last : 21].addr) << ")" << std::endl;
-				for(size_t p = 21; p < g_probeCount; ++p)
+				          << " (" << hex32(g_probes[last ? last : g_ladderBegin].addr) << ")" << std::endl;
+				for(size_t p = g_ladderBegin; p < g_ladderEnd; ++p)
 					std::cout << _label << ": rung " << hex32(g_probes[p].addr)
 					          << " = " << _r.life[p]
 					          << "  " << g_probes[p].what << std::endl;

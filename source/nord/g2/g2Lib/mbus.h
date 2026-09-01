@@ -83,6 +83,24 @@ namespace g2
 		const std::vector<std::string>& log() const { return m_log; }
 		void clearLog() { m_log.clear(); }
 
+		// How far the firmware drove this module. A test that reports "the ADC
+		// never answered" has to be able to tell that apart from "the firmware
+		// never asked", and the log above records only rejected accesses -- a
+		// module nobody touched and a module driven correctly both leave it
+		// empty. These five counters are additive and change no behaviour.
+		struct Traffic
+		{
+			uint64_t registerReads  = 0;  // any read inside the module window
+			uint64_t registerWrites = 0;  // any write inside the module window
+			uint64_t starts         = 0;  // MSTA 0->1 transitions
+			uint64_t addressPhases  = 0;  // address bytes offered to the slave
+			uint64_t acknowledged   = 0;  // of those, the ones a slave answered
+			uint64_t bytesWritten   = 0;  // data bytes handed to the slave
+			uint64_t bytesRead      = 0;  // data bytes clocked back in
+		};
+
+		const Traffic& traffic() const { return m_traffic; }
+
 	private:
 		void logLine(const char* _reason, bool _isWrite, int _size, uint32_t _offset);
 
@@ -111,5 +129,7 @@ namespace g2
 		bool m_addressPhase = false;
 
 		std::vector<std::string> m_log;
+
+		Traffic m_traffic;
 	};
 }
