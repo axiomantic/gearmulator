@@ -300,17 +300,37 @@ namespace
 
 	// ------------------------------------------------------------ the probe set
 	//
-	// The restart path, probed one level up from where the previous run looked.
-	// 0x30039398 is the DSP HF0/HF2 mailbox handshake, the single gate on the
-	// restart. 0x3001DC70 and 0x3001DD32 are the worker's BEGIN and its
-	// END/COMMIT, so "the worker never reached its tail" and "it reached the
-	// tail and the commit did nothing" are separable. 0x3001D85C is carried
-	// forward unchanged as the arm's own control: a prior run measured it at
-	// zero, so a zero here says the two runs agree.
-	constexpr uint32_t g_probeTarget   = 0x30039398u;
-	constexpr uint32_t g_probeCallerA  = 0x3001DC70u;
-	constexpr uint32_t g_probeCallerB  = 0x3001DD32u;
-	constexpr uint32_t g_probeAssembly = 0x3001D85Cu;
+	// The patch-load handler itself, which no prior run has covered. The prior
+	// run measured every member of the restart chain at zero on both arms with a
+	// live known positive on the same counter, so control never arrives at the
+	// chain's first link. These six addresses are the layers above it, in call
+	// order, so the run says at which layer control stops.
+	//
+	// The two live possibilities are separated by one pair of counts. A non-zero
+	// at the parser call with a zero at the request-restart call is the
+	// parse-failure signature: the handler ran, the parser refused the packet,
+	// and the handler took its abort path and returned 3 without ever reaching
+	// the restart request. Every probe zero is the handler never running at all.
+	struct ProbePoint
+	{
+		uint32_t    addr;
+		const char* what;
+	};
+
+	constexpr ProbePoint g_probes[] = {
+		{0x3004C10Cu, "worker  FUN_3004c10c entry"},
+		{0x3004C30Eu, "handler FUN_3004c30e entry"},
+		{0x3004C6C4u, "BEGIN            (depth 0->1)"},
+		{0x3004C702u, "parser  FUN_3002a2f8 call"},
+		{0x3004C77Eu, "REQUEST RESTART  (sets pending bit0)"},
+		{0x3004C792u, "END/COMMIT       (depth 1->0)"},
+	};
+
+	constexpr size_t g_probeCount = sizeof(g_probes) / sizeof(g_probes[0]);
+
+	// The one address the single-line verdict names: the handler's entry point.
+	// It is g_probes[1]; spelling it again here keeps the verdict readable.
+	constexpr uint32_t g_probeTarget = 0x3004C30Eu;
 
 	// The three memory probes, read as single bytes at the close of the window.
 	// They are state and not control flow, so a count would say nothing: what
@@ -501,11 +521,16 @@ namespace
 				// window" from "it has never run".
 				const uint32_t absolute = g2::g_sdramBase + _offset;
 
-				if(absolute == g_probeTarget)        ++m_lifeTarget;
-				else if(absolute == g_probeCallerA)  ++m_lifeCallerA;
-				else if(absolute == g_probeCallerB)  ++m_lifeCallerB;
-				else if(absolute == g_probeAssembly) ++m_lifeAssembly;
-				else if(absolute == g_probeLifePositive) ++m_lifePositive;
+				for(size_t p = 0; p < g_probeCount; ++p)
+				{
+					if(absolute == g_probes[p].addr)
+					{
+						++m_life[p];
+						break;
+					}
+				}
+
+				if(absolute == g_probeLifePositive) ++m_lifePositive;
 			}
 
 			const uint32_t count = uint32_t(_size) / 8u;
@@ -565,10 +590,11 @@ namespace
 			}
 		}
 
-		uint64_t lifeTarget() const   { return m_lifeTarget; }
-		uint64_t lifeCallerA() const  { return m_lifeCallerA; }
-		uint64_t lifeCallerB() const  { return m_lifeCallerB; }
-		uint64_t lifeAssembly() const { return m_lifeAssembly; }
+		uint64_t life(const size_t _probe) const
+		{
+			return _probe < g_probeCount ? m_life[_probe] : 0u;
+		}
+
 		uint64_t lifePositive() const { return m_lifePositive; }
 
 		uint64_t writesDspCount() const { return m_writesDspCount; }
@@ -596,10 +622,7 @@ namespace
 		std::vector<uint32_t> m_wordHits;
 		uint64_t             m_oddWordReads  = 0;
 		uint64_t             m_wordFetches   = 0;
-		uint64_t             m_lifeTarget    = 0;
-		uint64_t             m_lifeCallerA   = 0;
-		uint64_t             m_lifeCallerB   = 0;
-		uint64_t             m_lifeAssembly  = 0;
+		uint64_t             m_life[g_probeCount] = {};
 		uint64_t             m_lifePositive  = 0;
 		uint64_t             m_writesDspCount = 0;
 		uint64_t             m_writesSuspend  = 0;
@@ -791,17 +814,12 @@ namespace
 		uint64_t hitsKnownPositive = 0;
 		uint64_t hitsKnownNegative = 0;
 		uint64_t hitsTarget        = 0;
-		uint64_t hitsCallerA       = 0;
-		uint64_t hitsCallerB       = 0;
-		uint64_t hitsAssembly      = 0;
+		uint64_t hits[g_probeCount] = {};
 
 		// The three memory probes, and whether each address is inside the RAM
 		// this run gave the machine. Without that flag a 0 cannot be told from
 		// an address the model never covered.
-		uint64_t lifeTarget   = 0;
-		uint64_t lifeCallerA  = 0;
-		uint64_t lifeCallerB  = 0;
-		uint64_t lifeAssembly = 0;
+		uint64_t life[g_probeCount] = {};
 		uint64_t lifePositive = 0;
 
 		uint64_t writesDspCount = 0;
@@ -1016,9 +1034,9 @@ namespace
 			_r.hitsKnownPositive = hottest.hits;
 			_r.hitsKnownNegative = ram.hitsAt(g_probeNegative);
 			_r.hitsTarget        = ram.hitsAt(g_probeTarget);
-			_r.hitsCallerA       = ram.hitsAt(g_probeCallerA);
-			_r.hitsCallerB       = ram.hitsAt(g_probeCallerB);
-			_r.hitsAssembly      = ram.hitsAt(g_probeAssembly);
+
+			for(size_t p = 0; p < g_probeCount; ++p)
+				_r.hits[p] = ram.hitsAt(g_probes[p].addr);
 
 			_r.bytesInRam   = ram.covers(g_probeDspCount)
 			               && ram.covers(g_probeSuspend)
@@ -1027,10 +1045,9 @@ namespace
 			_r.byteSuspend  = ram.byteAt(g_probeSuspend);
 			_r.byteDepth    = ram.byteAt(g_probeDepth);
 
-			_r.lifeTarget   = ram.lifeTarget();
-			_r.lifeCallerA  = ram.lifeCallerA();
-			_r.lifeCallerB  = ram.lifeCallerB();
-			_r.lifeAssembly = ram.lifeAssembly();
+			for(size_t p = 0; p < g_probeCount; ++p)
+				_r.life[p] = ram.life(p);
+
 			_r.lifePositive = ram.lifePositive();
 
 			_r.writesDspCount = ram.writesDspCount();
@@ -1231,10 +1248,12 @@ namespace
 			std::cout << _label << ": at the CONTROL arm's known positive "
 			          << hex32(_r.crossAddr) << " this arm read " << _r.crossHits
 			          << std::endl;
-		std::cout << _label << ": probe " << hex32(g_probeTarget) << " = " << _r.hitsTarget
-		          << " | " << hex32(g_probeCallerA) << " = " << _r.hitsCallerA
-		          << " | " << hex32(g_probeCallerB) << " = " << _r.hitsCallerB
-		          << " | " << hex32(g_probeAssembly) << " = " << _r.hitsAssembly << std::endl;
+		for(size_t p = 0; p < g_probeCount; ++p)
+		{
+			std::cout << _label << ": probe " << hex32(g_probes[p].addr)
+			          << "  " << g_probes[p].what
+			          << "  window = " << _r.hits[p] << std::endl;
+		}
 		std::cout << _label << ": byte " << hex32(g_probeDspCount)
 		          << " (dspCount) = " << unsigned(_r.byteDspCount)
 		          << " | " << hex32(g_probeSuspend)
@@ -1243,13 +1262,35 @@ namespace
 		          << " (depth) = " << unsigned(_r.byteDepth)
 		          << (_r.bytesInRam ? "" : "  (AT LEAST ONE ADDRESS IS OUTSIDE THIS RAM: these are absences, not readings)")
 		          << std::endl;
-		std::cout << _label << ": LIFETIME fetches (boot included, never reset) "
-		          << hex32(g_probeTarget) << " = " << _r.lifeTarget
-		          << " | " << hex32(g_probeCallerA) << " = " << _r.lifeCallerA
-		          << " | " << hex32(g_probeCallerB) << " = " << _r.lifeCallerB
-		          << " | " << hex32(g_probeAssembly) << " = " << _r.lifeAssembly
-		          << "  || SAME-COUNTER KNOWN POSITIVE " << hex32(g_probeLifePositive)
-		          << " = " << _r.lifePositive << std::endl;
+		for(size_t p = 0; p < g_probeCount; ++p)
+		{
+			std::cout << _label << ": LIFETIME (boot included, never reset) "
+			          << hex32(g_probes[p].addr)
+			          << "  " << g_probes[p].what
+			          << "  = " << _r.life[p] << std::endl;
+		}
+
+		std::cout << _label << ": SAME-COUNTER KNOWN POSITIVE "
+		          << hex32(g_probeLifePositive) << " = " << _r.lifePositive << std::endl;
+
+		// The reading, derived here so the run states it rather than leaving it
+		// to be reconstructed. The parser call and the request-restart call are
+		// the pair that separates the two live possibilities.
+		{
+			const uint64_t handler = _r.life[1];
+			const uint64_t parse   = _r.life[3];
+			const uint64_t restart = _r.life[4];
+
+			const char* reading =
+				handler == 0 ? "HANDLER NEVER RAN -- control stops above FUN_3004c30e"
+				: (parse != 0 && restart == 0)
+					? "PARSE FAILURE -- handler ran, parser call fired, restart request never did (abort path, return 3)"
+				: (parse != 0 && restart != 0)
+					? "HANDLER RAN AND REACHED THE RESTART REQUEST"
+					: "HANDLER RAN BUT DID NOT REACH THE PARSER CALL";
+
+			std::cout << _label << ": READING = " << reading << std::endl;
+		}
 		std::cout << _label << ": WRITES to the byte probes (boot included) "
 		          << hex32(g_probeDspCount) << " = " << _r.writesDspCount
 		          << " | " << hex32(g_probeSuspend) << " = " << _r.writesSuspend
