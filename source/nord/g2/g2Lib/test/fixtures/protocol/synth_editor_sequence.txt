@@ -1,9 +1,9 @@
 # t0_pch2_load -- the expected editor message sequence for the SYNTHESIZED
-# corpus. Task PROTO-11. Design sections 15.7 and 15.3.
+# corpus.
 #
 # HOW THIS FILE WAS PRODUCED, because a fixture the code under test produced
 # asserts nothing. Every row below comes from a walker written in Python from
-# design sections 15.7 and 15.3 alone -- the same two specifications the C++
+# the specifications alone -- the same specifications the C++
 # load path is written from, and a different implementation of them, in a
 # different language. It read no C++ and ran none.
 #
@@ -22,7 +22,7 @@
 # claims that it does.
 #
 # A `TRAILER` row is the bytes between the last object and the stored CRC.
-# Design section 15.7's second file-against-wire difference puts `2d 00` there
+# One file-against-wire difference puts `2d 00` there
 # in a USB dump, and those two bytes are NOT an object -- an object header is
 # three bytes -- so the load path originates no frame for them and records them
 # here instead. That is what makes `wire_extra_bytes_file.pch2` and

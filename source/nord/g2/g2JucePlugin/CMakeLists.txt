@@ -2,10 +2,6 @@ cmake_minimum_required(VERSION 3.15)
 
 project(g2JucePlugin VERSION ${CMAKE_PROJECT_VERSION})
 
-# This directory belongs to the PLUGIN track. Every file under it is written by
-# a plugin-track task.
-# See plan section 7.4.2.
-#
 # The target is not yet a JUCE plugin. The createJucePlugin() macro that
 # every other product in this tree uses takes a product name, a
 # four-character plugin code, a binary-data target and a skin, and none of
@@ -15,19 +11,19 @@ add_library(g2JucePlugin STATIC)
 
 set(SOURCES)
 
-# PLG-1 adds the first plugin-track source: the synthLib::Device subclass. The
+# The synthLib::Device subclass. The
 # tests t0_device_surface and t0_handoff_flags compile this file DIRECTLY (the
 # g2PatchLoad.cpp arrangement), so this target's copy and theirs are one
 # translation unit, not two.
 list(APPEND SOURCES g2Device.cpp)
 
-# PLG-5 adds the seven-item state format the Device's overrides delegate to.
+# The state format the Device's overrides delegate to.
 # The same tests compile it directly alongside g2Device.cpp, for the same
 # reason.
 list(APPEND SOURCES g2State.cpp)
 
-# PLG-8 adds the synthLib::Plugin subclass that sets the resampler mode
-# (design section 14.2.2). t0_resampler_mode compiles it directly, the same
+# The synthLib::Plugin subclass that sets the resampler mode.
+# t0_resampler_mode compiles it directly, the same
 # arrangement.
 list(APPEND SOURCES g2Plugin.cpp)
 
