@@ -94,7 +94,7 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # to build on macOS/arm64.
 
 set(G2_MCF5307_SOURCE_DIR "" CACHE PATH "Build the MCF5307 core from this checkout instead of fetching it")
-set(G2_MCF5307_GIT_TAG "a1240775fc2f84f1d85b1de6bd31b355a4bfd369" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
+set(G2_MCF5307_GIT_TAG "264186b07d768c018797e0ebb158c86f95654993" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5307
