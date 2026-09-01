@@ -76,12 +76,18 @@ namespace
 // runtime, or an idempotence latch that recursed.
 //
 // It DOES NOT CATCH a wrong ANSWER from the core. Nothing below executes a
-// program: mcf5307_runtime_init returns void, and mcf5307_exec has its address
-// taken but is never called, because calling it needs a context and a program
-// and would be a behavioural assertion. Every behavioural assertion about the
-// core belongs to the cpu track's own conformance tests, in the cpu track's
-// own repository. The cases here are the ones a link defect can turn red,
-// rather than a longer list padded with assertions no defect could.
+// program: mcf5307_exec has its address taken but is never called, because
+// calling it needs a context and a program and would be a behavioural
+// assertion. Every behavioural assertion about the core belongs to the cpu
+// track's own conformance tests, in the cpu track's own repository. The cases
+// here are the ones a link defect can turn red, rather than a longer list
+// padded with assertions no defect could.
+//
+// It DOES NOT CATCH a stalled initialisation latch. mcf5307_runtime_init
+// answers a TRUTH VALUE and not a POSIX code -- 1 when the runtime is usable,
+// 0 when the latch was abandoned, which is terminal -- and the cases below
+// take the status only to make the pointer type match the header. Checking
+// the status is the job of a test that has something to do when it is 0.
 
 int main()
 {
@@ -93,7 +99,7 @@ int main()
 	// pointer forces the address to be materialised and forces the linker to
 	// resolve the symbol, so this case is red -- at the link step, naming
 	// _mcf5307_runtime_init -- for a g2Lib that does not carry the core.
-	void (*volatile runtimeInit)() = &mcf5307_runtime_init;
+	int (*volatile runtimeInit)() = &mcf5307_runtime_init;
 
 	check(runtimeInit != nullptr,
 		"mcf5307_runtime_init resolved to a non-null address through g2Lib");
