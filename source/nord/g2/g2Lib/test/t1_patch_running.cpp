@@ -300,14 +300,33 @@ namespace
 
 	// ------------------------------------------------------------ the probe set
 	//
-	// 0x30032A82 is the load-bearing unknown; 0x3001D85C and 0x3001DAD8 are its
-	// two callers, and they are probed too because "the caller never ran" and
-	// "the caller ran and did not reach it" are different findings about the
-	// machine. 0x30032254 is the three-piece assembly 0x30032A82 reaches.
-	constexpr uint32_t g_probeTarget   = 0x30032A82u;
-	constexpr uint32_t g_probeCallerA  = 0x3001D85Cu;
-	constexpr uint32_t g_probeCallerB  = 0x3001DAD8u;
-	constexpr uint32_t g_probeAssembly = 0x30032254u;
+	// The restart path, probed one level up from where the previous run looked.
+	// 0x30039398 is the DSP HF0/HF2 mailbox handshake, the single gate on the
+	// restart. 0x3001DC70 and 0x3001DD32 are the worker's BEGIN and its
+	// END/COMMIT, so "the worker never reached its tail" and "it reached the
+	// tail and the commit did nothing" are separable. 0x3001D85C is carried
+	// forward unchanged as the arm's own control: a prior run measured it at
+	// zero, so a zero here says the two runs agree.
+	constexpr uint32_t g_probeTarget   = 0x30039398u;
+	constexpr uint32_t g_probeCallerA  = 0x3001DC70u;
+	constexpr uint32_t g_probeCallerB  = 0x3001DD32u;
+	constexpr uint32_t g_probeAssembly = 0x3001D85Cu;
+
+	// The three memory probes, read as single bytes at the close of the window.
+	// They are state and not control flow, so a count would say nothing: what
+	// decides is the value each one holds once the machine has been given its
+	// chance to run.
+	// The lifetime counter's own known positive. A zero from a counter that is
+	// incremented only at four named addresses looks exactly like a counter
+	// that was never wired up, so one more address is tracked the same way:
+	// the in-image most-read address a prior run of this file measured at
+	// ~4.55 million. A lifetime count near that proves the mechanism; a zero
+	// there condemns the four zeros above as an artefact rather than a finding.
+	constexpr uint32_t g_probeLifePositive = 0x30055FBAu;
+
+	constexpr uint32_t g_probeDspCount = 0x302AA5D4u;
+	constexpr uint32_t g_probeSuspend  = 0x30115574u;
+	constexpr uint32_t g_probeDepth    = 0x30142CDEu;
 
 	// The known negative. An address inside the vector table this file writes.
 	// Vectors are read as 32-bit longwords, never fetched as instruction words,
@@ -356,6 +375,29 @@ namespace
 			const size_t index = size_t(offset) >> 1;
 
 			return index < m_wordHits.size() ? uint64_t(m_wordHits[index]) : 0u;
+		}
+
+		// The byte this RAM holds at one absolute SDRAM address. It reads the
+		// same m_bytes the bus read() serves, so it observes what the machine
+		// wrote and not a separate copy. Out of range reads 0, which is the
+		// same value an untouched cell holds -- so a caller must know the
+		// address is inside SDRAM for a 0 to mean "the machine left it 0".
+		// Whether an absolute address falls inside this RAM at all. It is what
+		// makes a 0 from byteAt a reading rather than an absence.
+		bool covers(const uint32_t _absolute) const
+		{
+			return _absolute >= g2::g_sdramBase
+			    && size_t(_absolute - g2::g_sdramBase) < m_bytes.size();
+		}
+
+		uint8_t byteAt(const uint32_t _absolute) const
+		{
+			if(_absolute < g2::g_sdramBase)
+				return 0u;
+
+			const size_t index = size_t(_absolute - g2::g_sdramBase);
+
+			return index < m_bytes.size() ? m_bytes[index] : uint8_t(0u);
 		}
 
 		// The argmax over every counter: the address this run read more times
@@ -450,6 +492,20 @@ namespace
 						++m_wordHits[index];
 					}
 				}
+
+				// The lifetime counters, which resetProbes does NOT clear. The
+				// window opens one frame after the hand-over, so a routine that
+				// ran inside that frame -- or at boot -- is invisible to the
+				// windowed counts above. These four say whether the address was
+				// EVER fetched by this run, and separate "it did not run in the
+				// window" from "it has never run".
+				const uint32_t absolute = g2::g_sdramBase + _offset;
+
+				if(absolute == g_probeTarget)        ++m_lifeTarget;
+				else if(absolute == g_probeCallerA)  ++m_lifeCallerA;
+				else if(absolute == g_probeCallerB)  ++m_lifeCallerB;
+				else if(absolute == g_probeAssembly) ++m_lifeAssembly;
+				else if(absolute == g_probeLifePositive) ++m_lifePositive;
 			}
 
 			const uint32_t count = uint32_t(_size) / 8u;
@@ -494,9 +550,30 @@ namespace
 					&& byte != 0x20u && byte != 0x00u)
 					++m_contentWrites;
 
+				// Write counts for the three memory probes. A byte that reads 0
+				// and was never written is indistinguishable from one the
+				// machine deliberately set to 0, and the difference is the
+				// whole finding: "the latch never fired" versus "nothing ever
+				// touched the latch". These counters tell the two apart.
+				const uint32_t absolute = g2::g_sdramBase + uint32_t(index);
+
+				if(absolute == g_probeDspCount)     ++m_writesDspCount;
+				else if(absolute == g_probeSuspend) ++m_writesSuspend;
+				else if(absolute == g_probeDepth)   ++m_writesDepth;
+
 				m_bytes[index] = byte;
 			}
 		}
+
+		uint64_t lifeTarget() const   { return m_lifeTarget; }
+		uint64_t lifeCallerA() const  { return m_lifeCallerA; }
+		uint64_t lifeCallerB() const  { return m_lifeCallerB; }
+		uint64_t lifeAssembly() const { return m_lifeAssembly; }
+		uint64_t lifePositive() const { return m_lifePositive; }
+
+		uint64_t writesDspCount() const { return m_writesDspCount; }
+		uint64_t writesSuspend() const  { return m_writesSuspend; }
+		uint64_t writesDepth() const    { return m_writesDepth; }
 
 		bool place(const uint32_t _offset, const std::vector<uint8_t>& _image)
 		{
@@ -519,6 +596,14 @@ namespace
 		std::vector<uint32_t> m_wordHits;
 		uint64_t             m_oddWordReads  = 0;
 		uint64_t             m_wordFetches   = 0;
+		uint64_t             m_lifeTarget    = 0;
+		uint64_t             m_lifeCallerA   = 0;
+		uint64_t             m_lifeCallerB   = 0;
+		uint64_t             m_lifeAssembly  = 0;
+		uint64_t             m_lifePositive  = 0;
+		uint64_t             m_writesDspCount = 0;
+		uint64_t             m_writesSuspend  = 0;
+		uint64_t             m_writesDepth    = 0;
 		uint32_t             m_watchBase     = 0;
 		uint32_t             m_watchLength   = 0;
 		uint64_t             m_contentWrites = 0;
@@ -709,6 +794,24 @@ namespace
 		uint64_t hitsCallerA       = 0;
 		uint64_t hitsCallerB       = 0;
 		uint64_t hitsAssembly      = 0;
+
+		// The three memory probes, and whether each address is inside the RAM
+		// this run gave the machine. Without that flag a 0 cannot be told from
+		// an address the model never covered.
+		uint64_t lifeTarget   = 0;
+		uint64_t lifeCallerA  = 0;
+		uint64_t lifeCallerB  = 0;
+		uint64_t lifeAssembly = 0;
+		uint64_t lifePositive = 0;
+
+		uint64_t writesDspCount = 0;
+		uint64_t writesSuspend  = 0;
+		uint64_t writesDepth    = 0;
+
+		uint8_t byteDspCount = 0;
+		uint8_t byteSuspend  = 0;
+		uint8_t byteDepth    = 0;
+		bool    bytesInRam   = false;
 
 		size_t   primedPulled   = 0;
 		unsigned walkQuanta     = 0;
@@ -917,6 +1020,23 @@ namespace
 			_r.hitsCallerB       = ram.hitsAt(g_probeCallerB);
 			_r.hitsAssembly      = ram.hitsAt(g_probeAssembly);
 
+			_r.bytesInRam   = ram.covers(g_probeDspCount)
+			               && ram.covers(g_probeSuspend)
+			               && ram.covers(g_probeDepth);
+			_r.byteDspCount = ram.byteAt(g_probeDspCount);
+			_r.byteSuspend  = ram.byteAt(g_probeSuspend);
+			_r.byteDepth    = ram.byteAt(g_probeDepth);
+
+			_r.lifeTarget   = ram.lifeTarget();
+			_r.lifeCallerA  = ram.lifeCallerA();
+			_r.lifeCallerB  = ram.lifeCallerB();
+			_r.lifeAssembly = ram.lifeAssembly();
+			_r.lifePositive = ram.lifePositive();
+
+			_r.writesDspCount = ram.writesDspCount();
+			_r.writesSuspend  = ram.writesSuspend();
+			_r.writesDepth    = ram.writesDepth();
+
 			// The second reading. If the first was non-zero and this one is
 			// 0x00, the firmware took the packet out during the window; if both
 			// carry the same byte, it never did.
@@ -1115,6 +1235,25 @@ namespace
 		          << " | " << hex32(g_probeCallerA) << " = " << _r.hitsCallerA
 		          << " | " << hex32(g_probeCallerB) << " = " << _r.hitsCallerB
 		          << " | " << hex32(g_probeAssembly) << " = " << _r.hitsAssembly << std::endl;
+		std::cout << _label << ": byte " << hex32(g_probeDspCount)
+		          << " (dspCount) = " << unsigned(_r.byteDspCount)
+		          << " | " << hex32(g_probeSuspend)
+		          << " (suspend) = " << unsigned(_r.byteSuspend)
+		          << " | " << hex32(g_probeDepth)
+		          << " (depth) = " << unsigned(_r.byteDepth)
+		          << (_r.bytesInRam ? "" : "  (AT LEAST ONE ADDRESS IS OUTSIDE THIS RAM: these are absences, not readings)")
+		          << std::endl;
+		std::cout << _label << ": LIFETIME fetches (boot included, never reset) "
+		          << hex32(g_probeTarget) << " = " << _r.lifeTarget
+		          << " | " << hex32(g_probeCallerA) << " = " << _r.lifeCallerA
+		          << " | " << hex32(g_probeCallerB) << " = " << _r.lifeCallerB
+		          << " | " << hex32(g_probeAssembly) << " = " << _r.lifeAssembly
+		          << "  || SAME-COUNTER KNOWN POSITIVE " << hex32(g_probeLifePositive)
+		          << " = " << _r.lifePositive << std::endl;
+		std::cout << _label << ": WRITES to the byte probes (boot included) "
+		          << hex32(g_probeDspCount) << " = " << _r.writesDspCount
+		          << " | " << hex32(g_probeSuspend) << " = " << _r.writesSuspend
+		          << " | " << hex32(g_probeDepth) << " = " << _r.writesDepth << std::endl;
 		std::cout << _label << ": cs3 peek endpoint " << g2::BoardConfig{}.usbProtocolEndpoint
 		          << " -- afterHandover=0x" << std::hex << unsigned(_r.peekAfterHandover)
 		          << " afterWindow=0x" << unsigned(_r.peekAfterWindow)
