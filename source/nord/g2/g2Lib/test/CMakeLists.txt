@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
 
-# THIS FILE HAS ONE OWNER: task BRD-0. See plan section 7.4.2.
-#
 # It is the REGISTRAR of every test under source/nord/g2/g2Lib/test/. A track
 # adds its own add_test(NAME <name> ...) lines to its own per-track list below
 # and to nothing else.

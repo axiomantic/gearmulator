@@ -49,8 +49,8 @@ namespace g2
 		uint32_t read32(uint32_t _addr) const;
 
 		// Writes are logged and rejected. The flash model is read-only:
-		// erase, write, and the Clavia update procedure are out of scope for
-		// this task. The model carries contents from reset, so whatever image
+		// erase, write, and the Clavia update procedure are out of scope.
+		// The model carries contents from reset, so whatever image
 		// was loaded is readable from the first cycle, but no call below ever
 		// changes the underlying bytes.
 		//

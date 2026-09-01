@@ -1,11 +1,10 @@
-# Task TOOL-18. The GDB-with-traffic harness's client side.
+# The GDB-with-traffic harness's client side.
 #
 # A minimal RSP client for the stub gdbStub.cpp serves. It exists because the
 # stub's packet set is deliberately small -- g/G/m/M/Z0-z3/s/c/D plus the one
 # qSupported capability -- and lldb's gdb-remote client requires a negotiation
-# that stub does not answer. Measured 2026-08-28, recorded in plan section
-# 24.6 row W3-454: a hand-rolled client over the loopback socket is what a
-# session on this stub uses.
+# that stub does not answer, so a hand-rolled client over the loopback socket
+# is what a session on this stub uses.
 #
 # THE PACKET LAYER IS THE PROTOCOL AND NOTHING HERE INVENTS A DIALECT: one
 # request is `$<payload>#<checksum>`, the checksum is the payload's bytes

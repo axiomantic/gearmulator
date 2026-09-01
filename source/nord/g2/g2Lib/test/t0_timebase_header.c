@@ -1,10 +1,10 @@
-/* t0_timebase_header.c -- the check of task SCH-0.
+/* t0_timebase_header.c -- the C-compilation check of g2/timebase.h.
  *
  * This file is compiled AS C11 by t0_timebase_header.cmake at TEST time, not
- * at build time. That is deliberate: design section 13.4.1 makes "g2/timebase.h
+ * at build time. That is deliberate: "g2/timebase.h
  * is a C header" a contract rather than a convention, and a contract that is
- * only asserted by the build cannot be reported by `ctest -R`. Plan section
- * 7.7.1 draws the same distinction. A C++ reference parameter anywhere in the
+ * only asserted by the build cannot be reported by `ctest -R`.
+ * A C++ reference parameter anywhere in the
  * header is a syntax error in C, so the compile IS the assertion.
  *
  * ------------------------------------------------------------------------
@@ -74,7 +74,7 @@ _Static_assert(G2_MCU_CORE_CLOCK_HZ != 54000u * 1000u,
 
 /* ---------------- the declared shape of Rational.
  *
- * A typedef struct of two uint32_t, per design section 13.4.1. _Generic is a
+ * A typedef struct of two uint32_t. _Generic is a
  * C11 construct and it pins the member types exactly rather than by width.
  */
 
@@ -90,7 +90,7 @@ _Static_assert(_Generic(((Rational){0u, 0u}).den, uint32_t: 1, default: 0),
 /* ---------------- the two signatures, each with its FULL function-pointer
  * type.
  *
- * This is the C analogue of the address-of expressions SCH-4 uses. The
+ * The
  * accumulator is a POINTER in both. A `uint32_t&` accumulator does not compile
  * in C at all, so the compile fails here before these initialisers are even
  * reached.
@@ -122,7 +122,7 @@ int main(void)
 	dsp.num = G2_DSP_CYCLES_PER_FRAME_NUM;
 	dsp.den = G2_DSP_CYCLES_PER_FRAME_DEN;
 
-	/* Design 13.4.1: the DSP sequence is 1562, 1563, 1562, 1563 and the mean
+	/* The DSP sequence is 1562, 1563, 1562, 1563 and the mean
 	 * is exactly 1562.5. A scalar constant cannot produce it, which is the
 	 * whole reason the rational exists. */
 	check(allocPtr(dsp, &acc) == 1562u, "alloc frame 0 is 1562");
@@ -139,7 +139,7 @@ int main(void)
 		/ G2_DSP_CYCLES_PER_FRAME_DEN, "alloc has no drift over 9600 frames");
 	check(acc == 0u, "the accumulator returns to zero on an exact boundary");
 
-	/* Design 14.1.1, the hard case: 44.1 kHz, r = 320/147, n = 32. m takes one
+	/* The hard case: 44.1 kHz, r = 320/147, n = 32. m takes one
 	 * of exactly two adjacent values, and 147 blocks repeat exactly. */
 	acc = 0u;
 	total = 0u;
@@ -156,7 +156,7 @@ int main(void)
 
 	/* The 64-bit intermediate. n * num is 96,000,000,000 here, which overflows
 	 * 32 bits; a narrow multiply would wrap and give a wrong answer rather
-	 * than a diagnostic. Design 14.1.1 requires the widening. */
+	 * than a diagnostic. */
 	acc = 0u;
 	check(framesForBlockPtr(1000000u, G2_HOST_FRAMES_NUM, 44100u, &acc)
 		== 2176870u, "framesForBlock widens to 64 bits before multiplying");

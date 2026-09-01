@@ -1,6 +1,5 @@
 # This file is the repository-side declaration of what this repository's
-# own Check: lines target, per the plan document's plan_lint.py
-# --check-targets condition (PLAN-CHECKTARGETS).
+# own Check: lines target.
 #
 # One check target per line. Blank lines and lines starting with "#" are
 # ignored. A line is either a ctest test name or a "pytest <path>"
@@ -11,24 +10,20 @@
 # target added before its task completes would make the lint fail on work that
 # has not happened yet.
 #
-# BRD-0 creates the test directory and the per-track CMake lists that
-# every other track registers through. It registers no check target of its own.
-#
-# The sched and repo tracks' Wave 2 and 2b tasks are the first to register one.
 
-# SCH-0, g2/timebase.h.
+# g2/timebase.h.
 t0_timebase_header
 
-# SCH-4, g2::Frame and the two ESAI conversion functions.
+# g2::Frame and the ESAI conversion functions.
 t0_frame_layout
 
-# REPO-5, the ArtifactResolver interface.
+# The ArtifactResolver interface.
 t0_artifact_resolver
 
-# REPO-7, the skip discipline.
+# The skip discipline.
 t0_skip_discipline
 
-# REPO-8, artifacts.sha256 and golden.timebase.
+# artifacts.sha256 and golden.timebase.
 t0_manifest_parses
 
 t0_extract_matches_python
@@ -37,7 +32,7 @@ t0_version_mismatch
 
 t0_no_firmware
 
-# PLG-14, `--help` names exactly the subcommands g2TestConsole implements.
+# `--help` names exactly the subcommands g2TestConsole implements.
 t0_console_subcommands
 
 # The kernel download and the DMA constants.

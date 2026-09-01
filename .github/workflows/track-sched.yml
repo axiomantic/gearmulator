@@ -1,5 +1,4 @@
-# The sched track's reusable workflow. Task REPO-6 creates it EMPTY; the
-# sched track fills it.
+# The sched track's reusable workflow.
 #
 # A per-track unit is a reusable workflow and it contributes a JOB, not a step.
 # Nothing outside a callee workflow can insert a step into it, so this track

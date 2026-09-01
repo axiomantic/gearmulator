@@ -1,5 +1,4 @@
-# The board track's reusable workflow. Task REPO-6 creates it EMPTY; the
-# board track fills it.
+# The board track's reusable workflow.
 #
 # A per-track unit is a reusable workflow and it contributes a JOB, not a step.
 # Nothing outside a callee workflow can insert a step into it, so this track
@@ -38,7 +37,7 @@ jobs:
       # libraries in this repository (mqLib, xtLib, virusLib, nord/n2x) and the
       # vendored `source/dsp56300` each carry their own P-memory write path and
       # are not this track's to govern. A repository-wide rule would fail on
-      # code this task has no claim over.
+      # code this track has no claim over.
       #
       # The allow-list is two paths and not a directory. Widening it to a
       # directory would let any new file in that directory write P memory,

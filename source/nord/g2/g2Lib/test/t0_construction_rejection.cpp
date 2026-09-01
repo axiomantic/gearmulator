@@ -17,7 +17,7 @@
  * A `dspCount` of 0 is such a Config: the DSP count row rejects it, and
  * `D_chain = (N - 1) * hopFrames` is unsigned, so at a count of 0 the
  * subtraction wraps and the lookahead bound is exceeded by the same Config. The
- * factory reports the FIRST failing row in the order the plan writes the table,
+ * factory reports the FIRST failing row in the order the table is written,
  * and the count row is the sixth of that table while the lookahead row is the
  * eighth, so the answer is `BadDspCount`.
  *
@@ -281,8 +281,8 @@ int main()
 	 * A dspCount of 0 satisfies two rows at once. `D_chain` is
 	 * `(N - 1) * hopFrames` over unsigned members, so at a count of 0 the
 	 * subtraction wraps and the lookahead bound is exceeded by the same Config.
-	 * The decision taken by this task is that the factory reports the FIRST
-	 * failing row in the order the plan writes the table, and the count row is
+	 * The factory reports the FIRST
+	 * failing row in the order the table is written, and the count row is
 	 * the sixth of that table while the lookahead row is the eighth.
 	 *
 	 * The case below is deliberately not folded into the loop above. There it

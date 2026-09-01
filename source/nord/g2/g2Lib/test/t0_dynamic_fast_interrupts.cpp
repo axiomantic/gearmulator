@@ -211,7 +211,7 @@ namespace
 	 * self-linked spin has no end, so "ten dispatches" would bound nothing.
 	 * Constructing a fresh JitConfig instead would carry the field under test at
 	 * its upstream default whatever dspSet.cpp does, arm 1 would be red in both
-	 * states, and this check would assert nothing about this task. The read
+	 * states, and this check would assert nothing. The read
 	 * preserves every field it does not name, so dynamicFastInterrupts still
 	 * arrives from dspSet.cpp and from nowhere else. */
 	void disableBlockLinking(dsp56k::DSP& _dsp)

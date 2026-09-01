@@ -15,7 +15,7 @@ namespace g2
 	//
 	// Windows removes a variable
 	// through _putenv_s by assigning it the empty string, so the empty value
-	// must behave as the unset value or the two halves of this task would
+	// must behave as the unset value or the two halves would
 	// disagree on the same input.
 	constexpr const char* g_artifactUnavailableMessage = "firmware artifact not available (NMG2_ARTIFACTS unset)";
 

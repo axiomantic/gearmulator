@@ -11,7 +11,7 @@
  *     egress   ChainAdapter::extractCodecSink(frame)       play regime only
  *
  * The two play-only phases are not asserted here and that is not an omission.
- * A Scheduler of this task carries no regime member, so it is the boot machine
+ * A Scheduler built here carries no regime member, so it is the boot machine
  * by construction and its quantum is FIVE records -- Swap, Panel, Sof, Mcu,
  * Dsp -- each carrying that quantum's frame index. Nothing in this file says
  * whether either play-only phase ever runs.
@@ -38,7 +38,7 @@
  * discriminates: the pointer the gate reads is non-null and is the BRIDGE's
  * own flag, by address. A per-slot cycle counter that advances is the honest
  * observable for execution and it needs an open gate, which needs a completed
- * firmware download; neither is this task's.
+ * firmware download.
  *
  * No case here is a language assert() and no case catches an exception, so
  * this file reports identically under NDEBUG and without it.
@@ -261,7 +261,7 @@ namespace
 	 * here carries no regime member and is the
 	 * boot machine by construction, and the play regime is what adds the
 	 * regime, the two calls and the codec queues that feed them. A sequence
-	 * naming either would assert an observable this task cannot produce. */
+	 * naming either would assert an observable this file cannot produce. */
 	constexpr g2::TracePhase kQuantum[] =
 	{
 		g2::TracePhase::Swap,

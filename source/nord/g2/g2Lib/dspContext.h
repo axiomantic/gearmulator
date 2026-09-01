@@ -110,7 +110,7 @@ namespace g2
 		 * the storage carried. */
 		const bool* programLanded = nullptr;  /* borrowed; NULL means NOT landed */
 
-		/* Design section 12.3's D, from G2_SECOND_BUS_FRAME_DIVIDER. Fixed at
+		/* From G2_SECOND_BUS_FRAME_DIVIDER. Fixed at
 		 * construction. The job body advances the second bus only when
 		 * frameIndex % secondBusFrameDivider == 0, which is the SAME window
 		 * ChainAdapter::advanceAll uses. Both read one symbol, and the same

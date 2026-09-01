@@ -1,5 +1,4 @@
-# The T0 job matrix. Task REPO-6 owns this file and is the only task that edits
-# one.
+# The T0 job matrix.
 #
 # THIS MATRIX IS T0 ONLY, AND IT ALWAYS WILL BE. No T1 job, no T2 job and no
 # integer-comparison job runs here. All of them need a firmware byte, and no

@@ -105,7 +105,7 @@ namespace g2
 		// An empty value counts as unset. Windows removes a variable by
 		// assigning it the empty string through _putenv_s, so a build that
 		// treated "" as a path would mean something different on Windows than
-		// it means on Linux and macOS, and the Python half of this task would
+		// it means on Linux and macOS, and the Python half would
 		// then disagree with this one on the same input.
 		if(!value || value[0] == '\0')
 		{

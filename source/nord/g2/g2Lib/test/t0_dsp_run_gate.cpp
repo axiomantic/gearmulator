@@ -50,7 +50,7 @@ namespace g2
 	void dspJob(JobContext*) noexcept;
 }
 
-/* THE MEMBER's declared type, pinned in this task's own file. A borrowed
+/* THE MEMBER's declared type. A borrowed
  * pointer is what makes the gate readable without the context owning the flag;
  * a bool by value would be a copy that no producer could ever update. */
 static_assert(std::is_same_v<decltype(g2::DspContext::programLanded),

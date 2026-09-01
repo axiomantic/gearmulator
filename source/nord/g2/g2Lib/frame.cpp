@@ -1,4 +1,4 @@
-/* frame.cpp -- the two conversion functions. Task SCH-4. Design 13.10.1.
+/* frame.cpp -- the conversion functions.
  *
  * The mapping, for a chosen register index R:
  *

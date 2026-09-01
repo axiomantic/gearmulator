@@ -204,7 +204,7 @@ namespace
 	/* ---------------- group 1: the vector leaves the host port
 	 *
 	 * The unbridged half is the control and it exercises `mc68k` rather than
-	 * this task. It earns its place by fixing the expected byte by measurement
+	 * the code under test. It earns its place by fixing the expected byte by measurement
 	 * instead of by hand, and by naming where the vector goes when no bridge
 	 * takes it rather than only where it does not go. */
 	void anUnbridgedPortKeepsTheVectorOnItsOwnQueue()

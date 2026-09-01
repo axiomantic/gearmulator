@@ -159,8 +159,7 @@ int main()
 	//
 	// A count word of N followed by only N - 1 data words. The model must
 	// report an incomplete load, not dispatch: isComplete() is false, and the
-	// machine is still Receiving because the body is not finished. This is
-	// the plan's "reports an incomplete load rather than dispatching".
+	// machine is still Receiving because the body is not finished.
 	{
 		uint32_t p[g_capacity];
 		for(uint32_t& w : p) w = g_sentinel;

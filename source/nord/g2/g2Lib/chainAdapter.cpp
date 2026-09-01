@@ -269,7 +269,7 @@ namespace g2
 	EsaiWriteTxCallback ChainAdapter::audioTxCallback(const unsigned position)
 	{
 		return [this, position](uint64_t&, const dsp56k::Audio::TxFrame& in) noexcept {
-			/* CHN-8 PHASE-ERROR RULE (section 12.3, 13.10.2), the audio-bus
+			/* THE PHASE-ERROR RULE, the audio-bus
 			 * half. phaseErrorFrames counts a transmit callback the scheduler
 			 * did NOT ask for, on either bus. On the audio bus that condition
 			 * is one thing: the position has ALREADY delivered on this bus in
@@ -294,7 +294,7 @@ namespace g2
 				++this->m_phaseError[position];
 			}
 
-			/* CHN-6 WRITTEN-FLAG RULE (section 12.3). The flag is NOT "the
+			/* THE WRITTEN-FLAG RULE. The flag is NOT "the
 			 * callback fired" - the scheduler drives a transmit callback for
 			 * every position on every quantum, so a two-state arrival flag
 			 * could never be clear and underrunFrames could never rise (a
@@ -374,7 +374,7 @@ namespace g2
 					++this->m_phaseError[position];
 			}
 
-			/* CHN-6 WRITTEN-FLAG RULE, the second-bus half. Same condition as
+			/* THE WRITTEN-FLAG RULE, the second-bus half. Same condition as
 			 * the audio wrapper - Esai::txUnderrunInFrame() at this instant
 			 * decides whether the position's second-bus delivery was good or
 			 * stale - but it writes m_secondWritten, the per-bus storage that

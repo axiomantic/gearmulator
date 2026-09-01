@@ -21,9 +21,7 @@ claude*.bat
 .mcp.json
 
 # Raw t1_boot traces: ~2-3 MB each and ~99% repetitive bus lines.
-# The evidentiary content is committed under artifacts/boot/summaries/,
-# which is what the plan 's W3 rows cite. Three raw logs predate this
-# convention and stay tracked.
+# The evidentiary content is committed under artifacts/boot/summaries/.
 artifacts/boot/t1_boot_bannerdump.log
 artifacts/boot/t1_boot_brd32_preinit.log
 artifacts/boot/t1_boot_brd32_preinit_1u.log

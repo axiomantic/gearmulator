@@ -11,15 +11,12 @@
 // the build carries is gated, that set is EMPTY.
 //
 // A clause quantified over an EMPTY SET is vacuously true. Asserted as written,
-// it would pass without exercising one line of the skip discipline -- the exact
-// shape this task's own block already caught one clause over, where the plan
-// removed the standing `-R t1_` sweep from this gate because at Wave 2b it
-// "matches nothing and exits 8".
+// it would pass without exercising one line of the skip discipline.
 //
 // This test therefore CONSTRUCTS the gated tests it asserts over, through
 // gatedFixture.h, which is the mechanism every later gated test will use. The
 // subject set is non-empty by construction and the assertions are falsifiable.
-// The vacuity is reported as a plan defect; it is not silently passed.
+// The vacuity is reported; it is not silently passed.
 // ---------------------------------------------------------------------------
 
 #include "gatedFixture.h"

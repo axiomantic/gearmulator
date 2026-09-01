@@ -1,5 +1,4 @@
-# The repo track's reusable workflow. Task REPO-6 creates it; the repo track
-# fills it.
+# The repo track's reusable workflow.
 #
 # A per-track unit is a REUSABLE WORKFLOW and it contributes a JOB, not a step.
 # GitHub resolves a local reusable workflow only as `./.github/workflows/<file>`,
@@ -265,7 +264,7 @@ jobs:
             fail=1
           fi
 
-          # The allow-list is the set of jobs the plan places INSIDE the private
+          # The allow-list is the set of jobs that run INSIDE the private
           # repository. That is exactly one workflow file, and it is allow-listed
           # only when the calling repository is the private one.
           allow=""
@@ -300,11 +299,11 @@ jobs:
           echo "no-clavia-upload: ${scanned} workflow file(s) matched, ${examined} examined."
           exit "${fail}"
 
-      # REPO-7, THE SKIP DISCIPLINE. Design section 18.5 steps 3 and 4.
+      # THE SKIP DISCIPLINE.
       #
-      #   3. The CI job prints a summary line with the counts: run, passed,
+      #   - The CI job prints a summary line with the counts: run, passed,
       #      failed, skipped.
-      #   4. A run that executed zero gated tests is reported as NOT VERIFIED,
+      #   - A run that executed zero gated tests is reported as NOT VERIFIED,
       #      not as PASS. The job's own summary says so in plain words.
       #
       # "run" counts gated tests that EXECUTED THEIR BODY. A skipped test is not
@@ -325,10 +324,10 @@ jobs:
       # repository, and this file exists in every repository. Until one
       # does, every repository prints NOT VERIFIED, WHICH IS THE TRUE ANSWER: no
       # gated test has been verified here. A step that printed PASS instead
-      # would be the exact green tick design section 18.5 exists to prevent.
+      # would be the exact green tick this discipline exists to prevent.
       #
       # The step does not fail the job. It reports. T1 and T2 are informational
-      # tiers by design section 19.1 and the job that runs a gated test owns its
+      # tiers, and the job that runs a gated test owns its
       # own exit status; overloading this reporter's status would duplicate the
       # tier rule.
       - name: gated-test-summary
