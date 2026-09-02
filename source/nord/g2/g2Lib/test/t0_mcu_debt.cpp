@@ -9,7 +9,7 @@
  *
  * No cycle cost is typed anywhere in this file. The cost of the one instruction
  * the fixture runs is measured from the linked core in case 1, and every rate,
- * every expected spend and the rule 2 bound are derived from that measurement.
+ * every expected spend and the debt bound are derived from that measurement.
  *
  * The independent observable is the program counter, which is why the fixture
  * is a field of one repeated instruction. `Board::runMcu` returns the cycles it
@@ -28,8 +28,8 @@
  *
  *   Forced-idle, at rate 1/1. One instruction costs c and the budget is 1, so
  *   the first quantum overruns by c-1 and the next c-1 quanta run nothing and
- *   pay the debt down by one whole allocation each. That is rule 4's long
- *   dispatch, driven by the real core.
+ *   pay the debt down by one whole allocation each. That is the long-dispatch
+ *   branch, driven by the real core.
  *
  * Under the never-idle workload `longDispatchQuanta(0)` is asserted exactly
  * zero rather than merely "moves": a never-idle context takes the `want <= 0`
@@ -90,13 +90,13 @@ namespace
 	 * re-type is a compile error at this line rather than a second block nobody
 	 * can diff. */
 	static_assert(std::is_same<decltype(g2::McuContext::rate),               ::Rational>::value,
-		"McuContext::rate is the section 13.4.1 rational the shared block reads");
+		"McuContext::rate is the rational the shared block reads");
 	static_assert(std::is_same<decltype(g2::McuContext::acc),                uint32_t>::value,
-		"McuContext::acc is the section 13.4.1 accumulator the shared block reads");
+		"McuContext::acc is the accumulator the shared block reads");
 	static_assert(std::is_same<decltype(g2::McuContext::debt),               int64_t>::value,
-		"McuContext::debt is the signed section 13.4.6 debt the shared block reads");
+		"McuContext::debt is the signed debt the shared block reads");
 	static_assert(std::is_same<decltype(g2::McuContext::longDispatchQuanta), uint64_t>::value,
-		"McuContext::longDispatchQuanta is the rule 4 counter the shared block reads");
+		"McuContext::longDispatchQuanta is the long-dispatch counter the shared block reads");
 
 	/* Byte-addressed big-endian memory, the shape t0_board_mcu_handle uses. It
 	 * keeps no access record: every assertion in this file is about the core's
@@ -414,7 +414,7 @@ int main()
 
 			if(want <= 0)
 			{
-				/* Rule 4's branch: nothing runs, the debt is paid down by one
+				/* The long-dispatch branch: nothing runs, the debt is paid down by one
 				 * whole allocation and the counter rises by exactly one. */
 				std::snprintf(what, sizeof(what),
 					"%s quantum %zu: the want <= 0 branch ran no instruction", _name, q);
@@ -548,15 +548,15 @@ int main()
 		/* The guards, before any equality is compared. */
 		check(totalSpent > 0, "never-idle: the core actually ran");
 		check(maxDebt > 0,
-			"never-idle: cycleDebt(0) reached a NON-ZERO value -- the clause section 24.6 row "
-			"W3-410 recorded as structurally impossible before the core stopped clamping");
+			"never-idle: cycleDebt(0) reached a NON-ZERO value -- this was recorded as "
+			"structurally impossible before the core stopped clamping");
 		check(moved,
 			"never-idle: cycleDebt(0) took at least two distinct values across the run, so no "
 			"later equality is a comparison of zero against zero");
 
 		checkEqual(static_cast<int64_t>(neverIdle.back().ldqAfter), 0,
 			"never-idle: longDispatchQuanta(0) is EXACTLY zero -- a never-idle context takes the "
-			"want <= 0 branch no times, and this is the falsifiable form of step 6's check 2 for "
+			"want <= 0 branch no times, and this is the falsifiable form of that claim for "
 			"this workload");
 
 		report(neverIdle, "never-idle");
@@ -590,7 +590,7 @@ int main()
 			"still carried");
 	}
 
-	/* The forced-idle drift workload, and rule 4's counter. The budget is one
+	/* The forced-idle drift workload, and the long-dispatch counter. The budget is one
 	 * cycle and one dispatch unit costs `instrCost`, so one running quantum is
 	 * followed by exactly `instrCost - 1` quanta that run nothing. Both
 	 * accessors move here.
@@ -624,7 +624,7 @@ int main()
 		check(moved,          "forced-idle: cycleDebt(0) took at least two distinct values");
 
 		check(forcedIdle.back().ldqAfter > 0,
-			"forced-idle: longDispatchQuanta(0) rose above zero -- rule 4's branch fired, driven "
+			"forced-idle: longDispatchQuanta(0) rose above zero -- the long-dispatch branch fired, driven "
 			"by the real core's overshoot");
 
 		/* An exact equality and not a bound: every quantum that took the branch

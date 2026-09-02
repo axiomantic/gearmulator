@@ -178,7 +178,7 @@ int main()
 
 			// The line is asserted whole, and not as a prefix plus a substring.
 			// A skip line that carried extra text after the message would still
-			// satisfy a substring test and would not satisfy section 18.5.
+			// satisfy a substring test and would not satisfy the skip discipline.
 			check(text == g_expectedSkipLine + "\n" + g_expectedSkipLine + "\n" + g_expectedSkipLine + "\n",
 				"unset: the printed text is exactly three skip lines and nothing else");
 
