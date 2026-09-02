@@ -183,6 +183,22 @@ set_property(TARGET t0_hdi08_adapter PROPERTY FOLDER "G2/test")
 add_test(NAME t0_hdi08_adapter COMMAND t0_hdi08_adapter)
 set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
 
+# ----------------- the HDI08 host-to-DSP flag bridge
+#
+# Tier T0 and ungated. The test constructs a single DSP behind one host port and
+# bridges them; HF0 is 0x08 in the ICR.
+#
+# It links g2Lib and nothing else: it constructs an Hdi08Adapter and an
+# Hdi08Bridge with the real mc68k and dsp56kEmu behind them, and g2Lib carries
+# that link itself.
+
+add_executable(t0_hdi08_flag_bridge t0_hdi08_flag_bridge.cpp)
+target_link_libraries(t0_hdi08_flag_bridge PRIVATE g2Lib)
+set_property(TARGET t0_hdi08_flag_bridge PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_hdi08_flag_bridge COMMAND t0_hdi08_flag_bridge)
+set_tests_properties(t0_hdi08_flag_bridge PROPERTIES LABELS "UnitTest")
+
 # ----------------- UART0
 #
 # UART0 at MBAR+0x1C0, vector 0x42, divider 0x36, 8N1; UART1 unused reads reset
