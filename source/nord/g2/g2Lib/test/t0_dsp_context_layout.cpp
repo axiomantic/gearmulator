@@ -114,18 +114,17 @@ static_assert(std::is_same_v<decltype(g2::DspContext::base), g2::JobContext>,
  * fails. */
 
 static_assert(std::is_same_v<decltype(g2::DspContext::position), unsigned>,
-	"DspContext::position -- the chain position of design section 12.3.");
+	"DspContext::position -- the chain position.");
 static_assert(std::is_same_v<decltype(g2::DspContext::rate), Rational>,
-	"DspContext::rate -- cycles for each frame, design section 13.4.1.");
+	"DspContext::rate -- cycles for each frame.");
 static_assert(std::is_same_v<decltype(g2::DspContext::acc), uint32_t>,
-	"DspContext::acc -- the rational accumulator, design section 13.4.1.");
+	"DspContext::acc -- the rational accumulator.");
 static_assert(std::is_same_v<decltype(g2::DspContext::debt), int64_t>,
-	"DspContext::debt -- the cycle debt, design section 13.4.6. It is SIGNED, "
+	"DspContext::debt -- the cycle debt. It is SIGNED, "
 	"because the want and debt block computes a signed difference.");
 static_assert(std::is_same_v<decltype(g2::DspContext::longDispatchQuanta),
 		uint64_t>,
-	"DspContext::longDispatchQuanta -- the rule 4 counter, design section "
-	"13.4.6.");
+	"DspContext::longDispatchQuanta -- the long-dispatch counter.");
 static_assert(std::is_same_v<decltype(g2::DspContext::dsp), dsp56k::DSP*>,
 	"DspContext::dsp -- borrowed. The Scheduler owns the DSP set.");
 
@@ -135,19 +134,17 @@ static_assert(std::is_same_v<decltype(g2::DspContext::dsp), dsp56k::DSP*>,
 
 static_assert(std::is_same_v<decltype(g2::DspContext::audioEsai),
 		dsp56k::Esai*>,
-	"DspContext::audioEsai -- borrowed, the X-space ESAI of design section "
-	"11.1.");
+	"DspContext::audioEsai -- borrowed, the X-space ESAI.");
 static_assert(std::is_same_v<decltype(g2::DspContext::secondEsai),
 		dsp56k::Esai*>,
-	"DspContext::secondEsai -- borrowed, the Y-space ESAI_1 of design section "
-	"11.1.");
+	"DspContext::secondEsai -- borrowed, the Y-space ESAI_1.");
 static_assert(std::is_same_v<decltype(g2::DspContext::frameIndex), uint64_t>,
 	"DspContext::frameIndex -- the virtual frame index for the quantum ABOUT "
 	"TO RUN. The Scheduler writes it into every DspContext before it calls "
 	"Executor::run, and NO job writes it.");
 static_assert(std::is_same_v<decltype(g2::DspContext::secondBusFrameDivider),
 		unsigned>,
-	"DspContext::secondBusFrameDivider -- design section 12.3's D, from "
+	"DspContext::secondBusFrameDivider -- the second-bus frame divider D, from "
 	"G2_SECOND_BUS_FRAME_DIVIDER. The job body advances the second bus only "
 	"when frameIndex % secondBusFrameDivider == 0.");
 

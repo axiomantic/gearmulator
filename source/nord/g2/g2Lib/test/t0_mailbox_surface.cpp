@@ -12,7 +12,7 @@
  *  3. writeSlot(unsigned) is declared returning slotWriteView, asserted with a
  *     static_assert on decltype (which also pins the rest of the Tier 1
  *     surface: read() returns const Frame&, write() returns Frame&, and both
- *     with advance() are noexcept as section 12.3 declares).
+ *     with advance() are noexcept).
  *
  * The allocation counter is a global operator new/delete pair, armed only
  * around the specific constructor call and around the advance loop. Nothing is
@@ -135,11 +135,11 @@ static_assert(std::is_same_v<decltype(std::declval<g2::Mailbox&>().write()),
 	g2::Frame&>,
 	"write() returns Frame&; a producing DSP fills the frame it writes.");
 static_assert(noexcept(std::declval<g2::Mailbox&>().read()),
-	"read() is noexcept, as design section 12.3 declares.");
+	"read() is noexcept.");
 static_assert(noexcept(std::declval<g2::Mailbox&>().write()),
-	"write() is noexcept, as design section 12.3 declares.");
+	"write() is noexcept.");
 static_assert(noexcept(std::declval<g2::Mailbox&>().advance()),
-	"advance() is noexcept, as design section 12.3 declares.");
+	"advance() is noexcept.");
 static_assert(std::is_same_v<decltype(std::declval<g2::Mailbox&>().writeSlot(0u)),
 	g2::SlotWriteView>,
 	"writeSlot(unsigned) is declared returning SlotWriteView.");
