@@ -1,0 +1,33 @@
+# The lint-only caller.
+#
+# `ci.yml` already declares a `track-repo` job, but `ci.yml` is
+# `workflow_dispatch` only: its build matrix costs hours of runner time, so
+# automatic triggers were removed from it. That removal took the repo-lint
+# layer with it, and the artifact-boundary guards have therefore never run on
+# a pull request in this repository. A guard that never runs and a guard that
+# is absent produce the same observable.
+#
+# This file restores the automatic trigger for the CHEAP half only. It calls
+# the same reusable workflow `ci.yml` calls, on one ubuntu runner, and it
+# carries no build matrix and no T0 job. `ci.yml` is left exactly as it was.
+#
+# Duplicate runs on a pull-request branch are expected and accepted: a push to
+# such a branch fires both the `push` and the `pull_request` trigger. The job
+# is a few minutes on one runner, and the `push` trigger is what covers a
+# branch before its pull request is opened.
+
+name: Lint
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lints:
+    uses: ./.github/workflows/track-repo.yml
+    with:
+      visibility: public

@@ -1,0 +1,39 @@
+# This file is the repository-side declaration of what this repository's
+# own Check: lines target.
+#
+# One check target per line. Blank lines and lines starting with "#" are
+# ignored. A line is either a ctest test name or a "pytest <path>"
+# invocation.
+#
+# The file declares the targets of the tasks declared complete, and no others.
+# The condition is asserted only for tasks a lint run declares complete, so a
+# target added before its task completes would make the lint fail on work that
+# has not happened yet.
+#
+
+# g2/timebase.h.
+t0_timebase_header
+
+# g2::Frame and the ESAI conversion functions.
+t0_frame_layout
+
+# The ArtifactResolver interface.
+t0_artifact_resolver
+
+# The skip discipline.
+t0_skip_discipline
+
+# artifacts.sha256 and golden.timebase.
+t0_manifest_parses
+
+t0_extract_matches_python
+
+t0_version_mismatch
+
+t0_no_firmware
+
+# `--help` names exactly the subcommands g2TestConsole implements.
+t0_console_subcommands
+
+# The kernel download and the DMA constants.
+t1_kernel_load
