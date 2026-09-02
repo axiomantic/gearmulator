@@ -679,6 +679,26 @@ if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
 	set_property(TEST t1_dsp_handshake APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 endif()
 
+# ----------------- the GDB remote stub
+#
+# Tier T0 and not gated: the test reads no firmware artifact. It composes a
+# Board, pokes six hand-encoded instruction words into a RAM of its own, and
+# drives the stub with a test client over a loopback socket -- no `gdb` binary
+# is required, so the check runs anywhere the suite does.
+#
+# It links g2Lib and nothing else. gdbStub.cpp is inside g2Lib through
+# sources_board.cmake, so the test drives the same translation unit
+# `g2TestConsole --gdb` drives and not a second copy of it.
+
+add_executable(t0_gdb_stub t0_gdb_stub.cpp)
+target_link_libraries(t0_gdb_stub PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t0_gdb_stub PRIVATE Threads::Threads)
+set_property(TARGET t0_gdb_stub PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_gdb_stub COMMAND t0_gdb_stub)
+set_tests_properties(t0_gdb_stub PROPERTIES LABELS "UnitTest")
+
 # ----------------- the DSP DMA check driven through the command that ships it
 #
 # Tier T1 and gated because the body boots the firmware. The registers the check
@@ -738,6 +758,75 @@ if(EXISTS "${g2_dumpDspDmaParentOfG2Lib}/g2TestConsole/CMakeLists.txt")
 else()
 	message(STATUS "g2TestConsole is not part of this configure; t1_dump_dsp_dma is not registered")
 endif()
+
+
+# ----------------- t1_gdb_dsp, the GDB stub advancing the whole machine
+#
+# Gated: the test reads CODE_30000400.bin. The defect it exists for only shows
+# against the real firmware, because it is the real firmware's HDI08 handshake
+# that a stub stepping Board::runMcu alone can never cross. A machine without
+# artifacts skips rather than passing in silence.
+#
+# The gate variables are this block's own rather than borrowed from a
+# neighbouring block: a variable borrowed across blocks is how one edit silently
+# changes another block's registration. The skip code is read out of
+# gatedFixture.h by the same regex the other sites use, so the spellings cannot
+# drift.
+#
+# gdbStub.cpp and scheduler.cpp are both inside g2Lib, so the test drives the
+# same two translation units `g2TestConsole --gdb` drives and not a copy of
+# either. Threads is the test client, which lives on its own thread.
+#
+# The timeout is the suite's outer bound and not the test's. The test carries
+# its own watchdog, which prints a named reason and exits 1; this property is
+# the backstop for a process that could not even reach that thread.
+
+add_executable(t1_gdb_dsp t1_gdb_dsp.cpp)
+target_link_libraries(t1_gdb_dsp PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t1_gdb_dsp PRIVATE Threads::Threads)
+set_property(TARGET t1_gdb_dsp PROPERTY FOLDER "G2/test")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_gdbDspSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_gdbDspSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_gdbDspSkipExitCode "${CMAKE_MATCH_1}")
+
+add_test(NAME t1_gdb_dsp COMMAND t1_gdb_dsp)
+set_tests_properties(t1_gdb_dsp PROPERTIES LABELS "IntegrationTest" SKIP_RETURN_CODE ${g2_gdbDspSkipExitCode} TIMEOUT 1200)
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_gdb_dsp APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
+
+
+# ----------------- the GDB-with-traffic harness's script client
+#
+# Tier T0 and not gated: the test reads no firmware artifact. It places the
+# same synthetic machine t0_gdb_stub places, serves the stub over a loopback
+# socket, and drives the packet sequence gdbScript.py runs. The watchpoint case
+# is the one the t0_gdb_stub tier cannot reach: the delivery driven through
+# pch2Load -> InternalClient -> TransportHub crosses into the device on the
+# same machine the stub serves, so the stop names an address only real traffic
+# writes.
+#
+# It links g2Lib and Threads and compiles one source directly. g2PatchLoad.cpp
+# lives in g2JucePlugin and is not a g2Lib source; Threads is the client thread,
+# which owns the socket while the main thread pumps the stub.
+
+add_executable(t0_gdb_script
+	t0_gdb_script.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2PatchLoad.cpp)
+target_link_libraries(t0_gdb_script PRIVATE g2Lib)
+find_package(Threads REQUIRED)
+target_link_libraries(t0_gdb_script PRIVATE Threads::Threads)
+set_property(TARGET t0_gdb_script PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_gdb_script COMMAND t0_gdb_script)
+set_tests_properties(t0_gdb_script PROPERTIES LABELS "UnitTest")
 
 
 # ----------------- Board-to-TransportHub consequence: the two targets that
