@@ -218,6 +218,21 @@ set_property(TARGET t0_codec_capacity PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_codec_capacity COMMAND t0_codec_capacity)
 
+# ---------------- t0_backend_rule
+#
+# The test reads dsp56k::g_useJIT at run time, so the Backend::Jit case is
+# conditional on the build and the Backend::Interpreter case is unconditional.
+#
+# No library beyond g2Lib is linked: the g2Lib target carries the dsp56kEmu
+# include directories transitively, so the test reaches dsp56k::g_useJIT
+# through scheduler.h.
+
+add_executable(t0_backend_rule ${CMAKE_CURRENT_SOURCE_DIR}/t0_backend_rule.cpp)
+target_link_libraries(t0_backend_rule PRIVATE g2Lib)
+set_property(TARGET t0_backend_rule PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_backend_rule COMMAND t0_backend_rule)
+
 # ---------------- t0_cycle_debt
 
 add_executable(t0_cycle_debt ${CMAKE_CURRENT_SOURCE_DIR}/t0_cycle_debt.cpp)
@@ -273,6 +288,32 @@ set_property(TARGET t0_status_contract PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_status_contract COMMAND t0_status_contract)
 
+# ---------------- t0_construction_rejection
+#
+# Nothing in the check is an assert() and nothing in it catches an exception, so
+# the status out-param is the whole observable in either build type. The
+# generator here is single-config and the tree is configured Debug, so this
+# add_test names one build type and can name no other; the release half needs a
+# second tree, and this file configures none.
+
+add_executable(t0_construction_rejection
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_construction_rejection.cpp)
+target_link_libraries(t0_construction_rejection PRIVATE g2Lib)
+set_property(TARGET t0_construction_rejection PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_construction_rejection COMMAND t0_construction_rejection)
+
+# ---------------- t0_order
+#
+# Nothing in the check is an assert() and nothing in it catches an exception, so
+# the failure counter is the whole observable in either build type.
+
+add_executable(t0_order ${CMAKE_CURRENT_SOURCE_DIR}/t0_order.cpp)
+target_link_libraries(t0_order PRIVATE g2Lib)
+set_property(TARGET t0_order PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_order COMMAND t0_order)
+
 # ---------------- t0_esai_slot_phase
 #
 # The path of the committed fixture is passed on the command line; the test
@@ -322,3 +363,94 @@ set_property(TARGET t0_transport_hub PROPERTY FOLDER "G2/test")
 add_test(NAME t0_transport_hub COMMAND t0_transport_hub
 	${CMAKE_CURRENT_SOURCE_DIR}/../transportHub.h)
 set_tests_properties(t0_transport_hub PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_begin_play_phase
+
+add_executable(t0_begin_play_phase
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_begin_play_phase.cpp)
+target_link_libraries(t0_begin_play_phase PRIVATE g2Lib)
+set_property(TARGET t0_begin_play_phase PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_begin_play_phase COMMAND t0_begin_play_phase)
+set_tests_properties(t0_begin_play_phase PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_codec_regimes
+
+add_executable(t0_codec_regimes
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_codec_regimes.cpp)
+target_link_libraries(t0_codec_regimes PRIVATE g2Lib)
+set_property(TARGET t0_codec_regimes PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_codec_regimes COMMAND t0_codec_regimes)
+set_tests_properties(t0_codec_regimes PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_scheduler_faults
+
+add_executable(t0_scheduler_faults
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_scheduler_faults.cpp)
+target_link_libraries(t0_scheduler_faults PRIVATE g2Lib)
+set_property(TARGET t0_scheduler_faults PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_scheduler_faults COMMAND t0_scheduler_faults)
+set_tests_properties(t0_scheduler_faults PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_thread_map
+
+add_executable(t0_thread_map
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_thread_map.cpp)
+target_link_libraries(t0_thread_map PRIVATE g2Lib)
+set_property(TARGET t0_thread_map PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_thread_map COMMAND t0_thread_map)
+set_tests_properties(t0_thread_map PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_mcu_debt
+#
+# No cycle cost is compiled in. The cost and the byte length of one dispatch
+# unit are measured at run time from the linked core, and both workload rates
+# and every expected spend are derived from them.
+
+add_executable(t0_mcu_debt
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_mcu_debt.cpp)
+target_link_libraries(t0_mcu_debt PRIVATE g2Lib)
+set_property(TARGET t0_mcu_debt PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_mcu_debt COMMAND t0_mcu_debt)
+set_tests_properties(t0_mcu_debt PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_scheduler_state
+#
+# The fixture is a field of one repeated instruction: the MCU context is the one
+# part of a T0 Scheduler whose emulated state moves, and a state round trip over
+# a machine whose state never moves is satisfied by a snapshot of zero bytes.
+
+add_executable(t0_scheduler_state
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_scheduler_state.cpp)
+target_link_libraries(t0_scheduler_state PRIVATE g2Lib)
+set_property(TARGET t0_scheduler_state PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_scheduler_state COMMAND t0_scheduler_state)
+set_tests_properties(t0_scheduler_state PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_state_excludes_regime
+#
+# An ordinary executable. The codec regime does not travel with a saved state
+# block: a play-regime snapshot loaded into a boot-regime machine leaves the
+# boot regime standing, and every other state item survives the round trip by
+# value.
+#
+# The regime is asserted through what a quantum does and never through a byte
+# offset: a boot quantum and a play quantum emit different phase sequences. The
+# source carries a known positive for that instrument, so a run in which every
+# quantum looked like a boot quantum cannot pass by accident.
+#
+# Nothing in the source is an assert() and nothing in it catches an exception.
+# Every verdict is the failure counter and the process exit status.
+
+add_executable(t0_state_excludes_regime
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_state_excludes_regime.cpp)
+target_link_libraries(t0_state_excludes_regime PRIVATE g2Lib)
+set_property(TARGET t0_state_excludes_regime PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_state_excludes_regime COMMAND t0_state_excludes_regime)
+set_tests_properties(t0_state_excludes_regime PROPERTIES LABELS "UnitTest")

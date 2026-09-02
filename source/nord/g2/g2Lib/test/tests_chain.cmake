@@ -83,6 +83,16 @@ add_test(NAME t0_chain_counters COMMAND t0_chain_counters)
 set_tests_properties(t0_chain_counters PROPERTIES LABELS "UnitTest")
 
 
+# ----------------- t0_four_phase, the four-phase procedure and the codec edges
+
+add_executable(t0_four_phase t0_four_phase.cpp)
+target_link_libraries(t0_four_phase PRIVATE g2Lib)
+set_property(TARGET t0_four_phase PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_four_phase COMMAND t0_four_phase)
+set_tests_properties(t0_four_phase PROPERTIES LABELS "UnitTest")
+
+
 # ----------------- t0_chain_state, the state round trip
 
 add_executable(t0_chain_state t0_chain_state.cpp)
