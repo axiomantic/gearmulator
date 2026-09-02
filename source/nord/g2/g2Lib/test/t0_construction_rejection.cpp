@@ -388,9 +388,9 @@ int main()
 	/* ---------------- row 8: the lookahead bound.
 	 *
 	 * Above 16,384 frames the framework silently truncates the reported latency
-	 * and logs that audio will be out of sync, and no other test in this design
-	 * would see it. The bound is on the sum being ABOVE 16,384, so the pair
-	 * below straddles it: exactly at the bound, and one frame past it. */
+	 * and logs that audio will be out of sync. The bound is on the sum being
+	 * ABOVE 16,384, so the pair below straddles it: exactly at the bound, and
+	 * one frame past it. */
 	{
 		g2::Scheduler::Config config;
 		const uint64_t        headroom = kLookaheadBound - chainDelay(config) - kDelayCodec;
