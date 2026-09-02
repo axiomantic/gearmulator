@@ -1,0 +1,211 @@
+/* The two properties a target build cannot see:
+ *
+ *   1. underrunFrames and secondBusUnderrunFrames are separate storage. Two
+ *      counters and not one, because the two buses advance at different rates
+ *      (with a divider above 1 the second bus transmits on one quantum in D),
+ *      so a single shared counter could not be attributed to a bus. Asserted
+ *      by driving one of the pair above zero at a single position and
+ *      asserting the other stays zero there; a shared counter would report
+ *      them equal at that position and fail.
+ *
+ *   2. One unwanted callback raises phaseErrorFrames(position) by exactly one
+ *      even when both conditions hold at once. A transmit callback the
+ *      scheduler did not ask for is one event. The double condition is
+ *      reachable on the second bus: the position has already delivered on that
+ *      bus in this quantum, and this is a non-window quantum
+ *      (frameIndex % secondBusFrameDivider != 0). A counter written as two
+ *      independent tests of the two conditions would raise it by two.
+ *
+ * The underrun pair is driven through the written flags (real emulated-ESAI
+ * M_TUE condition) and consumed by the advanceAll cadence; the phase-error
+ * count is driven by firing the transmit wrappers a second time.
+ */
+
+#include "chainAdapter.h"
+
+#include "dsp56kEmu/dsp.h"
+#include "dsp56kEmu/esai.h"
+#include "dsp56kEmu/memory.h"
+#include "dsp56kEmu/peripherals.h"
+
+#include <cstdint>
+#include <cstdio>
+
+namespace
+{
+	int failures = 0;
+
+	void check(const bool condition, const char* const what)
+	{
+		if(!condition)
+		{
+			printf("FAIL %s\n", what);
+			++failures;
+		}
+	}
+
+	dsp56k::DefaultMemoryValidator g_memoryValidator;
+
+	/* One chain position's two real Esai objects, so the written-flag
+	 * condition (M_TUE clear) is real here too. */
+	struct PositionEsai
+	{
+		dsp56k::Memory         memory;
+		dsp56k::PeripheralsNop periphX;
+		dsp56k::PeripheralsNop periphY;
+		dsp56k::DSP            dsp;
+		dsp56k::Esai           audioEsai;
+		dsp56k::Esai           secondEsai;
+
+		PositionEsai()
+			: memory(g_memoryValidator, 0x080000, 0x800000, 0x200000)
+			, dsp(memory, &periphX, &periphY)
+			, audioEsai(periphX, dsp56k::MemArea_X)
+			, secondEsai(periphY, dsp56k::MemArea_Y)
+		{}
+	};
+}
+
+int main()
+{
+	/* Two positions, so the per-position and per-bus separation are
+	 * observable in one adapter. A divider of 2 makes the second-bus advance
+	 * window land on even frame indices (0, 2, ...) and non-window quanta
+	 * land on odd ones (1, 3, ...). */
+	static const unsigned kN = 2u;
+	static const unsigned kDivider = 2u;
+
+	dsp56k::Audio::TxFrame frame;
+	uint64_t frameIndex = 0u;
+
+	/* ------------- Property 1a: audio above zero, second stays zero.
+	 *
+	 * Position 0 delivers on the second bus only (its second flag is set,
+	 * its audio flag is clear). A window advanceAll then counts the clear
+	 * audio flag into underrunFrames[0] and does not count the set second
+	 * flag into secondBusUnderrunFrames[0]. At position 0 the first is above
+	 * zero and the second stays zero: the two cannot be one counter. */
+	{
+		PositionEsai pos[2];
+		g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, kDivider);
+		adapter.attachEsai(0u, pos[0].audioEsai, pos[0].secondEsai);
+		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
+
+		auto secondTx0 = adapter.secondTxCallback(0u);
+		pos[0].secondEsai.writestatusRegister(0u);     /* no underrun outstanding */
+		secondTx0(frameIndex, frame);                  /* window quantum */
+		check(adapter.secondWritten(0u),
+			"1a setup: position 0's second-bus flag is set");
+		check(!adapter.audioWritten(0u),
+			"1a setup: position 0's audio flag stays clear");
+
+		adapter.advanceAll(0u);                        /* a window */
+		check(adapter.underrunFrames(0u) == 1u,
+			"1a: underrunFrames[0] rises to 1 from its clear audio flag");
+		check(adapter.secondBusUnderrunFrames(0u) == 0u,
+			"1a: secondBusUnderrunFrames[0] STAYS zero despite the window - "
+			"its flag was set (separate storage)");
+	}
+
+	/* ------------- Property 1b: second above zero, audio stays zero.
+	 *
+	 * The reverse direction at the same position, on a fresh adapter:
+	 * position 0 delivers on the audio bus only, so a window advanceAll
+	 * counts into secondBusUnderrunFrames[0] and not underrunFrames[0]. */
+	{
+		PositionEsai pos[2];
+		g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, kDivider);
+		adapter.attachEsai(0u, pos[0].audioEsai, pos[0].secondEsai);
+		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
+
+		auto audioTx0 = adapter.audioTxCallback(0u);
+		pos[0].audioEsai.writestatusRegister(0u);      /* no underrun outstanding */
+		audioTx0(frameIndex, frame);
+		check(adapter.audioWritten(0u),
+			"1b setup: position 0's audio flag is set");
+		check(!adapter.secondWritten(0u),
+			"1b setup: position 0's second-bus flag stays clear");
+
+		adapter.advanceAll(0u);                        /* a window */
+		check(adapter.secondBusUnderrunFrames(0u) == 1u,
+			"1b: secondBusUnderrunFrames[0] rises to 1 from its clear second "
+			"flag");
+		check(adapter.underrunFrames(0u) == 0u,
+			"1b: underrunFrames[0] STAYS zero despite the window - its flag "
+			"was set (separate storage)");
+	}
+
+	/* ------------- Property 2: the double condition raises phaseErrorFrames
+	 * by exactly one, not two.
+	 *
+	 * On the second bus, an unwanted callback is one where the position has
+	 * Already delivered on that bus in this quantum and this is a non-window
+	 * quantum. Drive it by firing position 0's second wrapper once in a
+	 * window (frameIndex 0: first delivery, sets the flag, no error), then a
+	 * Second time in a non-window (frameIndex 1: the flag is still set from
+	 * the first delivery, so "already delivered" holds, AND 1 % 2 != 0, so
+	 * "outside the window" holds). Both conditions true at once yield ONE
+	 * increment. A counter written as two independent tests would raise by
+	 * two. */
+	{
+		PositionEsai pos[2];
+		g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, kDivider);
+		adapter.attachEsai(0u, pos[0].audioEsai, pos[0].secondEsai);
+		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
+
+		auto secondTx0 = adapter.secondTxCallback(0u);
+		pos[0].secondEsai.writestatusRegister(0u);     /* no underrun outstanding */
+
+		/* First delivery, on the window (frameIndex 0): the one callback the
+		 * scheduler asks for. No phase error - a lone, windowed delivery is
+		 * not an unwanted callback. */
+		frameIndex = 0u;
+		secondTx0(frameIndex, frame);
+		check(adapter.phaseErrorFrames(0u) == 0u,
+			"2: a lone windowed second delivery raises phaseErrorFrames[0] by "
+			"nothing");
+		check(adapter.secondWritten(0u),
+			"2: the first delivery set position 0's second flag (so "
+			"'already delivered' can be detected)");
+
+		/* Second delivery, on a NON-window (frameIndex 1): already delivered
+		 * this quantum and outside the window. exactly one increment. */
+		frameIndex = 1u;
+		secondTx0(frameIndex, frame);
+		check(adapter.phaseErrorFrames(0u) == 1u,
+			"2: the double condition (already delivered AND non-window) raises "
+			"phaseErrorFrames[0] by EXACTLY ONE, not two");
+		check(adapter.phaseErrorFrames(1u) == 0u,
+			"2: position 1's phase error stays zero (per-position)");
+	}
+
+	/* Supplementary: the audio-bus duplicate, reachable without a Scheduler. A
+	 * second audio delivery in one quantum raises phaseErrorFrames(position)
+	 * by exactly one. */
+	{
+		PositionEsai pos[2];
+		g2::ChainAdapter adapter(kN, 1u, g2::ChainTopology::Ring, kDivider);
+		adapter.attachEsai(0u, pos[0].audioEsai, pos[0].secondEsai);
+		adapter.attachEsai(1u, pos[1].audioEsai, pos[1].secondEsai);
+
+		auto audioTx0 = adapter.audioTxCallback(0u);
+		pos[0].audioEsai.writestatusRegister(0u);      /* no underrun outstanding */
+		frameIndex = 0u;
+		audioTx0(frameIndex, frame);
+		check(adapter.phaseErrorFrames(0u) == 0u,
+			"supp: a lone audio delivery raises phaseErrorFrames[0] by nothing");
+		audioTx0(frameIndex, frame);                   /* second in one quantum */
+		check(adapter.phaseErrorFrames(0u) == 1u,
+			"supp: a second audio delivery in one quantum raises "
+			"phaseErrorFrames[0] by exactly one");
+	}
+
+	if(failures != 0)
+	{
+		printf("t0_chain_counters: %d failure(s)\n", failures);
+		return 1;
+	}
+
+	printf("t0_chain_counters: all cases passed\n");
+	return 0;
+}
