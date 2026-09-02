@@ -230,9 +230,8 @@ function(g2ScanForNeedles g2Label g2OutVerdict g2OutReport g2OutExcluded)
 		if(g2GrepResult EQUAL 0)
 			string(CONCAT g2Verdict
 				"${g2Label} FAILED: the string '${g2Needle}' is "
-				"present in this repository. Design section 13.4.3 refutes the "
-				"MCU clock literal and design section 13.4.6 deleted the debt "
-				"alarm macro; neither may come back.\n"
+				"present in this repository. The MCU clock literal is refuted and "
+				"the debt alarm macro is deleted; neither may come back.\n"
 				"${g2ScopeReport}\n"
 				"${g2GrepOutput}")
 			set(${g2OutVerdict} "${g2Verdict}" PARENT_SCOPE)
