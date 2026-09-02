@@ -96,7 +96,7 @@ int main()
 	 * Unconditional. The semantic cross-check harness drives DSP::exec
 	 * directly and never constructs a Scheduler, so the enumerator exists
 	 * but is never accepted by create(). The rule rejects it on every
-	 * build, and the test asserts it on every build. */
+	 * build. */
 	{
 		g2::Scheduler::Config cfg;
 		cfg.backend = g2::Backend::Interpreter;
