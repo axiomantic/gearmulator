@@ -1,4 +1,4 @@
-/* The long-dispatch counter, driven as the branch is written. Rule 4 fires
+/* The long-dispatch counter, driven as the branch is written. It fires
  * exactly when one dispatch unit of the emulated
  * instruction stream costs more than one frame's allocation. When it fires,
  * the quantum's want == budget - debt is <= 0, so the want <= 0 branch runs
@@ -6,11 +6,11 @@
  * increments `longDispatchQuanta` by exactly one. The branch repeats for every
  * consecutive quantum the carried debt still overruns, and once the debt has
  * been paid below the next allocation the running branch resumes and the debt
- * is back inside its rule 2 bound.
+ * is back inside its debt bound.
  *
  * THE spike. A single long dispatch unit -- one call that overruns its request
  * by several full allocations -- is exactly the "the previous quantum already
- * overran this quantum's whole budget" of rule 4. It leaves a debt equal to
+ * overran this quantum's whole budget" case. It leaves a debt equal to
  * the overshoot, and every quantum whose want is still <= 0 after it takes the
  * long branch and pays it down. The role-filler's later calls overrun by a
  * small amount strictly below kMaxDispatchCost, which is precisely the shape
@@ -27,7 +27,7 @@
  * number of long-dispatch quanta a spike produces is asserted once against a
  * hard-coded expectation (one full allocation is about 1562/1563, so a 1580
  * overshoot exhausts in one quantum, 4000 in two, 5000 in three) and once
- * against BranchModel, a pure re-derivation of rule 4's count and debt
+ * against BranchModel, a pure re-derivation of the long-dispatch count and debt
  * bookkeeping that never calls g2::runQuantum. A regression that changed the
  * template's branch would then be caught by two independent witnesses rather
  * than passing because the code and an expectation copied from it drifted
@@ -79,7 +79,7 @@ namespace
 	 * recovered debt must be inside the same [0, kMaxDispatchCost). The spike
 	 * overshoot is deliberately many allocations -- the long-dispatch
 	 * condition -- and while it is being paid down the debt sits above this
-	 * cap, returning inside the rule 2 bound afterwards. */
+	 * cap, returning inside the debt bound afterwards. */
 	constexpr int64_t kMaxDispatchCost = 40;
 
 	/* A context exposing exactly the four members the template needs: rate,
@@ -115,7 +115,7 @@ namespace
 	 * overruns the request by `spikeOvershoot`, which is several allocations.
 	 * Every later call overruns by a small positive amount strictly below
 	 * kMaxDispatchCost, so once the debt has been paid down the context
-	 * resumes running and stays inside the rule 2 bound. */
+	 * resumes running and stays inside the debt bound. */
 	struct SpikeRun
 	{
 		const int64_t spikeOvershoot;
@@ -135,7 +135,7 @@ namespace
 		}
 	};
 
-	/* The pure, independent model of rule 4's count and bookkeeping. It is
+	/* The pure, independent model of the long-dispatch count and bookkeeping. It is
 	 * derived from the spike overshoot and the frame-allocation sequence
 	 * Without calling g2::runQuantum, so a regression in the template's branch
 	 * is caught by a witness that cannot inherit the bug. `budgets` walks the
@@ -228,7 +228,7 @@ namespace
 					ranAfterSpike = true;
 			}
 
-			/* Rule 2's bound holds afterwards, not during. Through the spike's
+			/* The debt bound holds afterwards, not during. Through the spike's
 			 * pay-down the debt sits above the bound by
 			 * construction; once the context has resumed running (a running
 			 * quantum after the counter first moved) every boundary is inside
@@ -263,7 +263,7 @@ namespace
 
 		/* The role-filler ran once per running frame and never inside a long
 		 * quantum (already asserted per frame), and the debt returned inside
-		 * the fixture's rule 2 bound afterwards. */
+		 * the fixture's debt bound afterwards. */
 		checkEqual(static_cast<int64_t>(runCalls),
 			static_cast<int64_t>(kFrames - longFrames),
 			"the role-filler ran exactly once per running frame and never in "
@@ -286,7 +286,7 @@ namespace
 
 int main()
 {
-	printf("t0_long_dispatch: the rule 4 counter (task SCH-13)\n");
+	printf("t0_long_dispatch: the long-dispatch counter\n");
 
 	/* One whole allocation is about 1562/1563 at 150 MHz / 96 kHz. A spike of
 	 * 1580 exceeds one allocation, so it exhausts in exactly one long-dispatch
@@ -312,6 +312,6 @@ int main()
 
 	printf("t0_long_dispatch: all cases passed (the counter rises exactly one "
 		"per long-dispatch quantum, each pays one whole allocation, and the "
-		"debt returns inside the fixture's rule 2 bound after recovery)\n");
+		"debt returns inside the fixture's debt bound after recovery)\n");
 	return 0;
 }

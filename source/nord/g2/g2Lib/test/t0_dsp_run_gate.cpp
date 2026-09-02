@@ -336,9 +336,9 @@ namespace
 
 		checkEqual(ctx.acc, oneAllocation,
 			"PROVISIONAL, and pinned to OBSERVED behaviour rather than to a "
-			"ruling -- plan row W3-407 carries the open design question SHOULD "
+			"ruling -- an OPEN QUESTION remains, SHOULD "
 			"A SHUT GATE ADVANCE THE RATIONAL SAMPLE ACCUMULATOR?, and this "
-			"assertion does not answer it. Post-SCH-34 the allocation at "
+			"assertion does not answer it. The allocation at "
 			"dspJob.cpp:103 stands AHEAD of the run gate, so a shut gate "
 			"advances the accumulator by one whole allocation; that is what "
 			"this line pins, and it can no more tell a correct timebase from "
