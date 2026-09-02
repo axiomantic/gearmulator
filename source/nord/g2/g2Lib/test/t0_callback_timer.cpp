@@ -256,7 +256,7 @@ namespace
 int main()
 {
 	/* CASE 1 is the static_assert block above: the surface and the absent
-	 * state surface. It compiles only while the class matches the design. */
+	 * state surface. It compiles only while the class matches that shape. */
 	(void)g_begin; (void)g_end; (void)g_report; (void)g_reset;
 	(void)g_reportCallbacks; (void)g_reportMean; (void)g_reportP99; (void)g_reportMax;
 
