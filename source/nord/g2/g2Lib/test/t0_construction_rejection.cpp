@@ -5,9 +5,9 @@
  * halves of one row: a null return AND the exact `g2::Status`.
  *
  * No case here is a language assert() and no case catches an exception. A
- * release build removes an assert(), and the design forbids
- * throwing, so the status out-param is the whole observable and this file runs
- * identically in a release build and a debug build.
+ * release build removes an assert(), and throwing is forbidden here, so the
+ * status out-param is the whole observable and this file runs identically in a
+ * release build and a debug build.
  *
  * Why both halves of every row. A null return alone does not distinguish the
  * rows from each other, and a status alone does not establish that no object
@@ -67,7 +67,7 @@ namespace
 
 	/* The lookahead bound, and the two terms that meet `L` under
 	 * it. `D_codec` is 0 by construction and is written as a named term rather
-	 * than omitted, exactly as section 20's formula writes it. */
+	 * than omitted, exactly as the lookahead formula writes it. */
 	constexpr uint64_t kLookaheadBound = 16384;
 	constexpr uint64_t kDelayCodec     = 0;
 
