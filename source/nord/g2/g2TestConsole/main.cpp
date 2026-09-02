@@ -610,7 +610,7 @@ namespace
 		// The output says which sample each register is: DDR2 moves and the
 		// other two do not.
 		std::cout << "dsp-dma=" << (all ? "PASS" : "FAIL")
-		          << " (measured/expected, expectations from design section 2.3;"
+		          << " (measured/expected;"
 		             " DDR2 is LATCHED at its first written value and DCO2/DCO4"
 		             " are read at the bound)"
 		          << std::endl;
@@ -2165,7 +2165,7 @@ namespace
 		             " not come back is INSTRUMENT-BLIND" << std::endl;
 		std::cout << "options:" << std::endl;
 		std::cout << "  --dump-dsp-dma   modifier of --boot: additionally print each DSP"
-		             " position's DDR2, DCO2 and DCO4 and check them against design section 2.3;"
+		             " position's DDR2, DCO2 and DCO4 and check them against the expectations;"
 		             " a mismatch exits non-zero" << std::endl;
 		std::cout << "  --rx-probe       modifier of --impulse: additionally read the DSPs' ESAI"
 		             " RECEIVE side during the play phase -- the four audio-channel DMA pointers"
