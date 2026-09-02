@@ -157,7 +157,7 @@ add_test(NAME t0_interrupts COMMAND t0_interrupts)
 set_tests_properties(t0_interrupts PROPERTIES LABELS "UnitTest")
 
 
-# ----------------- the panel seam for criterion (h)
+# ----------------- the panel seam
 
 add_executable(t0_panel_seam t0_panel_seam.cpp)
 target_link_libraries(t0_panel_seam PRIVATE g2Lib)
