@@ -268,8 +268,9 @@ namespace
 // observable and no library is linked. The signatures are include/mcf5307.h's.
 extern "C"
 {
-	void mcf5307_runtime_init(void)
+	int mcf5307_runtime_init(void)
 	{
+		return 0;
 	}
 
 	mcf5307_ctx* mcf5307_create(void*, mcf5307_read_fn, mcf5307_write_fn,
@@ -368,8 +369,9 @@ extern "C"
 	 * links no mcf5307 archive must supply it. It is a SINK and not a
 	 * recorder: nothing in this file drives the hub, so no frame ever reaches
 	 * it, and a recorder here would be state no case reads. */
-	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
+	int isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
 	{
+		return 1;
 	}
 
 	/* THE BOARD MOVES ITS HANDLE OFF THE STUB BACKEND AT CONSTRUCTION, so

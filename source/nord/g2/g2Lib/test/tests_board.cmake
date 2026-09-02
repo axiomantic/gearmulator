@@ -981,3 +981,26 @@ set_tests_properties(t0_gdb_script PROPERTIES LABELS "UnitTest")
 
 target_sources(t0_sof_tick PRIVATE ../transportHub.cpp)
 target_sources(t0_board_interrupts PRIVATE ../transportHub.cpp)
+
+# ----------------- CallbackTimer
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t0_callback_timer$
+#
+# IT COMPILES ../perf/CallbackTimer.cpp DIRECTLY and links g2Lib.
+# CallbackTimer.cpp is not yet on sources_perf.cmake -- that source-list edit
+# belongs to the perf track's own file -- so the direct compile is what puts
+# the object into this test's link, the same arrangement the plugin-track
+# registrations use for the g2JucePlugin sources.
+#
+# THE TEST READS NO HOST CLOCK, so it needs no timing tolerance and no serial
+# property: its cases assert exact counts and order-only properties that any
+# monotonic clock satisfies.
+
+add_executable(t0_callback_timer
+	t0_callback_timer.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../perf/CallbackTimer.cpp)
+target_link_libraries(t0_callback_timer PRIVATE g2Lib)
+set_property(TARGET t0_callback_timer PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_callback_timer COMMAND t0_callback_timer)
+set_tests_properties(t0_callback_timer PROPERTIES LABELS "UnitTest")
