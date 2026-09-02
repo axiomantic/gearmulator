@@ -1,0 +1,48 @@
+# t1_boot_pre_sch35
+# Condensed from 57646 lines. Bus-trace lines omitted; the raw log was not retained.
+
+102: ok   CONTROL clear-shaped: sixteen 0x20 spaces written into display 0 line 0 through Board::onWrite count 0 content writes and 16 clear writes; counted 0 and 16
+102: ok   CONTROL banner-shaped: "Nord Modular G2 " written by the same route counts 13 content writes and 3 clear writes; counted 13 and 3
+102: ok   CONTROL banner-shaped: the same sixteen cells read back through Board::onRead equal "Nord Modular G2 "; read "Nord Modular G2 "
+102: ok   CONTROL landmark: one 2-byte read at 0x3001B7FA and one at 0x3001B7FC leave the counter at 0x3001B7FC reading exactly 1, so it answers that address and not its neighbour; read 1
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+102: hdiWriteTX@59: DSP Boot: finished
+102: boot: iterations=65000 readPathProven=1 halted=0 faulted=0
+102: boot: display 0 line 0 writes: content=0 clear=16
+102: boot: landmark 16-bit fetches: 0x30000400=1 0x3001B7FC=0
+102: boot: pcAtBanner=0x0 pcAfterBanner=0x300505d6 pcLater=0x300505dc
+102: boot: line0="                "
+102: boot: line1="                "
+102: boot: handshakePorts=0
+102: boot: dspCount=8 dspCycles=0 0 0 0 0 0 0 0 
+102: boot: bus log lines=0
+102: ok   sixteen bytes read at 0x30000400 through Board::onRead equal the first sixteen bytes of CODE_30000400.bin, so the display read path reaches memory and a zero buffer means the firmware wrote nothing
+102: FAIL display 0 line 0 equals "Nord Modular G2 " untrimmed; read "                "
+102: FAIL display 0 line 1 equals "Version 1.62 Exp"; read "                "
+102: FAIL HDI08 ports completing the HF0/HF2 handshake within 65000 iterations equals 8; counted 0
+102: ok   the landmark counter saw the core's own 16-bit instruction fetches at the reset PC 0x30000400, so a zero count at any other landmark is the firmware not arriving rather than the counter not looking; counted 1
+102: FAIL the firmware wrote at least one printable non-space character into display 0 line 0, which the display clear's 0x20 spaces cannot satisfy; counted 0 content writes and 16 clear writes
+102: FAIL execution entered the banner function 0x3001B7FC; counted 0 fetches of its first instruction
+102: FAIL execution entered the banner function 0x3001B7FC AND is no longer inside it, so the firmware returned past the banner rather than never arriving or stopping within it
+102: FAIL execution entered the banner function 0x3001B7FC AND the core has not halted
+102: FAIL execution entered the banner function 0x3001B7FC AND the run ended at neither hard halt (0x3001BB4C flash gate, 0x3001B86C model byte)
+102: ok   the Board owns 8 DSP slots; counted 8
+102: FAIL every DSP the Board owns executed at least one cycle, so the scheduler turned them rather than leaving them bootstrapped and still; counted [0, 0, 0, 0, 0, 0, 0, 0]
+2/2 Test #102: t1_boot ..........................***Failed   13.86 sec
+The following tests passed:
+50% tests passed, 1 tests failed out of 2
+	102 - t1_boot (Failed)                                  IntegrationTest

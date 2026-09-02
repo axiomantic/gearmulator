@@ -34,6 +34,10 @@ list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/tools/blockTableHarness.h)
 
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.h
+	${CMAKE_CURRENT_SOURCE_DIR}/scheduler.cpp)
+
 # Header-only, listed so the file appears in the target.
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/cycleDebt.h)
@@ -44,3 +48,7 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/transportHub.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/transportHub.h)
+
+# Header-only, listed so the file appears in the target.
+list(APPEND G2LIB_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/mcuContext.h)
