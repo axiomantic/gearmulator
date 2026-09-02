@@ -514,12 +514,12 @@ int main()
 
 		check(twoSlotReceivers == 1u,
 		      "exactly one port's receive channel is programmed for the two-slot codec pair "
-		      "(DCO2 = " + hex6(g_dcoEndpoint) + "), design section 2.4; " +
+		      "(DCO2 = " + hex6(g_dcoEndpoint) + "); " +
 		      std::to_string(twoSlotReceivers) + " are");
 
 		check(twoSlotTransmitters == 1u,
 		      "exactly one port's transmit channel is programmed for the two-slot codec pair "
-		      "(DCO4 = " + hex6(g_dcoEndpoint) + "), design section 2.4; " +
+		      "(DCO4 = " + hex6(g_dcoEndpoint) + "); " +
 		      std::to_string(twoSlotTransmitters) + " are");
 
 		if(twoSlotReceivers != 1u || twoSlotTransmitters != 1u)
