@@ -55,9 +55,8 @@ namespace
 	// ------------------------------------------------------------------
 	// golden.timebase
 	//
-	// The required symbols, in the order the design lists them. This vector is
-	// the required set: a symbol missing from the file is named, and a symbol in
-	// the file that is not here is named.
+	// The required symbols. This vector is the required set: a symbol missing
+	// from the file is named, and a symbol in the file that is not here is named.
 
 	const std::vector<std::string> g_requiredTimebaseSymbols =
 	{
