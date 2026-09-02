@@ -671,7 +671,7 @@ int main()
 				"case 3: a hundred more advanced it by a hundred more");
 
 			check(digestRun.ldq[0] > digestSave.ldq[0] && digestSave.ldq[0] > 0u,
-				"case 3: the MCU's rule 4 long-dispatch counter ROSE across the second "
+				"case 3: the MCU's long-dispatch counter ROSE across the second "
 				"hundred quanta and was already above zero at the save point -- the state "
 				"this round trip compares is not a zero");
 

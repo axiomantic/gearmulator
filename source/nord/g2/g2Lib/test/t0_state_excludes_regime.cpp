@@ -444,7 +444,7 @@ namespace
 			checkEqualI64(_observed.debt[c], _expected.debt[c],
 				_tag + ": item 'the cycle debt' survives by value" + atIndex(i));
 			checkEqual(_observed.ldq[c], _expected.ldq[c],
-				_tag + ": item 'the rule 4 long-dispatch counter' survives by value" + atIndex(i));
+				_tag + ": item 'the long-dispatch counter' survives by value" + atIndex(i));
 			checkEqual(_observed.fault[c], _expected.fault[c],
 				_tag + ": item 'the sticky fault latch' survives by value" + atIndex(i));
 		}
