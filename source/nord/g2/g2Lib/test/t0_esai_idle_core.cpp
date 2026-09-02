@@ -230,7 +230,7 @@ int main()
 	if(!dsp56k::g_useJIT)
 	{
 		std::printf("FAIL this build has g_useJIT = false. The idle-route "
-			"delivery is visible to both backends; W3-335's acceptance "
+			"delivery is visible to both backends; this check's acceptance "
 			"requires the JIT.\n");
 		return 1;
 	}

@@ -299,7 +299,7 @@ int main(int argc, char** argv)
 	if(!dsp56k::g_useJIT)
 	{
 		std::printf("FAIL this build has g_useJIT = false. The ESAI slot-and-core "
-			"interleave is visible to both backends; W3-319's acceptance requires "
+			"interleave is visible to both backends; this check's acceptance requires "
 			"the JIT.\n");
 		return 1;
 	}
