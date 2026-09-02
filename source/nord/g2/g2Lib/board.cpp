@@ -468,8 +468,7 @@ namespace g2
 		std::cout << "board: G2_MCU_CORE_CLOCK_HZ = "
 		          << G2_MCU_CORE_CLOCK_HZ
 		          << " is derived from the schematic CLKIN label and the PLL"
-		             " multiplier, and is not scope-measured;"
-		             " owner spike criterion (j)"
+		             " multiplier, and is not scope-measured"
 		          << std::endl;
 	}
 
