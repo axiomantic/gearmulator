@@ -86,10 +86,10 @@ if(G2_LINK_MCF5307)
 	target_link_libraries(g2Lib PUBLIC mcf5307::mcf5307)
 endif()
 
-# ----------------- the configure-time guard of measurement register rows 5 and 6
+# ----------------- the configure-time guard of the two UNMEASURED bus symbols
 #
-# G2_MCU_BUS_CLOCK_HZ and G2_MCU_BUS_DIVIDER are UNMEASURED. Spike criterion (j)
-# owns both and both read 0u today. A source that uses either one computes with
+# G2_MCU_BUS_CLOCK_HZ and G2_MCU_BUS_DIVIDER are UNMEASURED and both read 0u
+# today. A source that uses either one computes with
 # a zero, so the build fails at configure time and names the symbol.
 #
 # The one file allowed to carry the two names is their declaration site,
@@ -123,9 +123,9 @@ foreach(guardedFile IN LISTS G2_GUARDED_FILES)
 		if(NOT symbolPosition EQUAL -1)
 			message(FATAL_ERROR
 				"${guardedFile} uses ${unmeasuredSymbol}. "
-				"That value is UNMEASURED, it reads 0u, and spike criterion (j) owns it. "
-				"Measurement register row 5 governs G2_MCU_BUS_CLOCK_HZ and row 6 governs "
-				"G2_MCU_BUS_DIVIDER. No source may use either until criterion (j) reports.")
+				"That value is UNMEASURED and it reads 0u. "
+				"No source may use G2_MCU_BUS_CLOCK_HZ or G2_MCU_BUS_DIVIDER "
+				"until it has been measured.")
 		endif()
 	endforeach()
 endforeach()

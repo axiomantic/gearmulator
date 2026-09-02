@@ -10,8 +10,8 @@
  * ------------------------------------------------------------------------
  * WHY TWO DECLARED MACROS ARE NOT ASSERTED HERE.
  *
- * g2Lib/CMakeLists.txt carries a configure-time guard for the two UNMEASURED
- * symbols of measurement register rows 5 and 6. It fails the CONFIGURE step if
+ * g2Lib/CMakeLists.txt carries a configure-time guard for two UNMEASURED
+ * symbols. It fails the CONFIGURE step if
  * any file under source/nord/g2/ names either one, and it exempts exactly one
  * file: their declaration site, g2/timebase.h. This file is under that tree, so
  * naming either symbol here would fail the configure before this test could be
