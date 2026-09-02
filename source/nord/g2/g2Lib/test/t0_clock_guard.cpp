@@ -60,7 +60,7 @@
  *
  * What no scan can catch is a value computed from other constants, and this
  * file does not pretend otherwise. The scan is the cheap half. The rule that
- * the core clock has no derived value until criterion (j) reports is the half
+ * the core clock has no derived value until it is measured is the half
  * that does the work.
  *
  * Case 2, the configure-time guard. The two MCU bus symbols are both 0u and
@@ -146,8 +146,8 @@ namespace
 	 * bus clocks, and at the JEDEC row interval that fixes the bus clock to a
 	 * band about one part in fifty wide. An independent UART divider lands
 	 * inside the same band from a MIDI baud rate, which is what makes it a
-	 * derivation rather than a coincidence. Spike criterion (j) owns the
-	 * figure.
+	 * derivation rather than a coincidence. The measurement that would settle
+	 * the figure has not been taken.
 	 *
 	 * The divider floor is 2 because 2 holds under both readings of the part.
 	 * The MCF5307 manual's section 4.2 permits 2, 3 or 4 and no divide-by-one;
@@ -1035,9 +1035,8 @@ int main(const int argc, const char* const* const argv)
 						+ decimalDigits(value) + " Hz, which is below the "
 						"core-clock floor of " + decimalDigits(floorHz)
 						+ " Hz and therefore a bus-domain figure in a "
-						"core-domain symbol. Measurement register row 7 owns "
-						"the value and spike criterion (j) owns the "
-						"measurement that settles it.\n" + scopeReport + "\n"
+						"core-domain symbol. The measurement that would "
+						"settle the value has not been taken.\n" + scopeReport + "\n"
 						+ line);
 				}
 			}
