@@ -226,7 +226,7 @@ int main()
 	/* ---------------- rows 4 and 5, the companion case: WITH the override the
 	 * same two values are ACCEPTED.
 	 *
-	 * Register rows 9 and 10 require tests at H = 1 and H = 2 and at divider 1
+	 * Tests are required at H = 1 and H = 2 and at divider 1
 	 * and 4, which a strict equality would forbid. The override is the only way
 	 * to satisfy both, so it is driven in the ACCEPTING direction here as well
 	 * as in the rejecting direction above. */

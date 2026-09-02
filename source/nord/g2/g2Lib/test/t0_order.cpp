@@ -731,8 +731,7 @@ namespace
 	 * Config asked it to advance on.
 	 *
 	 * A divider of 1 NEEDS Config::testOverride, which is the escape from the
-	 * equality row and nothing else; measurement register row 10 requires the
-	 * value in any case.
+	 * equality row and nothing else; the value is required in any case.
 	 *
 	 * The quantum count is derived and not a literal, for the reason case 3
 	 * states: every quantum is an advance window at a divider of 1, so the
