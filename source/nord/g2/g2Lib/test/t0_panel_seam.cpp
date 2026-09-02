@@ -95,7 +95,7 @@ namespace
 int main()
 {
 	static_assert(noexcept(std::declval<g2::Panel&>().tick(uint64_t(0))),
-		"Panel::tick must be noexcept: the scheduler's run phase advances the panel without an error channel (design 13.10 rule 2).");
+		"Panel::tick must be noexcept: the scheduler's run phase advances the panel without an error channel.");
 	static_assert(noexcept(std::declval<const g2::Panel&>().stateSize()),
 		"Panel::stateSize must be noexcept.");
 	static_assert(noexcept(std::declval<const g2::Panel&>().stateSave(nullptr)),
@@ -103,7 +103,7 @@ int main()
 	static_assert(noexcept(std::declval<g2::Panel&>().stateLoad(nullptr)),
 		"Panel::stateLoad must be noexcept.");
 	static_assert(std::is_same_v<decltype(std::declval<const g2::Panel&>().stateSize()), size_t>,
-		"Panel::stateSize returns size_t, the byte count of the panel state (design 23.1.1).");
+		"Panel::stateSize returns size_t, the byte count of the panel state.");
 	static_assert(std::is_same_v<decltype(std::declval<const g2::Panel&>().stateSave(nullptr)), void>,
 		"Panel::stateSave returns void: a zero-byte state writes nothing.");
 	static_assert(std::is_same_v<decltype(std::declval<g2::Panel&>().stateLoad(nullptr)), void>,

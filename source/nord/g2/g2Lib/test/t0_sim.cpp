@@ -695,7 +695,7 @@ int main()
 
 		for(const uint32_t offset : forbidden)
 			check(!modelAnswersAt(bus, offset),
-				"the model carries no register at " + hex32(offset) + ", where a CS6 or CS7 family would sit, because AGENTS.md section 2.2 records that no G2 signal reaches them");
+				"the model carries no register at " + hex32(offset) + ", where a CS6 or CS7 family would sit, because no G2 signal reaches them");
 	}
 
 	// -----------------------------------------------------------------------
@@ -816,7 +816,7 @@ int main()
 		// The three protected places by name, so that a reader does not have
 		// to reconstruct them from the sweep.
 		checkEqual(uint32_t(modelWritableMask(bus, 0x248)), uint32_t(0xfd),
-			"Port A bit 9 is the one bit of MBAR+0x248 a write cannot change, because AGENTS.md sections 2.3 and 4.1 record it as an input strap");
+			"Port A bit 9 is the one bit of MBAR+0x248 a write cannot change, because it is an input strap");
 		checkEqual(uint32_t(modelWritableMask(bus, 0x249)), uint32_t(0xff),
 			"the low byte of Port A carries no strap, so a write reaches every bit of it");
 		checkEqual(uint32_t(modelWritableMask(bus, 0x1d0)), uint32_t(0x00),
