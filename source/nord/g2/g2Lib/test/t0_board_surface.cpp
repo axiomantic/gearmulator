@@ -109,8 +109,8 @@ int main()
 		      "construction logs the core clock value 162000000 exactly once");
 		check(countSubstring(out, "derived") == 1,
 		      "construction states the value is derived exactly once");
-		check(countSubstring(out, "(j)") >= 1,
-		      "construction names criterion (j) as the value's owner");
+		check(countSubstring(out, "is not scope-measured") == 1,
+		      "construction states the value is not scope-measured exactly once");
 	}
 
 	// ------------------------------------------------------------------
@@ -120,8 +120,9 @@ int main()
 		const std::string out = captureBoardConstructionOnce();
 		check(countSubstring(out, "G2_MCU_CORE_CLOCK_HZ") == 1,
 		      "each Board construction logs the core-clock line exactly once");
-		check(countSubstring(out, "(j)") >= 1,
-		      "each Board construction names criterion (j)");
+		check(countSubstring(out, "is not scope-measured") == 1,
+		      "each Board construction states the value is not scope-measured "
+		      "exactly once");
 	}
 
 	// ------------------------------------------------------------------
