@@ -67,12 +67,12 @@ namespace
 	constexpr int32_t kMostNegative = -static_cast<int32_t>(kQ23SignBit);
 	constexpr int32_t kMostPositive =  static_cast<int32_t>(kQ23SignBit) - 1;
 
-	/* The register indices the design's mapping table names. */
+	/* The register indices the frame mapping covers. */
 	constexpr unsigned kRegisters[] = { 0u, 2u };
 	constexpr unsigned kRegisterCount =
 		static_cast<unsigned>(sizeof(kRegisters) / sizeof(kRegisters[0]));
 
-	/* The slot counts the design's mapping table names. */
+	/* The slot counts the frame mapping covers. */
 	constexpr unsigned kSlotCounts[] = { 2u, 8u };
 	constexpr unsigned kSlotCountCount =
 		static_cast<unsigned>(sizeof(kSlotCounts) / sizeof(kSlotCounts[0]));

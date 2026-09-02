@@ -128,11 +128,11 @@ G2_STATIC_ASSERT(G2_MCU_CYCLES_PER_FRAME_DEN != 0u,
  * eventual measurement a deliberate edit: giving either symbol a value fails
  * these lines. */
 G2_STATIC_ASSERT(G2_MCU_BUS_CLOCK_HZ == 0u,
-	"BCLKO is UNMEASURED. Register row 5, owner SPK-9 criterion (j).");
+	"BCLKO is UNMEASURED.");
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER == 0u,
-	"PSTCLK/BCLKO is UNMEASURED. Register row 6, owner SPK-9 criterion (j).");
+	"PSTCLK/BCLKO is UNMEASURED.");
 
-/* 1 is illegal for the bus divider whatever criterion (j) returns: the MCF5307
+/* 1 is illegal for the bus divider whatever the measurement returns: the MCF5307
  * manual permits only 2, 3 or 4, and the MCF5407 the schematic reads at U14
  * multiplies CLKIN by 3. */
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER != 1u,

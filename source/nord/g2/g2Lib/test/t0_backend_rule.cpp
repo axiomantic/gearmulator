@@ -66,7 +66,7 @@ int main()
 
 	/* ---------------- case 1: backend == Backend::Jit
 	 *
-	 * The conditional result. The design says the rule is structural, so
+	 * The conditional result. The rule is structural, so
 	 * the assertion is conditional on the same constant the rule reads.
 	 *
 	 * A release build removes the branch the rule does not take, so the

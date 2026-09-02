@@ -24,4 +24,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: This track has no step yet
-        run: echo "track-sched is empty. SCH-26 adds the no-system-clock step."
+        run: echo "track-sched is empty. The no-system-clock step lands here."

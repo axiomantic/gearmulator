@@ -39,31 +39,31 @@
  */
 
 _Static_assert(G2_FRAME_RATE_HZ == 96000u,
-	"G2_FRAME_RATE_HZ is the ESAI frame rate, 96 kHz. Design 13.4.1.");
+	"G2_FRAME_RATE_HZ is the ESAI frame rate, 96 kHz.");
 
 _Static_assert(G2_DSP_CYCLES_PER_FRAME_NUM == 150000000u,
-	"DSP clock in Hz. PROVISIONAL, register row 8, owner SPK-8 criterion (e).");
+	"DSP clock in Hz. PROVISIONAL, and unmeasured.");
 
 _Static_assert(G2_DSP_CYCLES_PER_FRAME_DEN == 96000u,
 	"The DSP rational denominator is the frame rate, and it is fixed.");
 
 _Static_assert(G2_MCU_CYCLES_PER_FRAME_NUM == 162000000u,
-	"The MCU rational numerator is the CORE clock. Design 13.4.1, 13.4.3.");
+	"The MCU rational numerator is the CORE clock.");
 
 _Static_assert(G2_MCU_CYCLES_PER_FRAME_DEN == 96000u,
 	"The MCU rational denominator is the frame rate.");
 
 _Static_assert(G2_MCU_CORE_CLOCK_HZ == 162000000u,
-	"Register row 7: three times the CLKIN the schematic labels at U14.");
+	"Three times the CLKIN the schematic labels at U14.");
 
 _Static_assert(G2_CHAIN_HOP_FRAMES == 1u,
-	"H, provisional 1. Register row 9, owner SPK-3 criterion (d).");
+	"H, provisional 1, and unmeasured.");
 
 _Static_assert(G2_SECOND_BUS_FRAME_DIVIDER == 4u,
-	"Provisional 4, from the recorded 24 kHz control rate. Plan section 4.4.");
+	"Provisional 4, from the recorded 24 kHz control rate.");
 
 _Static_assert(G2_HOST_FRAMES_NUM == 96000u,
-	"The host-block mapping numerator is the frame rate. Design 14.1.1.");
+	"The host-block mapping numerator is the frame rate.");
 
 /* 54,000,000 is the BUS clock, and the core symbol is the one place where
  * standing it in would do real damage. The assert closes that place without

@@ -436,7 +436,7 @@ namespace
 	// source, and they are never used as an expectation.
 	static_assert(uint32_t(dsp56k::DmaChannel::RequestSource::Esai1ReceiveData) != g_rsEsai1Rx &&
 	              uint32_t(dsp56k::DmaChannel::RequestSource::Esai1TransmitData) != g_rsEsai1Tx,
-	              "DSP-2's two number spaces have collapsed: the hardware DCR field and the "
+	              "The two number spaces have collapsed: the hardware DCR field and the "
 	              "library enumerator now agree for ESAI_1, so this file's distinction is stale");
 
 	// The MOVEP immediate encoding is `08 F4 xx` plus one immediate word. The
@@ -969,7 +969,7 @@ int main()
 
 			check(kernels.size() == g_designImageCount,
 			      "the OS image carries " + std::to_string(g_designImageCount) + " containers of " +
-			      std::to_string(g_designWordCount) + " words, design sections 2.1 and 2.2; it carries " +
+			      std::to_string(g_designWordCount) + " words; it carries " +
 			      std::to_string(kernels.size()) + " of " + std::to_string(images.size()) +
 			      " self-identifying containers in all");
 
@@ -982,7 +982,7 @@ int main()
 			}
 
 			check(kernels.size() == g_designImageCount && allDifferent,
-			      "those containers hold images that differ from one another, design section 2.2; a "
+			      "those containers hold images that differ from one another; a "
 			      "scan that found the same bytes three times found one image and two coincidences");
 		}
 
@@ -1044,7 +1044,7 @@ int main()
 
 			check(permutation,
 			      "the port-to-position map read out of the booted machine is a permutation, so "
-			      "no two ports are checked against the same row of the design section 2.3 table");
+			      "no two ports are checked against the same row of the port-to-position table");
 		}
 
 		// Clause 1, the kernel download.
@@ -1069,7 +1069,7 @@ int main()
 
 			check(words == g_designWordCount,
 			      "port " + std::to_string(port) + " received " + std::to_string(words) +
-			      " words, and design section 18.3 says all eight DSPs receive " +
+			      " words, and all eight DSPs receive " +
 			      std::to_string(g_designWordCount));
 		}
 

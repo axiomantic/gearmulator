@@ -1,10 +1,10 @@
 /* The cycle-debt rule as a function template, checked against a synthetic
  * context and a synthetic role-filler. It runs no real DSP or MCU:
  *
- *   - Rule 2: 0 <= debt < maxDispatchCost at every quantum boundary.
- *   - Rule 3: the debt never goes negative at a boundary (no credit banking),
- *     and an idle period therefore never turns into a burst in a later
- *     quantum.
+ *   - The debt bound: 0 <= debt < maxDispatchCost at every quantum boundary.
+ *   - The floor at zero: the debt never goes negative at a boundary (no
+ *     credit banking), and an idle period therefore never turns into a burst
+ *     in a later quantum.
  *   - The never-idle drift case: every dispatch unit shorter than one
  *     allocation, the floor never fires, and the accumulated cycles spent
  *     differ from the accumulated ideal allocation by exactly the current
@@ -185,7 +185,7 @@ namespace
 			static_cast<int64_t>(kNeverIdleFrames),
 			"never-idle: the role-filler ran exactly once per frame");
 
-		/* Rule 2 held on every quantum boundary. */
+		/* The debt bound held on every quantum boundary. */
 		checkEqual(static_cast<int64_t>(violations), 0,
 			"never-idle: 0 <= debt < maxDispatchCost held on every boundary");
 
@@ -198,8 +198,8 @@ namespace
 			"zero never fired");
 
 		/* Zero drift. The accumulated spent minus the accumulated ideal
-		 * allocation equals exactly the current positional debt, which rule 2
-		 * bounds below kMaxDispatchCost. Over 10 million frames the difference
+		 * allocation equals exactly the current positional debt, which stays
+		 * below kMaxDispatchCost. Over 10 million frames the difference
 		 * does not grow: it is a bounded constant, so the long-run rate is
 		 * exactly the rational. */
 		checkEqual(totalSpent - totalIdeal, ctx.debt,
@@ -258,7 +258,7 @@ namespace
 		checkEqual(static_cast<int64_t>(violations), 0,
 			"forced-idle: 0 <= debt < maxDispatchCost held on every boundary");
 
-		/* Rule 3 -- the floor really fired, and the debt never went negative
+		/* The floor really fired, and the debt never went negative
 		 * at a boundary (no credit banking). */
 		check(run.idleFrames > 0,
 			"forced-idle: at least one idle quantum actually fired");
@@ -266,7 +266,7 @@ namespace
 			"forced-idle: the debt never survived a boundary negative");
 
 		/* Never fast. The running difference totalSpent - totalIdeal never
-		 * exceeded one dispatch unit; rule 3's floor discards unused cycles
+		 * exceeded one dispatch unit; the floor at zero discards unused cycles
 		 * and can only push the context slow, never let it run ahead. */
 		check(runningDiffMax <= kMaxDispatchCost,
 			"forced-idle: the context never ran more than one dispatch unit "
@@ -337,7 +337,7 @@ namespace
 
 int main()
 {
-	printf("t0_cycle_debt: the cycle-debt rule (task SCH-12)\n");
+	printf("t0_cycle_debt: the cycle-debt rule\n");
 
 	const int neverIdle  = runNeverIdle();
 	const int forcedIdle = runForcedIdle();

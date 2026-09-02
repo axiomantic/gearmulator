@@ -137,7 +137,7 @@ namespace
 		          << std::endl;
 	}
 
-	// ---------------------------------------------------------------- section 6.6
+	// ------------------------------------------------------- the display buffer
 
 	// The display buffer base, confirmed at 0x30057040,
 	// `addil #808062392,%d0`, and 808062392 decimal is 0x302A0DB8.
