@@ -360,8 +360,8 @@ int main()
 	 *     getTxWordCount() <= slots <= getTxWordCount() + 1
 	 *
 	 * The default build defines NDEBUG and removes that assertion from the
-	 * shipped translation unit, so this case is the only place the bound is
-	 * really checked in the build this project runs. */
+	 * shipped translation unit, so this case checks the bound in the build
+	 * this project runs. */
 	{
 		Fixture fixture;
 
