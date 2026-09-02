@@ -16,3 +16,8 @@ list(APPEND G2LIB_SOURCES slotWriteView.h)
 # The whole allocation of the ring happens once, in the constructor, so the
 # compiled part is a single translation unit.
 list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
+
+# ----------------- ChainTopology + the ChainAdapter class
+#
+# Both stay in the same source group so the IDE shows them together.
+list(APPEND G2LIB_SOURCES chainAdapter.h chainAdapter.cpp)
