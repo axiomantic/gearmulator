@@ -147,7 +147,7 @@ int main()
 
 		checkEqual(render(decision),
 			"NoFirmware machine=no patch=no offer=no message=<>",
-			"no firmware loads nothing and hands the message to design section 7.7");
+			"no firmware loads nothing and carries an empty message");
 
 		const g2::FirmwareVersionDecision same =
 			g2::decideFirmwareVersion(false, 0x0000u, 0x0000u);
