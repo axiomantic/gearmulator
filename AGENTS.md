@@ -327,10 +327,10 @@ to every other instrument here.
 must say this explicitly**: "Use `g2TestConsole --gdb` for runtime questions;
 breakpoints and watchpoints first, scaffolds only for what the stub cannot
 reach. For static structure questions (what does this routine do, who calls
-it), use the Ghidra headless decompiler per `nmg2-artifacts/AGENTS.md` §0.1 —
-decompile first to plan where to break, then break to confirm. Neither alone
-is evidence." An agent that inherits only this file's later paragraphs tends to
-default to disassembly and print-probes.
+it), use the Ghidra headless decompiler documented in
+`nmg2-artifacts/AGENTS.md` — decompile first to plan where to break, then break
+to confirm. Neither alone is evidence." An agent that inherits only this file's
+later paragraphs tends to default to disassembly and print-probes.
 
 `g2TestConsole --gdb <port>` places the same machine `--boot` places — the OS
 image at `0x30000400`, the vector table, the reset — and then serves a GDB
@@ -359,7 +359,7 @@ and reverting, at roughly ninety seconds a cycle:
 
 **The session drives the WHOLE machine.** `--gdb` builds the same `Scheduler`
 `--boot` builds and hands it to the stub, so a `continue` turns whole quanta in
-design section 13.5's order — panel, SOF, MCU, the eight DSPs, the chain — and
+the scheduler's order — panel, SOF, MCU, the eight DSPs, the chain — and
 the MCU can complete a host-command handshake. The stub adds one thing the
 quantum does not offer: a decision point between two MCU instructions, which is
 where the breakpoint compare happens. A breakpoint is therefore still an exact
@@ -411,9 +411,9 @@ stop reply names an access the MCU made in that phase.
 of it, and `Scheduler` pays one null check for each quantum when no stub is
 attached.
 
-**The scripted client: `gdbScript.py` (task TOOL-18).** `lldb`'s `gdb-remote`
-client cannot drive this stub — the session's measured finding of 2026-08-28 —
-so the repo ships a minimal RSP client at
+**The scripted client: `gdbScript.py`.** `lldb`'s `gdb-remote` client cannot
+drive this stub — the session's measured finding of 2026-08-28 — so the repo
+ships a minimal RSP client at
 `source/nord/g2/g2TestConsole/gdbScript.py` (stdlib only, class-based,
 importable). An operator session looks like:
 

@@ -1,7 +1,5 @@
 # The G2 thread map
 
-Task SCH-21 step 5 (formerly SCH-28). Design sections 13.10.5 and 18.2.
-
 This document is the MAP. It is prose, and no test reads it — a test that
 grepped this file would assert the prose, pass while the code was wrong, and go
 red when someone edited a sentence. The behaviour the map describes is asserted
@@ -20,9 +18,9 @@ quanta and performs the hand-off. It is the thread that calls
 first `runFrames` after the hand-off until the object is destroyed or `reset`.
 
 **The hand-off is `beginPlayPhase`, and it is the boot thread's last Scheduler
-action.** Its step 5 clears the recorded owning-thread identity, so that the
-first `runFrames` of the play phase re-establishes the owner on the audio thread
-instead of tripping on the boot thread's identity.
+action.** It clears the recorded owning-thread identity as its final act, so
+that the first `runFrames` of the play phase re-establishes the owner on the
+audio thread instead of tripping on the boot thread's identity.
 
 `reset()` returns the object to the pre-hand-off state, so the cycle may begin
 again. It is the boot thread's.
@@ -67,37 +65,33 @@ reads a copy the audio thread published, never the accessor.** Rows 7 to 11 are
 thread and is exactly why the rule is written down: a torn or stale read of a
 counter is invisible, and the counters are how this project measures itself.
 
-### The counts, and where they disagree with the plan
+### The counts, and the methods this table does not cover
 
-**SCH-21 step 5 states "14 `Scheduler` rows covering 24 methods". This table is
-12 rows over 20 methods, and the difference is four methods that DO NOT EXIST in
-the tree this document describes** — measured by listing the public declarations
-of `class Scheduler` in `g2Lib/scheduler.h`:
+**This table is 12 rows over 20 methods, measured by listing the public
+declarations of `class Scheduler` in `g2Lib/scheduler.h`.** Four further methods
+belong to the class's surface elsewhere in the project and are not covered here:
 
-* `stateSize`, `stateSave`, `stateLoad` — the state trio. SCH-21 step 4 owns
-  them and they are not landed.
-* `queueMidi` — named in step 5's own sentence, declared nowhere in `g2Lib`.
+* `stateSize`, `stateSave`, `stateLoad` — the state trio. They land with the
+  state work, not with the thread map.
+* `queueMidi` — declared nowhere in `g2Lib`.
 
 Adding those four as two further rows — one for the state trio, one for
-`queueMidi` — gives 14 rows over 24 methods exactly. **So the plan's figure
-describes the FINISHED surface and this table describes the surface that
-exists.** The table is written from the header rather than from the figure,
-because a row for a method that does not exist documents fiction. When step 4
-lands, its writer adds the state-trio row (boot thread: `stateLoad` is named as
-the boot thread's in step 5's own sentence; `stateSize` and `stateSave` go with
-it) and the count becomes the plan's.
+`queueMidi` — would give 14 rows over 24 methods. **The table is written from
+the header rather than from any planned surface, because a row for a method that
+does not exist documents fiction.** When the state trio lands, its writer adds
+the state-trio row: `stateLoad` is the boot thread's, and `stateSize` and
+`stateSave` go with it.
 
 ## `TransportHub` — 2 rows over 6 methods
 
 | Row | Methods | Owning thread |
 |---|---|---|
-| 1 | the constructor, `attach`, `detach` | boot. The allocation is fixed at construction and design section 13.10 rule 1 forbids allocating after it, so the endpoint set is built before the audio thread exists |
+| 1 | the constructor, `attach`, `detach` | boot. The allocation is fixed at construction and this project forbids allocating after it, so the endpoint set is built before the audio thread exists |
 | 2 | `fromDevice`, `toDevice`, `drainToDevice` | audio, inside a quantum boundary. `toDevice` is called from an endpoint's own thread with a BORROWED buffer, which is why the hub copies |
 
-**SCH-21 step 5 states "2 `TransportHub` rows covering 3". The row count is
-right and the method count is not**: `g2Lib/transportHub.h` declares six public
-members, and SCH-29's own `Check:` line names five of them by name. The figure 3
-is the size of row 2 alone. The table above covers all six.
+**`g2Lib/transportHub.h` declares six public members, and the table above covers
+all six** — the constructor, `attach` and `detach` in row 1; `fromDevice`,
+`toDevice` and `drainToDevice` in row 2.
 
 ## The borrow lifetime, which is a threading rule wearing another name
 
