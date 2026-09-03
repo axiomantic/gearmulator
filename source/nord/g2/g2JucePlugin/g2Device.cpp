@@ -504,7 +504,7 @@ namespace g2
 		notifyBootStep(BootStep::RunFrames, &scheduler);
 
 		/* WHY DESIGN SECTION 15.6's REGIME RULE HOLDS ACROSS A RESTORE, AND
-		 * WHAT THE REPORT BELOW IS FOR.
+		 * WHY STEP 5 NEEDS NOTHING FROM THIS SITE.
 		 *
 		 * MEASURED HERE. Scheduler::stateSave does NOT write the codec
 		 * regime: scheduler.cpp excludes it from the state block and its
@@ -515,33 +515,10 @@ namespace g2
 		 * nor consume from the source, and the merge section 15.6 forbids
 		 * cannot happen on this path.
 		 *
-		 * THE CONDITION BELOW IS ONE NO SNAPSHOT CAN PRODUCE WHILE THAT
-		 * HOLDS. Step 2 reconstructs both codec queues and the counters they
-		 * carry, step 3 does not touch either queue, and nothing between
-		 * step 2 and this line pushes or pulls. It stays as a REPORT and not
-		 * an assertion: a regime that began travelling again would surface
-		 * here as a result field, on the boot's own error channel, rather
-		 * than as a debug abort inside beginPlayPhase. THE COUNTERS ARE NOT
-		 * CLEARED, so a condition that did occur stays visible after the
-		 * fact, and the drain costs nothing beginPlayPhase does not already
-		 * do -- step 1 of that call reconstructs both queues -- so it
-		 * changes no emulated state. */
-		if(result.stateLoaded && (scheduler.droppedFrames() > 0 || scheduler.starvedFrames() > 0))
-		{
-			result.regimeRestoredFromSnapshot = true;
-			result.why = "the boot quanta touched a codec queue, which a boot-regime run cannot do: "
-			             "the restored snapshot put step 4 in the play regime, so the codec regime "
-			             "travelled through Scheduler::stateSave's block after all";
-
-			Frame  drained[64];
-			size_t taken = 0;
-
-			do
-			{
-				taken = scheduler.pull(drained, sizeof(drained) / sizeof(drained[0]));
-			}
-			while(taken > 0);
-		}
+		 * STEP 5's PREMISE IS THEREFORE ALREADY TRUE WHEN IT IS REACHED.
+		 * beginPlayPhase asserts both queue depths on entry, so a regime that
+		 * began travelling again reports itself there rather than through a
+		 * compensation written here. */
 
 		// ---- STEP 5. beginPlayPhase -- the CodecSource empty, the CodecSink
 		// holding exactly L frames, all seven chain-health counters zero and

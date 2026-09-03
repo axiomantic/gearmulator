@@ -8,9 +8,8 @@
  * design section 15.6's step 3 put step 4 into the PLAY regime. Step 4's boot
  * quanta then touched the codec queues, the sink filled after L + B pushes, the
  * run stopped part-way through the boot and beginPlayPhase's debug assert
- * aborted. PLG-12 reported the condition through
- * BootResult::regimeRestoredFromSnapshot and could not repair it, because
- * scheduler.{h,cpp} is not on its Files: line.
+ * aborted. PLG-12 could not repair it, because scheduler.{h,cpp} is not on its
+ * Files: line.
  *
  * THE REPAIR IS EXCLUSION AT stateSave AND THIS FILE ASSERTS THE BEHAVIOUR AND
  * NOT THE FIELD. Nothing here reads a byte offset and nothing here counts the
