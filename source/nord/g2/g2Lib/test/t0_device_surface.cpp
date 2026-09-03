@@ -111,7 +111,7 @@ int main()
 		const g2::FirmwareStatus& s = device.firmwareStatus();
 		if(s.report.empty())
 		{
-			std::printf("FAIL firmwareStatus().report is empty; BRD-10 requirement 2 is that the state is reported\n");
+			std::printf("FAIL firmwareStatus().report is empty; the report line is never empty in either resolver outcome\n");
 			return 1;
 		}
 	}
