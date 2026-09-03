@@ -583,7 +583,7 @@ int main()
 
 		// The value CSAR3 carries.
 		checkEqual(bus.read(0x0a4, 16, status) << 16, uint32_t(0x13000000u),
-			"CSAR3 gives CS3 the base 0x13000000, which AGENTS.md 3.8 names as the ISP1181");
+			"CSAR3 gives CS3 the base 0x13000000, which the chip-select map names as the ISP1181");
 
 		// The three are separate storage. Neither neighbour of the CS3 block
 		// may see any part of the CS3 programming.
