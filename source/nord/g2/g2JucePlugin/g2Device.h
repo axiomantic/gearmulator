@@ -214,11 +214,6 @@ namespace g2
 			bool     chainAttached = false;  // the DSP programs landed
 			bool     faulted       = false;
 
-			/* TRUE WHEN STEP 4's QUANTA TOUCHED A CODEC QUEUE, which is what
-			 * a step 3 that restored the play regime would produce. boot()'s
-			 * own comment at the site carries the measurement of why the
-			 * regime does not travel today. */
-			bool     regimeRestoredFromSnapshot = false;
 			uint64_t framesRun     = 0;
 			g2::Status status       = g2::Status::Unset;
 			std::string why;                 // empty on success

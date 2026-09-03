@@ -664,19 +664,6 @@ int main()
 		check(restoreResult.booted && restoreResult.stateLoaded,
 			"the restoring boot ran step 3 and completed");
 
-		/* REPORTED AND NOT ASSERTED EITHER WAY. Scheduler::stateSave excludes
-		 * the codec regime from its block, so a snapshot taken through getState
-		 * leaves step 4 in the boot regime and this flag stays false. The claim
-		 * that makes that true is t0_state_excludes_regime's, over the Scheduler
-		 * itself; a second assertion here would restate it through a slower
-		 * fixture. What this print is for is the other direction: a regime that
-		 * began travelling again names itself in this run's output. */
-		if(restoreResult.regimeRestoredFromSnapshot)
-		{
-			std::cout << "note THE RESTORE PATH DOES NOT RUN THE BOOT CODEC REGIME: "
-			          << restoreResult.why << std::endl;
-		}
-
 		const std::vector<g2::Device::BootStep> restoreOrder =
 		{
 			g2::Device::BootStep::Create,
