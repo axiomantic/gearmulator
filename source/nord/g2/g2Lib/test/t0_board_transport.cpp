@@ -164,7 +164,7 @@ int main()
 	                             g2::TransportHub&>,
 	              "Board::transport must answer the Board's own hub by reference");
 	static_assert(g2::TransportHub::kMaxEndpoints == 3,
-	              "design section 15.1 fixes three attachments");
+	              "the hub reserves exactly three attachments: internal client, G2-Edit socket, usbip adapter");
 
 	g2::Board board;
 

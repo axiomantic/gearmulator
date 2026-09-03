@@ -174,7 +174,7 @@ int main()
 		if(firmwarePresent)
 			check(accepted, "with firmware present, the image the device produced is accepted by its own setState");
 		else
-			check(!accepted, "with no firmware present, the restore loads nothing -- design section 7.7's row, through the plugin contract");
+			check(!accepted, "with no firmware present, the restore loads nothing, through the plugin contract");
 
 		// The SAVED image is what the round trip is for: it parses whole at
 		// the g2State level, header stripped, whatever the firmware row was.
@@ -347,8 +347,8 @@ int main()
 			const g2::StateLoadResult result = g2::deserializeState(image,
 				perf, patches, ids, bindings, overflow, false, 0);
 			check(!result.machineLoaded && !result.patchLoaded && !result.offerToLoadAnyway,
-				"no firmware present loads nothing, per design section 7.7");
-			check(result.message.empty(), "the no-firmware row carries no message: design section 7.7 owns that text");
+				"no firmware present loads nothing");
+			check(result.message.empty(), "the no-firmware row carries no message: firmwareState.h owns that text");
 		}
 
 		// A format version this build does not write is refused whole: the

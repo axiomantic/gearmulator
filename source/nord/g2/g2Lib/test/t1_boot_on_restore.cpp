@@ -353,7 +353,7 @@ namespace
 			std::swap(swapped[2], swapped[3]);
 
 			check(isExpectedOrder(right, expected),
-				"CONTROL the order predicate ACCEPTS the sequence design section 15.6 states");
+				"CONTROL the order predicate ACCEPTS the boot step order BootStep declares");
 
 			check(!isExpectedOrder(swapped, expected),
 				"CONTROL the order predicate REFUSES the same sequence with steps 4 and 5 swapped, "
@@ -480,7 +480,7 @@ int main()
 		          << " why=\"" << result.why << '"' << std::endl;
 		std::cout << "boot: observed " << spell(recorder.records()) << std::endl;
 
-		check(result.booted, "the boot completed every step of design section 15.6: " + result.why);
+		check(result.booted, "the boot completed every step BootStep declares: " + result.why);
 
 		const std::vector<g2::Device::BootStep> coldOrder =
 		{

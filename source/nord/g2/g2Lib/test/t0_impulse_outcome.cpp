@@ -186,7 +186,7 @@ int main()
 		// that can never match anything is red here before it is quietly red
 		// above.
 		check(carriesLine(run.output, "g2TestConsole: --impulse: failed with exit status 2"),
-			"the capture is real and the line matcher matches: the refusal line INT-2 already printed is found whole");
+			"the capture is real and the line matcher matches: the refusal line the console's diagnose() already printed is found whole");
 
 		// ---------------- the arms a machine on this desk cannot reach
 		//

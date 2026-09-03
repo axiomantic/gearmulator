@@ -394,7 +394,7 @@ int main()
 	 * may sit above 0.10 dB, so an edit that raised the constant
 	 * past the ceiling must be caught here and not pass quietly. */
 	check(g_committedTargetDb > 0.0 && g_committedTargetDb <= g_hardCeilingDb,
-		"the committed target is positive and at or below PLG-11's hard ceiling of 0.10 dB");
+		"the committed target is positive and at or below the hard ceiling of 0.10 dB");
 
 	/* ---------------------------------------------------------------
 	 * Case 5. The permanent control: the same sweep through the framework

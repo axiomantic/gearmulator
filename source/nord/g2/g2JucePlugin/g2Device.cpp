@@ -486,7 +486,7 @@ namespace g2
 			result.regimeRestoredFromSnapshot = true;
 			result.why = "the restored snapshot carried the PLAY codec regime, so the boot quanta "
 			             "did not run the boot regime; Scheduler::stateLoad restores the regime and "
-			             "PLG-12 has no declared way to re-enter the boot regime without a reset";
+			             "there is no declared way to re-enter the boot regime without a reset";
 
 			Frame  drained[64];
 			size_t taken = 0;
@@ -913,10 +913,10 @@ namespace g2
 	struct Device::MemberPin
 	{
 		static_assert(std::is_same_v<decltype(m_numSamplesProcessed), uint32_t>,
-			"m_numSamplesProcessed is the subclass's OWN uint32_t member, not an inherited one (PLG-6 reads it)");
+			"m_numSamplesProcessed is the subclass's OWN uint32_t member, not an inherited one (the MIDI-out offset conversion reads it)");
 		static_assert(std::is_same_v<decltype(m_ready), std::atomic<bool>>,
-			"m_ready is an std::atomic<bool>: the hand-off pairing's first flag (design 13.10 rule 3)");
+			"m_ready is an std::atomic<bool>: the hand-off pairing's first flag");
 		static_assert(std::is_same_v<decltype(m_inCallback), std::atomic<bool>>,
-			"m_inCallback is an std::atomic<bool>: the acknowledgement the reverse direction needs (design 13.10 rule 3)");
+			"m_inCallback is an std::atomic<bool>: the acknowledgement the reverse direction needs");
 	};
 }
