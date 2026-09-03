@@ -177,8 +177,10 @@ namespace g2
 			bool     chainAttached = false;  // the DSP programs landed
 			bool     faulted       = false;
 
-			/* True when step 3 put step 4 in the wrong codec regime, a
-			 * condition boot() can report and cannot fix. */
+			/* True when step 4's quanta touched a codec queue, which is what
+			 * a step 3 that restored the play regime would produce. boot()'s
+			 * own comment at the site carries the measurement of why the
+			 * regime does not travel today. */
 			bool     regimeRestoredFromSnapshot = false;
 			uint64_t framesRun     = 0;
 			g2::Status status       = g2::Status::Unset;

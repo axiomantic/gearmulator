@@ -649,11 +649,11 @@ int main()
 		check(restoreResult.booted && restoreResult.stateLoaded,
 			"the restoring boot ran step 3 and completed");
 
-		/* The known gap, reported and not asserted green. Scheduler::stateSave
-		 * writes the codec regime into its own limb of the state block, so a
-		 * snapshot taken through getState -- necessarily a play-regime snapshot
-		 * -- puts step 4 into the play regime. The repair is on the Scheduler
-		 * side; asserting this false would be asserting a defect fixed. */
+		/* Reported and not asserted either way. Scheduler::stateSave excludes
+		 * the codec regime from its block, so a snapshot taken through getState
+		 * leaves step 4 in the boot regime and this flag stays false. What this
+		 * print is for is the other direction: a regime that began travelling
+		 * again names itself in this run's output. */
 		if(restoreResult.regimeRestoredFromSnapshot)
 		{
 			std::cout << "note THE RESTORE PATH DOES NOT RUN THE BOOT CODEC REGIME: "
