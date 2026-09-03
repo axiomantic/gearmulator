@@ -503,42 +503,35 @@ namespace g2
 
 		notifyBootStep(BootStep::RunFrames, &scheduler);
 
-		/* THE ONE PLACE THIS SEQUENCE CANNOT BE WRITTEN AS DESIGN SECTION
-		 * 15.6 STATES IT, NAMED RATHER THAN PAPERED OVER.
+		/* WHY DESIGN SECTION 15.6's REGIME RULE HOLDS ACROSS A RESTORE, AND
+		 * WHAT THE REPORT BELOW IS FOR.
 		 *
-		 * MEASURED HERE. Scheduler::stateSave writes the CODEC REGIME into
-		 * its own limb of the state block (scheduler.cpp, the state block
-		 * layout: "the version word first, then the regime"), so
-		 * Scheduler::stateLoad RESTORES it. A snapshot taken through
-		 * getState is necessarily a PLAY-regime snapshot -- getState runs
-		 * after the boot published the machine -- so step 3 leaves this
-		 * object in the PLAY regime and step 4's quanta then run the play
-		 * regime during what is supposed to be the boot. That is EXACTLY the
-		 * merge design section 15.6 forbids: the sink fills, push refuses,
-		 * and the run stops part-way.
+		 * MEASURED HERE. Scheduler::stateSave does NOT write the codec
+		 * regime: scheduler.cpp excludes it from the state block and its
+		 * version word records the layout that exclusion produced. Step 3
+		 * therefore leaves the regime step 2 established, which is the BOOT
+		 * regime, whatever regime the snapshot was taken in. A boot quantum
+		 * touches neither codec queue, so step 4 can neither fill the sink
+		 * nor consume from the source, and the merge section 15.6 forbids
+		 * cannot happen on this path.
 		 *
-		 * PLG-12 CANNOT FIX IT. The regime is private, reset() is the only
-		 * thing that selects the boot regime, and re-running reset() after
-		 * step 3 would throw away the state step 3 just loaded. The fix is on
-		 * the SCHEDULER side -- stateLoad leaving the regime alone, or a
-		 * declared way to re-enter the boot regime without a reset -- and
-		 * scheduler.{h,cpp} is the SCH track's file and not on PLG-12's
-		 * `Files:` line.
-		 *
-		 * WHAT THIS DOES INSTEAD IS THE SMALLEST HONEST THING. It reports the
-		 * condition through the result, and it empties the sink so that step
-		 * 5's own premise holds. Emptying costs nothing that beginPlayPhase
-		 * does not already do -- step 1 of that call RECONSTRUCTS both queues
-		 * -- so this changes no emulated state and no observable outcome; it
-		 * only stops a debug build from asserting on a premise the restore
-		 * path violated upstream. THE COUNTERS ARE NOT CLEARED, so the
-		 * condition stays visible after the fact. */
+		 * THE CONDITION BELOW IS ONE NO SNAPSHOT CAN PRODUCE WHILE THAT
+		 * HOLDS. Step 2 reconstructs both codec queues and the counters they
+		 * carry, step 3 does not touch either queue, and nothing between
+		 * step 2 and this line pushes or pulls. It stays as a REPORT and not
+		 * an assertion: a regime that began travelling again would surface
+		 * here as a result field, on the boot's own error channel, rather
+		 * than as a debug abort inside beginPlayPhase. THE COUNTERS ARE NOT
+		 * CLEARED, so a condition that did occur stays visible after the
+		 * fact, and the drain costs nothing beginPlayPhase does not already
+		 * do -- step 1 of that call reconstructs both queues -- so it
+		 * changes no emulated state. */
 		if(result.stateLoaded && (scheduler.droppedFrames() > 0 || scheduler.starvedFrames() > 0))
 		{
 			result.regimeRestoredFromSnapshot = true;
-			result.why = "the restored snapshot carried the PLAY codec regime, so the boot quanta "
-			             "did not run the boot regime; Scheduler::stateLoad restores the regime and "
-			             "PLG-12 has no declared way to re-enter the boot regime without a reset";
+			result.why = "the boot quanta touched a codec queue, which a boot-regime run cannot do: "
+			             "the restored snapshot put step 4 in the play regime, so the codec regime "
+			             "travelled through Scheduler::stateSave's block after all";
 
 			Frame  drained[64];
 			size_t taken = 0;
