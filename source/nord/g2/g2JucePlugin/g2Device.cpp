@@ -452,41 +452,35 @@ namespace g2
 
 		notifyBootStep(BootStep::RunFrames, &scheduler);
 
-		/* The one place this sequence cannot be written as designed, named
-		 * rather than papered over.
+		/* Why the regime rule holds across a restore, and what the report
+		 * below is for.
 		 *
-		 * Measured here. Scheduler::stateSave writes the codec regime into
-		 * its own limb of the state block (scheduler.cpp, the state block
-		 * layout: "the version word first, then the regime"), so
-		 * Scheduler::stateLoad restores it. A snapshot taken through
-		 * getState is necessarily a PLAY-regime snapshot -- getState runs
-		 * after the boot published the machine -- so step 3 leaves this
-		 * object in the PLAY regime and step 4's quanta then run the play
-		 * regime during what is supposed to be the boot. That is exactly the
-		 * merge the sequence forbids: the sink fills, push refuses, and the
-		 * run stops part-way.
+		 * Measured here. Scheduler::stateSave does not write the codec
+		 * regime: scheduler.cpp excludes it from the state block and its
+		 * version word records the layout that exclusion produced. Step 3
+		 * therefore leaves the regime step 2 established, which is the BOOT
+		 * regime, whatever regime the snapshot was taken in. A boot quantum
+		 * touches neither codec queue, so step 4 can neither fill the sink
+		 * nor consume from the source, and the merge the sequence forbids
+		 * cannot happen on this path.
 		 *
-		 * It cannot be fixed from here. The regime is private, reset() is
-		 * the only thing that selects the boot regime, and re-running
-		 * reset() after step 3 would throw away the state step 3 just
-		 * loaded. The fix is on the Scheduler side -- stateLoad leaving the
-		 * regime alone, or a declared way to re-enter the boot regime
-		 * without a reset.
-		 *
-		 * What this does instead is the smallest honest thing. It reports the
-		 * condition through the result, and it empties the sink so that step
-		 * 5's own premise holds. Emptying costs nothing that beginPlayPhase
-		 * does not already do -- step 1 of that call reconstructs both queues
-		 * -- so this changes no emulated state and no observable outcome; it
-		 * only stops a debug build from asserting on a premise the restore
-		 * path violated upstream. The counters are not cleared, so the
-		 * condition stays visible after the fact. */
+		 * The condition below is one no snapshot can produce while that
+		 * holds. Step 2 reconstructs both codec queues and the counters they
+		 * carry, step 3 does not touch either queue, and nothing between
+		 * step 2 and this line pushes or pulls. It stays as a report and not
+		 * an assertion: a regime that began travelling again would surface
+		 * here as a result field, on the boot's own error channel, rather
+		 * than as a debug abort inside beginPlayPhase. The counters are not
+		 * cleared, so a condition that did occur stays visible after the
+		 * fact, and the drain costs nothing beginPlayPhase does not already
+		 * do -- step 1 of that call reconstructs both queues -- so it
+		 * changes no emulated state. */
 		if(result.stateLoaded && (scheduler.droppedFrames() > 0 || scheduler.starvedFrames() > 0))
 		{
 			result.regimeRestoredFromSnapshot = true;
-			result.why = "the restored snapshot carried the PLAY codec regime, so the boot quanta "
-			             "did not run the boot regime; Scheduler::stateLoad restores the regime and "
-			             "there is no declared way to re-enter the boot regime without a reset";
+			result.why = "the boot quanta touched a codec queue, which a boot-regime run cannot do: "
+			             "the restored snapshot put step 4 in the play regime, so the codec regime "
+			             "travelled through Scheduler::stateSave's block after all";
 
 			Frame  drained[64];
 			size_t taken = 0;
