@@ -664,13 +664,13 @@ int main()
 		check(restoreResult.booted && restoreResult.stateLoaded,
 			"the restoring boot ran step 3 and completed");
 
-		/* THE KNOWN GAP, REPORTED AND NOT ASSERTED GREEN. Scheduler::stateSave
-		 * writes the codec regime into its own limb of the state block, so a
-		 * snapshot taken through getState -- necessarily a PLAY-regime snapshot
-		 * -- puts step 4 into the play regime. PLG-12 reports the condition and
-		 * cannot repair it: the repair is on the Scheduler side and
-		 * scheduler.{h,cpp} is not on this task's Files: line. Asserting this
-		 * false would be asserting a defect fixed. */
+		/* REPORTED AND NOT ASSERTED EITHER WAY. Scheduler::stateSave excludes
+		 * the codec regime from its block, so a snapshot taken through getState
+		 * leaves step 4 in the boot regime and this flag stays false. The claim
+		 * that makes that true is t0_state_excludes_regime's, over the Scheduler
+		 * itself; a second assertion here would restate it through a slower
+		 * fixture. What this print is for is the other direction: a regime that
+		 * began travelling again names itself in this run's output. */
 		if(restoreResult.regimeRestoredFromSnapshot)
 		{
 			std::cout << "note THE RESTORE PATH DOES NOT RUN THE BOOT CODEC REGIME: "
