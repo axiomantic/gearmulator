@@ -22,8 +22,9 @@
 # deliberately given up. Judging the head of a pull-request branch reports
 # failures for conditions the merge destroys. Measured 2026-09-04 --
 # two pull requests elsewhere in this queue were red only in the `push`
-# context, with 24 findings against the head tree and 0 against the merge
-# tree. They are named in the plan record, not here: this file is public and
+# context, and their head trees failed on DIFFERENT lint codes: one reported
+# 24 findings against its head, the other 1, and both reported 0 against
+# their merge tree. The counts differ; the zero does not. They are named in the plan record, not here: this file is public and
 # the `no-clavia-upload` guard rejects a workflow that names the private
 # repository. That guard caught this comment on the commit that installed it.
 
