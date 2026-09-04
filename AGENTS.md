@@ -443,5 +443,20 @@ watchpoint never fire, and that absence says nothing about the patch path. A
 breakpoint question about the delivery path answered from a no-traffic session
 is an unsound negative.
 
+**ARM BREAKPOINTS AFTER BOOT, AND BOUND EVERY WINDOW — both rules exist
+because a violation of either already cost seven hours of a runaway run
+(2026-08-29).** The firmware's boot crosses mailbox-wait and HDI08-handshake
+loops (`0x3005454C`, `0x300018FC` and neighbours) hundreds of times; a
+breakpoint armed before the banner stops the machine at each crossing, and a
+continue-and-rearm loop over those stops never escapes to the delivery phase
+it was armed for — the measured shape was 35 stops, all in the handshake
+region, and a log that hit its cap without one delivery-window record. **Boot
+the machine with breakpoints disarmed (or with the stub unattached), arm the
+delivery-window points only after the boot predicate passes, and give every
+driven window a hard quantum bound AND a wall-clock timeout so a stuck run
+terminates itself instead of spinning.** An unbounded window is a run that
+hangs; a bound without a clock is a run that outlives the session that
+launched it. Both were learned here, not assumed.
+
 The listening socket binds loopback and never `INADDR_ANY`. It is an
 unauthenticated channel with full read and write access to the emulated machine.
