@@ -144,6 +144,22 @@ set_property(TARGET t0_codec_queue_surface PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_codec_queue_surface COMMAND t0_codec_queue_surface)
 
+# ---------------- t0_executor
+#
+# The declared names are held by their fully qualified types inside the
+# translation unit, so the compiler and the linker carry that half. What remains
+# is the behaviour: the order of the jobs, that every job ran on the calling
+# thread, and that a refused re-entry is counted. The re-entry count is
+# an observable in every build type, because the default build is Release with
+# NDEBUG and a check whose predicate is "the debug build asserted" cannot fail
+# in it.
+
+add_executable(t0_executor ${CMAKE_CURRENT_SOURCE_DIR}/t0_executor.cpp)
+target_link_libraries(t0_executor PRIVATE g2Lib)
+set_property(TARGET t0_executor PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_executor COMMAND t0_executor)
+
 # ---------------- t0_run_dsp_cycles_contract
 #
 # The declared signature is held by the whole function type inside the
@@ -256,6 +272,40 @@ target_include_directories(t0_status_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR
 set_property(TARGET t0_status_contract PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_status_contract COMMAND t0_status_contract)
+
+# ---------------- t0_esai_slot_phase
+#
+# The path of the committed fixture is passed on the command line; the test
+# reads it from argv[1] and assembles the file at run time.
+#
+# The test must run under the JIT: g_useJIT is read at run time and the test
+# fails loudly rather than skip on a non-JIT build. The fixture spin sits below
+# Vba_End ($100) so dynamicFastInterrupts puts the JIT in
+# FastInterruptMode::Dynamic and exec() returns after each instruction. It uses
+# DspSet rather than PeripheralsNop because dynamicFastInterrupts is set in
+# DspSet::Slot::Slot.
+
+add_executable(t0_esai_slot_phase
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_slot_phase.cpp)
+target_link_libraries(t0_esai_slot_phase PRIVATE g2Lib)
+set_property(TARGET t0_esai_slot_phase PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_esai_slot_phase COMMAND t0_esai_slot_phase
+	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/esai_sync_spin.asm)
+set_tests_properties(t0_esai_slot_phase PROPERTIES LABELS "UnitTest")
+
+# ---------------- t0_esai_idle_core
+#
+# No .asm is committed: the program is assembled in-test and sits below Vba_End
+# for the same reason t0_esai_slot_phase's does.
+
+add_executable(t0_esai_idle_core
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_esai_idle_core.cpp)
+target_link_libraries(t0_esai_idle_core PRIVATE g2Lib)
+set_property(TARGET t0_esai_idle_core PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_esai_idle_core COMMAND t0_esai_idle_core)
+set_tests_properties(t0_esai_idle_core PROPERTIES LABELS "UnitTest")
 
 # ---------------- t0_transport_hub
 #
