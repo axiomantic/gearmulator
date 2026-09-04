@@ -21,8 +21,11 @@
 # covered. That coverage is what the unscoped `push` trigger bought, and it is
 # deliberately given up. Judging the head of a pull-request branch reports
 # failures for conditions the merge destroys. Measured 2026-09-04 --
-# `nmg2-artifacts` #1 and #2 were red only in the `push` context, with 24
-# findings against the head tree and 0 against the merge tree.
+# two pull requests elsewhere in this queue were red only in the `push`
+# context, with 24 findings against the head tree and 0 against the merge
+# tree. They are named in the plan record, not here: this file is public and
+# the `no-clavia-upload` guard rejects a workflow that names the private
+# repository. That guard caught this comment on the commit that installed it.
 
 name: Lint
 
