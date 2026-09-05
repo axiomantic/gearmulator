@@ -56,6 +56,24 @@ Count with a command. Never estimate a number, and never recall one.
 State what you ran next to the result. A rule stated more broadly than what you
 tested is false in a way the test will not show you.
 
+## Pull requests
+
+Open every pull request against this project's own fork. **Never open one
+against an upstream repository.** Confirm the base repository after you create
+it; the command line tool defaults a fork's base to the upstream project.
+
+Some repositories in this project are forks of other people's work. A pull
+request in one of those is a FIRST DRAFT of what this project may one day offer
+that project's maintainers. It stays on the fork. Keep it to work a maintainer
+would want.
+
+This project's own machinery does not belong in that review queue. Agent
+instructions, comment sweeps, lint guards, lint pins and continuous-integration
+boundary checks go on the fork's default branch instead.
+
+The repositories this project owns outright have no upstream. Their pull
+requests only need to be reviewable. Keep them coarse.
+
 ## Git
 
 Never push to a default branch without permission. Never force push without
@@ -67,6 +85,18 @@ Never run a tree-wide git operation in a checkout you share with anyone:
 
 Never put an issue number in a commit message, a pull request title, or a pull
 request body. It notifies every subscriber.
+
+Back up a commit before you destroy it. Push it to `refs/preserve/<name>`, then
+read the ref back and confirm the sha before you delete anything.
+
+**Push a backup to `refs/preserve/`, never to `refs/heads/preserve/`.** The
+second one is a branch. A branch fires every push-triggered workflow, and a
+branch cleanup deletes it. `refs/preserve/` sits outside `refs/heads` and
+`refs/tags`, so it does neither.
+
+Brace the variable in a refspec: write `"${SHA}":"${REF}"`. An unbraced
+`$SHA:refs/...` is silently corrupted by the shell's history modifier, and the
+push either fails or writes the wrong ref.
 
 Work in a clone you created yourself. Never delete a path you did not create.
 
@@ -88,7 +118,8 @@ branch before you report a file as absent.
 
 ## This repository
 
-**Licence: GPL-3.0 fork.** Code here cannot move into `mcf5307` or
+**Licence: GPL-3.0. This is a fork of `dsp56300/gearmulator`.** Never open a
+pull request against that repository. Code here cannot move into `mcf5307` or
 `nmg2-tools` unless this project wrote it.
 
 The G2 work is `source/nord/g2`: `g2Lib`, `g2JucePlugin`, `g2TestConsole`. It
