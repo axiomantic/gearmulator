@@ -1,6 +1,10 @@
 name: CMake
 
-on: [push, pull_request]
+# This fork runs the upstream build matrix on demand only: the full matrix is
+# expensive, and firing it on every push and every pull request costs more than
+# the signal is worth here. Upstream keeps its own push/pull_request triggers.
+on:
+  workflow_dispatch:
 
 env:
   BUILD_TYPE: Release
