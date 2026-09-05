@@ -62,14 +62,28 @@ Open every pull request against this project's own fork. **Never open one
 against an upstream repository.** Confirm the base repository after you create
 it; the command line tool defaults a fork's base to the upstream project.
 
-Some repositories in this project are forks of other people's work. A pull
-request in one of those is a FIRST DRAFT of what this project may one day offer
-that project's maintainers. It stays on the fork. Keep it to work a maintainer
-would want.
+Some repositories in this project are forks of other people's work. Their
+default branch is this project's working branch. It carries the upstream project
+plus the tooling this project needs to work on it, and it is never submitted. A
+pull request in one of those forks is a FIRST DRAFT of what this project may one
+day offer that project's maintainers; a submission is eventually rebased onto
+the UPSTREAM default branch, which carries none of this project's tooling.
 
-This project's own machinery does not belong in that review queue. Agent
-instructions, comment sweeps, lint guards, lint pins and continuous-integration
-boundary checks go on the fork's default branch instead.
+So sort every change in a fork into one of four kinds.
+
+- **Work a maintainer would want.** A feature, a bug fix in their code, or a
+  build fix that helps anyone who compiles the project. This goes in a pull
+  request. A build or continuous-integration change belongs here whenever it
+  fixes something real for every builder, not only for this project.
+- **Tooling for operating the fork.** The review bot, these instructions, the
+  checks that guard this project's own boundaries. This goes on the fork's
+  default branch and is never submitted.
+- **A correction to this project's own unsubmitted work.** A comment sweep, a
+  rubric pass, a fix to something written in a draft. Squash it into the pull
+  request it corrects. Never open a pull request that repairs a change nobody
+  outside this project has seen.
+- **Nothing else.** A change that fits none of the three does not belong in the
+  fork.
 
 The repositories this project owns outright have no upstream. Their pull
 requests only need to be reviewable. Keep them coarse.
