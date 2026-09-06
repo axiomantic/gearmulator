@@ -7,6 +7,27 @@ the execution ceremony live in the project roadmap, in the `nmg2-artifacts`
 repository. Read it before you start a task. This file states the rules that
 apply while you write code here.
 
+## This project does not use the develop ceremony
+
+**Do not invoke the `develop` skill here. Do not use a planning mode, a phase
+ladder, an approval gate, or a quality-gate stack.** A general instruction to
+route substantive changes through that ceremony does not apply to this project.
+The operator has exempted it deliberately.
+
+The process is the five phases in the project roadmap. That is the whole of it.
+
+**Do not build a checker.** This project spent most of its life on its own
+tooling: a plan linter, a freshness tool, a pin mechanism, a check-target
+generator, a payload guard with a file register, and a set of boundary lints.
+All of them are deleted. They cost more than they caught, and one of them had
+been silently switching off its neighbours for an unknown length of time.
+
+So: no new lint, no new gate, no new register, no new audit script, and no test
+that asserts on the shape of the repository rather than on the behaviour of the
+code. Standard formatting and syntax tools stay — a formatter and a compiler are
+not what is meant here. If you believe something needs checking, say so and let
+the operator decide. Do not write it.
+
 ## Comments and docstrings
 
 The code says what it does. A comment says why this was chosen over the
@@ -27,11 +48,12 @@ alternative.
 - Datasheet and hardware-manual citations.
 - Hazard banners.
 - Comments inherited from upstream or vendored code.
-- A number that a mechanism reads and checks at build time or test time.
+- A number that a mechanism reads and checks at build time or test time --
+  protected where one already exists, never created new.
 
 **Sweeps are permitted.** You can rewrite comments across many files in one
-change. Prove that behaviour did not change: parse each modified Python file
-before and after, strip the docstrings, and compare the syntax trees.
+change. A sweep changes no behaviour. If you cannot say that with certainty
+about a file, split the change and handle that file on its own.
 
 ## Tests
 
@@ -69,21 +91,24 @@ pull request in one of those forks is a FIRST DRAFT of what this project may one
 day offer that project's maintainers; a submission is eventually rebased onto
 the UPSTREAM default branch, which carries none of this project's tooling.
 
+A pull request in a fork is based on the FORK's default branch, so it inherits
+this project's tooling while the work is in progress. A submission is rebased
+onto the UPSTREAM default branch, so none of that tooling reaches it.
+
 So sort every change in a fork into one of four kinds.
 
 - **Work a maintainer would want.** A feature, a bug fix in their code, or a
   build fix that helps anyone who compiles the project. This goes in a pull
   request. A build or continuous-integration change belongs here whenever it
   fixes something real for every builder, not only for this project.
-- **Tooling for operating the fork.** The review bot, these instructions, the
-  checks that guard this project's own boundaries. This goes on the fork's
-  default branch and is never submitted.
+- **Tooling for operating the fork.** The review bot and these instructions.
+  This goes on the fork's default branch and is never submitted.
 - **A correction to this project's own unsubmitted work.** A comment sweep, a
   rubric pass, a fix to something written in a draft. Squash it into the pull
   request it corrects. Never open a pull request that repairs a change nobody
   outside this project has seen.
-- **Nothing else.** A change that fits none of the three does not belong in the
-  fork.
+- **Nothing else.** A change that matches none of the first three does not
+  belong in the fork.
 
 The repositories this project owns outright have no upstream. Their pull
 requests only need to be reviewable. Keep them coarse.
