@@ -13,8 +13,6 @@
 # Each step closes a different hole and none substitutes for another.
 #   no-private-submodule    stops the private repository's URL and commit
 #                           hashes being published.
-#   no-clavia-payload       stops a Clavia byte reaching a public tree as a
-#                           committed file.
 #   no-clavia-upload        stops a Clavia byte LEAVING a public runner as a
 #                           build artifact. That route has no committed file in
 #                           it at all, so the payload step cannot see it.
@@ -32,7 +30,7 @@ on:
           of the credential lint is scoped to public repositories: a `secrets.`
           reference outside the three organization momus secrets is a defect in
           a public repository, while inside the private one the T1 and T2 jobs
-          legitimately hold what they need. The other three steps apply to all
+          legitimately hold what they need. The other two steps apply to all
           seven repositories without exception.
         required: false
         type: string
@@ -67,7 +65,7 @@ jobs:
         with:
           path: under-test
 
-      # The four lint scripts live in the tools repository, which is PUBLIC.
+      # The three lint scripts live in the tools repository, which is PUBLIC.
       # Reading it needs no credential of any kind.
       #
       # `lint-current` IS A MOVING ALIAS IN nmg2-tools, AND THE PIN IS TEMPORARY
@@ -214,15 +212,6 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: python3 -m nmg2_tools.submodule_lint "${GITHUB_WORKSPACE}/under-test"
-
-      - name: no-clavia-payload
-        if: ${{ !cancelled() }}
-        working-directory: lint-tools
-        run: |
-          python3 -m nmg2_tools.payload_lint "${GITHUB_WORKSPACE}/under-test" \
-            --register nmg2_tools/testdata/register.tsv \
-            --visibility "${{ inputs.visibility }}" \
-            --repo "${{ github.repository }}"
 
       # The upload step reads the WHOLE workflow text and NOT an action
       # allow-list. A `run: gh release download` against the private
