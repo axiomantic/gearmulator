@@ -1,0 +1,61 @@
+# t1_boot_g2x
+# Condensed from 56116 lines. Bus-trace lines omitted; the raw log was not retained.
+
+107: ok   CONTROL clear-shaped: sixteen 0x20 spaces written into display 0 line 0 through Board::onWrite count 0 content writes and 16 clear writes; counted 0 and 16
+107: ok   CONTROL banner-shaped: "Nord Modular G2X" written by the same route counts 14 content writes and 2 clear writes; counted 14 and 2
+107: ok   CONTROL banner-shaped: the same sixteen cells read back through Board::onRead equal "Nord Modular G2X"; read "Nord Modular G2X"
+107: ok   CONTROL landmark: one 2-byte read at 0x3001B7FA and one at 0x3001B7FC leave the counter at 0x3001B7FC reading exactly 1, so it answers that address and not its neighbour; read 1
+107: CS2TRACE #1 W16 addr=0x120000aa off=0xaa val=0x98 size=16 query=0
+107: CS2TRACE #2 R8-cfi addr=0x12000020 off=0x20 val=0x0 size=8 query=1
+107: CS2TRACE #3 R8-cfi addr=0x12000021 off=0x21 val=0x51 size=8 query=1
+107: CS2TRACE #4 R8-cfi addr=0x12000022 off=0x22 val=0x0 size=8 query=1
+107: CS2TRACE #5 R8-cfi addr=0x12000023 off=0x23 val=0x52 size=8 query=1
+107: CS2TRACE #6 R8-cfi addr=0x12000024 off=0x24 val=0x0 size=8 query=1
+107: CS2TRACE #7 R8-cfi addr=0x12000025 off=0x25 val=0x59 size=8 query=1
+107: CS2TRACE #8 R8-cfi addr=0x12000026 off=0x26 val=0x0 size=8 query=1
+107: CS2TRACE #9 R8-cfi addr=0x12000027 off=0x27 val=0x2 size=8 query=1
+107: CS2TRACE #10 R8-cfi addr=0x12000028 off=0x28 val=0x0 size=8 query=1
+107: CS2TRACE #11 R8-cfi addr=0x12000029 off=0x29 val=0x0 size=8 query=1
+107: CS2TRACE #12 W16 addr=0x12000000 off=0x0 val=0xf0 size=16 query=1
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+107: hdiWriteTX@59: DSP Boot: finished
+107: BANNERDUMP 4e 6f 72 64 20 4d 6f 64 75 6c 61 72 20 47 32 58 56 65 72 73 69 6f 6e 20 31 2e 36 32 20 45 78 09 00 00 00 00 00 20 00 00
+107: boot: iterations=30180 readPathProven=1 halted=0 faulted=0
+107: boot: display 0 line 0 writes: content=14 clear=16
+107: boot: landmark 16-bit fetches: 0x30000400=1 0x3001B7FC=1
+107: boot: pcAtBanner=0x300570a6 pcAfterBanner=0x30055fbc pcLater=0x30055fbc
+107: boot: line0="Nord Modular G2X"
+107: boot: line1="Version 1.62 Ex\x09"
+107: boot: handshakePorts=0
+107: boot: dspCount=8 dspCycles=44535996 53600915 53759544 45486039 53923941 54078171 54236166 54411392 
+107: boot: bus log lines=0
+107: ok   sixteen bytes read at 0x30000400 through Board::onRead equal the first sixteen bytes of CODE_30000400.bin, so the display read path reaches memory and a zero buffer means the firmware wrote nothing
+107: ok   display 0 line 0 equals "Nord Modular G2X" untrimmed; read "Nord Modular G2X"
+107: FAIL display 0 line 1 equals "Version 1.62 Exp"; read "Version 1.62 Ex\x09"
+107: FAIL HDI08 ports completing the HF0/HF2 handshake within 65000 iterations equals 8; counted 0
+107: ok   the landmark counter saw the core's own 16-bit instruction fetches at the reset PC 0x30000400, so a zero count at any other landmark is the firmware not arriving rather than the counter not looking; counted 1
+107: ok   the firmware wrote at least one printable non-space character into display 0 line 0, which the display clear's 0x20 spaces cannot satisfy; counted 14 content writes and 16 clear writes
+107: ok   execution entered the banner function 0x3001B7FC; counted 1 fetches of its first instruction
+107: ok   execution entered the banner function 0x3001B7FC AND is no longer inside it, so the firmware returned past the banner rather than never arriving or stopping within it
+107: ok   execution entered the banner function 0x3001B7FC AND the core has not halted
+107: ok   execution entered the banner function 0x3001B7FC AND the run ended at neither hard halt (0x3001BB4C flash gate, 0x3001B86C model byte)
+107: ok   the Board owns 8 DSP slots; counted 8
+107: ok   every DSP the Board owns executed at least one cycle, so the scheduler turned them rather than leaving them bootstrapped and still; counted [44535996, 53600915, 53759544, 45486039, 53923941, 54078171, 54236166, 54411392]
+2/2 Test #107: t1_boot ..........................***Failed    9.69 sec
+The following tests passed:
+50% tests passed, 1 tests failed out of 2
+	107 - t1_boot (Failed)                                  IntegrationTest

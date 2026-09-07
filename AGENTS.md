@@ -178,6 +178,10 @@ pull request against that repository. Code here cannot move into `mcf5307` or
 The G2 work is `source/nord/g2`: `g2Lib`, `g2JucePlugin`, `g2TestConsole`. It
 is not on the default branch. It is on stacked branches.
 
+`docs/agents-gearmulator.md` holds the fork's own detail: the narrow and full
+G2 build recipes, the source-dir override rules, the authorship boundary, and
+the GDB procedure for the MCF5307.
+
 Formatting follows `source/.clang-format`: tabs, tab size 4, 120 columns.
 
 Build and test:
