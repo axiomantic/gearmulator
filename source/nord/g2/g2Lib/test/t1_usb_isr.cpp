@@ -180,6 +180,24 @@ namespace
 	constexpr uint32_t g_bootQuantumBound   = 500000u;
 	constexpr uint32_t g_bannerSettleQuanta = 20000u;
 
+	// The firmware's event loop. Reaching it is what this file means by booted.
+	//
+	// The banner and its settle count are not that. They say a character other
+	// than the display clear reached the watched cells and that the machine kept
+	// running afterwards, which the machine does while it is still initialising:
+	// it leaves a long initialisation wait later still, and the event loop does
+	// not run until later than that. A predicate keyed on the banner is true on a
+	// machine that cannot yet consume anything, and every measurement taken
+	// behind it reads not-yet as never.
+	//
+	// The event loop is the condition worth keying on because it is what every
+	// consumer here depends on. The address is the one the findings corpus names,
+	// and the reading is this file's own probe counter, which counts 16-bit reads
+	// -- the width the core fetches an instruction word at. Both quanta are
+	// recorded, so a run says how far apart they are rather than only which one
+	// it used.
+	constexpr uint32_t g_eventLoopEntry = 0x30004674u;
+
 	// ------------------------------------------------------ the CS3 port split
 	//
 	// The device model's own: "the chip's A0 is wired to CPU A4, so bit 4 of
@@ -752,6 +770,17 @@ namespace
 
 		bool     booted         = false;
 		bool     programsLanded = false;
+		// The quantum at which the banner-and-settle predicate this file used to
+		// boot on became true, and the event loop's fetch count at that instant.
+		// The second is the known negative for the predicate that replaced it: a
+		// machine that satisfied the old one had not run the event loop, so the
+		// count must read 0 there. It is taken on the same run that later reads a
+		// positive, so it separates "the loop had not run yet" from "the counter
+		// cannot see the loop at all".
+		uint32_t bannerQuanta          = 0;
+		uint64_t eventLoopHitsAtBanner = 0;
+		uint32_t eventLoopQuanta       = 0;
+
 		bool     halted         = false;
 		bool     faulted        = false;
 		uint32_t bootQuanta     = 0;
@@ -871,6 +900,7 @@ namespace
 		Cs3Recorder recorder(boardCs3);
 		board.memory().attach(g2::Region::Cs3, &recorder);
 
+		const size_t iEventLoop = ram.addProbe(g_eventLoopEntry);
 		const size_t iNegative = ram.addProbe(g_probeNegative);
 		const size_t iIsr      = ram.addProbe(g_probeIsr);
 		const size_t iBlanket  = ram.addProbe(g_probeBlanket);
@@ -914,11 +944,20 @@ namespace
 			if(board.mcuHalted())
 				break;
 
-			if(ram.contentWrites() == 0)
+			// The old predicate, recorded rather than acted on. Its first firing
+			// is the instant a machine stopped early would have been called
+			// booted, and the event loop's count is read at exactly that instant.
+			if(_r.bannerQuanta == 0 && ram.contentWrites() != 0 && ++settle >= g_bannerSettleQuanta)
+			{
+				_r.bannerQuanta          = i + 1;
+				_r.eventLoopHitsAtBanner = ram.probe(iEventLoop).hits;
+			}
+
+			if(ram.probe(iEventLoop).hits == 0)
 				continue;
 
-			if(++settle < g_bannerSettleQuanta)
-				continue;
+			if(!_r.booted)
+				_r.eventLoopQuanta = i + 1;
 
 			_r.booted = true;
 
@@ -1103,6 +1142,9 @@ namespace
 		std::cout << l << ": endpoint=" << _r.endpoint
 		          << " bootQuanta=" << _r.bootQuanta
 		          << " booted=" << (_r.booted ? 1 : 0)
+		          << " eventLoopQuanta=" << _r.eventLoopQuanta
+		          << " bannerQuanta=" << _r.bannerQuanta
+		          << " eventLoopReadsAtBanner=" << _r.eventLoopHitsAtBanner
 		          << " programsLanded=" << (_r.programsLanded ? 1 : 0)
 		          << " dspCount=" << _r.dspCount
 		          << " halted=" << (_r.halted ? 1 : 0)
@@ -1258,6 +1300,40 @@ int main()
 			std::to_string(real.commandBytesBoot));
 
 		// The preconditions.
+
+		// ------------------------------------------- the boot predicate's floor
+		//
+		// The machine ran the event loop, and it had NOT run it at the instant the
+		// banner predicate this file used to boot on became true. The second half
+		// is the one that matters: it is this run's own early-stopped machine,
+		// measured with the same counter that later reads a positive, so a zero
+		// there is the loop not yet reached and not a counter that cannot see it.
+		check(real.booted,
+			"ep3-patch: the machine ran the event loop within the boot bound");
+		check(real.bannerQuanta != 0,
+			"ep3-patch: the banner predicate fired at some quantum, so the reading below was "
+			"taken and is not a field that was never written");
+		check(real.eventLoopHitsAtBanner == 0,
+			"ep3-patch: the event loop had not run when the banner predicate fired; observed "
+			+ std::to_string(real.eventLoopHitsAtBanner) + " reads at quantum "
+			+ std::to_string(real.bannerQuanta));
+		check(real.eventLoopQuanta > real.bannerQuanta,
+			"ep3-patch: the event loop ran later than the banner predicate fired; banner at "
+			+ std::to_string(real.bannerQuanta) + ", event loop at "
+			+ std::to_string(real.eventLoopQuanta));
+		check(control0.booted,
+			"ep0-small: the machine ran the event loop within the boot bound");
+		check(control0.bannerQuanta != 0,
+			"ep0-small: the banner predicate fired at some quantum, so the reading below was "
+			"taken and is not a field that was never written");
+		check(control0.eventLoopHitsAtBanner == 0,
+			"ep0-small: the event loop had not run when the banner predicate fired; observed "
+			+ std::to_string(control0.eventLoopHitsAtBanner) + " reads at quantum "
+			+ std::to_string(control0.bannerQuanta));
+		check(control0.eventLoopQuanta > control0.bannerQuanta,
+			"ep0-small: the event loop ran later than the banner predicate fired; banner at "
+			+ std::to_string(control0.bannerQuanta) + ", event loop at "
+			+ std::to_string(control0.eventLoopQuanta));
 		check(real.programsLanded, "ep3-patch: every DSP position took its program");
 		check(control0.programsLanded, "ep0-small: every DSP position took its program");
 		check(!real.halted, "ep3-patch: the core is not halted when the window closes");

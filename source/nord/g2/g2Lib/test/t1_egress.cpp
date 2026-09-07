@@ -131,6 +131,23 @@ namespace
 	// time, so leaving on the first content byte samples a machine mid-write.
 	constexpr uint32_t g_bannerSettleQuanta = 20000u;
 
+	// The firmware's event loop. Reaching it is what this file means by booted.
+	//
+	// The banner and its settle count are not that. They say a character other
+	// than the display clear reached the watched cells and that the machine kept
+	// running afterwards, which the machine does while it is still initialising:
+	// it leaves a long initialisation wait later still, and the event loop does
+	// not run until later than that. A predicate keyed on the banner is true on a
+	// machine that cannot yet consume anything, and every measurement taken
+	// behind it reads not-yet as never.
+	//
+	// The event loop is the condition worth keying on because it is what every
+	// consumer here depends on. The address is the one the findings corpus names,
+	// and the reading is a 16-bit read at it, which is the width the core fetches
+	// an instruction word at. Both quanta are recorded, so a run says how far
+	// apart they are rather than only which one it used.
+	constexpr uint32_t g_eventLoopEntry = 0x30004674u;
+
 	class Ram final : public g2::BusTarget
 	{
 	public:
@@ -148,6 +165,9 @@ namespace
 
 			const uint32_t count = uint32_t(_size) / 8u;
 			uint32_t value = 0u;
+
+			if(_size == 16 && m_fetchWatchSet && _offset == m_fetchWatch)
+				++m_fetchesAtWatch;
 
 			for(uint32_t i = 0; i < count; ++i)
 			{
@@ -208,11 +228,21 @@ namespace
 
 		uint64_t contentWrites() const { return m_contentWrites; }
 
+		// The event loop's own fetch counter. One address, counted on the width
+		// the core fetches an instruction at, so that "booted" can mean the loop
+		// ran rather than that a banner appeared.
+		void watchFetch(const uint32_t _offset) { m_fetchWatch = _offset; m_fetchWatchSet = true; }
+
+		uint64_t fetchesAtWatch() const { return m_fetchesAtWatch; }
+
 	private:
 		std::vector<uint8_t> m_bytes;
 		uint32_t             m_watchBase    = 0;
 		uint32_t             m_watchLength  = 0;
 		uint64_t             m_contentWrites = 0;
+		uint32_t             m_fetchWatch    = 0;
+		bool                 m_fetchWatchSet = false;
+		uint64_t             m_fetchesAtWatch = 0;
 	};
 
 	std::vector<uint8_t> readFile(const std::string& _path)
@@ -326,7 +356,18 @@ namespace
 		unsigned hopFrames       = 0;
 		unsigned lookaheadFrames = 0;
 		uint32_t bootQuanta      = 0;
-		bool     booted          = false;   // banner content observed
+		bool     booted          = false;   // the event loop ran
+
+		// The quantum at which the banner-and-settle predicate this file used to
+		// boot on became true, and the event loop's fetch count at that instant.
+		// The second is the known negative for the predicate that replaced it: a
+		// machine that satisfied the old one had not run the event loop, so the
+		// count must read 0 there. It is taken on the same run that later reads a
+		// positive, so it separates "the loop had not run yet" from "the counter
+		// cannot see the loop at all".
+		uint32_t bannerQuanta          = 0;
+		uint64_t eventLoopHitsAtBanner = 0;
+		uint32_t eventLoopQuanta       = 0;
 		bool     programsLanded  = false;
 		bool     halted          = false;
 		bool     faulted         = false;
@@ -409,6 +450,7 @@ namespace
 
 		// Installed before the core runs, so every count is the firmware's.
 		ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
+		ram.watchFetch(g_eventLoopEntry - g2::g_sdramBase);
 
 		board.resetMcu(g_entrySp, g_entryPc);
 
@@ -458,11 +500,20 @@ namespace
 			if(board.mcuHalted())
 				break;
 
-			if(ram.contentWrites() == 0)
+			// The old predicate, recorded rather than acted on. Its first firing
+			// is the instant a machine stopped early would have been called
+			// booted, and the event loop's count is read at exactly that instant.
+			if(_result.bannerQuanta == 0 && ram.contentWrites() != 0 && ++settle >= g_bannerSettleQuanta)
+			{
+				_result.bannerQuanta          = i + 1;
+				_result.eventLoopHitsAtBanner = ram.fetchesAtWatch();
+			}
+
+			if(ram.fetchesAtWatch() == 0)
 				continue;
 
-			if(++settle < g_bannerSettleQuanta)
-				continue;
+			if(!_result.booted)
+				_result.eventLoopQuanta = i + 1;
 
 			_result.booted = true;
 
@@ -652,6 +703,11 @@ namespace
 		          << " programsLanded=" << (_r.programsLanded ? 1 : 0)
 		          << " halted=" << (_r.halted ? 1 : 0)
 		          << " faulted=" << (_r.faulted ? 1 : 0) << std::endl;
+		std::cout << "egress: eventLoopQuanta=" << _r.eventLoopQuanta
+		          << " at 0x" << std::hex << g_eventLoopEntry << std::dec
+		          << "; the banner predicate fired at " << _r.bannerQuanta
+		          << " with " << _r.eventLoopHitsAtBanner
+		          << " reads of the event loop by then" << std::endl;
 		std::cout << "egress: primedPulled=" << _r.primedPulled
 		          << " walkQuanta=" << _r.walkQuanta
 		          << " arrival=" << _r.arrival
@@ -716,7 +772,27 @@ int main()
 		check(result.schedulerBuilt, "the Scheduler was created");
 		check(result.dspCount > 0, "the booted machine reports at least one DSP position");
 		check(result.hopFrames > 0, "the Scheduler Config carries a non-zero hop");
-		check(result.booted, "the firmware composed display content, so the machine really booted");
+
+		// ------------------------------------------- the boot predicate's floor
+		//
+		// The machine ran the event loop, and it had NOT run it at the instant the
+		// banner predicate this file used to boot on became true. The second half
+		// is the one that matters: it is this run's own early-stopped machine,
+		// measured with the same counter that later reads a positive, so a zero
+		// there is the loop not yet reached and not a counter that cannot see it.
+		check(result.booted,
+			"egress: the machine ran the event loop within the boot bound");
+		check(result.bannerQuanta != 0,
+			"egress: the banner predicate fired at some quantum, so the reading below was "
+			"taken and is not a field that was never written");
+		check(result.eventLoopHitsAtBanner == 0,
+			"egress: the event loop had not run when the banner predicate fired; observed "
+			+ std::to_string(result.eventLoopHitsAtBanner) + " reads at quantum "
+			+ std::to_string(result.bannerQuanta));
+		check(result.eventLoopQuanta > result.bannerQuanta,
+			"egress: the event loop ran later than the banner predicate fired; banner at "
+			+ std::to_string(result.bannerQuanta) + ", event loop at "
+			+ std::to_string(result.eventLoopQuanta));
 		check(result.programsLanded, "every DSP position took its program before the play phase began");
 		check(!result.halted, "the core is not halted at the play transition");
 		check(!result.faulted, "the board reports no fault at the play transition");
