@@ -11,7 +11,7 @@
 #include "memoryMap.h"
 #include "panel.h"
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstdint>
 #include <iostream>
@@ -71,15 +71,15 @@ namespace
 
 		~Board() { delete m_map; }
 
-		uint32_t read(const uint32_t _address, const int _size, mcf5307_bus_status& _status)
+		uint32_t read(const uint32_t _address, const int _size, mcf5407_bus_status& _status)
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return g2::memoryMapRead(m_map, _address, _size, &_status);
 		}
 
-		void write(const uint32_t _address, const int _size, const uint32_t _value, mcf5307_bus_status& _status)
+		void write(const uint32_t _address, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			g2::memoryMapWrite(m_map, _address, _size, _value, &_status);
 		}
 
@@ -125,10 +125,10 @@ int main()
 	// serves as a BusTarget.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		board.write(g_displayBase, 32, 0x4e4d4732u, status);
-		checkEqual(status, MCF5307_BUS_OK, "a write into the display buffer completes before ticking");
+		checkEqual(status, MCF5407_BUS_OK, "a write into the display buffer completes before ticking");
 
 		for(const uint64_t frame : {uint64_t(0), uint64_t(1), uint64_t(2048), uint64_t(~uint64_t(0))})
 		{
@@ -168,7 +168,7 @@ int main()
 		// legal call, which lets the scheduler's snapshot path skip the
 		// panel's block without special-casing it. The panel it saved from
 		// must still serve what it held.
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		board.write(g_displayBase, 32, 0x4e4d4732u, status);
 		board.panel().stateSave(nullptr);
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0x4e4d4732u),
@@ -182,7 +182,7 @@ int main()
 	// holds display contents must leave the display exactly as it was.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		board.write(g_displayBase, 32, 0x4e4d4732u, status);
 
@@ -208,7 +208,7 @@ int main()
 	// whatever it held, and stateSize stays zero.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		board.write(g_displayBase + 0x20u, 8, 0x5au, status);
 

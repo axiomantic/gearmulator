@@ -44,14 +44,14 @@ namespace g2
 			return result;
 		}
 
-		const char* statusName(const mcf5307_bus_status _status)
+		const char* statusName(const mcf5407_bus_status _status)
 		{
 			switch(_status)
 			{
-			case MCF5307_BUS_OK:           return "OK";
-			case MCF5307_BUS_UNMAPPED:     return "UNMAPPED";
-			case MCF5307_BUS_SIZE_ILLEGAL: return "SIZE_ILLEGAL";
-			case MCF5307_BUS_FAULT:        return "FAULT";
+			case MCF5407_BUS_OK:           return "OK";
+			case MCF5407_BUS_UNMAPPED:     return "UNMAPPED";
+			case MCF5407_BUS_SIZE_ILLEGAL: return "SIZE_ILLEGAL";
+			case MCF5407_BUS_FAULT:        return "FAULT";
 			}
 			return "UNKNOWN";
 		}
@@ -129,7 +129,7 @@ namespace g2
 		return m_targets[indexOf(_region)];
 	}
 
-	void MemoryMap::logFailure(const mcf5307_bus_status _status, const bool _isWrite,
+	void MemoryMap::logFailure(const mcf5407_bus_status _status, const bool _isWrite,
 		const int _size, const uint32_t _address)
 	{
 		m_log.push_back(std::string("memoryMap: ") + statusName(_status)
@@ -137,13 +137,13 @@ namespace g2
 			+ " bits at " + hex32(_address));
 	}
 
-	uint32_t MemoryMap::read(const uint32_t _address, const int _size, mcf5307_bus_status& _status)
+	uint32_t MemoryMap::read(const uint32_t _address, const int _size, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logFailure(_status, false, _size, _address);
 			return 0;
 		}
@@ -155,14 +155,14 @@ namespace g2
 		// decoded at all: no device answers at this address.
 		if(!busTarget)
 		{
-			_status = MCF5307_BUS_UNMAPPED;
+			_status = MCF5407_BUS_UNMAPPED;
 			logFailure(_status, false, _size, _address);
 			return 0;
 		}
 
 		const uint32_t value = busTarget->read(_address - window(region).base, _size, _status);
 
-		if(_status != MCF5307_BUS_OK)
+		if(_status != MCF5407_BUS_OK)
 		{
 			logFailure(_status, false, _size, _address);
 			return 0;
@@ -172,13 +172,13 @@ namespace g2
 	}
 
 	void MemoryMap::write(const uint32_t _address, const int _size, const uint32_t _value,
-		mcf5307_bus_status& _status)
+		mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logFailure(_status, true, _size, _address);
 			return;
 		}
@@ -188,20 +188,20 @@ namespace g2
 
 		if(!busTarget)
 		{
-			_status = MCF5307_BUS_UNMAPPED;
+			_status = MCF5407_BUS_UNMAPPED;
 			logFailure(_status, true, _size, _address);
 			return;
 		}
 
 		busTarget->write(_address - window(region).base, _size, _value, _status);
 
-		if(_status != MCF5307_BUS_OK)
+		if(_status != MCF5407_BUS_OK)
 			logFailure(_status, true, _size, _address);
 	}
 
-	uint32_t memoryMapRead(void* _user, const uint32_t _address, const int _size, mcf5307_bus_status* _status)
+	uint32_t memoryMapRead(void* _user, const uint32_t _address, const int _size, mcf5407_bus_status* _status)
 	{
-		mcf5307_bus_status local = MCF5307_BUS_OK;
+		mcf5407_bus_status local = MCF5407_BUS_OK;
 		const uint32_t value = static_cast<MemoryMap*>(_user)->read(_address, _size, local);
 		if(_status)
 			*_status = local;
@@ -209,9 +209,9 @@ namespace g2
 	}
 
 	void memoryMapWrite(void* _user, const uint32_t _address, const int _size, const uint32_t _value,
-		mcf5307_bus_status* _status)
+		mcf5407_bus_status* _status)
 	{
-		mcf5307_bus_status local = MCF5307_BUS_OK;
+		mcf5407_bus_status local = MCF5407_BUS_OK;
 		static_cast<MemoryMap*>(_user)->write(_address, _size, _value, local);
 		if(_status)
 			*_status = local;

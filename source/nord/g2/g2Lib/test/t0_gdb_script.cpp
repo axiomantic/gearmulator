@@ -99,12 +99,12 @@ namespace
 	public:
 		explicit Ram(const uint32_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -112,17 +112,17 @@ namespace
 			for(int i = 0; i < count; ++i)
 				value = (value << 8) | uint32_t(m_bytes[_offset + uint32_t(i)]);
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return value;
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-		           mcf5307_bus_status& _status) override
+		           mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -132,7 +132,7 @@ namespace
 				m_bytes[_offset + uint32_t(i)] = uint8_t((_value >> shift) & 0xffu);
 			}
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 		}
 
 		void pokeWord(const uint32_t _offset, const uint16_t _value)
@@ -188,7 +188,7 @@ namespace
 	 * so no program counter can equal it. */
 	constexpr uint32_t g_bpUnreached = g_codeBase + 0x001u;
 
-	/* The register indices of the MCF5307 C ABI. 17 is the program counter,
+	/* The register indices of the MCF5407 C ABI. 17 is the program counter,
 	 * which is the register the stub's breakpoint compare reads and the one
 	 * every PC assertion here reads. */
 	constexpr int g_regPc = 17;

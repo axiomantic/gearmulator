@@ -19,7 +19,7 @@
 //
 // The one restricted width rule, UM section 14.3.7: all UART module registers
 // must be accessed as bytes. A 16-bit or 32-bit access to any UART offset is
-// rejected with MCF5307_BUS_SIZE_ILLEGAL and one log line, on both the read
+// rejected with MCF5407_BUS_SIZE_ILLEGAL and one log line, on both the read
 // and the write path.
 //
 // The register facts are written out again by hand -- the offsets from Table
@@ -91,17 +91,17 @@ namespace
 	constexpr uint8_t gImrRxRdy = 0x02u;
 	constexpr uint8_t gImrTxRdy = 0x01u;
 
-	mcf5307_bus_status g_status = MCF5307_BUS_OK;
+	mcf5407_bus_status g_status = MCF5407_BUS_OK;
 
 	uint32_t rd(g2::Uart0& u, const uint32_t _off)
 	{
-		g_status = MCF5307_BUS_OK;
+		g_status = MCF5407_BUS_OK;
 		return u.read(_off, 8, g_status);
 	}
 
 	void wr(g2::Uart0& u, const uint32_t _off, const uint32_t _val)
 	{
-		g_status = MCF5307_BUS_OK;
+		g_status = MCF5407_BUS_OK;
 		u.write(_off, 8, _val, g_status);
 	}
 
@@ -210,25 +210,25 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 3. The one restricted width rule (UM section 14.3.7): every
 	// UART register is a byte, and a 16-bit or 32-bit access is rejected with
-	// MCF5307_BUS_SIZE_ILLEGAL and one log line, on both paths.
+	// MCF5407_BUS_SIZE_ILLEGAL and one log line, on both paths.
 	{
 		g2::Uart0 uart;
 		const uint32_t logAt = gUart0Base + gBuffer;
 
-		mcf5307_bus_status st = MCF5307_BUS_OK;
+		mcf5407_bus_status st = MCF5407_BUS_OK;
 		uart.read(logAt, 16, st);
-		check(st == MCF5307_BUS_SIZE_ILLEGAL,
+		check(st == MCF5407_BUS_SIZE_ILLEGAL,
 			"a 16-bit read of a UART register is rejected with SIZE_ILLEGAL");
-		st = MCF5307_BUS_OK;
+		st = MCF5407_BUS_OK;
 		uart.read(logAt, 32, st);
-		check(st == MCF5307_BUS_SIZE_ILLEGAL,
+		check(st == MCF5407_BUS_SIZE_ILLEGAL,
 			"a 32-bit read of a UART register is rejected with SIZE_ILLEGAL");
 		check(!uart.log().empty(), "a rejected width writes one log line");
 
 		uart.clearLog();
-		st = MCF5307_BUS_OK;
+		st = MCF5407_BUS_OK;
 		uart.write(logAt, 16, 0x1234u, st);
-		check(st == MCF5307_BUS_SIZE_ILLEGAL,
+		check(st == MCF5407_BUS_SIZE_ILLEGAL,
 			"a 16-bit write to a UART register is rejected with SIZE_ILLEGAL");
 		check(!uart.log().empty(), "a rejected write width writes one log line");
 	}
@@ -362,13 +362,13 @@ int main()
 	// a benign reset-value read, not a fault.)
 	{
 		g2::Uart0 uart;
-		mcf5307_bus_status st = MCF5307_BUS_OK;
+		mcf5407_bus_status st = MCF5407_BUS_OK;
 		uart.read(0x240, 8, st);
-		check(st == MCF5307_BUS_UNMAPPED,
+		check(st == MCF5407_BUS_UNMAPPED,
 			"an access past the UART blocks is refused as UNMAPPED");
-		st = MCF5307_BUS_OK;
+		st = MCF5407_BUS_OK;
 		uart.write(0x240, 8, 0x00, st);
-		check(st == MCF5307_BUS_UNMAPPED,
+		check(st == MCF5407_BUS_UNMAPPED,
 			"a write past the UART blocks is refused as UNMAPPED");
 	}
 

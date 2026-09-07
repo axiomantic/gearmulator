@@ -9,7 +9,7 @@
 //
 //   0. The Board presents nothing while its core handle is null. Uart0's
 //      constructor programs its vector into the controller, which presents,
-//      and that happens before mcf5307_create has returned.
+//      and that happens before mcf5407_create has returned.
 //
 //   1. A timer 2 reference match with TMR[ORI] set and ICR2 at MBAR+$04E
 //      programmed to 0x84 presents level 1, autovectored. The whole path is
@@ -57,7 +57,7 @@
 #include "../timer.h"
 #include "../uart0.h"
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstdint>
 #include <iostream>
@@ -96,12 +96,12 @@ namespace
 
 	// ------------------------------------------------------------ the double
 	//
-	// The recording double is mcf5307_set_irq itself. This target compiles
-	// ../board.cpp and links no mcf5307 archive, so the definition below is the
-	// one the Board's present function reaches. mcf5307.h publishes no getter
+	// The recording double is mcf5407_set_irq itself. This target compiles
+	// ../board.cpp and links no mcf5407 archive, so the definition below is the
+	// one the Board's present function reaches. mcf5407.h publishes no getter
 	// for the presented interrupt state, and the real symbol cannot be
 	// interposed on a link that carries the archive, because
-	// `nm -g libmcf5307.a` puts _mcf5307_set_irq in the same member as
+	// `nm -g libmcf5407.a` puts _mcf5407_set_irq in the same member as
 	// _takeInterrupt and _pendingInterrupt, which the core's own execution path
 	// needs.
 	//
@@ -112,7 +112,7 @@ namespace
 	struct SetIrqRecorder
 	{
 		int calls = 0;
-		mcf5307_ctx* ctx = nullptr;
+		mcf5407_ctx* ctx = nullptr;
 		int level = -999;
 		uint8_t vector = 0xFFu;
 		int autovector = -999;
@@ -187,16 +187,16 @@ namespace
 	constexpr int g_word = 2;
 
 	uint32_t boardRead(g2::Board& _board, const uint32_t _address, const int _size,
-		mcf5307_bus_status& _status)
+		mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		return g2::Board::onRead(&_board, _address, _size, &_status);
 	}
 
 	void boardWrite(g2::Board& _board, const uint32_t _address, const int _size,
-		const uint32_t _value, mcf5307_bus_status& _status)
+		const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		g2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 
@@ -208,14 +208,14 @@ namespace
 	}
 }
 
-// The mcf5307 and isp1181 entry points ../board.cpp calls. This target links no
-// mcf5307 archive: the recording mcf5307_set_irq above is the observation
+// The mcf5407 and isp1181 entry points ../board.cpp calls. This target links no
+// mcf5407 archive: the recording mcf5407_set_irq above is the observation
 // mechanism, and a link that carried the archive would refuse it as a duplicate
 // symbol.
 //
-// Every stub answers the value mcf5307.h defines for a context that can do
+// Every stub answers the value mcf5407.h defines for a context that can do
 // nothing. Nothing below is driven by any case in this file except
-// mcf5307_set_irq: the timers are advanced through Sim::advanceTimers and the
+// mcf5407_set_irq: the timers are advanced through Sim::advanceTimers and the
 // registers are written through the Board's own bus callbacks, so no case here
 // needs a core that executes.
 namespace
@@ -230,57 +230,57 @@ namespace
 
 extern "C"
 {
-	/* Answers 1, which is "the runtime is usable". mcf5307.h states the status
+	/* Answers 1, which is "the runtime is usable". mcf5407.h states the status
 	 * is a truth value and not a POSIX error code, and 0 is reserved for a
 	 * one-time latch that was abandoned. This fake has no latch and no runtime
 	 * to stall, so 1 is the only answer it can honestly give. */
-	int mcf5307_runtime_init(void)
+	int mcf5407_runtime_init(void)
 	{
 		return 1;
 	}
 
-	mcf5307_ctx* mcf5307_create(void*, mcf5307_read_fn, mcf5307_write_fn,
-	                            mcf5307_iack_fn)
+	mcf5407_ctx* mcf5407_create(void*, mcf5407_read_fn, mcf5407_write_fn,
+	                            mcf5407_iack_fn)
 	{
-		return reinterpret_cast<mcf5307_ctx*>(&g_coreToken);
+		return reinterpret_cast<mcf5407_ctx*>(&g_coreToken);
 	}
 
-	void mcf5307_destroy(mcf5307_ctx*)
-	{
-	}
-
-	uint32_t mcf5307_exec(mcf5307_ctx*, uint32_t)
-	{
-		return 0u;
-	}
-
-	void mcf5307_reset(mcf5307_ctx*, uint32_t, uint32_t)
+	void mcf5407_destroy(mcf5407_ctx*)
 	{
 	}
 
-	uint32_t mcf5307_get_reg(const mcf5307_ctx*, int)
+	uint32_t mcf5407_exec(mcf5407_ctx*, uint32_t)
 	{
 		return 0u;
 	}
 
-	int mcf5307_set_reg(mcf5307_ctx*, int, uint32_t)
+	void mcf5407_reset(mcf5407_ctx*, uint32_t, uint32_t)
+	{
+	}
+
+	uint32_t mcf5407_get_reg(const mcf5407_ctx*, int)
+	{
+		return 0u;
+	}
+
+	int mcf5407_set_reg(mcf5407_ctx*, int, uint32_t)
 	{
 		return 0;
 	}
 
-	int mcf5307_halted(const mcf5307_ctx*)
+	int mcf5407_halted(const mcf5407_ctx*)
 	{
 		return 0;
 	}
 
-	int mcf5307_faulted(const mcf5307_ctx*)
+	int mcf5407_faulted(const mcf5407_ctx*)
 	{
 		return 0;
 	}
 
 	// The one stub that is the test. Every case below asserts on what arrived
 	// here.
-	void mcf5307_set_irq(mcf5307_ctx* const ctx, const int level, const uint8_t vector,
+	void mcf5407_set_irq(mcf5407_ctx* const ctx, const int level, const uint8_t vector,
 	                     const int autovector)
 	{
 		++g_recorder.calls;
@@ -321,7 +321,7 @@ extern "C"
 
 	/* The Board drains its transport hub into the device on every quantum
 	 * boundary, so board.cpp references this entry point and a target that
-	 * links no mcf5307 archive must supply it. It is a sink and not a recorder:
+	 * links no mcf5407 archive must supply it. It is a sink and not a recorder:
 	 * nothing in this file drives the hub, so no frame ever reaches it.
 	 *
 	 * It answers 1, which is "an OUT buffer holds the packet". The Board reads
@@ -335,7 +335,7 @@ extern "C"
 
 	/* The Board moves its handle off the Stub backend at construction, so
 	 * board.cpp references this entry point too and a target that links no
-	 * mcf5307 archive must supply it.
+	 * mcf5407 archive must supply it.
 	 *
 	 * It answers 1, which is "the handle moved". The Board reads the return
 	 * only to detect a refusal, and a refusal is a state this file's fake
@@ -352,7 +352,7 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 0. The Board presents nothing while its core handle is null.
 	//
-	// The controller exists before mcf5307_create returns, and Uart0's own
+	// The controller exists before mcf5407_create returns, and Uart0's own
 	// constructor programs its vector into it, which recomputes and presents.
 	// That presentation has no core to reach. The assertion is on
 	// the whole construction, so it is red the moment the guard is removed:
@@ -374,7 +374,7 @@ int main()
 	{
 		g2::Board board(mbarOnlyConfig());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		const uint32_t icr2 = kMbarBase + kIcrBase + uint32_t(g2::Timer::gTimer2InterruptIndex);
 		boardWrite(board, icr2, g_byte, makeIcr(1, 0, true), status);
@@ -415,7 +415,7 @@ int main()
 		checkEqual(g_recorder.calls, 1,
 			"THE BOARD PRESENTS ON CLEAR AS WELL AS ON ASSERT: the clear presented once");
 		checkEqual(g_recorder.level, 0,
-			"the presentation after the clear is MCF5307_IRQ_NONE");
+			"the presentation after the clear is MCF5407_IRQ_NONE");
 		checkEqual(g_recorder.autovector, 0,
 			"a level 0 presentation carries no autovector");
 		checkEqual(uint32_t(g_recorder.vector), uint32_t(0x00u),
@@ -431,7 +431,7 @@ int main()
 	{
 		g2::Board board(mbarOnlyConfig());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		const uint32_t icr1 = kMbarBase + kIcrBase + uint32_t(g2::Timer::gTimer1InterruptIndex);
 		boardWrite(board, icr1, g_byte, makeIcr(1, 0, true), status);
@@ -458,7 +458,7 @@ int main()
 	{
 		g2::Board board(mbarOnlyConfig());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		const uint32_t icr2 = kMbarBase + kIcrBase + uint32_t(g2::Timer::gTimer2InterruptIndex);
 		const uint32_t icr4 = kMbarBase + kIcrBase + uint32_t(g2::Uart0::gUart0InterruptIndex);
@@ -527,7 +527,7 @@ int main()
 	{
 		g2::Board board(mbarOnlyConfig());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		check(g_usbIrq != nullptr,
 			"THE IRQ WIRE EXISTS: the Board handed isp1181_create a non-null IRQ callback");
@@ -564,7 +564,7 @@ int main()
 			checkEqual(g_recorder.calls, 1,
 				"the deassert presented exactly once");
 			checkEqual(g_recorder.level, 0,
-				"the deassert drops the presentation to MCF5307_IRQ_NONE");
+				"the deassert drops the presentation to MCF5407_IRQ_NONE");
 
 			// 5c. The level is the controller's, not the Board's. IRQPAR[1]
 			// moves IRQ3 to level 6 by UM Table 8-4. A hardcoded level 3
@@ -599,17 +599,17 @@ int main()
 	{
 		g2::Board board(mbarOnlyConfig());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		// 6a. Known positive. The router owns $04B, and the way that is
 		// visible from the bus is the interrupt block's byte-only rule: a
 		// wider access to an owned offset is refused.
 		boardWrite(board, kMbarBase + kAvrRegister, g_word, 0x0008u, status);
-		checkEqual(int(status), int(MCF5307_BUS_SIZE_ILLEGAL),
+		checkEqual(int(status), int(MCF5407_BUS_SIZE_ILLEGAL),
 			"KNOWN POSITIVE: a word write to $04B is refused, so the interrupt block owns it");
 
 		boardRead(board, kMbarBase + kAvrRegister, g_word, status);
-		checkEqual(int(status), int(MCF5307_BUS_SIZE_ILLEGAL),
+		checkEqual(int(status), int(MCF5407_BUS_SIZE_ILLEGAL),
 			"KNOWN POSITIVE: a word read of $04B is refused, so the interrupt block owns it");
 
 		// 6b. Known negative, same predicate. $049 is a Reserved byte of the
@@ -618,11 +618,11 @@ int main()
 		// access falls through to the SIM and is accepted. A predicate that
 		// swallowed the whole $048..$04B group would be red on this line.
 		boardWrite(board, kMbarBase + kAvrGroupReserved, g_word, 0x0008u, status);
-		checkEqual(int(status), int(MCF5307_BUS_OK),
+		checkEqual(int(status), int(MCF5407_BUS_OK),
 			"KNOWN NEGATIVE: a word write to the Reserved $049 is accepted, so the interrupt block does NOT own it");
 
 		boardRead(board, kMbarBase + kAvrGroupReserved, g_word, status);
-		checkEqual(int(status), int(MCF5307_BUS_OK),
+		checkEqual(int(status), int(MCF5407_BUS_OK),
 			"KNOWN NEGATIVE: a word read of the Reserved $049 is accepted, so the interrupt block does NOT own it");
 
 		// 6c. The firmware's own write, asserted from the controller's state.
@@ -630,7 +630,7 @@ int main()
 		// answering the byte it was handed. readRegister is the controller, so
 		// only a byte that actually reached the controller reads back here.
 		boardWrite(board, kMbarBase + kAvrRegister, g_byte, 0x08u, status);
-		checkEqual(int(status), int(MCF5307_BUS_OK),
+		checkEqual(int(status), int(MCF5407_BUS_OK),
 			"the firmware's byte write to $04B is accepted");
 		checkEqual(uint32_t(board.interrupts().readRegister(kAvrRegister)), uint32_t(0x08u),
 			"THE BYTE REACHES THE CONTROLLER: AVR reads back 0x08 from the controller itself");

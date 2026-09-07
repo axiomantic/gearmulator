@@ -134,10 +134,10 @@ int main()
 			const uint32_t word = baseWord | (uint32_t(e.index) << 12); // distinct per row.
 			const uint32_t offset = (e.address - g2::g_cs1Base) + 4u;   // register offset 4.
 
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			adapter.write(offset, 32, word, status);
 
-			checkEqual(status, uint32_t(MCF5307_BUS_OK),
+			checkEqual(status, uint32_t(MCF5407_BUS_OK),
 				std::string("longword at ") + hex32(e.address) + "+4 completes OK: " + e.note);
 
 			checkEqual(uint32_t(captures[e.expectedPort].count), uint32_t(1),
@@ -169,12 +169,12 @@ int main()
 		for(Capture& c : captures) { c.word = 0; c.count = 0; }
 
 		const uint32_t word = 0x0055aaffu;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		// CS1 offset zero is the broadcast; +4 is the longword register offset.
 		adapter.write(0x4u, 32, word, status);
 
-		checkEqual(status, uint32_t(MCF5307_BUS_OK), "the broadcast longword completes OK");
+		checkEqual(status, uint32_t(MCF5407_BUS_OK), "the broadcast longword completes OK");
 
 		for(int p = 0; p < g2::g_hdi08PortCount; ++p)
 		{
@@ -202,7 +202,7 @@ int main()
 		const uint32_t word = 0x00abcdefu;
 
 		// TXH first: no word yet.
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		adapter.write((portBase - g2::g_cs1Base) + 5u, 8, (word >> 16) & 0xffu, status);
 		checkEqual(uint32_t(captures[portIndex].count), uint32_t(0),
 			"writing TXH alone does not complete a word");
@@ -219,7 +219,7 @@ int main()
 			"the word completes when TXL is written");
 		checkEqual(captures[portIndex].word, word,
 			"the byte-at-a-time path assembles the same word as the longword path");
-		checkEqual(status, uint32_t(MCF5307_BUS_OK),
+		checkEqual(status, uint32_t(MCF5407_BUS_OK),
 			"each byte of the byte-at-a-time path completes OK");
 		for(int p = 0; p < g2::g_hdi08PortCount; ++p)
 		{
@@ -245,7 +245,7 @@ int main()
 		const int portIndex = 0;
 		const uint32_t half = 0x3f2au;
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		adapter.write((portBase - g2::g_cs1Base) + 6u, 16, half, status);
 
 		checkEqual(uint32_t(captures[portIndex].count), uint32_t(1),
@@ -272,12 +272,12 @@ int main()
 		for(Capture& c : captures) { c.word = 0; c.count = 0; }
 
 		const uint32_t word = 0x00bead00u;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		// 0x110007F0 = port 0 (register offset 0); +4 is the longword offset.
 		map.write(0x110007f4u, 32, word, status);
 
-		checkEqual(status, uint32_t(MCF5307_BUS_OK), "a write through the MemoryMap completes OK");
+		checkEqual(status, uint32_t(MCF5407_BUS_OK), "a write through the MemoryMap completes OK");
 		check(map.decode(0x110007f4u) == g2::Region::Cs1, "0x110007F4 decodes to CS1");
 		checkEqual(uint32_t(captures[0].count), uint32_t(1),
 			"a write through the MemoryMap reaches the decoded port");
@@ -318,10 +318,10 @@ int main()
 			const uint32_t portBase = 0x110007b8u;
 			const int portIndex = 3;
 
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			initAdapter.write(portBase - g2::g_cs1Base, 8, icrInitOnly, status);
 
-			checkEqual(status, uint32_t(MCF5307_BUS_OK), "the ICR init write completes OK");
+			checkEqual(status, uint32_t(MCF5407_BUS_OK), "the ICR init write completes OK");
 
 			checkEqual(initAdapter.port(portIndex).icr(), uint32_t(0),
 				"an ICR write of INIT alone reads back with INIT cleared");
@@ -347,7 +347,7 @@ int main()
 			const uint32_t written = mc68k::Hdi08::Init | mc68k::Hdi08::Hf0 | mc68k::Hdi08::Treq;
 			const uint32_t expected = mc68k::Hdi08::Hf0 | mc68k::Hdi08::Treq;
 
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			initAdapter.write(portBase - g2::g_cs1Base, 8, written, status);
 
 			checkEqual(initAdapter.port(portIndex).icr(), expected,
@@ -363,7 +363,7 @@ int main()
 
 			const uint32_t written = mc68k::Hdi08::Hf1;
 
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			initAdapter.write(portBase - g2::g_cs1Base, 8, written, status);
 
 			checkEqual(initAdapter.port(portIndex).icr(), written,
@@ -379,7 +379,7 @@ int main()
 			const g2::Hdi08Decode broadcastDecode(g2::g_hdi08ExpandedPorts);
 			g2::Hdi08Adapter broadcastAdapter(broadcastDecode);
 
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			broadcastAdapter.write(0u, 8, icrInitOnly, status);
 
 			for(int p = 0; p < g2::g_hdi08PortCount; ++p)

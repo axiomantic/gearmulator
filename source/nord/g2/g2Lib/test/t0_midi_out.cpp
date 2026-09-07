@@ -102,11 +102,11 @@ namespace
 	// model's width unit is bits, not bytes -- 8 is the byte access.
 	constexpr int g_byteWidth = 8;
 
-	mcf5307_bus_status g_status = MCF5307_BUS_OK;
+	mcf5407_bus_status g_status = MCF5407_BUS_OK;
 
 	void writeByte(g2::Uart0& _uart, const uint32_t _off, const uint32_t _val)
 	{
-		g_status = MCF5307_BUS_OK;
+		g_status = MCF5407_BUS_OK;
 		_uart.write(_off, g_byteWidth, _val, g_status);
 	}
 }
