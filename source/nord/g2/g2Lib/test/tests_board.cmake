@@ -81,6 +81,24 @@ set(G2_NMG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools 
 set(G2_NMG2_TOOLS_GIT_TAG "oracle-wire-compose-2026-09-01" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
 
 if(G2_NMG2_TOOLS_SOURCE_DIR)
+	# The override substitutes whatever branch the checkout happens to be on, and
+	# a branch that carries no Nord tooling has no `container` module. The oracle
+	# then dies inside a Python subprocess inside a test, and a
+	# ModuleNotFoundError arriving from there reads as an upstream deletion
+	# rather than as a local misconfiguration. It is diagnosed here, where the
+	# override is applied and the cause is still visible, and it is FATAL rather
+	# than a warning because a warning in a configure log is the signal this
+	# whole failure class already got past.
+	if(NOT EXISTS "${G2_NMG2_TOOLS_SOURCE_DIR}/nmg2_tools/container.py")
+		message(FATAL_ERROR
+			"G2_NMG2_TOOLS_SOURCE_DIR points at ${G2_NMG2_TOOLS_SOURCE_DIR}, which "
+			"has no nmg2_tools/container.py. That checkout carries no Nord tooling "
+			"and is most likely on a main-descended branch. Anything built from it "
+			"is a statement about that tree and not about the pin.\n"
+			"Unset G2_NMG2_TOOLS_SOURCE_DIR to build against the pin "
+			"(${G2_NMG2_TOOLS_GIT_TAG}), or check the sibling out onto a branch "
+			"that carries the tooling.")
+	endif()
 	set(G2_ORACLE_TOOLS_DIR "${G2_NMG2_TOOLS_SOURCE_DIR}")
 else()
 	include(FetchContent)
