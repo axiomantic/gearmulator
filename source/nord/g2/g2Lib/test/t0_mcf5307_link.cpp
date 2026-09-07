@@ -101,7 +101,7 @@ int main()
 	// pointer forces the address to be materialised and forces the linker to
 	// resolve the symbol, so this case is red -- at the link step, naming
 	// _mcf5307_runtime_init -- for a g2Lib that does not carry the core.
-	void (*volatile runtimeInit)() = &mcf5307_runtime_init;
+	int (*volatile runtimeInit)() = &mcf5307_runtime_init;
 
 	check(runtimeInit != nullptr,
 		"mcf5307_runtime_init resolved to a non-null address through g2Lib");

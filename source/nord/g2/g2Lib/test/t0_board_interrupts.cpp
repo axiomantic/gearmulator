@@ -249,7 +249,7 @@ namespace
 
 extern "C"
 {
-	void mcf5307_runtime_init(void)
+	int mcf5307_runtime_init(void)
 	{
 	}
 
@@ -265,7 +265,7 @@ extern "C"
 
 	uint32_t mcf5307_exec(mcf5307_ctx*, uint32_t)
 	{
-		return 0u;
+		return 0;
 	}
 
 	void mcf5307_reset(mcf5307_ctx*, uint32_t, uint32_t)
@@ -274,7 +274,7 @@ extern "C"
 
 	uint32_t mcf5307_get_reg(const mcf5307_ctx*, int)
 	{
-		return 0u;
+		return 0;
 	}
 
 	int mcf5307_set_reg(mcf5307_ctx*, int, uint32_t)
@@ -327,7 +327,7 @@ extern "C"
 
 	uint8_t isp1181_read(isp1181_ctx*, uint32_t)
 	{
-		return 0u;
+		return 0;
 	}
 
 	void isp1181_write(isp1181_ctx*, uint32_t, uint8_t)
@@ -339,8 +339,9 @@ extern "C"
 	 * links no mcf5307 archive must supply it. It is a SINK and not a
 	 * recorder: nothing in this file drives the hub, so no frame ever reaches
 	 * it, and a recorder here would be state no case reads. */
-	void isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
+	int isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t)
 	{
+		return 1;
 	}
 
 	/* THE BOARD MOVES ITS HANDLE OFF THE STUB BACKEND AT CONSTRUCTION, so
