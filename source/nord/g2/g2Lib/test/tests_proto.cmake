@@ -252,3 +252,26 @@ set_property(TARGET t0_automation PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_automation COMMAND t0_automation)
 set_tests_properties(t0_automation PROPERTIES LABELS "UnitTest")
+
+
+# ----------------- audio out, as a diagnostic and not a test
+#
+# This target measures whether the machine sends anything to its audio output.
+# It is built, so it cannot rot unnoticed, and it is deliberately NOT registered
+# with ctest: it asserts nothing. Its output is a table for a person to read.
+#
+# It is not a test because there is no known input that makes this firmware
+# produce sound. Until one exists, an assertion here could only encode the
+# current silence as correct, and a future change that produced audio would turn
+# that assertion red for the right reason -- which is the wrong way round.
+#
+# g2PatchLoad.cpp lives in g2JucePlugin rather than g2Lib, so it is compiled in
+# directly, the same way the neighbouring targets do it.
+
+add_executable(zz_audio_out
+	${CMAKE_CURRENT_SOURCE_DIR}/zz_audio_out.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2PatchLoad.cpp)
+target_link_libraries(zz_audio_out PRIVATE g2Lib)
+set_property(TARGET zz_audio_out PROPERTY FOLDER "G2/test")
+target_compile_definitions(zz_audio_out PRIVATE
+	G2_PATCH_RELATIVE_PATH="corpus/pch2/BackTo72 demo.pch2")
