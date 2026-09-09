@@ -465,11 +465,33 @@ int main()
 
 		const std::vector<uint8_t> code  = readFile(directory + "/CODE_30000400.bin");
 
-		std::string patchName = "BackTo72 demo";
+		// The path and the entry name are separate on purpose. They used to be one
+		// variable, and loading a patch from outside corpus/pch2 therefore sent its
+		// whole relative path as the entry name. The firmware silently discards a
+		// patch whose entry name exceeds 16 characters -- no error, no DSP work, a
+		// result indistinguishable from a patch it considered and declined. Three
+		// fixture patches were measured as inert for that reason and reported as a
+		// finding before the cause was found.
+		std::string patchPath = "BackTo72 demo";
 		if(const char* const p = std::getenv("G2_AUDIO_PATCH"))
-			patchName = p;
+			patchPath = p;
 
-		const std::vector<uint8_t> patch = readFile(directory + "/corpus/pch2/" + patchName + ".pch2");
+		// Default the transmitted name to the file's own stem, so a path never
+		// reaches the wire; G2_AUDIO_NAME overrides it for tests about the name.
+		std::string patchName = patchPath;
+		if(const auto slash = patchName.find_last_of('/'); slash != std::string::npos)
+			patchName = patchName.substr(slash + 1);
+		if(const char* const n = std::getenv("G2_AUDIO_NAME"))
+			patchName = n;
+
+		constexpr std::size_t g_maxEntryNameChars = 16;
+		if(patchName.size() > g_maxEntryNameChars)
+			std::cout << "WARNING entry name is " << patchName.size()
+				<< " characters, over the " << g_maxEntryNameChars
+				<< " the firmware accepts; it will discard this patch silently"
+				<< std::endl;
+
+		const std::vector<uint8_t> patch = readFile(directory + "/corpus/pch2/" + patchPath + ".pch2");
 
 		if(code.empty() || (mode != "none" && patch.empty()))
 		{
@@ -477,7 +499,7 @@ int main()
 			return false;
 		}
 
-		std::cout << "patch=\"" << patchName << "\" bytes=" << patch.size() << std::endl;
+		std::cout << "patch=\"" << patchPath << "\" name=\"" << patchName << "\" bytes=" << patch.size() << std::endl;
 
 		Logging::setLogFunc(&countLog);
 		baseLib::logging::setLogFunc(&countLog);
