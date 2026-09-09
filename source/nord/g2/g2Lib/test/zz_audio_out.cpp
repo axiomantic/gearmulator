@@ -472,6 +472,7 @@ int main()
 		// result indistinguishable from a patch it considered and declined. Three
 		// fixture patches were measured as inert for that reason and reported as a
 		// finding before the cause was found.
+		const char* loadResultName = nullptr;
 		std::string patchPath = "BackTo72 demo";
 		if(const char* const p = std::getenv("G2_AUDIO_PATCH"))
 			patchPath = p;
@@ -488,7 +489,7 @@ int main()
 		if(patchName.size() > g_maxEntryNameChars)
 			std::cout << "WARNING entry name is " << patchName.size()
 				<< " characters, over the " << g_maxEntryNameChars
-				<< " the firmware accepts; it will discard this patch silently"
+				<< " this emulator's loader accepts; it will REFUSE to originate"
 				<< std::endl;
 
 		const std::vector<uint8_t> patch = readFile(directory + "/corpus/pch2/" + patchPath + ".pch2");
@@ -629,14 +630,16 @@ int main()
 			if(mode == "objects")
 			{
 				const g2::Pch2LoadResult r = g2::pch2Load(patch.data(), patch.size(), client);
-				std::cout << "pch2Load = " << g2::pch2LoadResultName(r) << std::endl;
+				loadResultName = g2::pch2LoadResultName(r);
+				std::cout << "pch2Load = " << loadResultName << std::endl;
 				delivered = patch;
 			}
 			else if(mode == "framed")
 			{
 				const g2::Pch2LoadResult r = g2::pch2LoadFramed(patch.data(), patch.size(),
 					patchName.c_str(), 0, client, scratch.data(), scratch.size());
-				std::cout << "pch2LoadFramed = " << g2::pch2LoadResultName(r) << std::endl;
+				loadResultName = g2::pch2LoadResultName(r);
+				std::cout << "pch2LoadFramed = " << loadResultName << std::endl;
 
 				g2::Pch2LoadResult cr = g2::Pch2LoadResult::Loaded;
 				std::vector<uint8_t> msg(g2::g_maxPatchLoadMessageBytes + 4);
@@ -937,6 +940,16 @@ int main()
 		// every one of them from reading a subset of the eight and generalising.
 		// The counts are absolute; engagement is a comparison against a no-patch
 		// run of the same build, which the caller must take itself.
+		// A refusal is already reported by name where the load happens. That line
+		// sits near the top of a log that runs to six figures, and every analysis
+		// of this instrument grepped for counts and never read it -- so the same
+		// verdict is repeated here, beside the numbers a reader actually reads.
+		// A zero next to a refusal is not a measurement of anything.
+		if(loadResultName != nullptr && std::string(loadResultName) != "PCH2-LOADED")
+			std::cout << "*** DELIVERY REFUSED: " << loadResultName
+			          << " -- nothing below measures the machine's response to a patch"
+		          << std::endl;
+
 		std::cout << "WALKCOUNTS";
 		for(uint32_t d = 0; d < dspCount; ++d)
 			std::cout << ' ' << (board.dspSet().dsp(d).getInstructionCounter() - beforeWalk[d]);
