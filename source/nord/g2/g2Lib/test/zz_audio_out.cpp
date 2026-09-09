@@ -30,6 +30,7 @@
 #include "../uart0.h"
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
+#include "dsp56kEmu/disasm.h"
 #include "dsp56kBase/logging.h"
 #include "baseLib/logging.h"
 
@@ -855,6 +856,42 @@ int main()
 
 		std::vector<std::map<uint32_t, uint64_t>> pcHistogram(dspCount);
 
+		// -------------------------------------------- the poisoned audio window
+		//
+		// Reading the transmit window as zero after the walk cannot tell "nobody
+		// wrote here" from "somebody wrote zeros here", and those are different
+		// findings: the second says the synthesis runs and computes silence, the
+		// first says it never reaches the buffer at all.
+		//
+		// G2_AUDIO_POISON fills the whole window with a sentinel BEFORE the walk.
+		// Any word still holding the sentinel afterwards was not written by
+		// anyone -- DSP or DMA. A word that changed was written, whatever it was
+		// written with.
+		//
+		// This deliberately perturbs the machine: the transmit DMA sources from
+		// this window, so the poison is carried to the codec. That is a second
+		// reading and not a defect -- poison arriving at the sink shows the
+		// buffer-to-codec half of the path carrying data that the DSP did not
+		// produce, which is the known positive for the stage the walk measures.
+		// Because it perturbs, it is off by default and never runs in an arm
+		// whose sink reading is being used for anything else.
+		const bool poison = std::getenv("G2_AUDIO_POISON") != nullptr;
+		constexpr dsp56k::TWord g_poisonWord = 0x0ACE55u;
+		constexpr dsp56k::TWord g_poisonLo   = 0x1C00u;
+		constexpr dsp56k::TWord g_poisonHi   = 0x2000u;
+
+		if(poison)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+				for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+					memory.set(dsp56k::MemArea_X, w, g_poisonWord);
+			}
+			std::cout << "poison: filled X:" << hex32(g_poisonLo) << ".." << hex32(g_poisonHi)
+			          << " with " << hex32(g_poisonWord) << " on " << dspCount << " dsps" << std::endl;
+		}
+
 		// ---------------------------------------------------------- the walk
 		AudioReading walkRead;
 		uint64_t walkBuckets[64] = {0};
@@ -992,6 +1029,46 @@ int main()
 			          << std::endl;
 		}
 
+		// The poison readback. survivors == the whole window means nothing wrote
+		// a single word of it during the walk; survivors < the window names
+		// exactly how much was written, with or without zeros.
+		if(poison)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+				unsigned survivors = 0, zeroed = 0, other = 0;
+				dsp56k::TWord firstChangedAddr = 0, firstChangedVal = 0;
+
+				for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+				{
+					const dsp56k::TWord v = memory.get(dsp56k::MemArea_X, w);
+					if(v == g_poisonWord)
+					{
+						++survivors;
+						continue;
+					}
+					if(other == 0 && zeroed == 0)
+					{
+						firstChangedAddr = w;
+						firstChangedVal  = v;
+					}
+					if(v == 0)
+						++zeroed;
+					else
+						++other;
+				}
+
+				std::cout << "  dsp " << d << " poison readback"
+				          << " survivors=" << survivors << "/1024"
+				          << " overwrittenWithZero=" << zeroed
+				          << " overwrittenWithOther=" << other
+				          << " firstChanged=" << hex32(firstChangedAddr) << ":" << firstChangedVal
+				          << std::endl;
+			}
+		}
+
 		// Did the patch reach the DSPs at all? A digest of each DSP's three
 		// memory areas. The digests of the delivered arm and the control arm are
 		// compared BY THE READER, across two runs: a digest that is identical in
@@ -1029,6 +1106,79 @@ int main()
 			}
 
 			std::cout << std::endl;
+		}
+
+		// ------------------------------------- P memory dump and disassembly
+		//
+		// The digest above says only whether DSP memory MOVED. This says what
+		// it moved TO. G2_AUDIO_PDUMP names a directory; for every DSP it
+		// writes the raw program words and the disassembly of the same range,
+		// so that a delivered arm and a no-patch control can be differenced
+		// word by word offline rather than eyeballed through a hash.
+		//
+		// The raw dump is written unconditionally over the range, zeros
+		// included, so that the two arms' files are line-aligned and `diff`
+		// alone names every changed word. The disassembly skips NOPs, because
+		// an all-zero page disassembles to thousands of identical lines that
+		// bury the code.
+		if(const char* const pdumpDir = std::getenv("G2_AUDIO_PDUMP"))
+		{
+			dsp56k::TWord lo = 0x0000u, hi = 0x8000u;
+			if(const char* const v = std::getenv("G2_AUDIO_PDUMP_LO"))
+				lo = static_cast<dsp56k::TWord>(std::strtoul(v, nullptr, 0));
+			if(const char* const v = std::getenv("G2_AUDIO_PDUMP_HI"))
+				hi = static_cast<dsp56k::TWord>(std::strtoul(v, nullptr, 0));
+
+			std::cout << "pdump dir=" << pdumpDir
+			          << " range=" << hex32(lo) << ".." << hex32(hi) << std::endl;
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::DSP&    dsp    = board.dspSet().dsp(d);
+				dsp56k::Memory& memory = dsp.memory();
+
+				std::vector<uint32_t> words;
+				words.reserve(hi > lo ? hi - lo : 0u);
+
+				unsigned nonZeroP = 0;
+				for(dsp56k::TWord w = lo; w < hi; ++w)
+				{
+					const dsp56k::TWord v = memory.get(dsp56k::MemArea_P, w);
+					if(v != 0)
+						++nonZeroP;
+					words.push_back(static_cast<uint32_t>(v));
+				}
+
+				char nameRaw[512], nameAsm[512];
+				std::snprintf(nameRaw, sizeof(nameRaw), "%s/dsp%u.pmem.txt", pdumpDir, d);
+				std::snprintf(nameAsm, sizeof(nameAsm), "%s/dsp%u.disasm.txt", pdumpDir, d);
+
+				{
+					std::ofstream raw(nameRaw);
+					for(size_t i = 0; i < words.size(); ++i)
+					{
+						char line[32];
+						std::snprintf(line, sizeof(line), "%06x %06x\n",
+							static_cast<unsigned>(lo + i), words[i]);
+						raw << line;
+					}
+				}
+
+				std::string text;
+				dsp56k::Disassembler disasm(dsp.opcodes());
+				const bool ok = disasm.disassembleMemoryBlock(text, words, lo, true, true, true);
+
+				{
+					std::ofstream out(nameAsm);
+					out << text;
+				}
+
+				std::cout << "  dsp " << d << " pdump nonZeroP=" << nonZeroP
+				          << " words=" << words.size()
+				          << " disasmOk=" << (ok ? 1 : 0)
+				          << " disasmBytes=" << text.size()
+				          << std::endl;
+			}
 		}
 
 		for(unsigned d = 0; d < dspCount; ++d)
