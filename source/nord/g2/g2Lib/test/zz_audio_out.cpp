@@ -45,6 +45,7 @@
 #include <iostream>
 #include <functional>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <vector>
@@ -875,10 +876,29 @@ int main()
 		// produce, which is the known positive for the stage the walk measures.
 		// Because it perturbs, it is off by default and never runs in an arm
 		// whose sink reading is being used for anything else.
-		const bool poison = std::getenv("G2_AUDIO_POISON") != nullptr;
 		constexpr dsp56k::TWord g_poisonWord = 0x0ACE55u;
 		constexpr dsp56k::TWord g_poisonLo   = 0x1C00u;
 		constexpr dsp56k::TWord g_poisonHi   = 0x2000u;
+
+		// G2_AUDIO_POISONWATCH restores the sentinel after every quantum instead
+		// of only before the walk, so a write that a later write hides is still
+		// counted. It implies the poison fill.
+		const bool poisonWatch = std::getenv("G2_AUDIO_POISONWATCH") != nullptr;
+		const bool poison      = poisonWatch || std::getenv("G2_AUDIO_POISON") != nullptr;
+
+		const bool winSample = std::getenv("G2_AUDIO_WINSAMPLE") != nullptr;
+
+		std::vector<uint64_t> winSampleQuantaNonZero(dspCount, 0);
+		std::vector<uint64_t> winSampleWordTotal(dspCount, 0);
+		std::vector<unsigned> winSampleMaxWords(dspCount, 0);
+		std::vector<int>      winSampleFirstQuantum(dspCount, -1);
+
+		std::vector<uint64_t>          watchZeroWrites(dspCount, 0);
+		std::vector<uint64_t>          watchOtherWrites(dspCount, 0);
+		std::vector<int>               watchFirstOtherQuantum(dspCount, -1);
+		std::vector<dsp56k::TWord>     watchFirstOtherAddr(dspCount, 0);
+		std::vector<dsp56k::TWord>     watchFirstOtherVal(dspCount, 0);
+		std::vector<std::set<uint32_t>> watchTouched(dspCount);
 
 		if(poison)
 		{
@@ -889,7 +909,8 @@ int main()
 					memory.set(dsp56k::MemArea_X, w, g_poisonWord);
 			}
 			std::cout << "poison: filled X:" << hex32(g_poisonLo) << ".." << hex32(g_poisonHi)
-			          << " with " << hex32(g_poisonWord) << " on " << dspCount << " dsps" << std::endl;
+			          << " with " << hex32(g_poisonWord) << " on " << dspCount << " dsps"
+			          << " watch=" << (poisonWatch ? 1 : 0) << std::endl;
 		}
 
 		// ---------------------------------------------------------- the walk
@@ -912,6 +933,77 @@ int main()
 
 				for(unsigned d = 0; d < dspCount; ++d)
 					pcHistogram[d][board.dspSet().dsp(d).getPC().toWord() & pcBucketMask] += 1;
+
+				// The READ-ONLY control for the poison watch. It writes nothing,
+				// so it cannot perturb the machine the way re-poisoning might,
+				// and it answers the same question one step less sharply: how
+				// many words of the window are non-zero at the end of each
+				// quantum. A sample the synthesis stores and the firmware then
+				// clears is visible here as a non-zero count in some quanta and
+				// zero in others -- which the end-of-walk read cannot see at all.
+				if(winSample)
+				{
+					for(unsigned d = 0; d < dspCount; ++d)
+					{
+						dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+						unsigned nz = 0;
+						for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+							if(memory.get(dsp56k::MemArea_X, w) != 0)
+								++nz;
+
+						if(nz == 0)
+							continue;
+
+						++winSampleQuantaNonZero[d];
+						winSampleWordTotal[d] += nz;
+						if(nz > winSampleMaxWords[d])
+							winSampleMaxWords[d] = nz;
+						if(winSampleFirstQuantum[d] < 0)
+							winSampleFirstQuantum[d] = int(q);
+					}
+				}
+
+				// Re-poison every quantum. Reading the window only at the end
+				// cannot see a word that was written and then overwritten, and
+				// the firmware clears 32 words of each of the four buffers from
+				// its idle loop -- so "written with a sample, then cleared" and
+				// "only ever cleared" both end as zero and the end-of-walk read
+				// calls them the same thing. They are not the same thing: the
+				// first says the synthesis reaches the buffer and something
+				// wipes it, the second says it never arrives.
+				//
+				// Restoring the sentinel after every quantum makes each quantum
+				// its own experiment, so no write can hide behind a later one.
+				if(poisonWatch)
+				{
+					for(unsigned d = 0; d < dspCount; ++d)
+					{
+						dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+						for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+						{
+							const dsp56k::TWord v = memory.get(dsp56k::MemArea_X, w);
+							if(v == g_poisonWord)
+								continue;
+
+							if(v == 0)
+								++watchZeroWrites[d];
+							else
+							{
+								++watchOtherWrites[d];
+								if(watchFirstOtherQuantum[d] < 0)
+								{
+									watchFirstOtherQuantum[d] = int(q);
+									watchFirstOtherAddr[d]    = w;
+									watchFirstOtherVal[d]     = v;
+								}
+							}
+							watchTouched[d].insert(w);
+							memory.set(dsp56k::MemArea_X, w, g_poisonWord);
+						}
+					}
+				}
 
 				g2::Frame out{};
 				++walkRead.framesRequested;
@@ -1065,6 +1157,44 @@ int main()
 				          << " overwrittenWithZero=" << zeroed
 				          << " overwrittenWithOther=" << other
 				          << " firstChanged=" << hex32(firstChangedAddr) << ":" << firstChangedVal
+				          << std::endl;
+			}
+		}
+
+		if(winSample)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+				std::cout << "  dsp " << d << " window sample (read-only)"
+				          << " quantaWithNonZero=" << winSampleQuantaNonZero[d] << "/" << walkQuanta
+				          << " maxNonZeroWords=" << winSampleMaxWords[d]
+				          << " totalWordSamples=" << winSampleWordTotal[d]
+				          << " firstQuantum=" << winSampleFirstQuantum[d]
+				          << std::endl;
+		}
+
+		// The per-quantum tally. zeroWrites counts every quantum in which a word
+		// held zero instead of the sentinel -- the firmware's buffer clear is
+		// expected to dominate it. otherWrites is the one that matters: a single
+		// non-zero, non-sentinel word anywhere in the window is a sample the
+		// synthesis stored, and its absence over the whole walk is the finding.
+		if(poisonWatch)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				std::vector<uint32_t> touched(watchTouched[d].begin(), watchTouched[d].end());
+
+				std::cout << "  dsp " << d << " poison watch"
+				          << " zeroWrites=" << watchZeroWrites[d]
+				          << " otherWrites=" << watchOtherWrites[d]
+				          << " distinctWordsTouched=" << touched.size() << "/1024";
+
+				if(!touched.empty())
+					std::cout << " touchedRange=" << hex32(touched.front())
+					          << ".." << hex32(touched.back());
+
+				std::cout << " firstOtherQuantum=" << watchFirstOtherQuantum[d]
+				          << " firstOther=" << hex32(watchFirstOtherAddr[d])
+				          << ":" << watchFirstOtherVal[d]
 				          << std::endl;
 			}
 		}
