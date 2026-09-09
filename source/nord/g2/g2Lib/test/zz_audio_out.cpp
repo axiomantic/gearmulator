@@ -831,6 +831,25 @@ int main()
 		// zeros. Sampled and not traced -- one sample per quantum is a
 		// visit-frequency estimate, not a coverage proof, and it is read only
 		// as "this region was reached" against a control that reached another.
+		// Bucket width for the PC histogram. 256 words is coarse enough to hide
+		// whether a DSP runs code a patch just uploaded: a patch adds on the order
+		// of 1,600 non-zero program words, which spans several buckets, so a DSP
+		// executing in one bucket only is running almost none of it -- but at 256
+		// words that inference rests on arithmetic rather than on the histogram.
+		// G2_AUDIO_PCBUCKET makes it measurable directly.
+		uint32_t pcBucketWords = 256u;
+		if(const char* const b = std::getenv("G2_AUDIO_PCBUCKET"))
+		{
+			const unsigned long v = std::strtoul(b, nullptr, 0);
+			if(v >= 1 && (v & (v - 1)) == 0 && v <= 0x10000)
+				pcBucketWords = static_cast<uint32_t>(v);
+			else
+				std::cout << "WARNING G2_AUDIO_PCBUCKET=" << b
+					<< " is not a power of two in [1,65536]; keeping 256" << std::endl;
+		}
+		const uint32_t pcBucketMask = ~(pcBucketWords - 1u);
+		std::cout << "pcBucketWords=" << pcBucketWords << std::endl;
+
 		std::vector<std::map<uint32_t, uint64_t>> pcHistogram(dspCount);
 
 		// ---------------------------------------------------------- the walk
@@ -852,7 +871,7 @@ int main()
 				scheduler->runFrames(1);
 
 				for(unsigned d = 0; d < dspCount; ++d)
-					pcHistogram[d][board.dspSet().dsp(d).getPC().toWord() & 0xffffff00u] += 1;
+					pcHistogram[d][board.dspSet().dsp(d).getPC().toWord() & pcBucketMask] += 1;
 
 				g2::Frame out{};
 				++walkRead.framesRequested;
@@ -910,6 +929,18 @@ int main()
 			          << " longDispatch=" << scheduler->longDispatchQuanta(d + 1u)
 			          << std::endl;
 		}
+
+		// One machine-readable line carrying every DSP's walk instruction count,
+		// so a caller never has to grep eight separate lines and subtract against
+		// baselines typed into a shell script. That is not hypothetical tidiness:
+		// analysing this instrument by hand produced repeated wrong conclusions,
+		// every one of them from reading a subset of the eight and generalising.
+		// The counts are absolute; engagement is a comparison against a no-patch
+		// run of the same build, which the caller must take itself.
+		std::cout << "WALKCOUNTS";
+		for(uint32_t d = 0; d < dspCount; ++d)
+			std::cout << ' ' << (board.dspSet().dsp(d).getInstructionCounter() - beforeWalk[d]);
+		std::cout << std::endl;
 
 		// The audio buffer neighbourhood. The transmit DMA sources from around
 		// X:0x1C00..0x2000 on this machine (the DSR values above are inside it),
@@ -994,7 +1025,7 @@ int main()
 				ranked.emplace_back(one.second, one.first);
 			std::sort(ranked.begin(), ranked.end(), std::greater<>());
 
-			std::cout << "  dsp " << d << " pc regions (256-word, top 6 of " << ranked.size() << "):";
+			std::cout << "  dsp " << d << " pc regions (" << pcBucketWords << "-word, top 6 of " << ranked.size() << "):";
 			for(size_t i = 0; i < ranked.size() && i < 6; ++i)
 				std::cout << " " << hex32(ranked[i].second) << "=" << ranked[i].first;
 			std::cout << std::endl;
