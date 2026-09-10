@@ -2,17 +2,15 @@
 //
 // golden.timebase records the values the golden set was recorded under. Every
 // value in it names a macro in g2/timebase.h, and every one is compared against
-// that macro here -- a manifest that only parses would drift from the header
-// silently.
+// that macro below -- a manifest that only parses would drift from its header
+// silently, so the comparison is the point and parsing is the preparation.
 //
-// It sits beside the header for that reason. The 2026-09-07 tooling extraction
-// moved it to the default branch with artifacts.sha256, which separated it from
-// the only thing that can validate it: the test stayed here and the file went
-// there, so this test failed on all nine band branches until 2026-09-10.
-// artifacts.sha256 is genuinely fork tooling and stayed on the default branch,
-// with its half of this test, as t0_artifacts_manifest.
-//
-// Every timebase assertion below is carried over unchanged.
+// It sits beside the header for that reason rather than beside the fork's other
+// manifest. artifacts.sha256 describes the private artifact repository, not this
+// code, so it lives on the default branch and t0_artifacts_manifest validates it
+// there. A test cannot validate a manifest it is on a different branch from,
+// which is why the two are split by what they describe rather than kept together
+// by what they are.
 
 #include <algorithm>
 #include <cctype>
