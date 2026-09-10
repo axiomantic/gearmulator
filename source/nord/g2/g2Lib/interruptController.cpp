@@ -208,7 +208,7 @@ namespace g2
 
 	void InterruptController::recomputeAndPresent()
 	{
-		// No pending source presents MCF5307_IRQ_NONE (0). The board presents
+		// No pending source presents MCF5407_IRQ_NONE (0). The board presents
 		// its whole current state on every change and the call is idempotent,
 		// so presenting unconditionally is correct.
 		const Winner winner = arbitrate();

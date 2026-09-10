@@ -22,8 +22,8 @@ namespace g2
 	public:
 		explicit Panel(uint32_t _displaySize);
 
-		uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 		// The panel is a scheduled body, not a context: it consumes no
 		// emulated cycles, so it has no context index. `cycleDebt`,

@@ -4,24 +4,24 @@
 # source/nord/g2/g2Lib/test/. The NAME is the exact string passed to -r. Edit no
 # other CMake file in this tree.
 
-# ----------------- the mcf5307::mcf5307 link
+# ----------------- the mcf5407::mcf5407 link
 #
-# The test links g2Lib and nothing else. It never names mcf5307::mcf5307 on its
+# The test links g2Lib and nothing else. It never names mcf5407::mcf5407 on its
 # own link line, so the header and the symbol both have to arrive through
 # g2Lib's own PUBLIC link. Naming the core here as well would let this test pass
 # with that line deleted.
 #
 # The target is declared unconditionally and is not guarded by
-# if(G2_LINK_MCF5307). The guard would make the option-OFF build succeed by
+# if(G2_LINK_MCF5407). The guard would make the option-OFF build succeed by
 # building nothing; the negative case asserts that the option-OFF build fails at
-# the compile step on the missing mcf5307.h.
+# the compile step on the missing mcf5407.h.
 
-add_executable(t0_mcf5307_link t0_mcf5307_link.cpp)
-target_link_libraries(t0_mcf5307_link PRIVATE g2Lib)
-set_property(TARGET t0_mcf5307_link PROPERTY FOLDER "G2/test")
+add_executable(t0_mcf5407_link t0_mcf5407_link.cpp)
+target_link_libraries(t0_mcf5407_link PRIVATE g2Lib)
+set_property(TARGET t0_mcf5407_link PROPERTY FOLDER "G2/test")
 
-add_test(NAME t0_mcf5307_link COMMAND t0_mcf5307_link)
-set_tests_properties(t0_mcf5307_link PROPERTIES LABELS "UnitTest")
+add_test(NAME t0_mcf5407_link COMMAND t0_mcf5407_link)
+set_tests_properties(t0_mcf5407_link PROPERTIES LABELS "UnitTest")
 
 # ----------------- the memory decode and the two bus callbacks
 
@@ -75,7 +75,7 @@ set_tests_properties(t0_anomaly_log PROPERTIES LABELS "UnitTest")
 # this block is what puts it there. A cache variable names a sibling checkout
 # when a local engineer has one, and FetchContent fetches a pinned commit when
 # nobody has, mirroring the arrangement the root CMakeLists.txt uses for
-# mcf5307.
+# mcf5407.
 
 set(G2_NMG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools to use instead of fetching one")
 set(G2_NMG2_TOOLS_GIT_TAG "oracle-wire-compose-2026-09-01" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
@@ -246,7 +246,7 @@ set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 1
 # cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever include site
 # sets it first wins and the second set is a no-op with the same value.
 #
-# It links g2Lib and nothing else. Naming mcf5307::mcf5307 here would let the
+# It links g2Lib and nothing else. Naming mcf5407::mcf5407 here would let the
 # test pass with g2Lib's own link line deleted.
 
 add_executable(t1_sprintf_isolated t1_sprintf_isolated.cpp)

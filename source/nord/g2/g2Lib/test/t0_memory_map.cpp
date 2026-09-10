@@ -1,8 +1,8 @@
 // The memory decode and the two bus callbacks. Tier T0: this test needs no
 // firmware artifact.
 //
-// It drives the board's address decode and the two bus callbacks the MCF5307
-// core installs, mcf5307_read_fn and mcf5307_write_fn.
+// It drives the board's address decode and the two bus callbacks the MCF5407
+// core installs, mcf5407_read_fn and mcf5407_write_fn.
 //
 // The recorded bases are CS1 at 0x11000000, CS3 at 0x13000000 and the CS5 latch
 // at 0x15000000. No authority records an address for CS0, CS2 or CS4, so this
@@ -15,7 +15,7 @@
 
 #include "memoryMap.h"
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstdint>
 #include <iostream>
@@ -85,17 +85,17 @@ namespace
 		};
 
 		std::vector<Access> accesses;
-		mcf5307_bus_status answer = MCF5307_BUS_OK;
+		mcf5407_bus_status answer = MCF5407_BUS_OK;
 		uint32_t readValue = 0;
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			accesses.push_back(Access{_offset, _size, 0, false});
 			_status = answer;
-			return answer == MCF5307_BUS_OK ? readValue : 0;
+			return answer == MCF5407_BUS_OK ? readValue : 0;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
 		{
 			accesses.push_back(Access{_offset, _size, _value, true});
 			_status = answer;
@@ -163,14 +163,14 @@ int main()
 	// Case group 1. The two callbacks satisfy the core's own typedefs.
 	//
 	// The pointers below are of the core's types, so a signature that drifts
-	// from mcf5307.h stops the COMPILE step. Every access in this file then
+	// from mcf5407.h stops the COMPILE step. Every access in this file then
 	// goes THROUGH these pointers rather than calling the functions directly,
 	// so the typedef is exercised and not merely declared.
-	const mcf5307_read_fn busRead = &g2::memoryMapRead;
-	const mcf5307_write_fn busWrite = &g2::memoryMapWrite;
+	const mcf5407_read_fn busRead = &g2::memoryMapRead;
+	const mcf5407_write_fn busWrite = &g2::memoryMapWrite;
 
-	check(busRead != nullptr, "memoryMapRead is installable as an mcf5307_read_fn");
-	check(busWrite != nullptr, "memoryMapWrite is installable as an mcf5307_write_fn");
+	check(busRead != nullptr, "memoryMapRead is installable as an mcf5407_read_fn");
+	check(busWrite != nullptr, "memoryMapWrite is installable as an mcf5407_write_fn");
 
 	// -----------------------------------------------------------------------
 	// Case group 2. Every one of the eight windows decodes, at its first byte
@@ -274,7 +274,7 @@ int main()
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 5. An unmapped read reports MCF5307_BUS_UNMAPPED through the
+	// Case group 5. An unmapped read reports MCF5407_BUS_UNMAPPED through the
 	// out-parameter, returns zero, and writes one log line that carries the
 	// address, the width and the direction. The report and the trace are tied
 	// together, so the log line is asserted in full rather than by a
@@ -282,10 +282,10 @@ int main()
 	{
 		g2::MemoryMap map(layoutA());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		const uint32_t value = busRead(&map, 0x20000000u, 32, &status);
 
-		checkEqual(status, MCF5307_BUS_UNMAPPED, "an unmapped read reports MCF5307_BUS_UNMAPPED");
+		checkEqual(status, MCF5407_BUS_UNMAPPED, "an unmapped read reports MCF5407_BUS_UNMAPPED");
 		checkEqual(value, uint32_t(0), "an unmapped read returns zero");
 		checkEqual(map.log().size(), size_t(1), "an unmapped read writes exactly one log line");
 		checkEqual(logLine(map, 0),
@@ -299,10 +299,10 @@ int main()
 	{
 		g2::MemoryMap map(layoutA());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		busWrite(&map, 0x20000004u, 8, 0x5au, &status);
 
-		checkEqual(status, MCF5307_BUS_UNMAPPED, "an unmapped write reports MCF5307_BUS_UNMAPPED");
+		checkEqual(status, MCF5407_BUS_UNMAPPED, "an unmapped write reports MCF5407_BUS_UNMAPPED");
 		checkEqual(map.log().size(), size_t(1), "an unmapped write writes exactly one log line");
 		checkEqual(logLine(map, 0),
 			std::string("memoryMap: UNMAPPED write of 8 bits at 0x20000004"),
@@ -316,10 +316,10 @@ int main()
 	{
 		g2::MemoryMap map(layoutA());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		busRead(&map, 0x30000000u, 32, &status);
 
-		checkEqual(status, MCF5307_BUS_UNMAPPED, "a window with no target attached reports MCF5307_BUS_UNMAPPED");
+		checkEqual(status, MCF5407_BUS_UNMAPPED, "a window with no target attached reports MCF5407_BUS_UNMAPPED");
 		checkEqual(logLine(map, 0),
 			std::string("memoryMap: UNMAPPED read of 32 bits at 0x30000000"),
 			"the log line of an empty window carries the address, the width and the direction");
@@ -328,7 +328,7 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 8. A decoded access reaches the target of its OWN window,
 	// with the offset inside that window, and it leaves the status at
-	// MCF5307_BUS_OK and the log empty.
+	// MCF5407_BUS_OK and the log empty.
 	{
 		g2::MemoryMap map(layoutA());
 		RecordingTarget cs1;
@@ -338,20 +338,20 @@ int main()
 
 		sdram.readValue = 0xdeadbeefu;
 
-		mcf5307_bus_status status = MCF5307_BUS_UNMAPPED;
+		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
 		busWrite(&map, 0x110007f8u, 16, 0x1234u, &status);
 
-		checkEqual(status, MCF5307_BUS_OK, "a decoded write reports MCF5307_BUS_OK");
+		checkEqual(status, MCF5407_BUS_OK, "a decoded write reports MCF5407_BUS_OK");
 		checkEqual(cs1.accesses.size(), size_t(1), "a decoded write reaches the target of its own window once");
 		checkEqual(sdram.accesses.size(), size_t(0), "a decoded write reaches no other window's target");
 		checkEqual(describeAt(cs1, 0),
 			std::string("write 16 bits at offset 0x000007f8 value 0x00001234"),
 			"the target sees the offset inside its own window, the width and the value");
 
-		status = MCF5307_BUS_UNMAPPED;
+		status = MCF5407_BUS_UNMAPPED;
 		const uint32_t readBack = busRead(&map, 0x30000010u, 32, &status);
 
-		checkEqual(status, MCF5307_BUS_OK, "a decoded read reports MCF5307_BUS_OK");
+		checkEqual(status, MCF5407_BUS_OK, "a decoded read reports MCF5407_BUS_OK");
 		checkEqual(readBack, uint32_t(0xdeadbeefu), "a decoded read returns what the target answered");
 		checkEqual(describeAt(sdram, 0),
 			std::string("read 32 bits at offset 0x00000010 value 0x00000000"),
@@ -371,13 +371,13 @@ int main()
 		RecordingTarget sdram;
 		map.attach(g2::Region::Sdram, &sdram);
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		busWrite(&map, 0x30000000u, 8, 0x11u, &status);
-		checkEqual(status, MCF5307_BUS_OK, "an 8-bit write is accepted");
+		checkEqual(status, MCF5407_BUS_OK, "an 8-bit write is accepted");
 		busWrite(&map, 0x30000002u, 16, 0x2233u, &status);
-		checkEqual(status, MCF5307_BUS_OK, "a 16-bit write is accepted");
+		checkEqual(status, MCF5407_BUS_OK, "a 16-bit write is accepted");
 		busWrite(&map, 0x30000004u, 32, 0x44556677u, &status);
-		checkEqual(status, MCF5307_BUS_OK, "a 32-bit write is accepted");
+		checkEqual(status, MCF5407_BUS_OK, "a 32-bit write is accepted");
 
 		checkEqual(sdram.accesses.size(), size_t(3),
 			"three accesses of three widths make exactly three target calls, so the 32-bit case is not decomposed");
@@ -397,10 +397,10 @@ int main()
 		RecordingTarget sdram;
 		map.attach(g2::Region::Sdram, &sdram);
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		busWrite(&map, 0x30000000u, 24, 0x112233u, &status);
 
-		checkEqual(status, MCF5307_BUS_SIZE_ILLEGAL, "a 24-bit write reports MCF5307_BUS_SIZE_ILLEGAL");
+		checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL, "a 24-bit write reports MCF5407_BUS_SIZE_ILLEGAL");
 		checkEqual(sdram.accesses.size(), size_t(0), "a rejected width never reaches the target");
 		checkEqual(logLine(map, 0),
 			std::string("memoryMap: SIZE_ILLEGAL write of 24 bits at 0x30000000"),
@@ -413,13 +413,13 @@ int main()
 	{
 		g2::MemoryMap map(layoutA());
 		RecordingTarget cs3;
-		cs3.answer = MCF5307_BUS_FAULT;
+		cs3.answer = MCF5407_BUS_FAULT;
 		map.attach(g2::Region::Cs3, &cs3);
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		busRead(&map, 0x13000000u, 16, &status);
 
-		checkEqual(status, MCF5307_BUS_FAULT, "a target fault is carried back to the core");
+		checkEqual(status, MCF5407_BUS_FAULT, "a target fault is carried back to the core");
 		checkEqual(logLine(map, 0),
 			std::string("memoryMap: FAULT read of 16 bits at 0x13000000"),
 			"the log line of a target fault carries the address, the width and the direction");
@@ -434,10 +434,10 @@ int main()
 		bool everyStatusIsDefined = true;
 		for(uint64_t address = 0; address <= 0xffffffffull; address += 0x00010000ull)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			busRead(&map, uint32_t(address), 32, &status);
-			if(status != MCF5307_BUS_OK && status != MCF5307_BUS_UNMAPPED
-				&& status != MCF5307_BUS_SIZE_ILLEGAL && status != MCF5307_BUS_FAULT)
+			if(status != MCF5407_BUS_OK && status != MCF5407_BUS_UNMAPPED
+				&& status != MCF5407_BUS_SIZE_ILLEGAL && status != MCF5407_BUS_FAULT)
 			{
 				everyStatusIsDefined = false;
 				break;

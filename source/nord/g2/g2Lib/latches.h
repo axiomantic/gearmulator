@@ -29,8 +29,8 @@ namespace g2
 	public:
 		explicit Latches(uint32_t _windowSize);
 
-		uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 	private:
 		// One byte for every latch in the window. The first byte holds the
