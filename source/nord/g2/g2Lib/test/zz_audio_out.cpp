@@ -205,7 +205,38 @@ namespace
 			++m_writesTotal[a];
 			if(_addr >= g_traceHi)
 			{
+				/* X and Y are 0x800000 words each, so a dense array over the
+				 * whole space is not affordable and a bound chosen to match the
+				 * existing samplers reports everything past it as nothing at
+				 * all. The control arm's own trace found 64,848 X writes per
+				 * voice DSP above $2000 and named no address, which is the
+				 * silent-absence shape this project keeps paying for. A sparse
+				 * map, capped, names them. */
 				++m_writesAbove[a];
+				auto it = m_above[a].find(_addr);
+				if(it == m_above[a].end())
+				{
+					if(m_above[a].size() >= 200000)
+					{
+						++m_aboveUncounted[a];
+						return;
+					}
+					WriteCell fresh;
+					fresh.seen = true;
+					fresh.first = fresh.last = fresh.minVal = fresh.maxVal = _value;
+					fresh.writes = 1;
+					m_above[a].emplace(_addr, fresh);
+					return;
+				}
+				WriteCell& ac = it->second;
+				if(_value != ac.last)
+				{
+					++ac.changes;
+					if(_value < ac.minVal) ac.minVal = _value;
+					if(_value > ac.maxVal) ac.maxVal = _value;
+				}
+				ac.last = _value;
+				++ac.writes;
 				return;
 			}
 			WriteCell& c = m_cells[a][_addr];
@@ -230,6 +261,8 @@ namespace
 		uint64_t writesTotal(const unsigned _area) const { return m_writesTotal[_area]; }
 		uint64_t writesAbove(const unsigned _area) const { return m_writesAbove[_area]; }
 		uint64_t writesP() const { return m_writesP; }
+		const std::map<dsp56k::TWord, WriteCell>& above(const unsigned _area) const { return m_above[_area]; }
+		uint64_t aboveUncounted(const unsigned _area) const { return m_aboveUncounted[_area]; }
 
 	private:
 		bool                   m_armed = false;
@@ -237,6 +270,8 @@ namespace
 		uint64_t               m_writesTotal[2] = {0, 0};
 		uint64_t               m_writesAbove[2] = {0, 0};
 		uint64_t               m_writesP = 0;
+		std::map<dsp56k::TWord, WriteCell> m_above[2];
+		uint64_t               m_aboveUncounted[2] = {0, 0};
 	};
 
 	/* ------------------------------------------------------------------ DMA
@@ -1738,6 +1773,69 @@ int main()
 		 * SAME addresses that move with no patch at all. If they are, the
 		 * payload's 34.8 million instructions leave no trace in memory. */
 		const bool scratchAddr = std::getenv("G2_AUDIO_SCRATCHADDR") != nullptr;
+
+		/* G2_AUDIO_SCRATCHWATCH answers the one question no read-only sampler
+		 * can: does a store FIRE. Counting non-zero words cannot see a store
+		 * that writes zero over zero, and counting CHANGED words cannot see a
+		 * store that writes the same value every frame -- and "the payload runs
+		 * its body and computes a constant" and "the payload never reaches its
+		 * body" produce exactly those two invisible signatures.
+		 *
+		 * It is the poison watch aimed at the LOW scratch pages instead of the
+		 * transmit window: fill the range with a sentinel, and after every
+		 * quantum count and name every word that is no longer the sentinel,
+		 * then restore it.
+		 *
+		 * IT PERTURBS, and more violently than the window watch does. The
+		 * window is refilled by DMA every frame; low scratch holds the
+		 * coefficients the payload READS (`r3 = r4 = #$50`), so overwriting it
+		 * changes what the synthesis computes. That is acceptable for the
+		 * question being asked and fatal for any other: a perturbing probe
+		 * shows a mechanism CAN fire, never what it does undisturbed. Never
+		 * read the sink from an arm that has this on.
+		 *
+		 * The range defaults to $0010..$0400 -- above the first sixteen words,
+		 * covering $23/$24 and the $50 page the payload's own pointers name. */
+		const bool scratchWatch = std::getenv("G2_AUDIO_SCRATCHWATCH") != nullptr;
+		dsp56k::TWord swLo = 0x0010u, swHi = 0x0400u;
+		if(const char* const v = std::getenv("G2_AUDIO_SWLO"))
+			swLo = dsp56k::TWord(std::strtoul(v, nullptr, 0));
+		if(const char* const v = std::getenv("G2_AUDIO_SWHI"))
+			swHi = dsp56k::TWord(std::strtoul(v, nullptr, 0));
+
+		std::vector<uint64_t> swZero[2] = {std::vector<uint64_t>(dspCount, 0), std::vector<uint64_t>(dspCount, 0)};
+		std::vector<uint64_t> swOther[2] = {std::vector<uint64_t>(dspCount, 0), std::vector<uint64_t>(dspCount, 0)};
+		std::vector<std::map<dsp56k::TWord, uint64_t>> swAddr[2] = {
+			std::vector<std::map<dsp56k::TWord, uint64_t>>(dspCount),
+			std::vector<std::map<dsp56k::TWord, uint64_t>>(dspCount)};
+		/* The VALUE the store leaves behind, and whether it ever differs from
+		 * the one before it. "The store fires" and "the store fires writing the
+		 * same word every frame" are different findings, and only the second
+		 * one is silence. */
+		std::vector<std::map<dsp56k::TWord, dsp56k::TWord>> swLast[2] = {
+			std::vector<std::map<dsp56k::TWord, dsp56k::TWord>>(dspCount),
+			std::vector<std::map<dsp56k::TWord, dsp56k::TWord>>(dspCount)};
+		std::vector<std::map<dsp56k::TWord, uint64_t>> swVaried[2] = {
+			std::vector<std::map<dsp56k::TWord, uint64_t>>(dspCount),
+			std::vector<std::map<dsp56k::TWord, uint64_t>>(dspCount)};
+		std::vector<int> swFirstQuantum(dspCount, -1);
+
+		if(scratchWatch)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+				for(dsp56k::TWord w = swLo; w < swHi; ++w)
+				{
+					memory.set(dsp56k::MemArea_X, w, g_poisonWord);
+					memory.set(dsp56k::MemArea_Y, w, g_poisonWord);
+				}
+			}
+			std::cout << "scratchwatch: PERTURBING. filled X and Y "
+			          << hex32(swLo) << ".." << hex32(swHi)
+			          << " with " << hex32(g_poisonWord) << " on " << dspCount << " dsps"
+			          << std::endl;
+		}
 		std::vector<std::vector<uint32_t>> scratchChangeCountX(dspCount);
 		std::vector<std::vector<uint32_t>> scratchChangeCountY(dspCount);
 
@@ -1980,6 +2078,47 @@ int main()
 					}
 				}
 
+				if(scratchWatch)
+				{
+					for(unsigned d = 0; d < dspCount; ++d)
+					{
+						dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+						for(int area = 0; area < 2; ++area)
+						{
+							const dsp56k::EMemArea ma = area == 0 ? dsp56k::MemArea_X : dsp56k::MemArea_Y;
+							for(dsp56k::TWord w = swLo; w < swHi; ++w)
+							{
+								const dsp56k::TWord v = memory.get(ma, w);
+								if(v == g_poisonWord)
+									continue;
+
+								if(v == 0)
+									++swZero[area][d];
+								else
+									++swOther[area][d];
+
+								++swAddr[area][d][w];
+								{
+									auto lt = swLast[area][d].find(w);
+									if(lt == swLast[area][d].end())
+										swLast[area][d].emplace(w, v);
+									else
+									{
+										if(lt->second != v)
+											++swVaried[area][d][w];
+										lt->second = v;
+									}
+								}
+								if(swFirstQuantum[d] < 0)
+									swFirstQuantum[d] = int(q);
+
+								memory.set(ma, w, g_poisonWord);
+							}
+						}
+					}
+				}
+
 				// Re-poison every quantum. Reading the window only at the end
 				// cannot see a word that was written and then overwritten, and
 				// the firmware clears 32 words of each of the four buffers from
@@ -2129,6 +2268,45 @@ int main()
 						std::cout << ' ' << hex32(ct[i].second) << "=n" << ct[i].first
 						          << '/' << hex32(cells[ct[i].second].last);
 					if(showCt < ct.size())
+						std::cout << " ...";
+					std::cout << std::endl;
+				}
+
+				for(int area = 0; area < 2; ++area)
+				{
+					const std::map<dsp56k::TWord, WriteCell>& ab = c.above(unsigned(area));
+					if(ab.empty())
+						continue;
+
+					uint64_t movingAbove = 0;
+					for(const auto& kv : ab)
+						if(kv.second.changes != 0)
+							++movingAbove;
+
+					std::cout << "    dsp " << d << " writetrace " << (area == 0 ? "X" : "Y")
+					          << " above" << hex32(g_traceHi)
+					          << " addrs=" << ab.size()
+					          << " moving=" << movingAbove
+					          << " uncounted=" << c.aboveUncounted(unsigned(area))
+					          << " span=" << hex32(ab.begin()->first) << ".." << hex32(ab.rbegin()->first)
+					          << std::endl;
+
+					std::vector<std::pair<uint64_t, dsp56k::TWord>> mv;
+					for(const auto& kv : ab)
+						if(kv.second.changes != 0)
+							mv.emplace_back(kv.second.changes, kv.first);
+					std::sort(mv.begin(), mv.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+					std::cout << "      dsp " << d << " " << (area == 0 ? "X" : "Y") << " above moving:";
+					const size_t showAb = mv.size() < 24 ? mv.size() : 24;
+					for(size_t i = 0; i < showAb; ++i)
+					{
+						const WriteCell& cell = ab.at(mv[i].second);
+						std::cout << ' ' << hex32(mv[i].second) << "=n" << cell.writes
+						          << "/c" << cell.changes
+						          << "/[" << hex32(cell.minVal) << ".." << hex32(cell.maxVal) << ']';
+					}
+					if(showAb < mv.size())
 						std::cout << " ...";
 					std::cout << std::endl;
 				}
@@ -2370,6 +2548,44 @@ int main()
 							std::cout << " ...";
 						std::cout << std::endl;
 					}
+				}
+			}
+		}
+
+		if(scratchWatch)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				for(int area = 0; area < 2; ++area)
+				{
+					const std::map<dsp56k::TWord, uint64_t>& m = swAddr[area][d];
+
+					std::cout << "  dsp " << d << " scratchwatch " << (area == 0 ? "X" : "Y")
+					          << ' ' << hex32(swLo) << ".." << hex32(swHi)
+					          << " zeroWrites=" << swZero[area][d]
+					          << " otherWrites=" << swOther[area][d]
+					          << " distinctAddrs=" << m.size() << "/" << (swHi - swLo)
+					          << " firstQuantum=" << swFirstQuantum[d]
+					          << std::endl;
+
+					std::vector<std::pair<uint64_t, dsp56k::TWord>> hits;
+					for(const auto& kv : m)
+						hits.emplace_back(kv.second, kv.first);
+					std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+					std::cout << "    dsp " << d << " scratchwatch " << (area == 0 ? "X" : "Y") << " addrs:";
+					const size_t show = hits.size() < 40 ? hits.size() : 40;
+					for(size_t i = 0; i < show; ++i)
+					{
+						const dsp56k::TWord a = hits[i].second;
+						const auto vt = swVaried[area][d].find(a);
+						std::cout << ' ' << hex32(a) << "=n" << hits[i].first
+						          << "/v" << (vt == swVaried[area][d].end() ? uint64_t(0) : vt->second)
+						          << '/' << hex32(swLast[area][d][a]);
+					}
+					if(show < hits.size())
+						std::cout << " ...";
+					std::cout << std::endl;
 				}
 			}
 		}
