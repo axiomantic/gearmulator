@@ -847,8 +847,20 @@ int main()
 				"G2_AUDIO_MCUTRACE", "G2_AUDIO_MCUTRACEWIN", "G2_AUDIO_HDI08CAP",
 				"G2_AUDIO_PDUMP", "G2_AUDIO_POISON", "G2_AUDIO_POISONWATCH",
 				"G2_AUDIO_WINSAMPLE", "G2_AUDIO_YWIN", "G2_AUDIO_SCRATCH",
-				"G2_AUDIO_SCRATCHADDR", "G2_AUDIO_WRITETRACE", "G2_AUDIO_TRACEHI"
+				"G2_AUDIO_SCRATCHADDR", "G2_AUDIO_WRITETRACE", "G2_AUDIO_TRACEHI",
+				"G2_LOG_ESAI_UNDERRUN"
 			};
+
+			// The resolved directory, not the variable that suggested it.
+			// NMG2_ARTIFACTS is the single most consequential input this
+			// harness takes -- it decides which firmware images are loaded --
+			// and a run that does not name it cannot be told apart from a run
+			// against a different or a stale corpus. This project has already
+			// drawn a wrong conclusion from a stale checkout once.
+			std::cout << "ARTIFACTS: resolved='" << directory << "'"
+			          << " NMG2_ARTIFACTS='"
+			          << (std::getenv("NMG2_ARTIFACTS") ? std::getenv("NMG2_ARTIFACTS") : "-")
+			          << "'" << std::endl;
 
 			std::cout << "SWITCHES:";
 			for(const char* const name : g_switches)
