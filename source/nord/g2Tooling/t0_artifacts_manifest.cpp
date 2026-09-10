@@ -1,19 +1,16 @@
 // t0_artifacts_manifest.cpp -- artifacts.sha256, the fork's own manifest.
 //
-// This repository's default branch carries artifacts.sha256: the SHA-256 of
-// every firmware file the private artifact repository must supply, and no
-// payload of its own. The manifest is tooling for operating this fork, so the
-// test that validates it belongs here beside it and not inside a submission
-// draft.
+// artifacts.sha256 holds the SHA-256 of every firmware file the private
+// artifact repository must supply, and no payload of its own. It is tooling for
+// operating this fork rather than work an upstream maintainer would be offered,
+// so it lives on the default branch and this test lives beside it.
 //
-// It was split out of t0_manifest_parses on 2026-09-10. That test validated
-// this manifest AND golden.timebase, and the 2026-09-07 tooling extraction
-// moved both manifests here while leaving the test on the band branches, where
-// it then failed on all nine because neither file was there. golden.timebase
-// mirrors macros in g2/timebase.h, so it is product data and went back to the
-// bands with that half of the test; this half stayed with the file it reads.
-//
-// Every assertion below is carried over unchanged.
+// golden.timebase is the other manifest and it is NOT here. Every value in it
+// names a macro in g2/timebase.h and must be compared against that macro, so it
+// belongs with the header rather than with this file, and t0_manifest_parses on
+// the band branches validates it there. A test cannot validate a manifest it is
+// on a different branch from, which is why the two are split by what they
+// describe rather than kept together by what they are.
 
 #include <algorithm>
 #include <cctype>
