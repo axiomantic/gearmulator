@@ -828,6 +828,39 @@ int main()
 		          << " impulse=" << (pushImpulse ? 1 : 0)
 		          << " deadline=" << deadlineSeconds << "s" << std::endl;
 
+		// Every switch this file reads, echoed whether it is set or not.
+		//
+		// A switch that is read but never reported is the shape that already
+		// cost this project a run: an environment name is a string, a mistyped
+		// one is simply absent, and the run then measures the default while
+		// looking exactly like the run that was asked for. Reporting an unset
+		// switch as "-" makes the intended name visible when the name that was
+		// actually exported was something else.
+		{
+			static const char* const g_switches[] =
+			{
+				"G2_AUDIO_MODE", "G2_AUDIO_PATCH", "G2_AUDIO_NAME",
+				"G2_AUDIO_QUANTA", "G2_AUDIO_WALK", "G2_AUDIO_DEADLINE",
+				"G2_AUDIO_NOTE", "G2_AUDIO_NOTEIDLE", "G2_AUDIO_NOTEQUANTA",
+				"G2_AUDIO_IMPULSE", "G2_AUDIO_NOSRAM", "G2_AUDIO_PCBUCKET",
+				"G2_AUDIO_MIDIBYTES", "G2_AUDIO_MSGHEX", "G2_AUDIO_FORCEKBD",
+				"G2_AUDIO_MCUTRACE", "G2_AUDIO_MCUTRACEWIN", "G2_AUDIO_HDI08CAP",
+				"G2_AUDIO_PDUMP", "G2_AUDIO_POISON", "G2_AUDIO_POISONWATCH",
+				"G2_AUDIO_WINSAMPLE", "G2_AUDIO_YWIN", "G2_AUDIO_SCRATCH",
+				"G2_AUDIO_SCRATCHADDR", "G2_AUDIO_WRITETRACE", "G2_AUDIO_TRACEHI"
+			};
+
+			std::cout << "SWITCHES:";
+			for(const char* const name : g_switches)
+			{
+				const char* const value = std::getenv(name);
+				// Quoted: a value may hold a space -- a patch name does --
+				// and one token per switch is what makes the line greppable.
+				std::cout << ' ' << name << "='" << (value ? value : "-") << '\'';
+			}
+			std::cout << std::endl;
+		}
+
 		const std::vector<uint8_t> code  = readFile(directory + "/CODE_30000400.bin");
 
 		// The path and the entry name are separate on purpose. They used to be one
