@@ -32,6 +32,7 @@
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
 #include "dsp56kEmu/disasm.h"
+#include "dsp56kEmu/hdi08.h"
 #include "dsp56kBase/logging.h"
 #include "baseLib/logging.h"
 
@@ -500,6 +501,70 @@ namespace
 				std::cout << " " << b << ":" << _buckets[b];
 		std::cout << std::endl;
 	}
+
+	/* The MCU-to-DSP direction, counted exactly rather than sampled.
+	 *
+	 * `g2::Hdi08Adapter` is the single funnel for every CS1 cycle the MCU makes
+	 * to any of the eight HDI08 host ports, so a delta taken across a phase is
+	 * every access that phase made -- and a zero is the MCU having made none,
+	 * not a sampler having missed one.
+	 *
+	 * The phases are printed separately because the interesting quantity is a
+	 * DIFFERENCE. The upload phase drives thousands of words into every port and
+	 * is this instrument's own known positive for the counter: if the boot and
+	 * window rows are empty, nothing in the note row means anything.
+	 *
+	 * Register names are the DSP56300 host-side layout `mc68k::Hdi08` models:
+	 * ICR, CVR, ISR, IVR at +0..+3 and TXH/TXM/TXL at +5..+7. TXL is what
+	 * completes a 24-bit word, so the word count is the TXL column. */
+	void reportHdi08(const char* _label,
+		const g2::Hdi08Adapter::AccessCounts& _from,
+		const g2::Hdi08Adapter::AccessCounts& _to)
+	{
+		static const char* const regName[8] =
+			{"ICR", "CVR", "ISR", "IVR", "r4", "TXH", "TXM", "TXL"};
+
+		for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+		{
+			uint64_t writeTotal = 0, readTotal = 0;
+			for(int r = 0; r < 8; ++r)
+			{
+				writeTotal += _to.writes[p][r] - _from.writes[p][r];
+				readTotal  += _to.reads[p][r]  - _from.reads[p][r];
+			}
+
+			const uint64_t words = _to.words[p] - _from.words[p];
+			const uint64_t cmds  = _to.hostCommands[p] - _from.hostCommands[p];
+
+			std::cout << "HDI08 " << _label << " port " << p
+			          << " writes=" << writeTotal
+			          << " reads=" << readTotal
+			          << " words=" << words
+			          << " hostCommands=" << cmds
+			          << " w[";
+			for(int r = 0; r < 8; ++r)
+				std::cout << (r ? "," : "") << regName[r] << ":"
+				          << (_to.writes[p][r] - _from.writes[p][r]);
+			std::cout << "] r[";
+			for(int r = 0; r < 8; ++r)
+				std::cout << (r ? "," : "") << regName[r] << ":"
+				          << (_to.reads[p][r] - _from.reads[p][r]);
+			std::cout << "] vec[";
+
+			bool anyVector = false;
+			for(unsigned i = 0; i < 128; ++i)
+			{
+				const uint64_t n = _to.vectorCounts[p][i] - _from.vectorCounts[p][i];
+				if(n == 0)
+					continue;
+				std::cout << (anyVector ? "," : "") << "0x" << std::hex << (i * 2) << std::dec
+				          << ":" << n;
+				anyVector = true;
+			}
+
+			std::cout << "]" << std::endl;
+		}
+	}
 }
 
 int main()
@@ -716,6 +781,13 @@ int main()
 		          << " pc=" << hex32(board.mcuReg(g_regPc))
 		          << " t=" << seconds() << "s" << std::endl;
 
+		/* The MCU-to-DSP host-port accounting, phase by phase. The counters live
+		 * on the adapter and start at zero, so the boot row is a delta against a
+		 * default-constructed set. */
+		const g2::Hdi08Adapter::AccessCounts hdiZero{};
+		const g2::Hdi08Adapter::AccessCounts hdiAfterBoot = board.hdi08().accessCounts();
+		reportHdi08("boot", hdiZero, hdiAfterBoot);
+
 		// -------------------------------------------------------- the delivery
 		std::vector<uint8_t> delivered;
 
@@ -905,6 +977,9 @@ int main()
 		          << " frameIndex=" << scheduler->frameIndex()
 		          << " t=" << seconds() << "s" << std::endl;
 
+		const g2::Hdi08Adapter::AccessCounts hdiAfterWindow = board.hdi08().accessCounts();
+		reportHdi08("window", hdiAfterBoot, hdiAfterWindow);
+
 		if(winTrace)
 		{
 			scheduler->setMcuRunner(nullptr);
@@ -1039,6 +1114,15 @@ int main()
 				std::cout << std::endl;
 			}
 		}
+
+		/* G2_AUDIO_HDI08CAP arms a bounded per-port capture of the words and
+		 * host commands the MCU issues DURING THE NOTE PHASE. The counts say
+		 * how much moved; this says what. */
+		std::size_t hdiCapLimit = 0;
+		if(const char* const c = std::getenv("G2_AUDIO_HDI08CAP"))
+			hdiCapLimit = std::size_t(std::strtoul(c, nullptr, 0));
+		if(hdiCapLimit)
+			board.hdi08().armWordCapture(hdiCapLimit);
 
 		// The MCU coverage recorder, armed for the note phase ONLY. Arming it
 		// for the boot and upload windows would multiply their cost by the
@@ -1211,6 +1295,41 @@ int main()
 			          << std::endl;
 		}
 
+		const g2::Hdi08Adapter::AccessCounts hdiAfterNote = board.hdi08().accessCounts();
+		reportHdi08("note", hdiAfterWindow, hdiAfterNote);
+
+		/* The DSP-side receive ring, read at the end of the note phase.
+		 *
+		 * The host-port counts above are the MCU pushing words at a DSP. They do
+		 * not say the DSP took them. `dsp56k::HDI08` holds pushed words in an
+		 * 8,192-entry ring the DSP drains with its own RX reads, and the bridge
+		 * defers what will not fit -- so a ring that is filling, or full, is a
+		 * DSP that is not reading, and every parameter after that point is
+		 * queued rather than applied. A near-empty ring is the DSP keeping up. */
+		for(unsigned d = 0; d < dspCount; ++d)
+		{
+			const dsp56k::HDI08& h = board.dspSet().peripherals(d).getHDI08();
+			std::cout << "HDI08RX dsp " << d
+			          << " pending=" << h.rxData().size()
+			          << " capacity=" << h.rxData().capacity()
+			          << std::endl;
+		}
+
+		if(hdiCapLimit)
+		{
+			board.hdi08().disarmWordCapture();
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+			{
+				const std::vector<g2::Hdi08Adapter::CapturedEntry>& e =
+					board.hdi08().capturedEntries(p);
+				std::cout << "HDI08CAP port " << p << " entries=" << e.size() << " :";
+				for(const g2::Hdi08Adapter::CapturedEntry& c : e)
+					std::cout << " " << (c.isCommand ? "c" : "w")
+					          << std::hex << c.value << std::dec;
+				std::cout << std::endl;
+			}
+		}
+
 		// C: after the note phase. B-to-C is the question this run exists to
 		// answer, and it is asked with the same instrument that produced the
 		// A-to-B positive above.
@@ -1247,6 +1366,19 @@ int main()
 				std::cout << " nzNote=";
 				for(unsigned a = 0; a < 3; ++a)
 					std::cout << names[a] << (int64_t(snapC[d].nz[a]) - int64_t(snapB[d].nz[a])) << ",";
+
+				/* The ABSOLUTE digest at C, not only the within-arm change.
+				 * `noteChanged` compares B to C inside ONE run and so reports
+				 * time passing as well as the note; the digest itself is
+				 * comparable ACROSS runs, so an accept arm and a quanta-matched
+				 * idle arm can be held against each other. Equal digests at C
+				 * say the note left no trace in DSP memory; different ones say
+				 * it did. */
+				std::cout << "  dsp " << d << " digestC";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << " " << names[a] << "=" << std::hex << snapC[d].hash[a] << std::dec
+					          << "/nz" << snapC[d].nz[a];
+				std::cout << " instrC=" << snapC[d].instr << std::endl;
 
 				std::cout << std::endl;
 			}
@@ -1456,6 +1588,11 @@ int main()
 		}
 
 		reportAudio("WALK", walkRead, walkBuckets);
+
+		{
+			const g2::Hdi08Adapter::AccessCounts hdiAfterWalk = board.hdi08().accessCounts();
+			reportHdi08("walk", hdiAfterNote, hdiAfterWalk);
+		}
 
 		// ------------------------------- where in the path does the zero start?
 		//
