@@ -18,6 +18,18 @@
 //   walk beside a non-zero sentinel is a measurement; a zero walk beside a zero
 //   sentinel is a probe that cannot see audio.
 //
+// Three probes were added to answer "where does a voice DSP's audio go":
+//   (always on) a dump of all six DMA channels of all eight DSPs, before the
+//               walk and after it, with the DCR decoded. Every prior reading of
+//               the transmit path went through getDSR(4) alone.
+//   G2_AUDIO_YWIN     extends the window fill, the read-only sampler and the
+//                     per-quantum watch to the same range in Y space.
+//   G2_AUDIO_SCRATCH  samples, read-only and per quantum, the pages BELOW the
+//                     transmit window in both X and Y, counting both non-zero
+//                     words and words that CHANGED since the previous quantum.
+//                     The change count is the one that matters: a patch's
+//                     uploaded coefficients are non-zero and sit still.
+//
 // Nothing here asserts. Every verdict is an observable.
 #include "gatedFixture.h"
 
@@ -32,7 +44,9 @@
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
 #include "dsp56kEmu/disasm.h"
+#include "dsp56kEmu/dma.h"
 #include "dsp56kEmu/hdi08.h"
+#include "dsp56kEmu/peripherals56311.h"
 #include "dsp56kBase/logging.h"
 #include "baseLib/logging.h"
 
@@ -127,6 +141,96 @@ namespace
 		for(int s = 28; s >= 0; s -= 4)
 			r += d[(_v >> s) & 0xfu];
 		return r;
+	}
+
+	/* ------------------------------------------------------------------ DMA
+	 *
+	 * Every reading this instrument has ever taken of the transmit path went
+	 * through getDSR(4). Channel 4 is one of six, and the firmware arms at
+	 * least two of them from the same descriptor ring: DSR4 from x:$46 and
+	 * DSR5 from y:$46. Channel 5 has never been read at runtime, so "no DSP
+	 * writes $1e10" was a statement about a register nobody had looked at.
+	 *
+	 * This dumps all six channels of all eight DSPs. It reads only, so it may
+	 * sit in any arm; and it decodes the DCR rather than printing it raw,
+	 * because the source space is the field that decides whether the second
+	 * transmit bus sources from X or from Y, and a raw hex DCR invites the
+	 * reader to decode it by hand and get it wrong.
+	 *
+	 * The bit positions are DmaChannel::DcrBits, restated here rather than
+	 * reached for, because DcrBits is an enum in a submodule this run pins and
+	 * does not modify. */
+	const char* memAreaName(const dsp56k::EMemArea _a)
+	{
+		switch(_a)
+		{
+		case dsp56k::MemArea_X: return "X";
+		case dsp56k::MemArea_Y: return "Y";
+		case dsp56k::MemArea_P: return "P";
+		default:                return "?";
+		}
+	}
+
+	// The DCR request-source field, translated the way the 56311 translates it
+	// -- hardware 21 is ESAI_1 receive and hardware 22 is ESAI_1 transmit. The
+	// numbers below 21 need no translation.
+	std::string dmaRequestSourceName(const uint32_t _raw)
+	{
+		switch(_raw)
+		{
+		case 0x00: return "IRQA";
+		case 0x01: return "IRQB";
+		case 0x02: return "IRQC";
+		case 0x03: return "IRQD";
+		case 0x04: return "DMA0done";
+		case 0x05: return "DMA1done";
+		case 0x06: return "DMA2done";
+		case 0x07: return "DMA3done";
+		case 0x08: return "DMA4done";
+		case 0x09: return "DMA5done";
+		case 0x0b: return "EsaiRX";
+		case 0x0c: return "EsaiTX";
+		case 0x10: return "HostRX";
+		case 0x11: return "HostTX";
+		case 0x12: return "Timer0";
+		case 0x13: return "Timer1";
+		case 0x14: return "Timer2";
+		case 0x15: return "Esai1RX";
+		case 0x16: return "Esai1TX";
+		default:   return "raw" + std::to_string(_raw);
+		}
+	}
+
+	void reportDma(const char* const _label, dsp56k::Peripherals56311& _p, const unsigned _dsp)
+	{
+		dsp56k::Dma& dma = _p.getDMA();
+
+		for(dsp56k::TWord c = 0; c < 6u; ++c)
+		{
+			const dsp56k::TWord dcr = dma.getDCR(c);
+
+			const uint32_t srcSpace = dcr & 3u;
+			const uint32_t dstSpace = (dcr >> 2) & 3u;
+			const uint32_t addrMode = (dcr >> 4) & 0x3fu;
+			const uint32_t reqSrc   = (dcr >> 11) & 0x1fu;
+			const uint32_t xferMode = (dcr >> 19) & 7u;
+			const bool     enabled  = (dcr & (1u << 23)) != 0;
+			const bool     cont     = (dcr & (1u << 16)) != 0;
+
+			std::cout << "DMA " << _label << " dsp " << _dsp << " ch " << c
+			          << " DCR=" << hex32(dcr)
+			          << " en=" << (enabled ? 1 : 0)
+			          << " src=" << memAreaName(dsp56k::DmaChannel::convertMemArea(srcSpace))
+			          << ':' << hex32(dma.getDSR(c))
+			          << " dst=" << memAreaName(dsp56k::DmaChannel::convertMemArea(dstSpace))
+			          << ':' << hex32(dma.getDDR(c))
+			          << " DCO=" << dma.getDCO(c)
+			          << " req=" << dmaRequestSourceName(reqSrc)
+			          << " mode=" << xferMode
+			          << " am=" << addrMode
+			          << " cont=" << (cont ? 1 : 0)
+			          << std::endl;
+		}
 	}
 
 	/* An exact MCU program-counter coverage recorder for one phase of a run.
@@ -1384,6 +1488,14 @@ int main()
 			}
 		}
 
+		// The DMA arming, read before the walk opens. In the `none` arm this is
+		// what resident firmware alone arms; in a loaded arm it is that plus
+		// whatever the uploaded ISR has done to it by now. Both arms print the
+		// same eight-by-six table, so a difference is a difference and not a
+		// missing row.
+		for(unsigned d = 0; d < dspCount; ++d)
+			reportDma("prewalk", board.dspSet().peripherals(d), d);
+
 		// ------------------------------------------------- the play transition
 		scheduler->beginPlayPhase();
 
@@ -1459,6 +1571,75 @@ int main()
 
 		const bool winSample = std::getenv("G2_AUDIO_WINSAMPLE") != nullptr;
 
+		/* G2_AUDIO_YWIN extends every window probe -- the fill, the read-only
+		 * sampler and the per-quantum watch -- to the SAME address range in Y
+		 * space, counted separately.
+		 *
+		 * It exists because firmware arms `DSR5 <- y:$46` and the descriptor
+		 * ring's y half holds $1c10/$1d10/$1e10/$1f10, and every probe this
+		 * instrument has ever run reads X. The end-of-walk read does report a
+		 * `nonZeroY` and it has always been 0 -- but the poison fills X only,
+		 * so that zero has never had a known positive beside it and is not yet
+		 * a measurement of anything. With YWIN on, the poison arm supplies one.
+		 *
+		 * Y is also the space the firmware's own clear routine does NOT touch:
+		 * int_0000f4 stores through `x:(r2)+`. So a Y zero is less blind than
+		 * an X zero, which cuts the other way and makes the missing positive
+		 * the only thing standing between it and a real negative result. */
+		const bool yWin = std::getenv("G2_AUDIO_YWIN") != nullptr;
+
+		/* G2_AUDIO_SCRATCH samples, once per quantum and writing nothing, the
+		 * LOW pages of X and Y -- the pages the voice payload's synthesis
+		 * actually addresses, `r3 = r4 = #$50`.
+		 *
+		 * Everything this instrument has ever counted lives at $1c00..$1fff,
+		 * which is where the transmit DMA sources from. If a voice DSP writes
+		 * no computed word THERE and also writes none in its own scratch, the
+		 * machine is computing silence at the source and no routing question
+		 * can matter. If it writes non-zero scratch and no non-zero window, the
+		 * routing question is the whole of it. The two readings separate those,
+		 * and nothing in the corpus separates them today.
+		 *
+		 * The range is deliberately wider than $50: the payload's own base is
+		 * $50, but its stride is unknown and a range that stops short would
+		 * report an absence that is really a bound. */
+		const bool scratchSample = std::getenv("G2_AUDIO_SCRATCH") != nullptr;
+		constexpr dsp56k::TWord g_scratchLo = 0x0000u;
+		constexpr dsp56k::TWord g_scratchHi = 0x1C00u;
+
+		std::vector<uint64_t> scratchQuantaNonZeroX(dspCount, 0);
+		std::vector<uint64_t> scratchQuantaNonZeroY(dspCount, 0);
+		std::vector<unsigned> scratchMaxX(dspCount, 0);
+		std::vector<unsigned> scratchMaxY(dspCount, 0);
+		std::vector<dsp56k::TWord> scratchFirstAddrY(dspCount, 0);
+		std::vector<dsp56k::TWord> scratchFirstValY(dspCount, 0);
+
+		/* A non-zero WORD COUNT is not evidence of computation. A patch's
+		 * uploaded coefficients are non-zero and sit still, and they would
+		 * report the same count in all 8,192 quanta as a running oscillator
+		 * would. What separates them is CHANGE between one quantum and the
+		 * next, so the sampler keeps the previous quantum's contents and counts
+		 * words that differ.
+		 *
+		 * quantaChangedY counts quanta in which at least one Y word moved;
+		 * maxChangedY is the largest number that moved in any one quantum. Its
+		 * own known negative is the control arm, where the payload is absent. */
+		std::vector<std::vector<dsp56k::TWord>> scratchPrevX(dspCount);
+		std::vector<std::vector<dsp56k::TWord>> scratchPrevY(dspCount);
+		std::vector<uint64_t> scratchQuantaChangedX(dspCount, 0);
+		std::vector<uint64_t> scratchQuantaChangedY(dspCount, 0);
+		std::vector<unsigned> scratchMaxChangedX(dspCount, 0);
+		std::vector<unsigned> scratchMaxChangedY(dspCount, 0);
+
+		std::vector<uint64_t> winSampleQuantaNonZeroY(dspCount, 0);
+		std::vector<unsigned> winSampleMaxWordsY(dspCount, 0);
+		std::vector<int>      winSampleFirstQuantumY(dspCount, -1);
+		std::vector<uint64_t> watchZeroWritesY(dspCount, 0);
+		std::vector<uint64_t> watchOtherWritesY(dspCount, 0);
+		std::vector<int>      watchFirstOtherQuantumY(dspCount, -1);
+		std::vector<dsp56k::TWord> watchFirstOtherAddrY(dspCount, 0);
+		std::vector<dsp56k::TWord> watchFirstOtherValY(dspCount, 0);
+
 		std::vector<uint64_t> winSampleQuantaNonZero(dspCount, 0);
 		std::vector<uint64_t> winSampleWordTotal(dspCount, 0);
 		std::vector<unsigned> winSampleMaxWords(dspCount, 0);
@@ -1477,9 +1658,14 @@ int main()
 			{
 				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
 				for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+				{
 					memory.set(dsp56k::MemArea_X, w, g_poisonWord);
+					if(yWin)
+						memory.set(dsp56k::MemArea_Y, w, g_poisonWord);
+				}
 			}
 			std::cout << "poison: filled X:" << hex32(g_poisonLo) << ".." << hex32(g_poisonHi)
+			          << (yWin ? " and Y: the same range" : "")
 			          << " with " << hex32(g_poisonWord) << " on " << dspCount << " dsps"
 			          << " watch=" << (poisonWatch ? 1 : 0) << std::endl;
 		}
@@ -1518,10 +1704,23 @@ int main()
 					{
 						dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
 
-						unsigned nz = 0;
+						unsigned nz = 0, nzY = 0;
 						for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+						{
 							if(memory.get(dsp56k::MemArea_X, w) != 0)
 								++nz;
+							if(yWin && memory.get(dsp56k::MemArea_Y, w) != 0)
+								++nzY;
+						}
+
+						if(nzY != 0)
+						{
+							++winSampleQuantaNonZeroY[d];
+							if(nzY > winSampleMaxWordsY[d])
+								winSampleMaxWordsY[d] = nzY;
+							if(winSampleFirstQuantumY[d] < 0)
+								winSampleFirstQuantumY[d] = int(q);
+						}
 
 						if(nz == 0)
 							continue;
@@ -1532,6 +1731,81 @@ int main()
 							winSampleMaxWords[d] = nz;
 						if(winSampleFirstQuantum[d] < 0)
 							winSampleFirstQuantum[d] = int(q);
+					}
+				}
+
+				if(scratchSample)
+				{
+					for(unsigned d = 0; d < dspCount; ++d)
+					{
+						dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+						const size_t span = g_scratchHi - g_scratchLo;
+						const bool   hadPrev = !scratchPrevX[d].empty();
+						if(!hadPrev)
+						{
+							scratchPrevX[d].assign(span, 0);
+							scratchPrevY[d].assign(span, 0);
+						}
+
+						unsigned nzX = 0, nzY = 0, chX = 0, chY = 0;
+						dsp56k::TWord firstAddr = 0, firstVal = 0;
+
+						for(dsp56k::TWord w = g_scratchLo; w < g_scratchHi; ++w)
+						{
+							const size_t        i = w - g_scratchLo;
+							const dsp56k::TWord x = memory.get(dsp56k::MemArea_X, w);
+							const dsp56k::TWord y = memory.get(dsp56k::MemArea_Y, w);
+
+							if(x != 0)
+								++nzX;
+							if(hadPrev && x != scratchPrevX[d][i])
+								++chX;
+							if(hadPrev && y != scratchPrevY[d][i])
+								++chY;
+
+							scratchPrevX[d][i] = x;
+							scratchPrevY[d][i] = y;
+
+							if(y == 0)
+								continue;
+							if(nzY == 0)
+							{
+								firstAddr = w;
+								firstVal  = y;
+							}
+							++nzY;
+						}
+
+						if(chX != 0)
+						{
+							++scratchQuantaChangedX[d];
+							if(chX > scratchMaxChangedX[d])
+								scratchMaxChangedX[d] = chX;
+						}
+						if(chY != 0)
+						{
+							++scratchQuantaChangedY[d];
+							if(chY > scratchMaxChangedY[d])
+								scratchMaxChangedY[d] = chY;
+						}
+
+						if(nzX != 0)
+						{
+							++scratchQuantaNonZeroX[d];
+							if(nzX > scratchMaxX[d])
+								scratchMaxX[d] = nzX;
+						}
+						if(nzY != 0)
+						{
+							++scratchQuantaNonZeroY[d];
+							if(nzY > scratchMaxY[d])
+							{
+								scratchMaxY[d]       = nzY;
+								scratchFirstAddrY[d] = firstAddr;
+								scratchFirstValY[d]  = firstVal;
+							}
+						}
 					}
 				}
 
@@ -1573,6 +1847,30 @@ int main()
 							watchTouched[d].insert(w);
 							memory.set(dsp56k::MemArea_X, w, g_poisonWord);
 						}
+
+						if(!yWin)
+							continue;
+
+						for(dsp56k::TWord w = g_poisonLo; w < g_poisonHi; ++w)
+						{
+							const dsp56k::TWord v = memory.get(dsp56k::MemArea_Y, w);
+							if(v == g_poisonWord)
+								continue;
+
+							if(v == 0)
+								++watchZeroWritesY[d];
+							else
+							{
+								++watchOtherWritesY[d];
+								if(watchFirstOtherQuantumY[d] < 0)
+								{
+									watchFirstOtherQuantumY[d] = int(q);
+									watchFirstOtherAddrY[d]    = w;
+									watchFirstOtherValY[d]     = v;
+								}
+							}
+							memory.set(dsp56k::MemArea_Y, w, g_poisonWord);
+						}
 					}
 				}
 
@@ -1588,6 +1886,25 @@ int main()
 		}
 
 		reportAudio("WALK", walkRead, walkBuckets);
+
+		for(unsigned d = 0; d < dspCount; ++d)
+			reportDma("postwalk", board.dspSet().peripherals(d), d);
+
+		// The second transmit bus, beside the first. Channel 5's source is only
+		// interesting if ESAI_1 is transmitting at all, and `enabledTx=0` on the
+		// second bus would make every reading of channel 5 a reading of a
+		// register nothing consumes.
+		for(unsigned d = 0; d < dspCount; ++d)
+		{
+			dsp56k::Peripherals56311& p = board.dspSet().peripherals(d);
+			std::cout << "  dsp " << d << " esai1"
+			          << " enabledTx=" << p.getEsai1().hasEnabledTransmitters()
+			          << " enabledRx=" << p.getEsai1().hasEnabledReceivers()
+			          << " txWords=" << (p.getEsai1().getTxWordCount() + 1u)
+			          << " rxWords=" << (p.getEsai1().getRxWordCount() + 1u)
+			          << " secondBusUnderrun=" << scheduler->secondBusUnderrunFrames(d)
+			          << std::endl;
+		}
 
 		{
 			const g2::Hdi08Adapter::AccessCounts hdiAfterWalk = board.hdi08().accessCounts();
@@ -1746,6 +2063,33 @@ int main()
 				          << " totalWordSamples=" << winSampleWordTotal[d]
 				          << " firstQuantum=" << winSampleFirstQuantum[d]
 				          << std::endl;
+
+			if(yWin)
+			{
+				for(unsigned d = 0; d < dspCount; ++d)
+					std::cout << "  dsp " << d << " window sample Y (read-only)"
+					          << " quantaWithNonZeroY=" << winSampleQuantaNonZeroY[d] << "/" << walkQuanta
+					          << " maxNonZeroWordsY=" << winSampleMaxWordsY[d]
+					          << " firstQuantumY=" << winSampleFirstQuantumY[d]
+					          << std::endl;
+			}
+		}
+
+		if(scratchSample)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+				std::cout << "  dsp " << d << " scratch sample (read-only) "
+				          << hex32(g_scratchLo) << ".." << hex32(g_scratchHi)
+				          << " quantaWithNonZeroX=" << scratchQuantaNonZeroX[d] << "/" << walkQuanta
+				          << " maxWordsX=" << scratchMaxX[d]
+				          << " quantaWithNonZeroY=" << scratchQuantaNonZeroY[d] << "/" << walkQuanta
+				          << " maxWordsY=" << scratchMaxY[d]
+				          << " firstY=" << hex32(scratchFirstAddrY[d]) << ":" << scratchFirstValY[d]
+				          << " quantaChangedX=" << scratchQuantaChangedX[d] << "/" << walkQuanta
+				          << " maxChangedX=" << scratchMaxChangedX[d]
+				          << " quantaChangedY=" << scratchQuantaChangedY[d] << "/" << walkQuanta
+				          << " maxChangedY=" << scratchMaxChangedY[d]
+				          << std::endl;
 		}
 
 		// The per-quantum tally. zeroWrites counts every quantum in which a word
@@ -1772,6 +2116,18 @@ int main()
 				          << " firstOther=" << hex32(watchFirstOtherAddr[d])
 				          << ":" << watchFirstOtherVal[d]
 				          << std::endl;
+			}
+
+			if(yWin)
+			{
+				for(unsigned d = 0; d < dspCount; ++d)
+					std::cout << "  dsp " << d << " poison watch Y"
+					          << " zeroWritesY=" << watchZeroWritesY[d]
+					          << " otherWritesY=" << watchOtherWritesY[d]
+					          << " firstOtherQuantumY=" << watchFirstOtherQuantumY[d]
+					          << " firstOtherY=" << hex32(watchFirstOtherAddrY[d])
+					          << ":" << watchFirstOtherValY[d]
+					          << std::endl;
 			}
 		}
 
