@@ -28,15 +28,22 @@ set_property(TARGET t0_skip_discipline PROPERTY FOLDER "G2")
 add_test(NAME t0_skip_discipline COMMAND t0_skip_discipline)
 set_tests_properties(t0_skip_discipline PROPERTIES LABELS "UnitTest")
 
-# ----------------- artifacts.sha256 and golden.timebase
+# ----------------- golden.timebase
 #
 # Check: ctest --test-dir build --no-tests=error -R ^t0_manifest_parses$
 #
-# Both manifests are committed at the ROOT of this repository, so the test is
+# golden.timebase is committed at the ROOT of this repository, so the test is
 # given the repository root rather than deriving it from the working directory.
 # ctest runs a test from its own binary directory, and a relative path would
 # find nothing and be indistinguishable from a manifest that is genuinely
 # absent.
+#
+# artifacts.sha256 is NOT here and this test no longer reads it. It is fork
+# tooling and lives on the default branch, validated there by
+# source/nord/g2Tooling/t0_artifacts_manifest. golden.timebase stays with
+# g2/timebase.h because every value in it names a macro in that header and is
+# compared against it below -- separating the two is what left this test unable
+# to pass on any branch between 2026-09-07 and 2026-09-10.
 
 # The test also compares each recorded value against the macro that defines it,
 # so it needs g2/timebase.h. An include directory rather than g2Lib: the header
