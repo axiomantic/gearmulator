@@ -895,6 +895,8 @@ int main()
 				"G2_AUDIO_INTONE",
 				"G2_AUDIO_NOTEWATCH", "G2_AUDIO_NWLO", "G2_AUDIO_NWHI",
 				"G2_AUDIO_NWY",
+				"G2_UPLOAD_CAP", "G2_UPLOAD_MAP", "G2_UPLOAD_TIMELINE",
+				"G2_UPLOAD_DUMP", "G2_UPLOAD_CAPDUMP",
 				"G2_LOG_ESAI_UNDERRUN"
 			};
 
@@ -924,7 +926,7 @@ int main()
 				for(char** e = environ; e && *e; ++e)
 				{
 					const std::string entry(*e);
-					if(entry.rfind("G2_AUDIO_", 0) == 0 || entry.rfind("NMG2_", 0) == 0 || entry.rfind("G2_LOG_", 0) == 0)
+					if(entry.rfind("G2_AUDIO_", 0) == 0 || entry.rfind("NMG2_", 0) == 0 || entry.rfind("G2_LOG_", 0) == 0 || entry.rfind("G2_UPLOAD_", 0) == 0)
 						std::cout << ' ' << entry;
 				}
 				std::cout << std::endl;
@@ -1053,6 +1055,268 @@ int main()
 		};
 		const auto expired = [&]() { return seconds() > deadlineSeconds; };
 
+		/* -------------------------------------------- the upload instrument
+		 *
+		 * G2_UPLOAD_CAP arms the adapter's word capture BEFORE the machine
+		 * runs, so the DSP56300 boot stream itself is recorded rather than
+		 * inferred. `Hdi08Bridge` feeds every word to `dsp56k::DspBoot` until a
+		 * program has landed and reports nothing on the way, so the count word,
+		 * the address word and the body reach no other observation point.
+		 *
+		 * The capture is bounded per port and stops at the bound in silence, so
+		 * every row prints `atLimit`: a capture that filled is a truncated
+		 * OBSERVATION, and reading it as a short upload is the mistake this
+		 * field exists to prevent. */
+		std::size_t uploadCapLimit = 0;
+		if(const char* const c = std::getenv("G2_UPLOAD_CAP"))
+			uploadCapLimit = std::size_t(std::strtoul(c, nullptr, 0));
+		if(uploadCapLimit)
+			board.hdi08().armWordCapture(uploadCapLimit);
+
+		const auto reportUploadCapture = [&](const char* const _label)
+		{
+			if(!uploadCapLimit)
+				return;
+
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+			{
+				const std::vector<g2::Hdi08Adapter::CapturedEntry>& e =
+					board.hdi08().capturedEntries(p);
+
+				uint64_t words = 0, cmds = 0;
+				uint64_t hash = 1469598103934665603ull;
+				for(const g2::Hdi08Adapter::CapturedEntry& c : e)
+				{
+					if(c.isCommand)
+						++cmds;
+					else
+					{
+						++words;
+						hash = (hash ^ uint64_t(c.value)) * 1099511628211ull;
+					}
+				}
+
+				/* The first two WORDS a port ever takes are the boot header, a
+				 * count and a P-space start address, and the next `count` words
+				 * are the body. Parsing them is the only way to say where the
+				 * boot load ENDED and the running program's own traffic began,
+				 * which is the difference between a short upload and a complete
+				 * one followed by silence. */
+				uint32_t bootCount = 0, bootAddr = 0, bootBody = 0;
+				uint64_t bootHash = 1469598103934665603ull;
+				uint64_t pMatch = 0, pMismatch = 0;
+				{
+					size_t i = 0;
+					const auto nextWord = [&](uint32_t& _out) -> bool
+					{
+						while(i < e.size() && e[i].isCommand)
+							++i;
+						if(i >= e.size())
+							return false;
+						_out = e[i].value;
+						++i;
+						return true;
+					};
+
+					if(nextWord(bootCount) && nextWord(bootAddr))
+					{
+						uint32_t w = 0;
+						while(bootBody < bootCount && nextWord(w))
+						{
+							bootHash = (bootHash ^ uint64_t(w)) * 1099511628211ull;
+							if(unsigned(p) < dspCount)
+							{
+								const dsp56k::TWord got = board.dspSet().dsp(unsigned(p))
+									.memory().get(dsp56k::MemArea_P, bootAddr + bootBody);
+								if(got == dsp56k::TWord(w))
+									++pMatch;
+								else
+									++pMismatch;
+							}
+							++bootBody;
+						}
+					}
+				}
+
+				/* The stream itself, when a directory is named. The digests
+				 * above answer "is it the same"; only the words answer "what
+				 * is it", and the boot body is the one region of this
+				 * machine's traffic that no other probe can see. */
+				if(const char* const dir = std::getenv("G2_UPLOAD_CAPDUMP"))
+				{
+					char path[512];
+					std::snprintf(path, sizeof(path), "%s/%s.port%d.cap.txt", dir, _label, p);
+					std::ofstream out(path);
+					for(size_t i = 0; i < e.size(); ++i)
+					{
+						char line[48];
+						std::snprintf(line, sizeof(line), "%zu %c %06x\n",
+							i, e[i].isCommand ? 'c' : 'w', unsigned(e[i].value));
+						out << line;
+					}
+				}
+
+				std::cout << "UPLOADCAP " << _label << " port " << p
+				          << " entries=" << e.size()
+				          << " atLimit=" << (e.size() >= uploadCapLimit ? 1 : 0)
+				          << " words=" << words << " cmds=" << cmds
+				          << " wordDigest=" << std::hex << hash << std::dec
+				          << " bootCount=" << bootCount
+				          << " bootAddr=" << hex32(bootAddr)
+				          << " bootBody=" << bootBody
+				          << " bootDigest=" << std::hex << bootHash << std::dec
+				          << " pMatch=" << pMatch << " pMismatch=" << pMismatch
+				          << std::endl;
+			}
+		};
+
+		/* A cumulative per-port word count sampled on a fixed stride, across
+		 * the boot AND the long window. A phase delta says how much moved
+		 * between two points and cannot say whether it moved in one burst or in
+		 * several; the timeline can, which is what a claim about a second
+		 * upload phase needs. */
+		uint32_t uploadTimelineEvery = 0;
+		if(const char* const v = std::getenv("G2_UPLOAD_TIMELINE"))
+			uploadTimelineEvery = uint32_t(std::strtoul(v, nullptr, 0));
+
+		const auto uploadTimeline = [&](const char* const _phase, const uint32_t _q)
+		{
+			const g2::Hdi08Adapter::AccessCounts& c = board.hdi08().accessCounts();
+			std::cout << "UPLOADTL " << _phase << " q=" << _q << " words=";
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+				std::cout << (p ? "," : "") << c.words[p];
+			std::cout << " cmds=";
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+				std::cout << (p ? "," : "") << c.hostCommands[p];
+			std::cout << std::endl;
+		};
+
+		/* Contiguous runs of non-zero words. A digest says whether an area
+		 * moved and a count says how much of it is occupied; neither says
+		 * WHERE, and a payload that lands in two disjoint places, or at the
+		 * wrong address, is visible only in the layout. A single zero word
+		 * separates two runs, deliberately: merging across gaps would hide
+		 * exactly the discontinuity this map is looking for. */
+		const bool uploadMap = std::getenv("G2_UPLOAD_MAP") != nullptr;
+
+		const auto uploadRegionMap = [&](const char* const _label)
+		{
+			if(!uploadMap)
+				return;
+
+			const dsp56k::EMemArea areas[3] = {dsp56k::MemArea_X, dsp56k::MemArea_Y, dsp56k::MemArea_P};
+			const char* const names[3] = {"X", "Y", "P"};
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+				for(unsigned a = 0; a < 3; ++a)
+				{
+					uint64_t hash = 1469598103934665603ull;
+					uint64_t nz = 0;
+					std::vector<std::pair<uint32_t, uint32_t>> runs;
+					bool inRun = false;
+
+					for(dsp56k::TWord w = 0; w < 0x8000u; ++w)
+					{
+						const dsp56k::TWord v = memory.get(areas[a], w);
+						hash = (hash ^ uint64_t(v)) * 1099511628211ull;
+						if(v != 0)
+						{
+							++nz;
+							if(inRun)
+								runs.back().second = uint32_t(w);
+							else
+								runs.emplace_back(uint32_t(w), uint32_t(w));
+							inRun = true;
+						}
+						else
+						{
+							inRun = false;
+						}
+					}
+
+					std::cout << "UPLOADMAP " << _label << " dsp " << d << ' ' << names[a]
+					          << " nz=" << nz
+					          << " digest=" << std::hex << hash << std::dec
+					          << " runs=" << runs.size() << " :";
+					size_t printed = 0;
+					for(const std::pair<uint32_t, uint32_t>& r : runs)
+					{
+						if(printed++ == 200)
+							break;
+						std::cout << ' ' << hex32(r.first) << '-' << hex32(r.second)
+						          << '(' << (r.second - r.first + 1u) << ')';
+					}
+					if(runs.size() > printed)
+						std::cout << " ...+" << (runs.size() - printed) << "more";
+					std::cout << std::endl;
+				}
+			}
+		};
+
+		/* Where the words are, as opposed to how many were sent.
+		 *
+		 * The adapter's count is words the MCU COMPLETED on the host port. A
+		 * word only reaches the DSP after the bridge's per-quantum bound lets
+		 * it through and after the core drains it out of the receive ring, so a
+		 * phase that shows every word sent can still be a phase in which the
+		 * DSP has seen almost none of them -- and that reads exactly like a DSP
+		 * that received the payload and did nothing with it. */
+		const auto uploadQueues = [&](const char* const _label)
+		{
+			if(!uploadMap && !uploadCapLimit)
+				return;
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				const dsp56k::HDI08& h = board.dspSet().peripherals(d).getHDI08();
+				std::cout << "UPLOADQ " << _label << " dsp " << d
+				          << " bridgePending=" << board.dspSet().pendingHostWords(d)
+				          << " rxPending=" << h.rxData().size()
+				          << " rxCapacity=" << h.rxData().capacity()
+				          << " pc=" << hex32(board.dspSet().dsp(d).getPC().toWord())
+				          << " instr=" << board.dspSet().dsp(d).getInstructionCounter()
+				          << std::endl;
+			}
+		};
+
+		/* The words themselves, per DSP, at a named point. `G2_AUDIO_PDUMP`
+		 * writes P once at the very end of the run; this writes all three areas
+		 * at whichever point the caller names, so a post-boot image and a
+		 * post-upload image can be differenced word by word offline. */
+		const auto uploadDump = [&](const char* const _label)
+		{
+			const char* const dir = std::getenv("G2_UPLOAD_DUMP");
+			if(dir == nullptr)
+				return;
+
+			const dsp56k::EMemArea areas[3] = {dsp56k::MemArea_X, dsp56k::MemArea_Y, dsp56k::MemArea_P};
+			const char* const names[3] = {"X", "Y", "P"};
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+				for(unsigned a = 0; a < 3; ++a)
+				{
+					char path[512];
+					std::snprintf(path, sizeof(path), "%s/%s.dsp%u.%s.txt",
+						dir, _label, d, names[a]);
+					std::ofstream out(path);
+					for(dsp56k::TWord w = 0; w < 0x8000u; ++w)
+					{
+						char line[32];
+						std::snprintf(line, sizeof(line), "%06x %06x\n",
+							unsigned(w), unsigned(memory.get(areas[a], w)));
+						out << line;
+					}
+				}
+			}
+			std::cout << "UPLOADDUMP " << _label << " dir=" << dir
+			          << " dsps=" << dspCount << std::endl;
+		};
+
 		// ------------------------------------------------------------- the boot
 		bool booted = false;
 		bool programsLanded = false;
@@ -1063,6 +1327,9 @@ int main()
 		{
 			bootQuanta = i + 1;
 			scheduler->runFrames(1);
+
+			if(uploadTimelineEvery && (bootQuanta % uploadTimelineEvery) == 0)
+				uploadTimeline("boot", bootQuanta);
 
 			if(board.mcuHalted() || expired())
 				break;
@@ -1100,6 +1367,13 @@ int main()
 		const g2::Hdi08Adapter::AccessCounts hdiZero{};
 		const g2::Hdi08Adapter::AccessCounts hdiAfterBoot = board.hdi08().accessCounts();
 		reportHdi08("boot", hdiZero, hdiAfterBoot);
+
+		if(uploadTimelineEvery)
+			uploadTimeline("postBoot", bootQuanta);
+		reportUploadCapture("postBoot");
+		uploadQueues("postBoot");
+		uploadRegionMap("postBoot");
+		uploadDump("postBoot");
 
 		// -------------------------------------------------------- the delivery
 		std::vector<uint8_t> delivered;
@@ -1328,6 +1602,9 @@ int main()
 			scheduler->runFrames(1);
 			ran = i + 1;
 
+			if(uploadTimelineEvery && (ran % uploadTimelineEvery) == 0)
+				uploadTimeline("window", ran);
+
 			if((ran % 50000u) == 0)
 			{
 				std::cout << "  progress q=" << ran << " pc=" << hex32(board.mcuReg(g_regPc))
@@ -1371,6 +1648,13 @@ int main()
 		// memory must move here. If it does not, nothing below means anything.
 		const std::vector<DspSnap> snapB = takeSnap();
 		dumpCoeff("B-postUpload");
+
+		if(uploadTimelineEvery)
+			uploadTimeline("postWindow", ran);
+		reportUploadCapture("postWindow");
+		uploadQueues("postWindow");
+		uploadRegionMap("postWindow");
+		uploadDump("postWindow");
 
 		// Was the patch stored? Kept small: one needle from the middle of what
 		// went on the wire, so a silent run can say whether the patch was there

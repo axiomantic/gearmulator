@@ -44,6 +44,10 @@ namespace g2
 		 * landed" and needs no agreement between the two sides. */
 		const bool* programLanded(unsigned index) const noexcept;
 
+		/* Host words the slot's bridge is still holding, or 0 for a slot with
+		 * no bridge. See `Hdi08Bridge::pendingWords`. */
+		std::size_t pendingHostWords(unsigned index) const noexcept;
+
 		/* The snapshot covers the register block of every slot as a struct
 		 * copy, plus that slot's P, X and Y memory. It does not cover the
 		 * peripherals, because the DSP library carries no save or load member

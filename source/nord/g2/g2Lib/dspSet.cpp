@@ -132,6 +132,14 @@ namespace g2
 		return m_bridges[_index]->programLanded();
 	}
 
+	std::size_t DspSet::pendingHostWords(const unsigned _index) const noexcept
+	{
+		if(_index >= m_bridges.size())
+			return 0;
+
+		return m_bridges[_index]->pendingWords();
+	}
+
 	size_t DspSet::stateSize() const noexcept
 	{
 		size_t total = 0;

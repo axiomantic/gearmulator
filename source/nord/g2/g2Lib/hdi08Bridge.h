@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -55,6 +56,14 @@ namespace g2
 		 * for the whole run, so the flag has to be an object with an address and
 		 * not a predicate's return value. */
 		const bool* programLanded() const noexcept { return &m_programLanded; }
+
+		/* Words the per-quantum bound has not let through yet. A host word the
+		 * bridge is still holding has left the MCU and has NOT reached the DSP,
+		 * so the adapter's exact word count and what the DSP has actually seen
+		 * differ by exactly this. Above zero at the end of a run is an upload
+		 * still in flight, which no other observation point distinguishes from
+		 * an upload the DSP received and ignored. */
+		std::size_t pendingWords() const noexcept { return m_pending.size(); }
 
 	private:
 		void onBootWord(uint32_t _word);
