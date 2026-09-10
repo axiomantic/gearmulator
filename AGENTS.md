@@ -475,6 +475,49 @@ push either fails or writes the wrong ref.
 
 Work in a clone you created yourself. Never delete a path you did not create.
 
+## Isolated working copies
+
+**Use a separate clone, not a `git worktree`, for this repository.** A worktree
+shares the superproject's `.git/modules/`, so `source/dsp56300/.git` inside a
+worktree resolves to `../../.git/modules/source/dsp56300` — the same gitdir the
+main checkout uses. A `git submodule update --init` in the worktree therefore
+moves the main checkout's submodule HEADs out from under whoever is using it. An
+agent working "safely in a worktree" corrupts the main working tree's state
+without touching a file in it. An agent here abandoned a worktree for an
+isolated clone for exactly that reason, to keep deliberately pinned submodule
+revisions in the operator's checkout where they were put.
+
+The hazard is submodules, not worktrees. A repository that has none is fine with
+`git worktree`. This one is a superproject, so it is not.
+
+Clone with `--reference` against an existing checkout. It shares the object
+store, so a second working copy costs megabytes rather than gigabytes.
+
+```bash
+git clone --reference /path/to/your/gearmulator \
+  git@github.com:axiomantic/gearmulator.git /path/to/workspace/gearmulator
+```
+
+The clone is not what fills the disk. A build directory is, on the order of a
+gigabyte each, so remove the previous one before you build again.
+
+Set `submodule.recurse=false` in a secondary workspace, so no ordinary command
+walks into a shared submodule gitdir by accident.
+
+The tree-wide git operations named above act on the whole working tree, not on
+the files you have in mind. Never run one in a checkout that someone or
+something else may be using.
+
+After any operation that could have reached a shared checkout, verify it:
+
+```bash
+git -C <main checkout> submodule status
+git -C <main checkout> status --porcelain -uall
+```
+
+Confirm nothing outside your scope moved. That verification is part of the
+practice, not an extra.
+
 ## Pull requests
 
 Open every pull request against this project's own fork. **Never open one
