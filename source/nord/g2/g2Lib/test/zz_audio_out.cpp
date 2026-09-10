@@ -999,6 +999,7 @@ int main()
 				"G2_AUDIO_PCTRACE", "G2_AUDIO_PCTRACEQ", "G2_AUDIO_PCTRACEN",
 				"G2_AUDIO_WPCTRACE",
 				"G2_AUDIO_NWY",
+				"G2_PARAM_CAP", "G2_PARAM_REGS", "G2_PARAM_FIXLA",
 				"G2_LOG_ESAI_UNDERRUN"
 			};
 
@@ -1028,7 +1029,8 @@ int main()
 				for(char** e = environ; e && *e; ++e)
 				{
 					const std::string entry(*e);
-					if(entry.rfind("G2_AUDIO_", 0) == 0 || entry.rfind("NMG2_", 0) == 0 || entry.rfind("G2_LOG_", 0) == 0)
+					if(entry.rfind("G2_AUDIO_", 0) == 0 || entry.rfind("NMG2_", 0) == 0
+						|| entry.rfind("G2_PARAM_", 0) == 0 || entry.rfind("G2_LOG_", 0) == 0)
 						std::cout << ' ' << entry;
 				}
 				std::cout << std::endl;
@@ -1146,6 +1148,20 @@ int main()
 		}
 
 		const unsigned dspCount = board.dspSet().dspCount();
+
+		/* G2_PARAM_CAP arms the SAME per-port word capture G2_AUDIO_HDI08CAP
+		 * arms, at a point BEFORE the boot quanta rather than after them. The
+		 * later arming cannot see the payload upload, and a command that is
+		 * only ever issued at install time is indistinguishable, through it,
+		 * from a command that is never issued at all. */
+		std::size_t paramCapLimit = 0;
+		if(const char* const c = std::getenv("G2_PARAM_CAP"))
+			paramCapLimit = std::size_t(std::strtoul(c, nullptr, 0));
+		if(paramCapLimit)
+		{
+			board.hdi08().armWordCapture(paramCapLimit);
+			std::cout << "paramcap: armed before boot, perPortLimit=" << paramCapLimit << std::endl;
+		}
 
 		std::cout << "dspCount=" << dspCount
 		          << " hopFrames=" << config.hopFrames
@@ -1919,6 +1935,37 @@ int main()
 			          << std::endl;
 		}
 
+		if(paramCapLimit)
+		{
+			/* A census by host-command vector, not a transcript: the question is
+			 * which of the resident firmware's command entry points the MCU ever
+			 * reaches, and a transcript of 20,000 entries answers it only after
+			 * being counted anyway. Words are counted but not listed. */
+			board.hdi08().disarmWordCapture();
+			for(int p = 0; p < g2::g_hdi08PortCount; ++p)
+			{
+				const std::vector<g2::Hdi08Adapter::CapturedEntry>& e =
+					board.hdi08().capturedEntries(p);
+				std::map<uint32_t, uint64_t> byVector;
+				uint64_t words = 0;
+				for(const g2::Hdi08Adapter::CapturedEntry& c : e)
+				{
+					if(c.isCommand)
+						++byVector[c.value];
+					else
+						++words;
+				}
+				std::cout << "PARAMCAP port " << p
+				          << " entries=" << e.size()
+				          << " capped=" << (e.size() >= paramCapLimit ? 1 : 0)
+				          << " words=" << words
+				          << " commands:";
+				for(const std::pair<const uint32_t, uint64_t>& v : byVector)
+					std::cout << " " << std::hex << v.first << std::dec << "=" << v.second;
+				std::cout << std::endl;
+			}
+		}
+
 		if(hdiCapLimit)
 		{
 			board.hdi08().disarmWordCapture();
@@ -2004,6 +2051,50 @@ int main()
 			std::vector<g2::Frame> primed(config.lookaheadFrames);
 			const size_t pulled = scheduler->pull(primed.data(), primed.size());
 			std::cout << "play: primedPulled=" << pulled << " of " << config.lookaheadFrames << std::endl;
+		}
+
+		/* G2_PARAM_FIXLA is an EXPERIMENT AND IT PERTURBS PROGRAM MEMORY. It
+		 * exists to test one hypothesis and nothing may be read from an arm
+		 * carrying it except whether the hypothesis holds.
+		 *
+		 * The guest extends its background DO FOREVER loop by writing the LA
+		 * register over the host port after the DO has already been entered.
+		 * The JIT fixes a loop's end when it compiles the DO instruction, from
+		 * that instruction's own operand word, so the write moves the
+		 * architectural LA and does not move the loop the emulator executes.
+		 * Rewriting the operand word to the LA the guest asked for, and then
+		 * re-deriving the loop bookkeeping from it, is the smallest change that
+		 * makes the executed loop agree with the register -- and if the
+		 * hypothesis is right, the payload's parameter engine begins to run. */
+		if(std::getenv("G2_PARAM_FIXLA"))
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::DSP& dsp = board.dspSet().dsp(d);
+				const dsp56k::TWord la = dsp.regs().la.toWord();
+				const dsp56k::TWord opB = dsp.memory().get(dsp56k::MemArea_P, 0x221);
+
+				std::cout << "PARAMFIXLA dsp " << d
+				          << " la=" << hex32(la)
+				          << " doOperandBefore=" << hex32(opB);
+
+				if(la != opB)
+				{
+					// The order matters: the operand must already carry the new
+					// end when the DO block is rebuilt, and the rebuild must
+					// come last because destroying blocks also unregisters the
+					// loop it is being rebuilt to register.
+					dsp.getJit().destroyAllBlocks();
+					dsp.memWriteP(0x221, la);
+					dsp.getJit().create(0x220, false);
+				}
+
+				std::cout << " doOperandAfter=" << hex32(dsp.memory().get(dsp56k::MemArea_P, 0x221))
+				          << " jitLoops:";
+				for(const std::pair<const dsp56k::TWord, dsp56k::TWord>& l : dsp.getJit().getLoops())
+					std::cout << " " << hex32(l.first) << "->" << hex32(l.second);
+				std::cout << std::endl;
+			}
 		}
 
 		// The DSP instruction counters as the walk opens. A DSP that executes
@@ -2478,13 +2569,11 @@ int main()
 					dsp56k::DSP& dsp = board.dspSet().dsp(unsigned(pcTraceDsp));
 					pcTracer.reset(new PcTracer(dsp));
 					dsp.setDebugger(pcTracer.get());
-					dsp56k::DSP::setForceInterpreter(true);
 					g2::g_interpretDsp = &dsp;
 				}
 				if(pcTraceDsp >= 0 && q == pcTraceQuantum + pcTraceQuanta)
 				{
 					g2::g_interpretDsp = nullptr;
-					dsp56k::DSP::setForceInterpreter(false);
 					board.dspSet().dsp(unsigned(pcTraceDsp)).setDebugger(nullptr);
 				}
 
@@ -3404,6 +3493,54 @@ int main()
 			std::cout << "pctrace: instructionsStepped=" << pcTracer->pcs().size()
 			          << " xyAccesses=" << pcTracer->accesses().size()
 			          << " out=" << (path ? path : "pctrace.txt") << std::endl;
+		}
+
+		/* G2_PARAM_REGS reads, and writes nothing, the PCU and AGU registers
+		 * every DSP is left holding at the end of the walk.
+		 *
+		 * LA is the one that carries a question. The resident firmware's whole
+		 * background job runs inside a single DO FOREVER whose loop-address
+		 * register decides which addresses belong to the loop body, and the
+		 * host-command entry point at P:$098 lets the MCU write that register
+		 * over the port. Whether the loop the machine is actually executing
+		 * ends where the resident code left it, or where an uploaded payload
+		 * would need it to end, is a value -- so it is read rather than
+		 * argued. r3 and r4 are read for the same reason: the loop reloads
+		 * them from x:$fffff2 and x:$ffffe9, both host-writable. */
+		if(std::getenv("G2_PARAM_REGS"))
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				const dsp56k::DspRegs& r = board.dspSet().dsp(d).regs();
+				std::cout << "PARAMREGS dsp " << d
+				          << " pc=" << hex32(r.pc.toWord())
+				          << " la=" << hex32(r.la.toWord())
+				          << " lc=" << hex32(r.lc.toWord())
+				          << " sp=" << hex32(r.sp.toWord())
+				          << " sc=" << hex32(uint32_t(r.sc.var))
+				          << " ep=" << hex32(r.ep.toWord())
+				          << " r0=" << hex32(r.r[0].toWord())
+				          << " r3=" << hex32(r.r[3].toWord())
+				          << " r4=" << hex32(r.r[4].toWord())
+				          << " m0=" << hex32(r.m[0].toWord())
+				          << std::endl;
+
+				/* The architectural LA above and the loop the emulator is
+				 * actually executing are two different things, and the whole
+				 * point of printing them together is that they can disagree.
+				 * The JIT derives a DO loop's end from the DO instruction's
+				 * operand word when it compiles the block; the interpreter
+				 * compares the live PC against the live LA register. Only the
+				 * second follows an LA the guest writes after the DO. */
+				const dsp56k::Jit& jit = board.dspSet().dsp(d).getJit();
+				std::cout << "PARAMLOOPS dsp " << d << " jitLoops:";
+				for(const std::pair<const dsp56k::TWord, dsp56k::TWord>& l : jit.getLoops())
+					std::cout << " " << hex32(l.first) << "->" << hex32(l.second);
+				std::cout << " jitLoopEnds:";
+				for(const dsp56k::TWord e : jit.getLoopEnds())
+					std::cout << " " << hex32(e);
+				std::cout << std::endl;
+			}
 		}
 
 		if(const char* const pdumpDir = std::getenv("G2_AUDIO_PDUMP"))
