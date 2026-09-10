@@ -2,7 +2,7 @@
 // socket and drives the machine through the surface the `Board` already
 // publishes.
 //
-// `mcf5307.h` documents the register file as 0..7 = d0..d7, 8..15 = a0..a7,
+// `mcf5407.h` documents the register file as 0..7 = d0..d7, 8..15 = a0..a7,
 // 16 = SR, 17 = PC, which is exactly GDB's m68k order -- so `g` and `G` are a
 // direct eighteen-register big-endian serialisation with no remapping. They
 // reach the machine through `Board::mcuReg` and `Board::setMcuReg`.
@@ -12,7 +12,7 @@
 // containers. The one intrusion is the borrowed `McuRunner*` in `Scheduler`,
 // null when no stub is attached, costing one null test for each quantum.
 //
-// `Board::runMcu(1)` forwards to `mcf5307_exec(ctx, 1)`, whose loop runs while
+// `Board::runMcu(1)` forwards to `mcf5407_exec(ctx, 1)`, whose loop runs while
 // `spent < maxCycles` -- so a budget of one runs exactly one instruction,
 // whatever that instruction costs. A budget of zero runs nothing.
 //
@@ -154,8 +154,8 @@ namespace g2
 			Watcher(GdbStub& _stub, BusTarget& _inner, const MemoryMap& _map, const Region _region)
 				: m_stub(_stub), m_inner(_inner), m_map(_map), m_region(_region) {}
 
-			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+			uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 			BusTarget& inner() const { return m_inner; }
 			Region     region() const { return m_region; }

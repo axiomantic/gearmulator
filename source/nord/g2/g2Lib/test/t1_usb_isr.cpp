@@ -24,7 +24,7 @@
 //
 //   3. The service routine. A counter on 16-bit SDRAM reads at 0x30053C38,
 //      which is the address the CODE image installs with
-//      install_autovector(3, ...). The MCF5307 core fetches every instruction
+//      install_autovector(3, ...). The MCF5407 core fetches every instruction
 //      word through the bus read callback as a 16-bit access at the
 //      instruction's own address, so a counter on 16-bit reads at one SDRAM
 //      offset is an instruction-fetch counter for that address.
@@ -382,13 +382,13 @@ namespace
 
 		uint64_t wordFetches() const { return m_wordFetches; }
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -429,13 +429,13 @@ namespace
 			return value;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -510,18 +510,18 @@ namespace
 	public:
 		explicit Cs3Recorder(g2::BusTarget* const _inner) : m_inner(_inner) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			if(m_inner == nullptr)
 			{
-				_status = MCF5307_BUS_OK;
+				_status = MCF5407_BUS_OK;
 				return 0u;
 			}
 			return m_inner->read(_offset, _size, _status);
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-			mcf5307_bus_status& _status) override
+			mcf5407_bus_status& _status) override
 		{
 			if((_offset & g_commandSelect) != 0 && m_recording)
 			{
@@ -573,7 +573,7 @@ namespace
 
 			if(m_inner == nullptr)
 			{
-				_status = MCF5307_BUS_OK;
+				_status = MCF5407_BUS_OK;
 				return;
 			}
 
@@ -667,7 +667,7 @@ namespace
 
 		_recorder.setRecording(false);
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		g2::Board::onWrite(&_board, g_commandPortAbs, g_byteWidth,
 			uint32_t(g_endpointConfigBase) + uint32_t(slot), &status);

@@ -17,7 +17,7 @@
 //   2. Audio. `arrival=-1` on an unpatched machine is not a claim about a
 //      patched one.
 //
-// The instrument needs no production change. The MCF5307 core fetches every
+// The instrument needs no production change. The MCF5407 core fetches every
 // instruction word through the bus read callback -- `cpu.nim`'s
 // `ctx.readFn(ctx.user, ctx.pc, 2, addr status)` -- and Board::onRead routes
 // that to the MemoryMap, which routes it to the BusTarget attached at
@@ -222,7 +222,7 @@ namespace
 		if(slot < 0)
 			return 0x00u;
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		g2::Board::onWrite(&_board, g_commandPort, g_byteWidth,
 			uint32_t(g_endpointConfigBase) + uint32_t(slot), &status);
@@ -415,13 +415,13 @@ namespace
 		// never reached at all".
 		uint64_t wordFetches() const { return m_wordFetches; }
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -466,13 +466,13 @@ namespace
 			return value;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -594,7 +594,7 @@ namespace
 
 		for(unsigned position = 0; position < _count; ++position)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			const uint32_t entry =
 				g2::Board::onRead(&_board, g_portTableBase + position * 4u, 4, &status);
 

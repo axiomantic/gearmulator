@@ -29,7 +29,7 @@
 // unit would satisfy every positive case above. So every window is probed one
 // byte below its base and one byte above its last byte, and the fixture leaves
 // a gap between every pair of windows so that those two addresses fall in no
-// window at all. An address in no window must report MCF5307_BUS_UNMAPPED,
+// window at all. An address in no window must report MCF5407_BUS_UNMAPPED,
 // which is the answer memoryMap.cpp already gives and which this test does not
 // re-decide.
 //
@@ -165,12 +165,12 @@ namespace
 	// Every access in this file goes through the installed callback.
 	//
 	// Board::onRead and Board::onWrite are the function pointers handed to
-	// mcf5307_create. Driving them means a body that stops forwarding turns
+	// mcf5407_create. Driving them means a body that stops forwarding turns
 	// this test red; a test that called Board::busRead directly passes against
 	// a callback that answers 0u with a bus-OK status.
 	//
 	// It also means the size argument is the core's, which is a count of bytes
-	// and not a width in bits. mcf5307.h states that unit twice, once per
+	// and not a width in bits. mcf5407.h states that unit twice, once per
 	// callback typedef. The constants below are named rather than written as
 	// bare 1, 2 and 4, because a silent swap of one unit for another is the
 	// defect itself and a reader must be able to see which unit a call site is
@@ -180,16 +180,16 @@ namespace
 	constexpr int g_long = 4;
 
 	uint32_t busRead(g2::Board& _board, const uint32_t _address, const int _size,
-	                 mcf5307_bus_status& _status)
+	                 mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		return g2::Board::onRead(&_board, _address, _size, &_status);
 	}
 
 	void busWrite(g2::Board& _board, const uint32_t _address, const int _size,
-	              const uint32_t _value, mcf5307_bus_status& _status)
+	              const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		g2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 
@@ -199,9 +199,9 @@ namespace
 	// this test exists to catch also returns.
 	void checkUnmapped(g2::Board& _board, const uint32_t _address, const std::string& _what)
 	{
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		(void)busRead(_board, _address, g_byte, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_UNMAPPED), _what);
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_UNMAPPED), _what);
 	}
 
 	// A byte read asserted to complete and to carry the value only one unit
@@ -211,9 +211,9 @@ namespace
 	void checkByte(g2::Board& _board, const uint32_t _address, const uint32_t _expected,
 	               const std::string& _what)
 	{
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		const uint32_t value = busRead(_board, _address, g_byte, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK), _what + " completes");
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK), _what + " completes");
 		checkEqual(value, _expected, _what);
 	}
 }
@@ -222,7 +222,7 @@ int main()
 {
 	// ------------------------------------------------------------------
 	// The composed board. Every unit below is reached through the busRead /
-	// busWrite helpers above, which call the function pointers mcf5307_create
+	// busWrite helpers above, which call the function pointers mcf5407_create
 	// was given: no test case touches a unit's own read() or write() directly,
 	// because doing so would test the unit and not the routing, and none calls
 	// Board::busRead directly, because doing so would skip the forwarding.
@@ -231,7 +231,7 @@ int main()
 	board.flash().loadCs0(makeImage(g_cs0Size, g_cs0First, g_cs0Last));
 	board.flash().loadCs2(makeImage(g_cs2Size, g_cs2First, g_cs2Last));
 
-	mcf5307_bus_status status = MCF5307_BUS_OK;
+	mcf5407_bus_status status = MCF5407_BUS_OK;
 
 	// ==================================================================
 	// CS0 -- the flash boot image.
@@ -273,8 +273,8 @@ int main()
 		// The two windows must not be answering from the same image. This
 		// is the case that a router mapping both windows to one image, or
 		// mapping CS2's offset through CS0's base, would fail.
-		mcf5307_bus_status cs0Status = MCF5307_BUS_OK;
-		mcf5307_bus_status cs2Status = MCF5307_BUS_OK;
+		mcf5407_bus_status cs0Status = MCF5407_BUS_OK;
+		mcf5407_bus_status cs2Status = MCF5407_BUS_OK;
 		const uint32_t cs0Value = busRead(board, g_cs0Base, g_byte, cs0Status);
 		const uint32_t cs2Value = busRead(board, g_cs2Base, g_byte, cs2Status);
 		check(cs0Value != cs2Value,
@@ -299,7 +299,7 @@ int main()
 		// write and a read together prove the latches answered and that the
 		// offset the router produced was window-relative.
 		busWrite(board, g2::g_cs5Base + 1u, g_byte, 0xA5u, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 		           "a write to a CS5 latch completes");
 		checkByte(board, g2::g_cs5Base + 1u, 0xA5u,
 		          "a CS5 latch returns the byte written through the board");
@@ -317,7 +317,7 @@ int main()
 	// ==================================================================
 	{
 		busWrite(board, g_cs4Base, g_byte, 0xA4u, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 		           "a write to the CS4 panel completes");
 		checkByte(board, g_cs4Base, 0xA4u,
 		          "CS4 first byte reaches the panel and reads back");
@@ -370,7 +370,7 @@ int main()
 		const uint32_t port0Word = 0x00BEAD00u;
 		busWrite(board, 0x110007F4u, g_long, port0Word, status);
 
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 		           "a CS1 longword write completes");
 		checkEqual(uint32_t(captures[0].count), 1u,
 		           "the CS1 write reached HDI08 port 0 exactly once");
@@ -395,9 +395,9 @@ int main()
 		// The first byte of CS1 is inside the window and must complete: the
 		// HDI08 decode selects no port there and answers zero, and the status
 		// is what separates that from an address the router dropped.
-		mcf5307_bus_status cs1Status = MCF5307_BUS_OK;
+		mcf5407_bus_status cs1Status = MCF5407_BUS_OK;
 		(void)busRead(board, g2::g_cs1Base, g_byte, cs1Status);
-		checkEqual(uint32_t(cs1Status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(cs1Status), uint32_t(MCF5407_BUS_OK),
 		           "CS1 first byte is inside the window and completes");
 	}
 
@@ -410,12 +410,12 @@ int main()
 		const uint32_t csar0 = g_mbarBase + 0x080u;
 
 		busWrite(board, csar0, g_word, 0xA6A6u, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 		           "a 16-bit write to the SIM CSAR0 completes");
 
-		mcf5307_bus_status simStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status simStatus = MCF5407_BUS_OK;
 		const uint32_t simValue = busRead(board, csar0, g_word, simStatus);
-		checkEqual(uint32_t(simStatus), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(simStatus), uint32_t(MCF5407_BUS_OK),
 		           "a 16-bit read of the SIM CSAR0 completes");
 		checkEqual(simValue, 0xA6A6u,
 		           "MBAR+0x080 reaches the SIM and returns the written CSAR0");
@@ -445,9 +445,9 @@ int main()
 		// models no register there at all. So a 16-bit access that is
 		// rejected is a behaviour only UART0 produces, and it is independent
 		// evidence of the same routing the value above asserts.
-		mcf5307_bus_status wideStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status wideStatus = MCF5407_BUS_OK;
 		(void)busRead(board, uivr, g_word, wideStatus);
-		checkEqual(uint32_t(wideStatus), uint32_t(MCF5307_BUS_SIZE_ILLEGAL),
+		checkEqual(uint32_t(wideStatus), uint32_t(MCF5407_BUS_SIZE_ILLEGAL),
 		           "a 16-bit read of a UART0 register is rejected by UART0");
 
 		// UIVR is read/write, so the vector the firmware programs round
@@ -459,7 +459,7 @@ int main()
 		// The SIM register written earlier is unchanged by all of that,
 		// which proves the two MBAR units are separate objects and that the
 		// split did not send the UART traffic to the SIM.
-		mcf5307_bus_status simStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status simStatus = MCF5407_BUS_OK;
 		const uint32_t simValue = busRead(board, g_mbarBase + 0x080u, g_word, simStatus);
 		checkEqual(simValue, 0xA6A6u,
 		           "the UART0 writes left the SIM's CSAR0 untouched");

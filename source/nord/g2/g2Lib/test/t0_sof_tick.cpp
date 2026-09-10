@@ -19,9 +19,9 @@
 //
 // How the tick is observed, and why the target links no library. This
 // executable compiles board.cpp together with this file and supplies its own
-// definitions of the mcf5307 C entry points board.cpp uses. That makes
+// definitions of the mcf5407 C entry points board.cpp uses. That makes
 // isp1181_tick observable without adding a test-only accessor to the shipped
-// Board. Defining isp1181_tick while also linking libmcf5307.a is a
+// Board. Defining isp1181_tick while also linking libmcf5407.a is a
 // duplicate-symbol link error the moment anything in the link pulls the archive
 // member that defines it, so the seam is taken by owning the whole link line
 // instead. The Board creates and destroys its USB device, so isp1181_create and
@@ -54,7 +54,7 @@
 #include <string>
 #include <vector>
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 namespace
 {
@@ -125,8 +125,8 @@ namespace
 	// the allocator happened to reuse.
 	std::deque<int> g_usbTokens;
 
-	// The token mcf5307_create hands back. Board only stores it and passes it
-	// back to mcf5307_exec and mcf5307_destroy, so any non-null address does.
+	// The token mcf5407_create hands back. Board only stores it and passes it
+	// back to mcf5407_exec and mcf5407_destroy, so any non-null address does.
 	int g_coreToken = 0;
 
 	// Clear the call records between runs. The token pool above is deliberately
@@ -247,59 +247,59 @@ namespace
 	}
 }
 
-// The mcf5307 C entry points board.cpp uses, supplied here so that the tick is
-// observable and no library is linked. The signatures are include/mcf5307.h's.
+// The mcf5407 C entry points board.cpp uses, supplied here so that the tick is
+// observable and no library is linked. The signatures are include/mcf5407.h's.
 extern "C"
 {
-	/* Answers 1, which is "the runtime is usable". mcf5307.h states the status
+	/* Answers 1, which is "the runtime is usable". mcf5407.h states the status
 	 * is a truth value and not a POSIX error code, and 0 is reserved for a
 	 * one-time latch that was abandoned. This fake has no latch and no runtime
 	 * to stall, so 1 is the only answer it can honestly give. */
-	int mcf5307_runtime_init(void)
+	int mcf5407_runtime_init(void)
 	{
 		return 1;
 	}
 
-	mcf5307_ctx* mcf5307_create(void*, mcf5307_read_fn, mcf5307_write_fn,
-	                            mcf5307_iack_fn)
+	mcf5407_ctx* mcf5407_create(void*, mcf5407_read_fn, mcf5407_write_fn,
+	                            mcf5407_iack_fn)
 	{
-		return reinterpret_cast<mcf5307_ctx*>(&g_coreToken);
+		return reinterpret_cast<mcf5407_ctx*>(&g_coreToken);
 	}
 
-	void mcf5307_destroy(mcf5307_ctx*)
+	void mcf5407_destroy(mcf5407_ctx*)
 	{
 	}
 
-	uint32_t mcf5307_exec(mcf5307_ctx*, uint32_t)
+	uint32_t mcf5407_exec(mcf5407_ctx*, uint32_t)
 	{
 		return 0u;
 	}
 
 	/* The core entry points the Board's handle to its own core forwards to.
-	 * Nothing here drives that handle, so each answers the value mcf5307.h
+	 * Nothing here drives that handle, so each answers the value mcf5407.h
 	 * defines for a context that can do nothing: no register holds a value, a
 	 * write to one does not succeed, and a core that never ran is neither
 	 * halted nor faulted. */
-	void mcf5307_reset(mcf5307_ctx*, uint32_t, uint32_t)
+	void mcf5407_reset(mcf5407_ctx*, uint32_t, uint32_t)
 	{
 	}
 
-	uint32_t mcf5307_get_reg(const mcf5307_ctx*, int)
+	uint32_t mcf5407_get_reg(const mcf5407_ctx*, int)
 	{
 		return 0u;
 	}
 
-	int mcf5307_set_reg(mcf5307_ctx*, int, uint32_t)
+	int mcf5407_set_reg(mcf5407_ctx*, int, uint32_t)
 	{
 		return 0;
 	}
 
-	int mcf5307_halted(const mcf5307_ctx*)
+	int mcf5407_halted(const mcf5407_ctx*)
 	{
 		return 0;
 	}
 
-	int mcf5307_faulted(const mcf5307_ctx*)
+	int mcf5407_faulted(const mcf5407_ctx*)
 	{
 		return 0;
 	}
@@ -307,7 +307,7 @@ extern "C"
 	/* board.cpp presents the Board's interrupt state to the core, so a target
 	 * that compiles it on its own must supply this entry point too. Nothing in
 	 * this test drives it: no case here programs an ICR or raises a source. */
-	void mcf5307_set_irq(mcf5307_ctx*, int, uint8_t, int)
+	void mcf5407_set_irq(mcf5407_ctx*, int, uint8_t, int)
 	{
 	}
 
@@ -350,7 +350,7 @@ extern "C"
 
 	/* The Board drains its transport hub into the device on every quantum
 	 * boundary, so board.cpp references this entry point and a target that
-	 * links no mcf5307 archive must supply it. It is a sink and not a recorder:
+	 * links no mcf5407 archive must supply it. It is a sink and not a recorder:
 	 * nothing in this file drives the hub, so no frame ever reaches it.
 	 *
 	 * It answers 1, which is "an OUT buffer holds the packet". The Board reads
@@ -364,7 +364,7 @@ extern "C"
 
 	/* The Board moves its handle off the Stub backend at construction, so
 	 * board.cpp references this entry point too and a target that links no
-	 * mcf5307 archive must supply it.
+	 * mcf5407 archive must supply it.
 	 *
 	 * It answers 1, which is "the handle moved". The Board reads the return
 	 * only to detect a refusal, and a refusal is a state this file's fake

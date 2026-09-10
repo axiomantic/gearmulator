@@ -82,7 +82,7 @@ namespace
 
 	// The vector table: 256 identical big-endian longwords at the SDRAM
 	// base, with VBR pointed at it. Booting CODE directly skips the code
-	// that would build it. Register index 18 is the mcf5307 C ABI's VBR.
+	// that would build it. Register index 18 is the mcf5407 C ABI's VBR.
 	constexpr int      g_regVbr             = 18;
 	constexpr uint32_t g_vectorTableBase    = 0x30000000u;
 	constexpr uint32_t g_vectorTableEntries = 256u;
@@ -132,9 +132,9 @@ namespace g2
 			return true;
 		}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			/* A BusTarget's `_size` is a width in bits and not a count of
 			 * bytes. Board::onRead converts the core's byte count through
@@ -142,7 +142,7 @@ namespace g2
 			 * (board.cpp), so the legal widths here are 8, 16 and 32. */
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -167,13 +167,13 @@ namespace g2
 			return value;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
