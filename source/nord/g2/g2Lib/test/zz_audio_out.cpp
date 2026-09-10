@@ -893,6 +893,8 @@ int main()
 				"G2_AUDIO_COEFF", "G2_AUDIO_COEFFSNAP",
 				"G2_AUDIO_COEFFLO", "G2_AUDIO_COEFFHI", "G2_AUDIO_DMATRACE",
 				"G2_AUDIO_INTONE",
+				"G2_AUDIO_NOTEWATCH", "G2_AUDIO_NWLO", "G2_AUDIO_NWHI",
+				"G2_AUDIO_NWY",
 				"G2_LOG_ESAI_UNDERRUN"
 			};
 
@@ -1488,6 +1490,127 @@ int main()
 			}
 		}
 
+		/* G2_AUDIO_NOTEWATCH is G2_AUDIO_SCRATCHWATCH moved to the OTHER SIDE of
+		 * the note phase, and it exists because that ordering was the stated
+		 * limit of the pitch-perturbation arm.
+		 *
+		 * SCRATCHWATCH fills its range after the note has already been posted
+		 * and its 40,000 quanta already run, so a payload that consumed
+		 * X:$0001-$0004 ONCE, when the note arrived, had finished with them
+		 * before the sentinel existed. Such an arm shows the payload does not
+		 * RE-READ the pitch each frame. It cannot show whether it read it.
+		 *
+		 * This one fills BEFORE the first MIDI byte is posted and restores the
+		 * sentinel after every quantum of the note phase, so the words are the
+		 * sentinel at every instant the payload could sample them except within
+		 * the quantum the MCU writes them. Two phases are counted separately:
+		 *
+		 *   phase=note   the note phase. Its `otherWrites` is the KNOWN
+		 *                POSITIVE for the whole arm -- it says the MCU's own
+		 *                pitch write actually landed in the range and was
+		 *                contested. A note arm whose note phase reports zero
+		 *                displacements has not perturbed anything, and its
+		 *                result words say nothing.
+		 *   phase=walk   the walk, so the perturbation is continuous.
+		 *
+		 * X only by default: the pitch ladder is in X, and filling Y as well
+		 * would perturb pages this arm is not asking about. G2_AUDIO_NWY adds Y.
+		 *
+		 * IT PERTURBS. Never read the audio sink from an arm that has it on. */
+		/* The same sentinel the window and scratch watches use, so the arms are
+		 * comparable; declared here because this probe runs before theirs. */
+		constexpr dsp56k::TWord g_notePoisonWord = 0x0ACE55u;
+		const bool noteWatch = std::getenv("G2_AUDIO_NOTEWATCH") != nullptr;
+		const bool noteWatchY = std::getenv("G2_AUDIO_NWY") != nullptr;
+		dsp56k::TWord nwLo = 0x0001u, nwHi = 0x0006u;
+		if(const char* const v = std::getenv("G2_AUDIO_NWLO"))
+			nwLo = dsp56k::TWord(std::strtoul(v, nullptr, 0));
+		if(const char* const v = std::getenv("G2_AUDIO_NWHI"))
+			nwHi = dsp56k::TWord(std::strtoul(v, nullptr, 0));
+
+		// [phase][area][dsp]. phase 0 = note, 1 = walk. area 0 = X, 1 = Y.
+		std::vector<uint64_t> nwZero[2][2], nwOther[2][2];
+		std::vector<std::map<dsp56k::TWord, uint64_t>> nwAddr[2][2], nwVaried[2][2];
+		std::vector<std::map<dsp56k::TWord, dsp56k::TWord>> nwLast[2][2];
+		std::vector<int> nwFirst[2] = {std::vector<int>(dspCount, -1), std::vector<int>(dspCount, -1)};
+		for(int ph = 0; ph < 2; ++ph)
+		{
+			for(int ar = 0; ar < 2; ++ar)
+			{
+				nwZero[ph][ar].assign(dspCount, 0);
+				nwOther[ph][ar].assign(dspCount, 0);
+				nwAddr[ph][ar].assign(dspCount, {});
+				nwVaried[ph][ar].assign(dspCount, {});
+				nwLast[ph][ar].assign(dspCount, {});
+			}
+		}
+
+		const auto nwFill = [&]()
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+				for(dsp56k::TWord w = nwLo; w < nwHi; ++w)
+				{
+					memory.set(dsp56k::MemArea_X, w, g_notePoisonWord);
+					if(noteWatchY)
+						memory.set(dsp56k::MemArea_Y, w, g_notePoisonWord);
+				}
+			}
+		};
+
+		/* Name every word that is no longer the sentinel, record whether its
+		 * value differs from the one seen before, then restore. Identical in
+		 * shape to the SCRATCHWATCH sweep so the two are comparable. */
+		const auto nwSweep = [&](const int _phase, const uint32_t _quantum)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+				const int areaCount = noteWatchY ? 2 : 1;
+				for(int area = 0; area < areaCount; ++area)
+				{
+					const dsp56k::EMemArea ma = area == 0 ? dsp56k::MemArea_X : dsp56k::MemArea_Y;
+					for(dsp56k::TWord w = nwLo; w < nwHi; ++w)
+					{
+						const dsp56k::TWord v = memory.get(ma, w);
+						if(v == g_notePoisonWord)
+							continue;
+
+						if(v == 0)
+							++nwZero[_phase][area][d];
+						else
+							++nwOther[_phase][area][d];
+
+						++nwAddr[_phase][area][d][w];
+						auto lt = nwLast[_phase][area][d].find(w);
+						if(lt == nwLast[_phase][area][d].end())
+							nwLast[_phase][area][d].emplace(w, v);
+						else
+						{
+							if(lt->second != v)
+								++nwVaried[_phase][area][d][w];
+							lt->second = v;
+						}
+						if(nwFirst[_phase][d] < 0)
+							nwFirst[_phase][d] = int(_quantum);
+
+						memory.set(ma, w, g_notePoisonWord);
+					}
+				}
+			}
+		};
+
+		if(noteWatch)
+		{
+			nwFill();
+			std::cout << "notewatch: PERTURBING BEFORE THE NOTE. filled "
+			          << (noteWatchY ? "X and Y " : "X ")
+			          << hex32(nwLo) << ".." << hex32(nwHi)
+			          << " with " << hex32(g_notePoisonWord)
+			          << " on " << dspCount << " dsps" << std::endl;
+		}
+
 		/* G2_AUDIO_HDI08CAP arms a bounded per-port capture of the words and
 		 * host commands the MCU issues DURING THE NOTE PHASE. The counts say
 		 * how much moved; this says what. */
@@ -1629,6 +1752,8 @@ int main()
 			{
 				scheduler->runFrames(1);
 				++notePhaseQuanta;
+				if(noteWatch)
+					nwSweep(0, i);
 				if((i & 0x3ffu) == 0 && expired())
 					break;
 				if(board.mcuHalted())
@@ -1644,6 +1769,8 @@ int main()
 			{
 				scheduler->runFrames(1);
 				++notePhaseQuanta;
+				if(noteWatch)
+					nwSweep(0, i);
 				if((i & 0x3ffu) == 0 && expired())
 					break;
 				if(board.mcuHalted())
@@ -2353,6 +2480,9 @@ int main()
 					}
 				}
 
+				if(noteWatch)
+					nwSweep(1, q);
+
 				if(scratchWatch)
 				{
 					for(unsigned d = 0; d < dspCount; ++d)
@@ -2889,6 +3019,39 @@ int main()
 					for(size_t i = 0; i < cells.size(); ++i)
 						std::cout << ' ' << hex32(cells[i].last);
 					std::cout << std::endl;
+				}
+			}
+		}
+
+		if(noteWatch)
+		{
+			const char* const phaseName[2] = {"note", "walk"};
+			for(int ph = 0; ph < 2; ++ph)
+			{
+				for(unsigned d = 0; d < dspCount; ++d)
+				{
+					const int areaCount = noteWatchY ? 2 : 1;
+					for(int area = 0; area < areaCount; ++area)
+					{
+						const std::map<dsp56k::TWord, uint64_t>& m = nwAddr[ph][area][d];
+
+						std::cout << "  dsp " << d << " notewatch phase=" << phaseName[ph]
+						          << ' ' << (area == 0 ? "X" : "Y")
+						          << ' ' << hex32(nwLo) << ".." << hex32(nwHi)
+						          << " zeroWrites=" << nwZero[ph][area][d]
+						          << " otherWrites=" << nwOther[ph][area][d]
+						          << " distinctAddrs=" << m.size() << "/" << (nwHi - nwLo)
+						          << " firstQuantum=" << nwFirst[ph][d]
+						          << " :";
+						for(const auto& kv : m)
+						{
+							const auto vt = nwVaried[ph][area][d].find(kv.first);
+							std::cout << ' ' << hex32(kv.first) << "=n" << kv.second
+							          << "/v" << (vt == nwVaried[ph][area][d].end() ? uint64_t(0) : vt->second)
+							          << '/' << hex32(nwLast[ph][area][d][kv.first]);
+						}
+						std::cout << std::endl;
+					}
 				}
 			}
 		}
