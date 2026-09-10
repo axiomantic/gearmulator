@@ -897,6 +897,7 @@ int main()
 				"G2_AUDIO_NWY",
 				"G2_UPLOAD_CAP", "G2_UPLOAD_MAP", "G2_UPLOAD_TIMELINE",
 				"G2_UPLOAD_DUMP", "G2_UPLOAD_CAPDUMP",
+				"G2_CMD_NOTEDUMP",
 				"G2_LOG_ESAI_UNDERRUN"
 			};
 
@@ -2106,11 +2107,33 @@ int main()
 			{
 				const std::vector<g2::Hdi08Adapter::CapturedEntry>& e =
 					board.hdi08().capturedEntries(p);
-				std::cout << "HDI08CAP port " << p << " entries=" << e.size() << " :";
+				std::cout << "HDI08CAP port " << p << " entries=" << e.size()
+				          << " atLimit=" << (e.size() >= hdiCapLimit ? 1 : 0) << " :";
 				for(const g2::Hdi08Adapter::CapturedEntry& c : e)
 					std::cout << " " << (c.isCommand ? "c" : "w")
 					          << std::hex << c.value << std::dec;
 				std::cout << std::endl;
+
+				/* The same stream as a file, in the format G2_UPLOAD_CAPDUMP
+				 * already writes, so a note arm and an idle arm are compared
+				 * by the same reader rather than by two. The inline form above
+				 * is one line per port and is unreadable past a few hundred
+				 * entries; a note phase produces tens of thousands. */
+				if(const char* const dir = std::getenv("G2_CMD_NOTEDUMP"))
+				{
+					char path[512];
+					std::snprintf(path, sizeof(path), "%s/note.port%d.cap.txt", dir, p);
+					std::ofstream out(path);
+					for(size_t i = 0; i < e.size(); ++i)
+					{
+						char line[48];
+						std::snprintf(line, sizeof(line), "%zu %c %06x\n",
+							i, e[i].isCommand ? 'c' : 'w', unsigned(e[i].value));
+						out << line;
+					}
+					std::cout << "G2CMDNOTEDUMP port " << p << " entries=" << e.size()
+					          << " path=" << path << std::endl;
+				}
 			}
 		}
 
