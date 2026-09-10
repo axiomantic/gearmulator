@@ -60,6 +60,17 @@ namespace
 	}
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
+
+	// One DSP's observable state at a moment. The note phase and the patch
+	// upload are then measured by the SAME instrument in the SAME run, which is
+	// the whole point: a note phase measured with a different probe than the one
+	// that sees the upload compares two things that were never comparable.
+	struct DspSnap
+	{
+		uint64_t instr = 0;
+		uint64_t nz[3] = {0, 0, 0};
+		uint64_t hash[3] = {0, 0, 0};
+	};
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
 	constexpr int g_regPc  = 17;
@@ -114,6 +125,86 @@ namespace
 			r += d[(_v >> s) & 0xfu];
 		return r;
 	}
+
+	/* An exact MCU program-counter coverage recorder for one phase of a run.
+	 *
+	 * The DSP-side snapshots answer whether a note reached a DSP. They cannot
+	 * answer where in the MC68k firmware it stopped, because nothing here saw
+	 * the MCU between two instructions. `g2::McuRunner` is that point -- the
+	 * scheduler asks the installed runner for the quantum's MCU cycles, and a
+	 * runner that spends them one instruction at a time can read the PC after
+	 * each one. It is a coverage SET, not a trace: only which addresses were
+	 * reached, and how often.
+	 *
+	 * Read as a DIFFERENCE against a quanta-matched arm that posted no MIDI.
+	 * An address the note arm reaches and the idle arm does not is firmware the
+	 * note caused to run, and the deepest such address is where the note got
+	 * to. A single arm's coverage says nothing: the firmware's idle loop
+	 * reaches thousands of addresses every phase. */
+	class McuPcCoverage final : public g2::McuRunner
+	{
+	public:
+		McuPcCoverage(g2::Board& _board, const uint32_t _base, const uint32_t _size)
+			: m_board(_board), m_base(_base), m_counts(_size / 2u, 0u) {}
+
+		uint32_t runMcu(const uint32_t _want) noexcept override
+		{
+			uint32_t spent = 0;
+
+			while(spent < _want)
+			{
+				const uint32_t n = m_board.runMcu(1);
+				if(n == 0)
+					break;
+				spent += n;
+				++m_instructions;
+
+				const uint32_t pc = m_board.mcuReg(17);
+				if(pc >= m_base && pc < m_base + uint32_t(m_counts.size()) * 2u)
+				{
+					uint32_t& c = m_counts[(pc - m_base) >> 1];
+					if(c != 0xffffffffu)
+						++c;
+				}
+				else
+				{
+					++m_outside;
+				}
+			}
+
+			return spent;
+		}
+
+		uint64_t instructions() const { return m_instructions; }
+		uint64_t outside() const { return m_outside; }
+
+		uint64_t distinct() const
+		{
+			uint64_t n = 0;
+			for(const uint32_t c : m_counts)
+				if(c != 0)
+					++n;
+			return n;
+		}
+
+		bool write(const std::string& _path) const
+		{
+			std::ofstream f(_path, std::ios::binary);
+			if(!f)
+				return false;
+			for(size_t i = 0; i < m_counts.size(); ++i)
+				if(m_counts[i] != 0)
+					f << hex32(m_base + uint32_t(i) * 2u) << " " << m_counts[i] << "\n";
+			return true;
+		}
+
+	private:
+		g2::Board& m_board;
+		uint32_t m_base;
+		std::vector<uint32_t> m_counts;
+		uint64_t m_instructions = 0;
+		uint64_t m_outside = 0;
+	};
 
 	class Ram final : public g2::BusTarget
 	{
@@ -446,6 +537,11 @@ int main()
 		// silent, so a run without this cannot separate "no audio path" from
 		// "nothing was asked to sound".
 		const bool sendNote = std::getenv("G2_AUDIO_NOTE") != nullptr;
+		// The note arm's own control: run the note phase's quanta WITHOUT posting
+		// any MIDI. Without it a zero note-phase delta is unreadable, because the
+		// no-note arm runs no quanta at all -- so its zero says only that time
+		// did not pass, not that the note did nothing.
+		const bool noteIdle = std::getenv("G2_AUDIO_NOTEIDLE") != nullptr;
 		uint32_t noteQuanta = 40000u;
 		if(const char* const n = std::getenv("G2_AUDIO_NOTEQUANTA"))
 			noteQuanta = uint32_t(std::strtoul(n, nullptr, 10));
@@ -660,6 +756,38 @@ int main()
 			scheduler->runFrames(1);
 		}
 
+		// FNV-1a over the low 0x8000 words of each area, plus the instruction
+		// counter. Only equality, inequality and the non-zero counts are read.
+		const auto takeSnap = [&]() -> std::vector<DspSnap>
+		{
+			std::vector<DspSnap> out(dspCount);
+			const dsp56k::EMemArea areas[3] = {dsp56k::MemArea_X, dsp56k::MemArea_Y, dsp56k::MemArea_P};
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				out[d].instr = board.dspSet().dsp(d).getInstructionCounter();
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+				for(unsigned a = 0; a < 3; ++a)
+				{
+					uint64_t hash = 1469598103934665603ull, nz = 0;
+					for(dsp56k::TWord w = 0; w < 0x8000u; ++w)
+					{
+						const dsp56k::TWord v = memory.get(areas[a], w);
+						if(v != 0)
+							++nz;
+						hash = (hash ^ uint64_t(v)) * 1099511628211ull;
+					}
+					out[d].nz[a]   = nz;
+					out[d].hash[a] = hash;
+				}
+			}
+			return out;
+		};
+
+		// A: patch handed to the transport, firmware has not yet uploaded it.
+		const std::vector<DspSnap> snapA = takeSnap();
+
 		// ------------------------------------------------------- the long window
 		uint32_t ran = 0;
 
@@ -691,6 +819,11 @@ int main()
 		          << " frameIndex=" << scheduler->frameIndex()
 		          << " t=" << seconds() << "s" << std::endl;
 
+		// B: after the upload window. A-to-B is the KNOWN POSITIVE for this
+		// instrument -- the firmware uploads the patch during this window, so P
+		// memory must move here. If it does not, nothing below means anything.
+		const std::vector<DspSnap> snapB = takeSnap();
+
 		// Was the patch stored? Kept small: one needle from the middle of what
 		// went on the wire, so a silent run can say whether the patch was there
 		// at all.
@@ -712,6 +845,92 @@ int main()
 
 		if(withSram)
 			std::cout << "cs4: bankWrites=" << cs4.bankWrites() << " holeWrites=" << cs4.holeWrites() << std::endl;
+
+		// Quanta actually consumed by the note phase. The note arm runs MORE of
+		// them than the idle arm does: every posted byte is followed by a bounded
+		// wait for the firmware to drain it, and those waits run the machine. A
+		// raw instruction-count difference between the two arms is therefore not
+		// the note's cost -- it is the note's cost plus that extra time, and at
+		// twelve bytes the extra time alone is the right size to explain it.
+		uint64_t notePhaseQuanta = 0;
+
+		/* The four per-slot keyboard-assignment records the firmware's note-on
+		 * router walks, read out of SDRAM before the note phase.
+		 *
+		 * `FUN_30025758` at 0x30025758 loops slots 0..3 and, for a slot whose
+		 * channel matches, calls the acceptor at 0x300513fe with
+		 * `*(uint32*)(*(uint32*)(0x302a7c74 + slot*4) + 0x47c)`. That acceptor
+		 * refuses the note unless the bytes at +0x101 and +0x102 of the record
+		 * are both non-zero, and -- when +0x103 is non-zero -- unless the note
+		 * lies in [+0x104, +0x105]. Reading those bytes turns a disassembly
+		 * into a measurement of the state this instrument actually drives the
+		 * machine into.
+		 *
+		 * G2_AUDIO_FORCEKBD writes 1 into +0x102 of every slot's record. It is
+		 * a PERTURBING probe: it proves the gate is what stops the note, and it
+		 * says nothing about whether the firmware would ever set that byte by
+		 * itself. */
+		{
+			const auto rd32 = [&](const uint32_t _addr) -> uint32_t
+			{
+				const std::vector<uint8_t>& m = ram.bytes();
+				const uint32_t o = _addr - g2::g_sdramBase;
+				if(size_t(o) + 4 > m.size())
+					return 0;
+				return uint32_t(m[o]) << 24 | uint32_t(m[o+1]) << 16 | uint32_t(m[o+2]) << 8 | m[o+3];
+			};
+			const auto rd8 = [&](const uint32_t _addr) -> unsigned
+			{
+				const std::vector<uint8_t>& m = ram.bytes();
+				const uint32_t o = _addr - g2::g_sdramBase;
+				return size_t(o) < m.size() ? m[o] : 0u;
+			};
+
+			const bool forceKbd = std::getenv("G2_AUDIO_FORCEKBD") != nullptr;
+
+			for(unsigned slot = 0; slot < 4; ++slot)
+			{
+				const uint32_t slotPtr = rd32(0x302a7c74u + slot * 4u);
+				const uint32_t rec = slotPtr != 0 ? rd32(slotPtr + 0x47cu) : 0u;
+
+				std::cout << "kbd slot " << slot
+				          << " slotPtr=" << hex32(slotPtr)
+				          << " record=" << hex32(rec);
+
+				if(rec >= g2::g_sdramBase && rec < g2::g_sdramBase + g_sdramSize)
+				{
+					std::cout << " +101=" << rd8(rec + 0x101)
+					          << " +102=" << rd8(rec + 0x102)
+					          << " +103=" << rd8(rec + 0x103)
+					          << " +104=" << rd8(rec + 0x104)
+					          << " +105=" << rd8(rec + 0x105)
+					          << " +106=" << rd8(rec + 0x106)
+					          << " +107=" << rd8(rec + 0x107);
+
+					if(forceKbd)
+					{
+						mcf5407_bus_status st = MCF5407_BUS_OK;
+						ram.write(rec + 0x102u - g2::g_sdramBase, 8, 1u, st);
+						std::cout << " FORCED+102=" << rd8(rec + 0x102);
+					}
+				}
+
+				std::cout << std::endl;
+			}
+
+			std::cout << "kbd channelByte=" << rd8(0x30115cc8u) << std::endl;
+		}
+
+		// The MCU coverage recorder, armed for the note phase ONLY. Arming it
+		// for the boot and upload windows would multiply their cost by the
+		// per-instruction dispatch and measure a phase no arm varies.
+		const char* const mcuTracePath = std::getenv("G2_AUDIO_MCUTRACE");
+		std::unique_ptr<McuPcCoverage> mcuTrace;
+		if(mcuTracePath != nullptr)
+		{
+			mcuTrace = std::make_unique<McuPcCoverage>(board, g2::g_sdramBase, g_sdramSize);
+			scheduler->setMcuRunner(mcuTrace.get());
+		}
 
 		// ------------------------------------------------------------- the note
 		//
@@ -739,12 +958,41 @@ int main()
 			// The message, and then a second one on a different channel: an
 			// arm that reaches only channel 1 and an arm that reaches none are
 			// different findings.
-			const uint8_t message[] = {
+			std::vector<uint8_t> message = {
 				0x90u, 0x3Cu, 0x64u,   // note on,  channel 1, C4, velocity 100
 				0x91u, 0x40u, 0x64u,   // note on,  channel 2, E4
 				0x92u, 0x43u, 0x64u,   // note on,  channel 3, G4
 				0x93u, 0x3Cu, 0x64u    // note on,  channel 4, C4
 			};
+
+			/* G2_AUDIO_MIDIBYTES replaces the message with an arbitrary hex
+			 * string. The default above cannot separate "the firmware ran code
+			 * because a MIDI BYTE arrived" from "because a NOTE-ON arrived",
+			 * and those are different findings: the first is a UART wake-up,
+			 * the second is note handling. A byte stream that is not a note-on
+			 * is the control that separates them. */
+			if(const char* const b = std::getenv("G2_AUDIO_MIDIBYTES"))
+			{
+				std::vector<uint8_t> custom;
+				for(const char* p = b; *p != '\0'; )
+				{
+					if(*p == ' ' || *p == ',') { ++p; continue; }
+					char* end = nullptr;
+					char pair[3] = {p[0], p[1], '\0'};
+					const unsigned long v = std::strtoul(pair, &end, 16);
+					if(end != pair + 2)
+						break;
+					custom.push_back(uint8_t(v));
+					p += 2;
+				}
+				if(!custom.empty())
+					message = custom;
+			}
+
+			std::cout << "midi: bytes =";
+			for(const uint8_t b : message)
+				std::cout << " " << std::hex << unsigned(b) << std::dec;
+			std::cout << " (" << message.size() << ")" << std::endl;
 
 			unsigned posted = 0, accepted = 0, consumed = 0, dropped = 0;
 
@@ -767,6 +1015,7 @@ int main()
 				for(uint32_t i = 0; i < 20000u && !taken; ++i)
 				{
 					scheduler->runFrames(1);
+				++notePhaseQuanta;
 					if((uart.usr() & 0x01u) == 0u)
 						taken = true;
 					if(board.mcuHalted())
@@ -803,6 +1052,7 @@ int main()
 			for(uint32_t i = 0; i < noteQuanta; ++i)
 			{
 				scheduler->runFrames(1);
+				++notePhaseQuanta;
 				if((i & 0x3ffu) == 0 && expired())
 					break;
 				if(board.mcuHalted())
@@ -811,6 +1061,76 @@ int main()
 
 			std::cout << "note: ran " << noteQuanta << " further quanta, pc="
 			          << hex32(board.mcuReg(g_regPc)) << " t=" << seconds() << "s" << std::endl;
+		}
+		else if(noteIdle)
+		{
+			for(uint32_t i = 0; i < noteQuanta; ++i)
+			{
+				scheduler->runFrames(1);
+				++notePhaseQuanta;
+				if((i & 0x3ffu) == 0 && expired())
+					break;
+				if(board.mcuHalted())
+					break;
+			}
+
+			std::cout << "noteIdle: ran " << noteQuanta
+			          << " quanta with NO midi posted, pc="
+			          << hex32(board.mcuReg(g_regPc)) << " t=" << seconds() << "s" << std::endl;
+		}
+
+		if(mcuTrace)
+		{
+			scheduler->setMcuRunner(nullptr);
+			const bool ok = mcuTrace->write(mcuTracePath);
+			std::cout << "MCUTRACE path=" << mcuTracePath
+			          << " written=" << (ok ? 1 : 0)
+			          << " mcuInstructions=" << mcuTrace->instructions()
+			          << " distinctAddresses=" << mcuTrace->distinct()
+			          << " outsideSdram=" << mcuTrace->outside()
+			          << " notePhaseQuanta=" << notePhaseQuanta
+			          << std::endl;
+		}
+
+		// C: after the note phase. B-to-C is the question this run exists to
+		// answer, and it is asked with the same instrument that produced the
+		// A-to-B positive above.
+		const std::vector<DspSnap> snapC = takeSnap();
+
+		{
+			const char* const names[3] = {"X", "Y", "P"};
+
+			std::cout << "DSPSNAP mode=" << mode
+			          << " note=" << (sendNote ? 1 : 0)
+			          << " noteIdle=" << (noteIdle ? 1 : 0)
+			          << " noteQuantaRequested=" << ((sendNote || noteIdle) ? noteQuanta : 0u)
+			          << " notePhaseQuantaActual=" << notePhaseQuanta
+			          << std::endl;
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				std::cout << "  dsp " << d
+				          << " uploadInstr=" << (snapB[d].instr - snapA[d].instr)
+				          << " noteInstr=" << (snapC[d].instr - snapB[d].instr)
+				          << " uploadChanged=";
+
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (snapA[d].hash[a] != snapB[d].hash[a] ? "1" : "0");
+
+				std::cout << " noteChanged=";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (snapB[d].hash[a] != snapC[d].hash[a] ? "1" : "0");
+
+				std::cout << " nzUpload=";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (int64_t(snapB[d].nz[a]) - int64_t(snapA[d].nz[a])) << ",";
+
+				std::cout << " nzNote=";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (int64_t(snapC[d].nz[a]) - int64_t(snapB[d].nz[a])) << ",";
+
+				std::cout << std::endl;
+			}
 		}
 
 		// ------------------------------------------------- the play transition
