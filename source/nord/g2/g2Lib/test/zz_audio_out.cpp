@@ -27,6 +27,7 @@
 #include "../scheduler.h"
 #include "../status.h"
 #include "../transportHub.h"
+#include "../crc16.h"
 #include "../uart0.h"
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
@@ -47,6 +48,7 @@
 #include <map>
 #include <set>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -717,13 +719,29 @@ int main()
 		// -------------------------------------------------------- the delivery
 		std::vector<uint8_t> delivered;
 
+		// ONE client, sized for the largest thing any arm originates. Two
+		// attached clients would put a second endpoint in a hub that holds
+		// three, and a delivery that failed for that reason would look like
+		// a delivery the firmware ignored.
+		//
+		/* THE CLIENT OUTLIVES THE DELIVERY BLOCK, and that is load-bearing.
+		 * Board::pumpTransport takes at most ONE frame out of the hub per
+		 * quantum and holds it until the firmware has drained every packet of
+		 * it, so a second originated frame necessarily waits in the hub's
+		 * queue for many quanta. Destroying the client at the end of the
+		 * delivery block detached its endpoint and took that queued frame with
+		 * it -- measured: with the client block-scoped, a second message
+		 * reported sent=1 and the long window's MCU coverage was BYTE-IDENTICAL
+		 * to the no-message arm, 46,092 addresses either way, with the message
+		 * worker at 0x3004C10C present in both. The frame never reached the
+		 * device at all, and every downstream zero was about that and not about
+		 * the message. */
+		std::vector<uint8_t> scratch(g2::g_maxPatchLoadMessageBytes + 4);
+		std::optional<g2::InternalClient> clientStorage;
+		clientStorage.emplace(board.transport(), scratch.size(), 4);
+		g2::InternalClient& client = *clientStorage;
+
 		{
-			// ONE client, sized for the largest thing any arm originates. Two
-			// attached clients would put a second endpoint in a hub that holds
-			// three, and a delivery that failed for that reason would look like
-			// a delivery the firmware ignored.
-			std::vector<uint8_t> scratch(g2::g_maxPatchLoadMessageBytes + 4);
-			g2::InternalClient client(board.transport(), scratch.size(), 4);
 
 			if(mode == "objects")
 			{
@@ -750,6 +768,59 @@ int main()
 			else
 			{
 				std::cout << "no delivery (the negative control arm)" << std::endl;
+			}
+
+			/* G2_AUDIO_MSGHEX originates ONE further message whose BODY is
+			 * given verbatim as hex. The instrument writes the frame around it
+			 * -- the 2-byte big-endian total that includes the prefix, and the
+			 * 2-byte big-endian CRC-16/CCITT-XMODEM over the body -- so the
+			 * caller states only the bytes the firmware's message worker
+			 * reads. Nothing else about the body is interpreted here: a wrong
+			 * body must be REFUSED by the firmware, not corrected by the
+			 * instrument. Several messages may be given, separated by '/', and
+			 * they are sent in the order written. */
+			if(const char* const h = std::getenv("G2_AUDIO_MSGHEX"))
+			{
+				std::vector<std::vector<uint8_t>> bodies(1);
+				for(const char* p = h; *p != '\0'; )
+				{
+					if(*p == ' ' || *p == ',') { ++p; continue; }
+					if(*p == '/') { bodies.emplace_back(); ++p; continue; }
+					char pair[3] = {p[0], p[1], '\0'};
+					char* end = nullptr;
+					const unsigned long v = std::strtoul(pair, &end, 16);
+					if(end != pair + 2)
+					{
+						std::cout << "MSGHEX-BAD-HEX at offset " << (p - h) << std::endl;
+						bodies.clear();
+						break;
+					}
+					bodies.back().push_back(uint8_t(v));
+					p += 2;
+				}
+
+				for(const std::vector<uint8_t>& body : bodies)
+				{
+					if(body.empty())
+						continue;
+
+					const std::size_t total = body.size() + 4;
+					std::vector<uint8_t> frame(total);
+					frame[0] = uint8_t(total >> 8);
+					frame[1] = uint8_t(total & 0xFFu);
+					std::memcpy(frame.data() + 2, body.data(), body.size());
+					g2::crc16Store(frame.data() + 2 + body.size(),
+						g2::crc16(frame.data() + 2, body.size()));
+
+					const bool ok = client.send(g2::ProtocolFrame{ frame.data(), frame.size() });
+
+					std::cout << "MSGHEX bodyBytes=" << body.size()
+					          << " frameBytes=" << frame.size()
+					          << " sent=" << (ok ? 1 : 0) << " body=";
+					for(const uint8_t b : body)
+						std::cout << " " << std::hex << unsigned(b) << std::dec;
+					std::cout << std::endl;
+				}
 			}
 
 			board.pumpTransport();
@@ -789,6 +860,21 @@ int main()
 		const std::vector<DspSnap> snapA = takeSnap();
 
 		// ------------------------------------------------------- the long window
+		//
+		/* G2_AUDIO_MCUTRACEWIN records MCU coverage across the LONG WINDOW, not
+		 * the note phase. A message originated before the window and never
+		 * executed by the firmware, and a message executed and refused, are the
+		 * same silence at every other observation point this instrument has.
+		 * The trace separates them: the message worker's own addresses either
+		 * appear in the coverage set or they do not. */
+		const char* const winTracePath = std::getenv("G2_AUDIO_MCUTRACEWIN");
+		std::unique_ptr<McuPcCoverage> winTrace;
+		if(winTracePath != nullptr)
+		{
+			winTrace = std::make_unique<McuPcCoverage>(board, g2::g_sdramBase, g_sdramSize);
+			scheduler->setMcuRunner(winTrace.get());
+		}
+
 		uint32_t ran = 0;
 
 		for(uint32_t i = 0; i < windowQuanta; ++i)
@@ -818,6 +904,18 @@ int main()
 		          << " chainAttached=" << (scheduler->chainAttached() ? 1 : 0)
 		          << " frameIndex=" << scheduler->frameIndex()
 		          << " t=" << seconds() << "s" << std::endl;
+
+		if(winTrace)
+		{
+			scheduler->setMcuRunner(nullptr);
+			const bool ok = winTrace->write(winTracePath);
+			std::cout << "MCUTRACEWIN path=" << winTracePath
+			          << " written=" << (ok ? 1 : 0)
+			          << " mcuInstructions=" << winTrace->instructions()
+			          << " distinctAddresses=" << winTrace->distinct()
+			          << " outsideSdram=" << winTrace->outside()
+			          << std::endl;
+		}
 
 		// B: after the upload window. A-to-B is the KNOWN POSITIVE for this
 		// instrument -- the firmware uploads the patch during this window, so P
@@ -919,6 +1017,27 @@ int main()
 			}
 
 			std::cout << "kbd channelByte=" << rd8(0x30115cc8u) << std::endl;
+
+			/* The performance-settings object the message layer parses INTO,
+			 * read one level above the keyboard record. `FUN_3002473e` reads
+			 * its per-slot parameter bytes at settings + 43 + slot*25, applies
+			 * index 0 to slotPtr+0x489 and index 1 to the keyboard record's
+			 * +0x102. Printing them separates "the message never parsed" from
+			 * "it parsed and the apply did not run". */
+			{
+				const uint32_t settings = rd32(0x302a7c70u);
+				std::cout << "perfSettings=" << hex32(settings);
+				if(settings >= g2::g_sdramBase && settings < g2::g_sdramBase + g_sdramSize)
+				{
+					for(unsigned slot = 0; slot < 4; ++slot)
+					{
+						const uint32_t p = settings + 43u + slot * 25u;
+						std::cout << " s" << slot << "[" << rd8(p) << "," << rd8(p + 1)
+						          << "," << rd8(p + 2) << "]";
+					}
+				}
+				std::cout << std::endl;
+			}
 		}
 
 		// The MCU coverage recorder, armed for the note phase ONLY. Arming it
