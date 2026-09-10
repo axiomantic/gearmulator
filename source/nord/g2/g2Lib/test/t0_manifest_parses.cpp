@@ -1,26 +1,18 @@
-// Tier T0: this test reads two committed text files of hashes and integers. It
-// needs no firmware artifact and no NMG2_ARTIFACTS.
+// t0_manifest_parses.cpp -- golden.timebase, and the header it mirrors.
 //
-// The two manifests:
+// golden.timebase records the values the golden set was recorded under. Every
+// value in it names a macro in g2/timebase.h, and every one is compared against
+// that macro here -- a manifest that only parses would drift from the header
+// silently.
 //
-//   artifacts.sha256   the SHA-256 of every required firmware file, and no
-//                      payload. The gate checks the hashes before it runs T1 or
-//                      T2. A hash mismatch is a hard failure with the file name,
-//                      never a skip.
+// It sits beside the header for that reason. The 2026-09-07 tooling extraction
+// moved it to the default branch with artifacts.sha256, which separated it from
+// the only thing that can validate it: the test stayed here and the file went
+// there, so this test failed on all nine band branches until 2026-09-10.
+// artifacts.sha256 is genuinely fork tooling and stayed on the default branch,
+// with its half of this test, as t0_artifacts_manifest.
 //
-//   golden.timebase    the values the golden set was recorded under. Integers
-//                      only, so the file is public. A change to any of the
-//                      in-boundary values invalidates the whole golden set.
-//
-// Every value the committed golden.timebase records is compared against the
-// macro that defines that value, because a manifest whose shape is checked and
-// whose values are not carries the authority of a checked artifact while
-// describing a state that has moved.
-//
-// Every negative case asserts a named failure that identifies the offending
-// symbol, and the short and long manifests are built by removing and adding a
-// named symbol rather than by padding a line count: a parse that merely counted
-// lines would accept five wrong lines.
+// Every timebase assertion below is carried over unchanged.
 
 #include <algorithm>
 #include <cctype>
@@ -188,108 +180,6 @@ namespace
 	}
 
 	// ------------------------------------------------------------------
-	// artifacts.sha256
-
-	const std::vector<std::string> g_requiredArtifactNames =
-	{
-		"BOOT_128_Loader.bin",
-		"NMG2_128_OS.bin",
-		"CODE_30000400.bin",
-		"SRAM_20000800.bin"
-	};
-
-	struct ArtifactEntry
-	{
-		std::string hash;
-		std::string name;
-	};
-
-	bool isLowercaseSha256(const std::string& _hash)
-	{
-		if(_hash.size() != 64)
-			return false;
-
-		return std::all_of(_hash.begin(), _hash.end(), [](const unsigned char _c)
-		{
-			return (_c >= '0' && _c <= '9') || (_c >= 'a' && _c <= 'f');
-		});
-	}
-
-	std::vector<ArtifactEntry> parseArtifacts(const std::string& _text, std::vector<std::string>& _failures)
-	{
-		std::vector<ArtifactEntry> entries;
-
-		std::istringstream stream(_text);
-		std::string line;
-		size_t lineNumber = 0;
-
-		while(std::getline(stream, line))
-		{
-			++lineNumber;
-
-			if(!line.empty() && line.back() == '\r')
-				line.pop_back();
-
-			if(line.empty())
-				continue;
-
-			std::istringstream lineStream(line);
-			std::string hash;
-			std::string name;
-			std::string surplus;
-
-			if(!(lineStream >> hash >> name))
-			{
-				_failures.push_back("MANIFEST-ARTIFACT-MALFORMED-LINE: line " + std::to_string(lineNumber) + ": " + line);
-				continue;
-			}
-
-			if(lineStream >> surplus)
-			{
-				_failures.push_back("MANIFEST-ARTIFACT-SURPLUS-FIELD: " + name + ": " + surplus);
-				continue;
-			}
-
-			if(!isLowercaseSha256(hash))
-			{
-				_failures.push_back("MANIFEST-ARTIFACT-NOT-A-SHA256: " + name + ": " + hash);
-				continue;
-			}
-
-			const bool known = std::find(g_requiredArtifactNames.begin(), g_requiredArtifactNames.end(), name) != g_requiredArtifactNames.end();
-
-			if(!known)
-			{
-				_failures.push_back("MANIFEST-ARTIFACT-UNKNOWN-FILE: " + name);
-				continue;
-			}
-
-			const bool duplicate = std::any_of(entries.begin(), entries.end(), [&](const ArtifactEntry& _e) { return _e.name == name; });
-
-			if(duplicate)
-			{
-				_failures.push_back("MANIFEST-ARTIFACT-DUPLICATE-FILE: " + name);
-				continue;
-			}
-
-			ArtifactEntry entry;
-			entry.hash = hash;
-			entry.name = name;
-			entries.push_back(entry);
-		}
-
-		for(const std::string& required : g_requiredArtifactNames)
-		{
-			const bool present = std::any_of(entries.begin(), entries.end(), [&](const ArtifactEntry& _e) { return _e.name == required; });
-
-			if(!present)
-				_failures.push_back("MANIFEST-ARTIFACT-MISSING-FILE: " + required);
-		}
-
-		return entries;
-	}
-
-	// ------------------------------------------------------------------
 
 	bool readWholeFile(const std::string& _path, std::string& _text)
 	{
@@ -384,50 +274,6 @@ int main()
 					[&](const TimebaseConstant& _c) { return _c.symbol == required; });
 				check(compared, "golden.timebase: " + required + " is compared against g2/timebase.h and not only parsed");
 			}
-		}
-
-		// ================= artifacts.sha256, the committed file
-
-		std::string artifactsText;
-		const std::string artifactsPath = g_repositoryRoot + "/artifacts.sha256";
-
-		if(!readWholeFile(artifactsPath, artifactsText))
-		{
-			std::cout << "FAIL artifacts.sha256 is not committed at " << artifactsPath << std::endl;
-			++g_failures;
-		}
-		else
-		{
-			std::vector<std::string> failures;
-			const std::vector<ArtifactEntry> entries = parseArtifacts(artifactsText, failures);
-
-			check(failures.empty(), "artifacts.sha256: the committed manifest parses with no failure" + joined(failures));
-			check(entries.size() == 4, "artifacts.sha256: the committed manifest holds exactly four hashes");
-
-			// And no payload. A hard byte ceiling well under the 65,536-byte
-			// fixture ceiling makes "no payload" a measured property rather
-			// than an intention.
-			check(artifactsText.size() < 512, "artifacts.sha256: the file is under 512 bytes, so it carries no payload");
-
-			const bool hexAndNamesOnly = std::all_of(artifactsText.begin(), artifactsText.end(), [](const unsigned char _c)
-			{
-				return std::isalnum(_c) != 0 || _c == '_' || _c == '.' || _c == ' ' || _c == '\n';
-			});
-			check(hexAndNamesOnly, "artifacts.sha256: every byte is alphanumeric, an underscore, a dot, a space or a newline");
-
-			// Distinct hashes. A manifest whose rows were copied from one
-			// another would satisfy every shape assertion above.
-			std::vector<std::string> hashes;
-			for(const ArtifactEntry& entry : entries)
-				hashes.push_back(entry.hash);
-			std::sort(hashes.begin(), hashes.end());
-			check(std::unique(hashes.begin(), hashes.end()) == hashes.end(), "artifacts.sha256: the four hashes are distinct");
-
-			// The SHA-256 of the empty input. A placeholder hash is a forbidden
-			// failure mode, and it has one well-known spelling.
-			const std::string emptyInputHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-			const bool anyEmpty = std::any_of(entries.begin(), entries.end(), [&](const ArtifactEntry& _e) { return _e.hash == emptyInputHash; });
-			check(!anyEmpty, "artifacts.sha256: no row carries the hash of an empty file");
 		}
 
 		// ================= the negative cases
@@ -530,39 +376,6 @@ int main()
 				"non-integer value: the failure NAMES the symbol and the value");
 		}
 
-		// ---- artifacts.sha256 with three hashes, and with a bad hash.
-		{
-			const std::string threeHashes =
-				"d1b8e30804edbccae853b647e06ac20ae902fd6da05ade7b5d2090ce17c24d88  BOOT_128_Loader.bin\n"
-				"b3a76b7db724d88e3f603e1f500cf873fd525d8015e35d4f985866a842751c3a  NMG2_128_OS.bin\n"
-				"2fa65ac9a1ca2d96c5060baedb1bd220efb4140e606738e8e2686a3b93c35788  CODE_30000400.bin\n";
-
-			std::vector<std::string> failures;
-			parseArtifacts(threeHashes, failures);
-
-			std::cout << "     three-hash manifest failures:" << joined(failures) << std::endl;
-
-			check(failures.size() == 1, "three hashes: exactly one failure");
-			check(!failures.empty() && failures.front() == "MANIFEST-ARTIFACT-MISSING-FILE: SRAM_20000800.bin",
-				"three hashes: the failure NAMES the missing file");
-		}
-
-		{
-			const std::string badHash =
-				"d1b8e30804edbccae853b647e06ac20ae902fd6da05ade7b5d2090ce17c24d88  BOOT_128_Loader.bin\n"
-				"b3a76b7db724d88e3f603e1f500cf873fd525d8015e35d4f985866a842751c3a  NMG2_128_OS.bin\n"
-				"2fa65ac9a1ca2d96c5060baedb1bd220efb4140e606738e8e2686a3b93c35788  CODE_30000400.bin\n"
-				"TBD                                                               SRAM_20000800.bin\n";
-
-			std::vector<std::string> failures;
-			parseArtifacts(badHash, failures);
-
-			std::cout << "     placeholder-hash manifest failures:" << joined(failures) << std::endl;
-
-			check(failures.size() == 2, "placeholder hash: two failures, the bad hash and the file it left missing");
-			check(!failures.empty() && failures.front() == "MANIFEST-ARTIFACT-NOT-A-SHA256: SRAM_20000800.bin: TBD",
-				"placeholder hash: the failure NAMES the file and the value that is not a hash");
-		}
 	}
 	catch(const std::exception& _e)
 	{
