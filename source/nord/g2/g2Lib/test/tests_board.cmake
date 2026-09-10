@@ -4,24 +4,24 @@
 # source/nord/g2/g2Lib/test/. The NAME is the exact string passed to -r. Edit no
 # other CMake file in this tree.
 
-# ----------------- the mcf5307::mcf5307 link
+# ----------------- the mcf5407::mcf5407 link
 #
-# The test links g2Lib and nothing else. It never names mcf5307::mcf5307 on its
+# The test links g2Lib and nothing else. It never names mcf5407::mcf5407 on its
 # own link line, so the header and the symbol both have to arrive through
 # g2Lib's own PUBLIC link. Naming the core here as well would let this test pass
 # with that line deleted.
 #
 # The target is declared unconditionally and is not guarded by
-# if(G2_LINK_MCF5307). The guard would make the option-OFF build succeed by
+# if(G2_LINK_MCF5407). The guard would make the option-OFF build succeed by
 # building nothing; the negative case asserts that the option-OFF build fails at
-# the compile step on the missing mcf5307.h.
+# the compile step on the missing mcf5407.h.
 
-add_executable(t0_mcf5307_link t0_mcf5307_link.cpp)
-target_link_libraries(t0_mcf5307_link PRIVATE g2Lib)
-set_property(TARGET t0_mcf5307_link PROPERTY FOLDER "G2/test")
+add_executable(t0_mcf5407_link t0_mcf5407_link.cpp)
+target_link_libraries(t0_mcf5407_link PRIVATE g2Lib)
+set_property(TARGET t0_mcf5407_link PROPERTY FOLDER "G2/test")
 
-add_test(NAME t0_mcf5307_link COMMAND t0_mcf5307_link)
-set_tests_properties(t0_mcf5307_link PROPERTIES LABELS "UnitTest")
+add_test(NAME t0_mcf5407_link COMMAND t0_mcf5407_link)
+set_tests_properties(t0_mcf5407_link PROPERTIES LABELS "UnitTest")
 
 # ----------------- the memory decode and the two bus callbacks
 
@@ -75,12 +75,30 @@ set_tests_properties(t0_anomaly_log PROPERTIES LABELS "UnitTest")
 # this block is what puts it there. A cache variable names a sibling checkout
 # when a local engineer has one, and FetchContent fetches a pinned commit when
 # nobody has, mirroring the arrangement the root CMakeLists.txt uses for
-# mcf5307.
+# mcf5407.
 
 set(G2_NMG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools to use instead of fetching one")
 set(G2_NMG2_TOOLS_GIT_TAG "oracle-wire-compose-2026-09-01" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
 
 if(G2_NMG2_TOOLS_SOURCE_DIR)
+	# The override substitutes whatever branch the checkout happens to be on, and
+	# a branch that carries no Nord tooling has no `container` module. The oracle
+	# then dies inside a Python subprocess inside a test, and a
+	# ModuleNotFoundError arriving from there reads as an upstream deletion
+	# rather than as a local misconfiguration. It is diagnosed here, where the
+	# override is applied and the cause is still visible, and it is FATAL rather
+	# than a warning because a warning in a configure log is the signal this
+	# whole failure class already got past.
+	if(NOT EXISTS "${G2_NMG2_TOOLS_SOURCE_DIR}/nmg2_tools/container.py")
+		message(FATAL_ERROR
+			"G2_NMG2_TOOLS_SOURCE_DIR points at ${G2_NMG2_TOOLS_SOURCE_DIR}, which "
+			"has no nmg2_tools/container.py. That checkout carries no Nord tooling "
+			"and is most likely on a main-descended branch. Anything built from it "
+			"is a statement about that tree and not about the pin.\n"
+			"Unset G2_NMG2_TOOLS_SOURCE_DIR to build against the pin "
+			"(${G2_NMG2_TOOLS_GIT_TAG}), or check the sibling out onto a branch "
+			"that carries the tooling.")
+	endif()
 	set(G2_ORACLE_TOOLS_DIR "${G2_NMG2_TOOLS_SOURCE_DIR}")
 else()
 	include(FetchContent)
@@ -218,7 +236,7 @@ set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 1
 #
 # The test links g2Lib and names no other library. The funnel is a g2Lib source,
 # and the just-in-time compiler it must notify arrives through g2Lib's own
-# PUBLIC link of dsp56kEmu. Nothing here references mcf5307::mcf5307, so no
+# PUBLIC link of dsp56kEmu. Nothing here references mcf5407::mcf5407, so no
 # if(TARGET) guard is needed: this block is inert in the option-OFF configure
 # that t0_clock_guard runs as its control.
 #
@@ -246,7 +264,7 @@ set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
 # cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever include site
 # sets it first wins and the second set is a no-op with the same value.
 #
-# It links g2Lib and nothing else. Naming mcf5307::mcf5307 here would let the
+# It links g2Lib and nothing else. Naming mcf5407::mcf5407 here would let the
 # test pass with g2Lib's own link line deleted.
 
 add_executable(t1_sprintf_isolated t1_sprintf_isolated.cpp)

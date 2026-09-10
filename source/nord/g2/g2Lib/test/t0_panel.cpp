@@ -10,7 +10,7 @@
 #include "memoryMap.h"
 #include "panel.h"
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstdint>
 #include <iostream>
@@ -76,15 +76,15 @@ namespace
 
 		~Board() { delete m_map; }
 
-		uint32_t read(const uint32_t _address, const int _size, mcf5307_bus_status& _status)
+		uint32_t read(const uint32_t _address, const int _size, mcf5407_bus_status& _status)
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return g2::memoryMapRead(m_map, _address, _size, &_status);
 		}
 
-		void write(const uint32_t _address, const int _size, const uint32_t _value, mcf5307_bus_status& _status)
+		void write(const uint32_t _address, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			g2::memoryMapWrite(m_map, _address, _size, _value, &_status);
 		}
 
@@ -108,11 +108,11 @@ int main()
 	// ERR at 0x3001B86C. This machine is 0b11.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		const uint32_t latch = board.read(0x15000000u, 8, status);
 
-		checkEqual(status, MCF5307_BUS_OK, "the CS5 latch answers a read");
+		checkEqual(status, MCF5407_BUS_OK, "the CS5 latch answers a read");
 		checkEqual((latch >> 4) & 0x3u, uint32_t(0x3u),
 			"the panel latch at 0x15000000 returns bits 5:4 = 0b11, which is model code 1, the G2X");
 
@@ -135,10 +135,10 @@ int main()
 	// the identifier would present a different machine one instruction later.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		board.write(0x15000000u, 8, 0x00u, status);
-		checkEqual(status, MCF5307_BUS_OK, "a write to the identifier latch completes");
+		checkEqual(status, MCF5407_BUS_OK, "a write to the identifier latch completes");
 		checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, uint32_t(0x3u),
 			"the identifier still reads 0b11 after a write of zero");
 
@@ -155,13 +155,13 @@ int main()
 	// asserted.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		checkEqual(board.read(0x15000001u, 8, status), uint32_t(0),
 			"an output latch reads zero before anything is written to it");
 
 		board.write(0x15000001u, 8, 0xa5u, status);
-		checkEqual(status, MCF5307_BUS_OK, "a write to an output latch completes");
+		checkEqual(status, MCF5407_BUS_OK, "a write to an output latch completes");
 		checkEqual(board.read(0x15000001u, 8, status), uint32_t(0xa5u),
 			"an output latch returns the last value written to it");
 
@@ -197,13 +197,13 @@ int main()
 	// image running and this is a T0 check.
 	{
 		Board board;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0),
 			"the display buffer reads zero before anything is written to it");
 
 		board.write(g_displayBase, 32, 0x4e4d4732u, status);
-		checkEqual(status, MCF5307_BUS_OK, "a 32-bit write to the display buffer completes");
+		checkEqual(status, MCF5407_BUS_OK, "a 32-bit write to the display buffer completes");
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0x4e4d4732u),
 			"the display buffer returns the 32-bit value this test wrote");
 
@@ -246,9 +246,9 @@ int main()
 		{
 			for(const int width : widths)
 			{
-				mcf5307_bus_status status = MCF5307_BUS_OK;
+				mcf5407_bus_status status = MCF5407_BUS_OK;
 				const uint32_t value = board.read(g_displayBase + offset, width, status);
-				if(status != MCF5307_BUS_OK)
+				if(status != MCF5407_BUS_OK)
 					everyPollCompleted = false;
 				if(value != 0)
 					everyPollIsQuiescent = false;
@@ -263,9 +263,9 @@ int main()
 		bool everyLatchPollCompleted = true;
 		for(uint32_t offset = 0; offset < g_latchWindowSize; ++offset)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			board.read(g2::g_cs5Base + offset, 8, status);
-			if(status != MCF5307_BUS_OK)
+			if(status != MCF5407_BUS_OK)
 				everyLatchPollCompleted = false;
 		}
 
