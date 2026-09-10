@@ -58,6 +58,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+
+#if defined(_WIN32)
+#	define environ _environ
+#endif
+extern char** environ;
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -901,6 +906,27 @@ int main()
 			          << " NMG2_ARTIFACTS='"
 			          << (std::getenv("NMG2_ARTIFACTS") ? std::getenv("NMG2_ARTIFACTS") : "-")
 			          << "'" << std::endl;
+
+			// Everything actually exported, taken from the environment rather
+			// than from the list below.
+			//
+			// The list is hand-maintained and went stale within hours of being
+			// written -- three switches were added and not listed, which is the
+			// exact defect the list exists to prevent, reappearing inside the
+			// fix. Enumerating the environment cannot go stale, and it is also
+			// what catches a TYPO: a mistyped G2_AUDIO_* appears here as a name
+			// the list below does not report, which is visible where a silent
+			// default is not.
+			{
+				std::cout << "EXPORTED:";
+				for(char** e = environ; e && *e; ++e)
+				{
+					const std::string entry(*e);
+					if(entry.rfind("G2_AUDIO_", 0) == 0 || entry.rfind("NMG2_", 0) == 0 || entry.rfind("G2_LOG_", 0) == 0)
+						std::cout << ' ' << entry;
+				}
+				std::cout << std::endl;
+			}
 
 			std::cout << "SWITCHES:";
 			for(const char* const name : g_switches)
