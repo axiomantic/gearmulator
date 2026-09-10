@@ -164,6 +164,23 @@ namespace
 	constexpr uint32_t g_bootQuantumBound   = 500000u;
 	constexpr uint32_t g_bannerSettleQuanta = 20000u;
 
+	// The firmware's event loop. Reaching it is what this file means by booted.
+	//
+	// The banner and its settle count are not that. They say a character other
+	// than the display clear reached the watched cells and that the machine kept
+	// running afterwards, which the machine does while it is still initialising:
+	// it leaves a long initialisation wait later still, and the event loop does
+	// not run until later than that. A predicate keyed on the banner is true on a
+	// machine that cannot yet consume anything, and every measurement taken
+	// behind it reads not-yet as never.
+	//
+	// The event loop is the condition worth keying on because it is what every
+	// consumer here depends on. The address is the one the findings corpus names,
+	// and the reading is a 16-bit read at it, which is the width the core fetches
+	// an instruction word at. Both quanta are recorded, so a run says how far
+	// apart they are rather than only which one it used.
+	constexpr uint32_t g_eventLoopEntry = 0x30004674u;
+
 	// 4096 quanta is about 42.7 ms of 96 kHz audio, which is long enough that a
 	// per-quantum defect appearing once in a thousand frames has to show.
 	constexpr unsigned g_goldenQuanta = 4096u;
@@ -185,6 +202,9 @@ namespace
 
 			const uint32_t count = uint32_t(_size) / 8u;
 			uint32_t value = 0u;
+
+			if(_size == 16 && m_fetchWatchSet && _offset == m_fetchWatch)
+				++m_fetchesAtWatch;
 
 			for(uint32_t i = 0; i < count; ++i)
 			{
@@ -244,11 +264,21 @@ namespace
 
 		uint64_t contentWrites() const { return m_contentWrites; }
 
+		// The event loop's own fetch counter. One address, counted on the width
+		// the core fetches an instruction at, so that "booted" can mean the loop
+		// ran rather than that a banner appeared.
+		void watchFetch(const uint32_t _offset) { m_fetchWatch = _offset; m_fetchWatchSet = true; }
+
+		uint64_t fetchesAtWatch() const { return m_fetchesAtWatch; }
+
 	private:
 		std::vector<uint8_t> m_bytes;
 		uint32_t             m_watchBase     = 0;
 		uint32_t             m_watchLength   = 0;
 		uint64_t             m_contentWrites = 0;
+		uint32_t             m_fetchWatch    = 0;
+		bool                 m_fetchWatchSet = false;
+		uint64_t             m_fetchesAtWatch = 0;
 	};
 
 	std::vector<uint8_t> readFile(const std::string& _path)
@@ -375,6 +405,17 @@ namespace
 		unsigned dspCount   = 0;
 		uint32_t bootQuanta = 0;
 		bool     booted     = false;
+
+		// The quantum at which the banner-and-settle predicate this file used to
+		// boot on became true, and the event loop's fetch count at that instant.
+		// The second is the known negative for the predicate that replaced it: a
+		// machine that satisfied the old one had not run the event loop, so the
+		// count must read 0 there. It is taken on the same run that later reads a
+		// positive, so it separates "the loop had not run yet" from "the counter
+		// cannot see the loop at all".
+		uint32_t bannerQuanta          = 0;
+		uint64_t eventLoopHitsAtBanner = 0;
+		uint32_t eventLoopQuanta       = 0;
 		bool     landed     = false;
 		bool     rxArmed    = false;
 		unsigned rxArmedPorts = 0;
@@ -431,6 +472,7 @@ namespace
 
 		_m.board.memory().attach(g2::Region::Sdram, &_m.ram);
 		_m.ram.watchCells(g_displayBase - g2::g_sdramBase, g_lineWidth);
+		_m.ram.watchFetch(g_eventLoopEntry - g2::g_sdramBase);
 
 		_m.board.resetMcu(g_entrySp, g_entryPc);
 
@@ -463,11 +505,20 @@ namespace
 			if(_m.board.mcuHalted())
 				break;
 
-			if(_m.ram.contentWrites() == 0)
+			// The old predicate, recorded rather than acted on. Its first firing
+			// is the instant a machine stopped early would have been called
+			// booted, and the event loop's count is read at exactly that instant.
+			if(_m.bannerQuanta == 0 && _m.ram.contentWrites() != 0 && ++settle >= g_bannerSettleQuanta)
+			{
+				_m.bannerQuanta          = i + 1;
+				_m.eventLoopHitsAtBanner = _m.ram.fetchesAtWatch();
+			}
+
+			if(_m.ram.fetchesAtWatch() == 0)
 				continue;
 
-			if(++settle < g_bannerSettleQuanta)
-				continue;
+			if(!_m.booted)
+				_m.eventLoopQuanta = i + 1;
 
 			_m.booted = true;
 
@@ -504,6 +555,33 @@ namespace
 		          << " rxArmedPorts=" << _m.rxArmedPorts << "/" << _m.dspCount
 		          << " halted=" << (_m.halted ? 1 : 0)
 		          << " faulted=" << (_m.faulted ? 1 : 0) << std::endl;
+
+		std::cout << "machine: eventLoopQuanta=" << _m.eventLoopQuanta
+		          << " at 0x" << std::hex << g_eventLoopEntry << std::dec
+		          << "; the banner predicate fired at " << _m.bannerQuanta
+		          << " with " << _m.eventLoopHitsAtBanner
+		          << " reads of the event loop by then" << std::endl;
+
+		// ------------------------------------------- the boot predicate's floor
+		//
+		// The machine ran the event loop, and it had NOT run it at the instant the
+		// banner predicate this file used to boot on became true. The second half
+		// is the one that matters: it is this run's own early-stopped machine,
+		// measured with the same counter that later reads a positive, so a zero
+		// there is the loop not yet reached and not a counter that cannot see it.
+		check(_m.booted,
+			"machine: the machine ran the event loop within the boot bound");
+		check(_m.bannerQuanta != 0,
+			"machine: the banner predicate fired at some quantum, so the reading below was "
+			"taken and is not a field that was never written");
+		check(_m.eventLoopHitsAtBanner == 0,
+			"machine: the event loop had not run when the banner predicate fired; observed "
+			+ std::to_string(_m.eventLoopHitsAtBanner) + " reads at quantum "
+			+ std::to_string(_m.bannerQuanta));
+		check(_m.eventLoopQuanta > _m.bannerQuanta,
+			"machine: the event loop ran later than the banner predicate fired; banner at "
+			+ std::to_string(_m.bannerQuanta) + ", event loop at "
+			+ std::to_string(_m.eventLoopQuanta));
 
 		// The counters this file asserts zero on are all satisfied by a machine whose
 		// receive path never came up, so without this observable the gate would pass on

@@ -168,6 +168,27 @@ namespace
 	constexpr uint32_t g_bootQuantumBound   = 500000u;
 	constexpr uint32_t g_bannerSettleQuanta = 20000u;
 
+	// The firmware's event loop. Reaching it is what this file means by booted.
+	//
+	// The banner and its settle count are not that. They say a character other
+	// than the display clear reached the watched cells and that the machine kept
+	// running for a while afterwards, which the machine does while it is still
+	// initialising: it leaves a long initialisation wait later still, and the
+	// event loop does not run until later than that. A predicate keyed on the
+	// banner is true on a machine that cannot yet consume anything, and every
+	// measurement taken behind it reads not-yet as never.
+	//
+	// The event loop is the condition worth keying on because it is what every
+	// consumer in this file depends on -- the dispatcher, the message worker and
+	// the patch store all run from it. The address is the one the findings corpus
+	// names, and the instrument is the histogram this file already keeps: a
+	// counter at that word is a 16-bit read at it, which is the width the core
+	// fetches an instruction at.
+	//
+	// Both figures are recorded, so that a run says how far apart they are rather
+	// than only which one it used.
+	constexpr uint32_t g_eventLoopEntry = 0x30004674u;
+
 	// ------------------------------------------------- the CS3 peek instrument
 	//
 	// t0_usb_ingress_byte's instrument: the part's own peek command (0xD2)
@@ -661,6 +682,17 @@ namespace
 		bool     halted         = false;
 		bool     faulted        = false;
 		uint32_t bootQuanta     = 0;
+
+		// The quantum at which the banner-and-settle predicate this file used to
+		// boot on became true, and the event loop's fetch count at that instant.
+		// The second is the known negative for the predicate that replaced it:
+		// the machine that satisfied the old one had not run the event loop, so
+		// the count must read 0 there. It is taken on the same run that later
+		// reads a positive, so it separates "the loop had not run yet" from "the
+		// counter cannot see the loop at all".
+		uint32_t bannerQuanta          = 0;
+		uint64_t eventLoopHitsAtBanner = 0;
+		uint32_t eventLoopQuanta       = 0;
 		unsigned dspCount       = 0;
 		unsigned hopFrames      = 0;
 		unsigned lookaheadFrames = 0;
@@ -815,11 +847,20 @@ namespace
 			if(board.mcuHalted())
 				break;
 
-			if(ram.contentWrites() == 0)
+			// The old predicate, recorded rather than acted on. Its first firing
+			// is the instant a machine stopped early would have been called
+			// booted, and the event loop's count is read at exactly that instant.
+			if(_r.bannerQuanta == 0 && ram.contentWrites() != 0 && ++settle >= g_bannerSettleQuanta)
+			{
+				_r.bannerQuanta          = i + 1;
+				_r.eventLoopHitsAtBanner = ram.hitsAt(g_eventLoopEntry);
+			}
+
+			if(ram.hitsAt(g_eventLoopEntry) == 0)
 				continue;
 
-			if(++settle < g_bannerSettleQuanta)
-				continue;
+			if(!_r.booted)
+				_r.eventLoopQuanta = i + 1;
 
 			_r.booted = true;
 
@@ -1087,6 +1128,11 @@ namespace
 		          << " halted=" << (_r.halted ? 1 : 0)
 		          << " faulted=" << (_r.faulted ? 1 : 0)
 		          << " dspCount=" << _r.dspCount << std::endl;
+		std::cout << _label << ": eventLoopQuanta=" << _r.eventLoopQuanta
+		          << " at " << hex32(g_eventLoopEntry)
+		          << "; the banner predicate fired at " << _r.bannerQuanta
+		          << " with " << _r.eventLoopHitsAtBanner
+		          << " reads of the event loop by then" << std::endl;
 		std::cout << _label << ": windowQuanta=" << g_observeQuanta
 		          << " windowWordFetches=" << _r.windowFetches
 		          << " oddWordReads=" << _r.oddWordReads << std::endl;
@@ -1318,6 +1364,36 @@ int main()
 				+ std::to_string(run.second.sinkControlL) + "/"
 				+ std::to_string(run.second.sinkControlR) + " against "
 				+ std::to_string(g_sinkControlExpected));
+		}
+
+		// ------------------------------------------- the boot predicate's floor
+		//
+		// The machine ran the event loop, and it had NOT run it at the instant
+		// the banner predicate this file used to boot on became true. The second
+		// half is the one that matters: it is this run's own early-stopped
+		// machine, measured with the same counter that later reads a positive, so
+		// a zero there is the loop not yet reached and not a counter that cannot
+		// see it.
+		for(const std::pair<const char*, const RunResult&> run :
+			{std::pair<const char*, const RunResult&>{"control", control},
+			 std::pair<const char*, const RunResult&>{"patched", patched}})
+		{
+			const std::string label = run.first;
+
+			check(run.second.booted,
+				label + ": the machine ran the event loop within " + std::to_string(g_bootQuantumBound)
+				+ " quanta");
+			check(run.second.bannerQuanta != 0,
+				label + ": the banner predicate fired at some quantum, so the reading below "
+				"was taken and is not a field that was never written");
+			check(run.second.eventLoopHitsAtBanner == 0,
+				label + ": the event loop had not run when the banner predicate fired; observed "
+				+ std::to_string(run.second.eventLoopHitsAtBanner) + " reads at quantum "
+				+ std::to_string(run.second.bannerQuanta));
+			check(run.second.eventLoopQuanta > run.second.bannerQuanta,
+				label + ": the event loop ran later than the banner predicate fired; banner at "
+				+ std::to_string(run.second.bannerQuanta) + ", event loop at "
+				+ std::to_string(run.second.eventLoopQuanta));
 		}
 
 		check(control.programsLanded, "control: every DSP position took its program");
