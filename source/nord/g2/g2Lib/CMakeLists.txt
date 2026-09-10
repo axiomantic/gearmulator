@@ -50,7 +50,9 @@ source_group("source" FILES ${G2LIB_SOURCES})
 
 target_link_libraries(g2Lib PUBLIC hardwareLib dsp56kEmu synthLib)
 
-if(DSP56300_DEBUGGER)
+# The wxWidgets debugger application is a separate target from the core hooks
+# DSP56300_DEBUGGER arms, and DSP56300_DEBUGGER_GUI=OFF never defines it.
+if(DSP56300_DEBUGGER AND DSP56300_DEBUGGER_GUI)
 	target_link_libraries(g2Lib PUBLIC dsp56kDebugger)
 endif()
 

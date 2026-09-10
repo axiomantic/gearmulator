@@ -8,8 +8,17 @@
 
 namespace g2
 {
+	dsp56k::DSP* g_interpretDsp = nullptr;
+
 	uint32_t runDspCycles(dsp56k::DSP& dsp, const uint32_t wantCycles) noexcept
 	{
+		if(&dsp == g_interpretDsp)
+		{
+			for(uint32_t i = 0; i < wantCycles; ++i)
+				dsp.execInterpreter();
+			return wantCycles;
+		}
+
 		/* Debug only, and not the predicate of any check. The default build of
 		 * this tree is Release and defines NDEBUG, so neither assertion below
 		 * is in the shipped translation unit. T0_run_dsp_cycles_contract and

@@ -41,6 +41,7 @@
 #include "../transportHub.h"
 #include "../crc16.h"
 #include "../uart0.h"
+#include "../runDspCycles.h"
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
 #include "dsp56kEmu/debuggerinterface.h"
@@ -184,6 +185,107 @@ namespace
 		dsp56k::TWord       last    = 0;
 		dsp56k::TWord       minVal  = 0xffffffu;
 		dsp56k::TWord       maxVal  = 0;
+	};
+
+	/* Records, for one DSP over a bounded window, the PC of every instruction
+	 * and every X/Y word that instruction reads or writes.
+	 *
+	 * It is driven by DSP::execInterpreter and not by the scheduler, because
+	 * `g_useJIT` is a compile-time constant and the DSP core's memory hooks
+	 * live in Memory::get and Memory::dspWrite -- paths the JIT inlines past.
+	 * A JIT build with `memoryWritesCallCpp` reaches the write hook but never
+	 * the read hook, and its PC is a block entry rather than an instruction, so
+	 * neither half of the question can be answered through it.
+	 *
+	 * IT PERTURBS, by construction: the instructions it steps are instructions
+	 * the scheduler did not ask for, so the traced DSP runs ahead of the other
+	 * seven for the length of the window. It names code; it must never be the
+	 * source of a result word. The P-memory disassembly is the non-perturbing
+	 * cross-check for everything it reports. */
+	class PcTracer final : public dsp56k::DebuggerInterface
+	{
+	public:
+		struct Access
+		{
+			dsp56k::TWord pc   = 0;
+			dsp56k::TWord addr = 0;
+			char          area = 'X';
+			char          rw   = 'r';
+		};
+
+		explicit PcTracer(dsp56k::DSP& _dsp) : DebuggerInterface(_dsp) {}
+
+		void onExec(const dsp56k::TWord _addr) override
+		{
+			m_pc = _addr;
+			m_pcs.push_back(_addr);
+		}
+
+		void onMemoryRead(const dsp56k::EMemArea _area, const dsp56k::TWord _addr) override
+		{
+			record(_area, _addr, 'r');
+		}
+
+		void onMemoryWrite(const dsp56k::EMemArea _area, const dsp56k::TWord _addr, dsp56k::TWord) override
+		{
+			record(_area, _addr, 'w');
+		}
+
+		const std::vector<Access>&      accesses() const { return m_accesses; }
+		const std::vector<dsp56k::TWord>& pcs()    const { return m_pcs; }
+
+	private:
+		void record(const dsp56k::EMemArea _area, const dsp56k::TWord _addr, const char _rw)
+		{
+			// P reads are the instruction fetch of the very step being traced.
+			if(_area != dsp56k::MemArea_X && _area != dsp56k::MemArea_Y)
+				return;
+			Access a;
+			a.pc   = m_pc;
+			a.addr = _addr;
+			a.area = _area == dsp56k::MemArea_X ? 'X' : 'Y';
+			a.rw   = _rw;
+			m_accesses.push_back(a);
+		}
+
+		dsp56k::TWord              m_pc = 0;
+		std::vector<Access>        m_accesses;
+		std::vector<dsp56k::TWord> m_pcs;
+	};
+
+	/* Names the PROGRAM COUNTER of every store, without leaving the JIT.
+	 *
+	 * `memoryWritesCallCpp` routes the JIT's stores through Memory::dspWrite,
+	 * which reaches onMemoryWrite; `maxInstructionsPerBlock = 1` then makes
+	 * every compiled block one instruction long, so the PC the trampoline was
+	 * entered with identifies the storing instruction rather than the head of a
+	 * block that may hold dozens. Neither alone answers the question.
+	 *
+	 * This does NOT perturb what the machine computes -- the same stores happen,
+	 * through a slower path -- but it is far too slow for a full walk, so the
+	 * arm that carries it runs a short one. */
+	class WritePcCollector final : public dsp56k::DebuggerInterface
+	{
+	public:
+		explicit WritePcCollector(dsp56k::DSP& _dsp) : DebuggerInterface(_dsp) {}
+
+		void arm(const bool _on) { m_armed = _on; }
+
+		void onMemoryWrite(const dsp56k::EMemArea _area, const dsp56k::TWord _addr, dsp56k::TWord) override
+		{
+			if(!m_armed || (_area != dsp56k::MemArea_X && _area != dsp56k::MemArea_Y))
+				return;
+			const uint64_t key = (uint64_t(_area == dsp56k::MemArea_X ? 0 : 1) << 48)
+			                   | (uint64_t(_addr & 0xffffffu) << 24)
+			                   | uint64_t(dsp().getPC().toWord() & 0xffffffu);
+			++m_hits[key];
+		}
+
+		const std::map<uint64_t, uint64_t>& hits() const { return m_hits; }
+
+	private:
+		bool m_armed = false;
+		std::map<uint64_t, uint64_t> m_hits;
 	};
 
 	class WriteCollector final : public dsp56k::DebuggerInterface
@@ -894,6 +996,8 @@ int main()
 				"G2_AUDIO_COEFFLO", "G2_AUDIO_COEFFHI", "G2_AUDIO_DMATRACE",
 				"G2_AUDIO_INTONE",
 				"G2_AUDIO_NOTEWATCH", "G2_AUDIO_NWLO", "G2_AUDIO_NWHI",
+				"G2_AUDIO_PCTRACE", "G2_AUDIO_PCTRACEQ", "G2_AUDIO_PCTRACEN",
+				"G2_AUDIO_WPCTRACE",
 				"G2_AUDIO_NWY",
 				"G2_LOG_ESAI_UNDERRUN"
 			};
@@ -2225,6 +2329,66 @@ int main()
 		 * payload's own stores by construction. Its own known negative is that
 		 * blindness, and its known positive is the firmware buffer clear, which
 		 * runs in DSP code and must therefore NOT appear. */
+		/* G2_AUDIO_PCTRACE names the DSP to single-step; PCTRACEQ the walk
+		 * quantum to do it after, and PCTRACEN how many instructions. The
+		 * window must be long enough to contain a whole ESAI interrupt, which
+		 * fires once every four quanta -- a window that ends before the
+		 * interrupt arrives reports no payload code and is indistinguishable
+		 * from a payload that never runs, so PCTRACEN is reported beside the
+		 * count of instructions actually seen. */
+		int      pcTraceDsp     = -1;
+		uint32_t pcTraceQuantum = 16;
+		uint32_t pcTraceQuanta  = 8;
+		std::unique_ptr<PcTracer> pcTracer;
+		if(const char* const v = std::getenv("G2_AUDIO_PCTRACE"))
+			pcTraceDsp = int(std::strtol(v, nullptr, 0));
+		if(const char* const v = std::getenv("G2_AUDIO_PCTRACEQ"))
+			pcTraceQuantum = uint32_t(std::strtoul(v, nullptr, 0));
+		if(const char* const v = std::getenv("G2_AUDIO_PCTRACEN"))
+			pcTraceQuanta = uint32_t(std::strtoul(v, nullptr, 0));
+		if(pcTraceDsp >= 0)
+		{
+#if DSP56300_DEBUGGER
+			const int pcTraceBuilt = 1;
+#else
+			const int pcTraceBuilt = 0;
+#endif
+			std::cout << "pctrace: dsp=" << pcTraceDsp
+			          << " quantum=" << pcTraceQuantum
+			          << " quanta=" << pcTraceQuanta
+			          << " DSP56300_DEBUGGER=" << pcTraceBuilt
+			          << " PERTURBING: the traced dsp runs ahead of the others"
+			          << std::endl;
+		}
+
+		/* G2_AUDIO_WPCTRACE=<dsp> names the store PCs on ONE dsp for the whole
+		 * walk. Pair it with a SHORT G2_AUDIO_WALK: the call-out costs seconds
+		 * per quantum and the single-instruction blocks cost more again. The
+		 * ISR fires once every four quanta, so a walk of 32 contains eight
+		 * invocations -- and the count of stores seen is reported, because a
+		 * walk too short to contain one reports nothing and reads exactly like
+		 * a payload that never stores. */
+		int wpcDsp = -1;
+		std::unique_ptr<WritePcCollector> wpc;
+		if(const char* const v = std::getenv("G2_AUDIO_WPCTRACE"))
+			wpcDsp = int(std::strtol(v, nullptr, 0));
+		if(wpcDsp >= 0)
+		{
+			dsp56k::DSP& dsp = board.dspSet().dsp(unsigned(wpcDsp));
+			dsp56k::JitConfig cfg = dsp.getJit().getConfig();
+			cfg.memoryWritesCallCpp = true;
+			if(const char* const b = std::getenv("G2_AUDIO_WPCBLOCK"))
+				cfg.maxInstructionsPerBlock = uint32_t(std::strtoul(b, nullptr, 0));
+			dsp.getJit().setConfig(cfg);
+			dsp.getJit().destroyAllBlocks();
+			wpc.reset(new WritePcCollector(dsp));
+			dsp.setDebugger(wpc.get());
+			wpc->arm(true);
+			std::cout << "wpctrace: dsp=" << wpcDsp
+			          << " memoryWritesCallCpp=1 maxInstructionsPerBlock=" << cfg.maxInstructionsPerBlock
+			          << " walkQuanta=" << walkQuanta << std::endl;
+		}
+
 		const bool dmaTrace   = std::getenv("G2_AUDIO_DMATRACE") != nullptr;
 		const bool writeTrace = dmaTrace || std::getenv("G2_AUDIO_WRITETRACE") != nullptr;
 		if(const char* const th = std::getenv("G2_AUDIO_TRACEHI"))
@@ -2308,6 +2472,21 @@ int main()
 				}
 
 				const g2::Frame& in = inTone ? tone : ((pushImpulse && q == 0) ? impulse : silence);
+
+				if(pcTraceDsp >= 0 && q == pcTraceQuantum)
+				{
+					dsp56k::DSP& dsp = board.dspSet().dsp(unsigned(pcTraceDsp));
+					pcTracer.reset(new PcTracer(dsp));
+					dsp.setDebugger(pcTracer.get());
+					dsp56k::DSP::setForceInterpreter(true);
+					g2::g_interpretDsp = &dsp;
+				}
+				if(pcTraceDsp >= 0 && q == pcTraceQuantum + pcTraceQuanta)
+				{
+					g2::g_interpretDsp = nullptr;
+					dsp56k::DSP::setForceInterpreter(false);
+					board.dspSet().dsp(unsigned(pcTraceDsp)).setDebugger(nullptr);
+				}
 
 				(void) scheduler->push(&in, 1);
 				scheduler->runFrames(1);
@@ -3185,6 +3364,48 @@ int main()
 		// alone names every changed word. The disassembly skips NOPs, because
 		// an all-zero page disassembles to thousands of identical lines that
 		// bury the code.
+		if(wpc)
+		{
+			uint64_t total = 0;
+			for(const auto& kv : wpc->hits())
+				total += kv.second;
+			std::cout << "wpctrace: storesSeen=" << total
+			          << " distinctAddrPcPairs=" << wpc->hits().size() << std::endl;
+			for(const auto& kv : wpc->hits())
+			{
+				const unsigned area = unsigned(kv.first >> 48);
+				const unsigned addr = unsigned((kv.first >> 24) & 0xffffffu);
+				const unsigned pc   = unsigned(kv.first & 0xffffffu);
+				std::cout << "  wpc " << (area ? 'Y' : 'X') << ':' << hex32(addr)
+				          << " pc=" << hex32(pc) << " n=" << kv.second << std::endl;
+			}
+		}
+
+		if(pcTracer)
+		{
+			const char* const path = std::getenv("G2_AUDIO_PCTRACEOUT");
+			std::ofstream out(path ? path : "pctrace.txt");
+			for(const PcTracer::Access& a : pcTracer->accesses())
+			{
+				char line[64];
+				std::snprintf(line, sizeof(line), "%06x %c %c %06x\n",
+					unsigned(a.pc), a.rw, a.area, unsigned(a.addr));
+				out << line;
+			}
+			{
+				std::ofstream pcs(std::string(path ? path : "pctrace.txt") + ".pcs");
+				for(const dsp56k::TWord pc : pcTracer->pcs())
+				{
+					char line[32];
+					std::snprintf(line, sizeof(line), "%06x\n", unsigned(pc));
+					pcs << line;
+				}
+			}
+			std::cout << "pctrace: instructionsStepped=" << pcTracer->pcs().size()
+			          << " xyAccesses=" << pcTracer->accesses().size()
+			          << " out=" << (path ? path : "pctrace.txt") << std::endl;
+		}
+
 		if(const char* const pdumpDir = std::getenv("G2_AUDIO_PDUMP"))
 		{
 			dsp56k::TWord lo = 0x0000u, hi = 0x8000u;

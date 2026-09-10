@@ -46,4 +46,21 @@ namespace g2
 	 * Overshoot is one dispatch unit, bounded by maxDispatchCost. Every test
 	 * that names the bound takes it from its own fixture. */
 	uint32_t runDspCycles(dsp56k::DSP& dsp, uint32_t wantCycles) noexcept;
+
+	/* When set, THAT ONE DSP is stepped by the interpreter instead of the JIT.
+	 * It exists so a probe can see the core's onExec/onMemoryRead hooks, which
+	 * live on paths the JIT inlines past. `dsp56k::g_useJIT` is a compile-time
+	 * constant, so the choice cannot be made inside DSP::exec.
+	 *
+	 * Stepping ONE dsp out of band is not an option: the chain feeds this
+	 * processor's ESAI, so a window that freezes the other seven never
+	 * delivers an interrupt and reports the payload as never running. The
+	 * substitution has to happen HERE, inside the scheduler's own per-quantum
+	 * call, so the rest of the machine keeps running around it.
+	 *
+	 * It PERTURBS: the interpreter does not write m_cycles, so the loop below
+	 * spends one INSTRUCTION per requested CYCLE and reports the request as
+	 * met. That is a different time base for the traced processor. It names
+	 * code; it must never be the source of a result word. */
+	extern dsp56k::DSP* g_interpretDsp;
 }
