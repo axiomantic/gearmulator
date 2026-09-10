@@ -766,6 +766,14 @@ int main()
 		if(withSram)
 			std::cout << "cs4: bankWrites=" << cs4.bankWrites() << " holeWrites=" << cs4.holeWrites() << std::endl;
 
+		// Quanta actually consumed by the note phase. The note arm runs MORE of
+		// them than the idle arm does: every posted byte is followed by a bounded
+		// wait for the firmware to drain it, and those waits run the machine. A
+		// raw instruction-count difference between the two arms is therefore not
+		// the note's cost -- it is the note's cost plus that extra time, and at
+		// twelve bytes the extra time alone is the right size to explain it.
+		uint64_t notePhaseQuanta = 0;
+
 		// ------------------------------------------------------------- the note
 		//
 		// Uart0::receive DROPS the byte and returns void when the receiver is
@@ -820,6 +828,7 @@ int main()
 				for(uint32_t i = 0; i < 20000u && !taken; ++i)
 				{
 					scheduler->runFrames(1);
+				++notePhaseQuanta;
 					if((uart.usr() & 0x01u) == 0u)
 						taken = true;
 					if(board.mcuHalted())
@@ -856,6 +865,7 @@ int main()
 			for(uint32_t i = 0; i < noteQuanta; ++i)
 			{
 				scheduler->runFrames(1);
+				++notePhaseQuanta;
 				if((i & 0x3ffu) == 0 && expired())
 					break;
 				if(board.mcuHalted())
@@ -870,6 +880,7 @@ int main()
 			for(uint32_t i = 0; i < noteQuanta; ++i)
 			{
 				scheduler->runFrames(1);
+				++notePhaseQuanta;
 				if((i & 0x3ffu) == 0 && expired())
 					break;
 				if(board.mcuHalted())
@@ -892,7 +903,8 @@ int main()
 			std::cout << "DSPSNAP mode=" << mode
 			          << " note=" << (sendNote ? 1 : 0)
 			          << " noteIdle=" << (noteIdle ? 1 : 0)
-			          << " noteQuanta=" << ((sendNote || noteIdle) ? noteQuanta : 0u)
+			          << " noteQuantaRequested=" << ((sendNote || noteIdle) ? noteQuanta : 0u)
+			          << " notePhaseQuantaActual=" << notePhaseQuanta
 			          << std::endl;
 
 			for(unsigned d = 0; d < dspCount; ++d)
