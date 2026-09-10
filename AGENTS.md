@@ -504,9 +504,9 @@ gigabyte each, so remove the previous one before you build again.
 Set `submodule.recurse=false` in a secondary workspace, so no ordinary command
 walks into a shared submodule gitdir by accident.
 
-The tree-wide git operations named above act on the whole working tree, not on
-the files you have in mind. Never run one in a checkout that someone or
-something else may be using.
+The tree-wide git operations named under `## Git` act on the whole working
+tree, not on the files you have in mind. Never run one in a checkout that
+someone or something else may be using.
 
 After any operation that could have reached a shared checkout, verify it:
 
