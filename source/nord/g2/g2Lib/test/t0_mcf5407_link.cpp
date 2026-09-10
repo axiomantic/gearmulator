@@ -1,22 +1,22 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// The mcf5307::mcf5307 link sits behind option(G2_LINK_MCF5307). This test is
+// The mcf5407::mcf5407 link sits behind option(G2_LINK_MCF5407). This test is
 // the evidence that the option is live and not decorative.
 //
-// The test links g2Lib and nothing else. It never names mcf5307::mcf5307 on
-// its own link line. Every mcf5307 name it uses -- the header and the symbol
+// The test links g2Lib and nothing else. It never names mcf5407::mcf5407 on
+// its own link line. Every mcf5407 name it uses -- the header and the symbol
 // -- has to arrive through g2Lib's own PUBLIC link. Link the test against the
 // core directly and the test would pass with that line deleted, which is the
 // exact defect it exists to catch.
 //
 // The two failure modes are different steps, and this is measured, not argued:
 //
-//   * With G2_LINK_MCF5307 OFF the FetchContent declaration of the root
-//     CMakeLists.txt is never populated, so mcf5307.h is absent from the tree
+//   * With G2_LINK_MCF5407 OFF the FetchContent declaration of the root
+//     CMakeLists.txt is never populated, so mcf5407.h is absent from the tree
 //     and this translation unit stops at the COMPILE step with
-//     `fatal error: 'mcf5307.h' file not found`.
+//     `fatal error: 'mcf5407.h' file not found`.
 //   * With the header present and the symbol unresolved the LINK step stops
-//     with `Undefined symbols ... "_mcf5307_runtime_init"`.
+//     with `Undefined symbols ... "_mcf5407_runtime_init"`.
 //
 // Both fail, so the negative case fires either way. They are named apart
 // because a reader who expects the second and observes the first reads a real
@@ -24,16 +24,16 @@
 // putting the header on the include path with the option OFF -- is the one
 // change that would make the negative case stop testing anything.
 //
-// To confirm that the pinned core defines both symbols, against libmcf5307.a
+// To confirm that the pinned core defines both symbols, against libmcf5407.a
 // built from the pinned commit:
 //
-//   $ nm -g libmcf5307.a | grep mcf5307_
+//   $ nm -g libmcf5407.a | grep mcf5407_
 //
 // No stub is supplied for either symbol. A stub would make the link succeed
 // against a definition that is not the core, which is the one outcome this
 // test exists to refuse.
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstddef>
 #include <iostream>
@@ -61,7 +61,7 @@ namespace
 	}
 }
 
-// Nothing below executes a program: mcf5307_exec has its address taken but is
+// Nothing below executes a program: mcf5407_exec has its address taken but is
 // never called, because calling it needs a context and a program and would be
 // a behavioural assertion about the core rather than about the link.
 
@@ -74,10 +74,10 @@ int main()
 	// proves nothing about the link. An indirect call through a volatile
 	// pointer forces the address to be materialised and forces the linker to
 	// resolve the symbol.
-	int (*volatile runtimeInit)() = &mcf5307_runtime_init;
+	int (*volatile runtimeInit)() = &mcf5407_runtime_init;
 
 	check(runtimeInit != nullptr,
-		"mcf5307_runtime_init resolved to a non-null address through g2Lib");
+		"mcf5407_runtime_init resolved to a non-null address through g2Lib");
 
 	// Case 1b. The execution entry point resolved too, and through the same
 	// link line.
@@ -88,15 +88,15 @@ int main()
 	// The address is taken and NOT called. Calling it needs a context and a
 	// program, and what it returned would be a statement about the core rather
 	// than about the link.
-	uint32_t (*volatile exec)(mcf5307_ctx*, uint32_t) = &mcf5307_exec;
+	uint32_t (*volatile exec)(mcf5407_ctx*, uint32_t) = &mcf5407_exec;
 
 	check(exec != nullptr,
-		"mcf5307_exec resolved to a non-null address through g2Lib");
+		"mcf5407_exec resolved to a non-null address through g2Lib");
 
 	// Case 2. The runtime entry point runs, and it runs repeatedly.
 	//
 	// It is the procedure a C++ caller must use in place of ever naming
-	// NimMain, and src/mcf5307.nim states that it is idempotent behind a
+	// NimMain, and src/mcf5407.nim states that it is idempotent behind a
 	// latch that is set AFTER the call. A latch set
 	// before the call would be written back by module initialisation and
 	// every later call would run the initialiser again.
@@ -115,7 +115,7 @@ int main()
 	++returnedCalls;
 
 	check(returnedCalls == 3,
-		"mcf5307_runtime_init returned from all three of three calls");
+		"mcf5407_runtime_init returned from all three of three calls");
 
 	// Case 3. The runtime reports itself usable, and keeps reporting it.
 	//
@@ -124,16 +124,16 @@ int main()
 	// terminal. Summing rather than checking the last call is what keeps a
 	// latch that answered 1 and then 0 from passing.
 	check(initialisedCalls == 3,
-		"mcf5307_runtime_init reported the runtime usable on all three calls");
+		"mcf5407_runtime_init reported the runtime usable on all three calls");
 
 	if(g_failures)
 	{
-		std::cout << "t0_mcf5307_link: " << g_failures << " of " << g_cases
+		std::cout << "t0_mcf5407_link: " << g_failures << " of " << g_cases
 			<< " cases failed" << std::endl;
 		return 1;
 	}
 
-	std::cout << "t0_mcf5307_link: " << g_cases << " of " << g_cases
+	std::cout << "t0_mcf5407_link: " << g_cases << " of " << g_cases
 		<< " cases passed" << std::endl;
 	return 0;
 }

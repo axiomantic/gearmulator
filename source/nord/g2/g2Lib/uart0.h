@@ -19,7 +19,7 @@
 //
 // UM section 14.3.7 states one rule for the whole UART block: all UART module
 // registers must be accessed as bytes. A 16-bit or 32-bit access to any UART
-// offset is rejected with MCF5307_BUS_SIZE_ILLEGAL and one log line.
+// offset is rejected with MCF5407_BUS_SIZE_ILLEGAL and one log line.
 //
 // REGISTER MAP, MCF5307 um table 14-1. Offsets are relative to each UART
 // base (0x1C0 / 0x200). The modules are MC68681-compatible, so each register
@@ -104,9 +104,9 @@ namespace g2
 
 		// The single restricted width rule of UM section 14.3.7: every UART
 		// register is a byte. A 16-bit or 32-bit access is rejected with
-		// MCF5307_BUS_SIZE_ILLEGAL and one log line.
-		uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+		// MCF5407_BUS_SIZE_ILLEGAL and one log line.
+		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 		// The MIDI-out consumer (readMidiOut's source). A byte is delivered
 		// when the firmware writes the transmitter buffer.

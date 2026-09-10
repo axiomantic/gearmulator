@@ -61,7 +61,7 @@ namespace
 	}
 
 	// The present callback records the last presented arguments so that a test
-	// can assert what the arbiter would hand to mcf5307_set_irq.
+	// can assert what the arbiter would hand to mcf5407_set_irq.
 	struct PresentRecorder
 	{
 		int level = -999;
@@ -216,7 +216,7 @@ int main()
 	// Case group 4. No pending source presents the named zero, and a source
 	// that drops returns to it.
 	//
-	// With nothing pending the board presents MCF5307_IRQ_NONE. The one pending
+	// With nothing pending the board presents MCF5407_IRQ_NONE. The one pending
 	// source is then raised and dropped (a level source dropping when the device
 	// model clears its own condition), and the board must present the named zero
 	// again. An arbiter
@@ -227,7 +227,7 @@ int main()
 
 		// No source pending. The constructor presents nothing yet; a read of
 		// the last-presented state pins the named zero.
-		checkEqual(controller.presentedLevel(), 0, "with no source pending, the controller's presented level is MCF5307_IRQ_NONE (0)");
+		checkEqual(controller.presentedLevel(), 0, "with no source pending, the controller's presented level is MCF5407_IRQ_NONE (0)");
 
 		// Raise one internal source.
 		controller.writeRegister(gIcrBase + 3, makeIcr(2, 0, false));
@@ -237,7 +237,7 @@ int main()
 		// Drop it: the level source's condition clears and the board
 		// recomputes.
 		controller.setInternalPending(3, false);
-		checkEqual(recorder.level, 0, "dropping the only pending source returns the presented level to MCF5307_IRQ_NONE (0)");
+		checkEqual(recorder.level, 0, "dropping the only pending source returns the presented level to MCF5407_IRQ_NONE (0)");
 
 		// The same via an external source, the worked case's own source class.
 		controller.setExternalPending(g2::ExternalPin::Irq3, true);
@@ -245,7 +245,7 @@ int main()
 		checkEqual(recorder.level, 6, "raising the IRQ3 pin presents its mapped level 6");
 
 		controller.setExternalPending(g2::ExternalPin::Irq3, false);
-		checkEqual(recorder.level, 0, "dropping the IRQ3 pin returns the presented level to MCF5307_IRQ_NONE (0)");
+		checkEqual(recorder.level, 0, "dropping the IRQ3 pin returns the presented level to MCF5407_IRQ_NONE (0)");
 	}
 
 	// -----------------------------------------------------------------------
@@ -327,14 +327,14 @@ int main()
 	// the level-indexed AVR bitmask. Here every byte offset from $04C to $057
 	// inclusive is programmed, each one to every level the interface admits,
 	// 1 to 7, and for each state the test asserts that the level the board
-	// presents is MCF5307_IRQ_NONE or 1 to 7, and that the level it names
+	// presents is MCF5407_IRQ_NONE or 1 to 7, and that the level it names
 	// belongs to the one source that is pending.
 	//
 	// Each iteration clears every source, holds ONE source pending, programs
 	// its register to `level`, and asserts the presented level equals `level`.
 	// Offsets $056 and $057 are Reserved: their registers store the byte but
 	// generate no source, so with them programmed and no other source pending
-	// the board presents MCF5307_IRQ_NONE.
+	// the board presents MCF5407_IRQ_NONE.
 	//
 	// An index leaving the control-register table or the AVR bitmask reads a
 	// neighbouring byte. This walk drives the full domain, so under a
@@ -373,7 +373,7 @@ int main()
 				{
 					// Reserved register: stored but generates no source.
 					checkEqual(recorder.level, 0,
-						"the reserved ICR offset " + std::to_string(offset) + " generates no source, so the presented level is MCF5307_IRQ_NONE");
+						"the reserved ICR offset " + std::to_string(offset) + " generates no source, so the presented level is MCF5407_IRQ_NONE");
 				}
 			}
 		}
