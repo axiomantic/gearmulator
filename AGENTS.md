@@ -456,8 +456,10 @@ Never run a tree-wide git operation in a checkout you share with anyone:
 `git reset --hard`. To compare against a commit, read it with `git show`.
 
 Never put an issue number in a commit message, a pull request title, or a pull
-request body. It notifies every subscriber.- A `Co-authored-by` trailer is permitted in this fork. Upstream's convention
-  omits it; this fork keeps it, so a rewrite of history to strip it is not wanted.
+request body. It notifies every subscriber.
+
+A `Co-authored-by` trailer is permitted in this fork. Upstream's convention
+omits it; this fork keeps it, so rewriting history to strip it is not wanted.
 
 Back up a commit before you destroy it. Push it to `refs/preserve/<name>`, then
 read the ref back and confirm the sha before you delete anything.
