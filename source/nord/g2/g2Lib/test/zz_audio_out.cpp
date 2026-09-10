@@ -43,6 +43,8 @@
 #include "../uart0.h"
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
+#include "dsp56kEmu/debuggerinterface.h"
+#include "dsp56kEmu/jit.h"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dma.h"
 #include "dsp56kEmu/hdi08.h"
@@ -142,6 +144,100 @@ namespace
 			r += d[(_v >> s) & 0xfu];
 		return r;
 	}
+
+	/* ------------------------------------------------- the write collector
+	 *
+	 * Every probe this instrument has carried is a SAMPLE: it reads memory once
+	 * per audio frame and infers what happened in between. That cannot tell a
+	 * store that fires with a constant operand from a store that never fires at
+	 * all, and the corpus names that gap explicitly.
+	 *
+	 * This is not a sample. dsp56k routes every DSP memory write through
+	 * Memory::dspWrite when the JIT is configured with memoryWritesCallCpp, and
+	 * dspWrite calls DebuggerInterface::onMemoryWrite when the emulator is built
+	 * with DSP56300_DEBUGGER=1. Both are existing, unmodified mechanisms; this
+	 * instrument only turns them on. The result is an EXACT per-address write
+	 * event count for X and Y below g_traceHi, per DSP, over the walk.
+	 *
+	 * Armed only for the duration of the walk, because the instrument's own
+	 * poison fill and the patch upload also go through Memory::set and would
+	 * otherwise be counted as machine writes.
+	 */
+	/* The upper bound of the traced range, settable because the control arm's
+	 * own trace showed 64,848 X writes per voice DSP ABOVE $2000 -- a region no
+	 * probe in this corpus has ever sampled per quantum. A bound chosen to match
+	 * the existing samplers would have reported those writes as "out of range"
+	 * and nothing would have said so. G2_AUDIO_TRACEHI raises it. */
+	dsp56k::TWord g_traceHi = 0x2000u;
+
+	struct WriteCell
+	{
+		uint64_t            writes  = 0;
+		uint64_t            changes = 0;   // writes whose value differed from the last one written
+		bool                seen    = false;
+		dsp56k::TWord       first   = 0;
+		dsp56k::TWord       last    = 0;
+		dsp56k::TWord       minVal  = 0xffffffu;
+		dsp56k::TWord       maxVal  = 0;
+	};
+
+	class WriteCollector final : public dsp56k::DebuggerInterface
+	{
+	public:
+		explicit WriteCollector(dsp56k::DSP& _dsp) : DebuggerInterface(_dsp)
+		{
+			m_cells[0].resize(g_traceHi);
+			m_cells[1].resize(g_traceHi);
+		}
+
+		void arm(const bool _on) { m_armed = _on; }
+
+		void onMemoryWrite(const dsp56k::EMemArea _area, const dsp56k::TWord _addr, const dsp56k::TWord _value) override
+		{
+			if(!m_armed)
+				return;
+			const unsigned a = _area == dsp56k::MemArea_X ? 0u : (_area == dsp56k::MemArea_Y ? 1u : 2u);
+			if(a > 1u)
+			{
+				++m_writesP;
+				return;
+			}
+			++m_writesTotal[a];
+			if(_addr >= g_traceHi)
+			{
+				++m_writesAbove[a];
+				return;
+			}
+			WriteCell& c = m_cells[a][_addr];
+			if(!c.seen)
+			{
+				c.seen  = true;
+				c.first = _value;
+				c.minVal = _value;
+				c.maxVal = _value;
+			}
+			else if(_value != c.last)
+			{
+				++c.changes;
+				if(_value < c.minVal) c.minVal = _value;
+				if(_value > c.maxVal) c.maxVal = _value;
+			}
+			c.last = _value;
+			++c.writes;
+		}
+
+		const std::vector<WriteCell>& cells(const unsigned _area) const { return m_cells[_area]; }
+		uint64_t writesTotal(const unsigned _area) const { return m_writesTotal[_area]; }
+		uint64_t writesAbove(const unsigned _area) const { return m_writesAbove[_area]; }
+		uint64_t writesP() const { return m_writesP; }
+
+	private:
+		bool                   m_armed = false;
+		std::vector<WriteCell> m_cells[2];
+		uint64_t               m_writesTotal[2] = {0, 0};
+		uint64_t               m_writesAbove[2] = {0, 0};
+		uint64_t               m_writesP = 0;
+	};
 
 	/* ------------------------------------------------------------------ DMA
 	 *
@@ -1631,6 +1727,20 @@ int main()
 		std::vector<unsigned> scratchMaxChangedX(dspCount, 0);
 		std::vector<unsigned> scratchMaxChangedY(dspCount, 0);
 
+		/* G2_AUDIO_SCRATCHADDR records WHICH words move, not how many. It is the
+		 * same loop, the same range and the same comparison that produce
+		 * maxChangedX/maxChangedY above, so the addresses it names are exactly
+		 * the words those counters count -- there is no second instrument to
+		 * reconcile. Per address: the number of quanta in which it differed from
+		 * the previous quantum, and the last value seen.
+		 *
+		 * The question it answers: are the 4-7 words that move with a patch the
+		 * SAME addresses that move with no patch at all. If they are, the
+		 * payload's 34.8 million instructions leave no trace in memory. */
+		const bool scratchAddr = std::getenv("G2_AUDIO_SCRATCHADDR") != nullptr;
+		std::vector<std::vector<uint32_t>> scratchChangeCountX(dspCount);
+		std::vector<std::vector<uint32_t>> scratchChangeCountY(dspCount);
+
 		std::vector<uint64_t> winSampleQuantaNonZeroY(dspCount, 0);
 		std::vector<unsigned> winSampleMaxWordsY(dspCount, 0);
 		std::vector<int>      winSampleFirstQuantumY(dspCount, -1);
@@ -1670,6 +1780,51 @@ int main()
 			          << " watch=" << (poisonWatch ? 1 : 0) << std::endl;
 		}
 
+		/* G2_AUDIO_WRITETRACE turns on the exact per-address write counter. Two
+		 * existing dsp56k mechanisms carry it and neither is modified here:
+		 * JitConfig::memoryWritesCallCpp routes every JIT-generated DSP memory
+		 * write through Memory::dspWrite instead of inlining it, and
+		 * DSP56300_DEBUGGER=1 makes dspWrite call the attached debugger's
+		 * onMemoryWrite. The build must be configured -DDSP56300_DEBUGGER=ON or
+		 * the hook is compiled out and this arm silently measures nothing --
+		 * which is why the report prints the total write count first: a zero
+		 * total is the instrument saying it is blind, not the machine saying it
+		 * is quiet.
+		 *
+		 * Blocks compiled before the config change do not carry the callback, so
+		 * every block is destroyed after the change and recompiled on next use.
+		 *
+		 * This costs speed and nothing else: the writes performed are identical,
+		 * only the code path that performs them differs. */
+		const bool writeTrace = std::getenv("G2_AUDIO_WRITETRACE") != nullptr;
+		if(const char* const th = std::getenv("G2_AUDIO_TRACEHI"))
+			g_traceHi = dsp56k::TWord(std::strtoul(th, nullptr, 0));
+		std::vector<std::unique_ptr<WriteCollector>> collectors;
+
+		if(writeTrace)
+		{
+#if DSP56300_DEBUGGER
+			const int debuggerBuilt = 1;
+#else
+			const int debuggerBuilt = 0;
+#endif
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::DSP& dsp = board.dspSet().dsp(d);
+				dsp56k::JitConfig cfg = dsp.getJit().getConfig();
+				cfg.memoryWritesCallCpp = true;
+				dsp.getJit().setConfig(cfg);
+				dsp.getJit().destroyAllBlocks();
+
+				collectors.emplace_back(new WriteCollector(dsp));
+				dsp.setDebugger(collectors.back().get());
+			}
+			std::cout << "writetrace: armed on " << dspCount << " dsps"
+			          << " range X/Y " << hex32(0) << ".." << hex32(g_traceHi)
+			          << " DSP56300_DEBUGGER=" << debuggerBuilt
+			          << std::endl;
+		}
+
 		// ---------------------------------------------------------- the walk
 		AudioReading walkRead;
 		uint64_t walkBuckets[64] = {0};
@@ -1680,6 +1835,9 @@ int main()
 			impulse.slot[1] = g_impulseRight;
 
 			const g2::Frame silence{};
+
+			for(auto& c : collectors)
+				c->arm(true);
 
 			for(unsigned q = 0; q < walkQuanta; ++q)
 			{
@@ -1746,6 +1904,11 @@ int main()
 						{
 							scratchPrevX[d].assign(span, 0);
 							scratchPrevY[d].assign(span, 0);
+							if(scratchAddr)
+							{
+								scratchChangeCountX[d].assign(span, 0);
+								scratchChangeCountY[d].assign(span, 0);
+							}
 						}
 
 						unsigned nzX = 0, nzY = 0, chX = 0, chY = 0;
@@ -1760,9 +1923,17 @@ int main()
 							if(x != 0)
 								++nzX;
 							if(hadPrev && x != scratchPrevX[d][i])
+							{
 								++chX;
+								if(scratchAddr)
+									++scratchChangeCountX[d][i];
+							}
 							if(hadPrev && y != scratchPrevY[d][i])
+							{
 								++chY;
+								if(scratchAddr)
+									++scratchChangeCountY[d][i];
+							}
 
 							scratchPrevX[d][i] = x;
 							scratchPrevY[d][i] = y;
@@ -1883,9 +2054,91 @@ int main()
 
 				observe(walkRead, out, q, walkBuckets);
 			}
+
+			for(auto& c : collectors)
+				c->arm(false);
 		}
 
 		reportAudio("WALK", walkRead, walkBuckets);
+
+		if(writeTrace)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				const WriteCollector& c = *collectors[d];
+
+				for(int area = 0; area < 2; ++area)
+				{
+					const std::vector<WriteCell>& cells = c.cells(unsigned(area));
+
+					uint64_t touched = 0, moving = 0, writesInRange = 0;
+					for(const WriteCell& cell : cells)
+					{
+						if(!cell.seen)
+							continue;
+						++touched;
+						writesInRange += cell.writes;
+						if(cell.changes != 0)
+							++moving;
+					}
+
+					std::cout << "  dsp " << d << " writetrace " << (area == 0 ? "X" : "Y")
+					          << " totalWrites=" << c.writesTotal(unsigned(area))
+					          << " inRange=" << writesInRange
+					          << " above" << hex32(g_traceHi) << "=" << c.writesAbove(unsigned(area))
+					          << " addrsWritten=" << touched
+					          << " addrsWithAChangedValue=" << moving
+					          << std::endl;
+
+					// The addresses that carry a VALUE THAT MOVES, most first.
+					// An address written every frame with the same word is a
+					// store that fires and computes a constant; an address whose
+					// value changes is the only thing that can become audio.
+					std::vector<std::pair<uint64_t, dsp56k::TWord>> mv;
+					for(size_t i = 0; i < cells.size(); ++i)
+						if(cells[i].changes != 0)
+							mv.emplace_back(cells[i].changes, dsp56k::TWord(i));
+					std::sort(mv.begin(), mv.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+					std::cout << "    dsp " << d << " writetrace " << (area == 0 ? "X" : "Y") << " moving:";
+					const size_t showMv = mv.size() < 32 ? mv.size() : 32;
+					for(size_t i = 0; i < showMv; ++i)
+					{
+						const WriteCell& cell = cells[mv[i].second];
+						std::cout << ' ' << hex32(mv[i].second) << "=n" << cell.writes
+						          << "/c" << cell.changes
+						          << "/[" << hex32(cell.minVal) << ".." << hex32(cell.maxVal) << ']';
+					}
+					if(showMv < mv.size())
+						std::cout << " ...";
+					std::cout << std::endl;
+
+					// And the addresses written with a CONSTANT. These separate
+					// "the store never fires" from "the store fires and stores
+					// the same word every time", which no value-classifying
+					// probe in this corpus has ever been able to tell apart.
+					std::vector<std::pair<uint64_t, dsp56k::TWord>> ct;
+					for(size_t i = 0; i < cells.size(); ++i)
+						if(cells[i].seen && cells[i].changes == 0)
+							ct.emplace_back(cells[i].writes, dsp56k::TWord(i));
+					std::sort(ct.begin(), ct.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+					std::cout << "    dsp " << d << " writetrace " << (area == 0 ? "X" : "Y") << " constant:";
+					const size_t showCt = ct.size() < 32 ? ct.size() : 32;
+					for(size_t i = 0; i < showCt; ++i)
+						std::cout << ' ' << hex32(ct[i].second) << "=n" << ct[i].first
+						          << '/' << hex32(cells[ct[i].second].last);
+					if(showCt < ct.size())
+						std::cout << " ...";
+					std::cout << std::endl;
+				}
+
+				std::cout << "  dsp " << d << " writetrace P writes=" << c.writesP() << std::endl;
+			}
+
+			for(unsigned d = 0; d < dspCount; ++d)
+				board.dspSet().dsp(d).setDebugger(nullptr);
+		}
 
 		for(unsigned d = 0; d < dspCount; ++d)
 			reportDma("postwalk", board.dspSet().peripherals(d), d);
@@ -2090,6 +2343,35 @@ int main()
 				          << " quantaChangedY=" << scratchQuantaChangedY[d] << "/" << walkQuanta
 				          << " maxChangedY=" << scratchMaxChangedY[d]
 				          << std::endl;
+
+			if(scratchAddr)
+			{
+				for(unsigned d = 0; d < dspCount; ++d)
+				{
+					for(int area = 0; area < 2; ++area)
+					{
+						const std::vector<uint32_t>& cc = area == 0 ? scratchChangeCountX[d] : scratchChangeCountY[d];
+						if(cc.empty())
+							continue;
+
+						std::vector<std::pair<uint32_t, dsp56k::TWord>> hits;
+						for(size_t i = 0; i < cc.size(); ++i)
+							if(cc[i] != 0)
+								hits.emplace_back(cc[i], dsp56k::TWord(g_scratchLo + i));
+
+						std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+						std::cout << "  dsp " << d << " scratch changed addrs " << (area == 0 ? "X" : "Y")
+						          << " distinct=" << hits.size();
+						const size_t show = hits.size() < 48 ? hits.size() : 48;
+						for(size_t i = 0; i < show; ++i)
+							std::cout << ' ' << hex32(hits[i].second) << '=' << hits[i].first;
+						if(show < hits.size())
+							std::cout << " ...";
+						std::cout << std::endl;
+					}
+				}
+			}
 		}
 
 		// The per-quantum tally. zeroWrites counts every quantum in which a word
