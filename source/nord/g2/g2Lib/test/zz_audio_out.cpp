@@ -60,6 +60,17 @@ namespace
 	}
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
+
+	// One DSP's observable state at a moment. The note phase and the patch
+	// upload are then measured by the SAME instrument in the SAME run, which is
+	// the whole point: a note phase measured with a different probe than the one
+	// that sees the upload compares two things that were never comparable.
+	struct DspSnap
+	{
+		uint64_t instr = 0;
+		uint64_t nz[3] = {0, 0, 0};
+		uint64_t hash[3] = {0, 0, 0};
+	};
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
 	constexpr int g_regPc  = 17;
@@ -446,6 +457,11 @@ int main()
 		// silent, so a run without this cannot separate "no audio path" from
 		// "nothing was asked to sound".
 		const bool sendNote = std::getenv("G2_AUDIO_NOTE") != nullptr;
+		// The note arm's own control: run the note phase's quanta WITHOUT posting
+		// any MIDI. Without it a zero note-phase delta is unreadable, because the
+		// no-note arm runs no quanta at all -- so its zero says only that time
+		// did not pass, not that the note did nothing.
+		const bool noteIdle = std::getenv("G2_AUDIO_NOTEIDLE") != nullptr;
 		uint32_t noteQuanta = 40000u;
 		if(const char* const n = std::getenv("G2_AUDIO_NOTEQUANTA"))
 			noteQuanta = uint32_t(std::strtoul(n, nullptr, 10));
@@ -660,6 +676,38 @@ int main()
 			scheduler->runFrames(1);
 		}
 
+		// FNV-1a over the low 0x8000 words of each area, plus the instruction
+		// counter. Only equality, inequality and the non-zero counts are read.
+		const auto takeSnap = [&]() -> std::vector<DspSnap>
+		{
+			std::vector<DspSnap> out(dspCount);
+			const dsp56k::EMemArea areas[3] = {dsp56k::MemArea_X, dsp56k::MemArea_Y, dsp56k::MemArea_P};
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				out[d].instr = board.dspSet().dsp(d).getInstructionCounter();
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+
+				for(unsigned a = 0; a < 3; ++a)
+				{
+					uint64_t hash = 1469598103934665603ull, nz = 0;
+					for(dsp56k::TWord w = 0; w < 0x8000u; ++w)
+					{
+						const dsp56k::TWord v = memory.get(areas[a], w);
+						if(v != 0)
+							++nz;
+						hash = (hash ^ uint64_t(v)) * 1099511628211ull;
+					}
+					out[d].nz[a]   = nz;
+					out[d].hash[a] = hash;
+				}
+			}
+			return out;
+		};
+
+		// A: patch handed to the transport, firmware has not yet uploaded it.
+		const std::vector<DspSnap> snapA = takeSnap();
+
 		// ------------------------------------------------------- the long window
 		uint32_t ran = 0;
 
@@ -690,6 +738,11 @@ int main()
 		          << " chainAttached=" << (scheduler->chainAttached() ? 1 : 0)
 		          << " frameIndex=" << scheduler->frameIndex()
 		          << " t=" << seconds() << "s" << std::endl;
+
+		// B: after the upload window. A-to-B is the KNOWN POSITIVE for this
+		// instrument -- the firmware uploads the patch during this window, so P
+		// memory must move here. If it does not, nothing below means anything.
+		const std::vector<DspSnap> snapB = takeSnap();
 
 		// Was the patch stored? Kept small: one needle from the middle of what
 		// went on the wire, so a silent run can say whether the patch was there
@@ -811,6 +864,61 @@ int main()
 
 			std::cout << "note: ran " << noteQuanta << " further quanta, pc="
 			          << hex32(board.mcuReg(g_regPc)) << " t=" << seconds() << "s" << std::endl;
+		}
+		else if(noteIdle)
+		{
+			for(uint32_t i = 0; i < noteQuanta; ++i)
+			{
+				scheduler->runFrames(1);
+				if((i & 0x3ffu) == 0 && expired())
+					break;
+				if(board.mcuHalted())
+					break;
+			}
+
+			std::cout << "noteIdle: ran " << noteQuanta
+			          << " quanta with NO midi posted, pc="
+			          << hex32(board.mcuReg(g_regPc)) << " t=" << seconds() << "s" << std::endl;
+		}
+
+		// C: after the note phase. B-to-C is the question this run exists to
+		// answer, and it is asked with the same instrument that produced the
+		// A-to-B positive above.
+		const std::vector<DspSnap> snapC = takeSnap();
+
+		{
+			const char* const names[3] = {"X", "Y", "P"};
+
+			std::cout << "DSPSNAP mode=" << mode
+			          << " note=" << (sendNote ? 1 : 0)
+			          << " noteIdle=" << (noteIdle ? 1 : 0)
+			          << " noteQuanta=" << ((sendNote || noteIdle) ? noteQuanta : 0u)
+			          << std::endl;
+
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				std::cout << "  dsp " << d
+				          << " uploadInstr=" << (snapB[d].instr - snapA[d].instr)
+				          << " noteInstr=" << (snapC[d].instr - snapB[d].instr)
+				          << " uploadChanged=";
+
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (snapA[d].hash[a] != snapB[d].hash[a] ? "1" : "0");
+
+				std::cout << " noteChanged=";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (snapB[d].hash[a] != snapC[d].hash[a] ? "1" : "0");
+
+				std::cout << " nzUpload=";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (int64_t(snapB[d].nz[a]) - int64_t(snapA[d].nz[a])) << ",";
+
+				std::cout << " nzNote=";
+				for(unsigned a = 0; a < 3; ++a)
+					std::cout << names[a] << (int64_t(snapC[d].nz[a]) - int64_t(snapB[d].nz[a])) << ",";
+
+				std::cout << std::endl;
+			}
 		}
 
 		// ------------------------------------------------- the play transition
