@@ -272,13 +272,13 @@ namespace g2
 		}
 	}
 
-	uint32_t Uart0::read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status)
+	uint32_t Uart0::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isByteAccess(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", false, _size, _offset);
 			return 0;
 		}
@@ -286,7 +286,7 @@ namespace g2
 		const UartLoc loc = locate(_offset);
 		if(!loc.inModule)
 		{
-			_status = MCF5307_BUS_UNMAPPED;
+			_status = MCF5407_BUS_UNMAPPED;
 			logLine("UNMAPPED", false, _size, _offset);
 			return 0;
 		}
@@ -297,13 +297,13 @@ namespace g2
 		return readUart0(loc.local);
 	}
 
-	void Uart0::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status)
+	void Uart0::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isByteAccess(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", true, _size, _offset);
 			return;
 		}
@@ -311,7 +311,7 @@ namespace g2
 		const UartLoc loc = locate(_offset);
 		if(!loc.inModule)
 		{
-			_status = MCF5307_BUS_UNMAPPED;
+			_status = MCF5407_BUS_UNMAPPED;
 			logLine("UNMAPPED", true, _size, _offset);
 			return;
 		}

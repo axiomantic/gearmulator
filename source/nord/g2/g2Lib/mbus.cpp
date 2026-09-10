@@ -45,13 +45,13 @@ namespace g2
 			+ " bits at offset " + hex32(_offset));
 	}
 
-	uint32_t MBus::read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status)
+	uint32_t MBus::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", false, _size, _offset);
 			return 0u;
 		}
@@ -66,7 +66,7 @@ namespace g2
 		// whole register and is refused rather than silently narrowed.
 		if(_size != 8)
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", false, _size, _offset);
 			return 0u;
 		}
@@ -75,13 +75,13 @@ namespace g2
 	}
 
 	void MBus::write(const uint32_t _offset, const int _size, const uint32_t _value,
-		mcf5307_bus_status& _status)
+		mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", true, _size, _offset);
 			return;
 		}
@@ -94,7 +94,7 @@ namespace g2
 
 		if(_size != 8)
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", true, _size, _offset);
 			return;
 		}

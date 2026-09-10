@@ -31,6 +31,20 @@ jobs:
       if: matrix.os == 'windows-2022'
       uses: ilammy/msvc-dev-cmd@v1
 
+    - name: Install Nim
+      uses: jiro4989/setup-nim-action@v2
+      with:
+        # The MCF5407 core compiles its Nim sources during CMake configure and
+        # stops the configure on any version other than the one its own
+        # .nim-version names, so the pin here is an exact version and not a
+        # range. Advance it together with that file.
+        nim-version: '2.2.10'
+        # The compiler tree goes outside the workspace: the default puts it in
+        # the working directory, where it becomes a subtree of the checkout
+        # that the build's recursive source globs would walk.
+        parent-nim-install-directory: ${{ runner.temp }}
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Configure CMake with ${{ matrix.cmake_generator }}
       if: matrix.cmake_generator != 'default'
       run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}

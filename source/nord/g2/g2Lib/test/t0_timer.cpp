@@ -30,7 +30,7 @@
 //      is the unit's and not a stored byte.
 //
 //   6. The Board advances the timers from the cycles it actually ran. Case
-//      group 8 runs the real MCF5307 core over a page of NOPs and asserts the
+//      group 8 runs the real MCF5407 core over a page of NOPs and asserts the
 //      counter equals the cycle count runMcu returned. A Board that advanced
 //      nothing reads zero there.
 
@@ -39,7 +39,7 @@
 #include "../sim.h"
 #include "../timer.h"
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstdint>
 #include <iostream>
@@ -151,16 +151,16 @@ namespace
 	constexpr int g_word = 2;   // the core's size unit is BYTES
 
 	uint32_t boardRead(g2::Board& _board, const uint32_t _address, const int _size,
-		mcf5307_bus_status& _status)
+		mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		return g2::Board::onRead(&_board, _address, _size, &_status);
 	}
 
 	void boardWrite(g2::Board& _board, const uint32_t _address, const int _size,
-		const uint32_t _value, mcf5307_bus_status& _status)
+		const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		g2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 }
@@ -371,7 +371,7 @@ int main()
 	// offsets the manual assigns.
 	{
 		g2::Sim sim;
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		checkEqual(sim.read(0x184, 16, status), uint32_t(0xffffu),
 			"TRR2 reads its reset value 0xffff through the Sim");
@@ -418,7 +418,7 @@ int main()
 	// -----------------------------------------------------------------------
 	// Case group 8. The Board advances the timers from the cycles it ran.
 	//
-	// The real MCF5307 core runs a page of NOPs out of CS0 and the counter is
+	// The real MCF5407 core runs a page of NOPs out of CS0 and the counter is
 	// read back through the same bus callbacks the core uses. The assertion is
 	// an equality against the cycle count runMcu returned, so a Board that
 	// advanced the timers from anything other than the cycles it ran is red
@@ -440,7 +440,7 @@ int main()
 		}
 		board.flash().loadCs0(nops);
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		// PS = 0 so one cycle is one tick, FRR set, ORI clear so nothing is
 		// raised, RST set so the timer is enabled.

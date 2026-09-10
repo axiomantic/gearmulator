@@ -2,11 +2,11 @@
 //
 // The OS store-helper executes `movea.l #$13000010,a0` then `move.b #$f6,(a0)`
 // during USB init. $13000010 is CS3's command port, and with nothing answering
-// Region::Cs3 the write returns MCF5307_BUS_UNMAPPED and the core collapses
+// Region::Cs3 the write returns MCF5407_BUS_UNMAPPED and the core collapses
 // through the absolute vector at $8 into erased flash and a double fault.
 //
 // Board::onRead and Board::onWrite are the exact function pointers handed to
-// mcf5307_create, so driving them drives the path the core drives. Driving
+// mcf5407_create, so driving them drives the path the core drives. Driving
 // busRead instead stays green against a broken forwarding body.
 //
 // The size unit of those two callbacks is a count of bytes -- 1, 2 or 4 -- and
@@ -16,7 +16,7 @@
 // The assertions read the status and never the return value. The unmapped read
 // path zeroes its return exactly as a benign stub answer might, so an assertion
 // on the value passes without any wiring. The status is the fact under test:
-// MCF5307_BUS_UNMAPPED before the wiring, MCF5307_BUS_OK after it.
+// MCF5407_BUS_UNMAPPED before the wiring, MCF5407_BUS_OK after it.
 //
 // What this test cannot see: the device answers identically at every offset in
 // the window, so a forwarding error that swaps the A0/A4 command and data
@@ -78,15 +78,15 @@ int main()
 {
 	g2::Board board(makeConfig());
 
-	mcf5307_bus_status status = MCF5307_BUS_OK;
+	mcf5407_bus_status status = MCF5407_BUS_OK;
 
 	// The OS store-helper's byte write of 0xf6 to the ISP1181 command port at
 	// 0x13000010. Before the wiring this
-	// answers MCF5307_BUS_UNMAPPED and the core faults on it; after the
-	// wiring the adapter accepts it and reports MCF5307_BUS_OK.
-	status = MCF5307_BUS_OK;
+	// answers MCF5407_BUS_UNMAPPED and the core faults on it; after the
+	// wiring the adapter accepts it and reports MCF5407_BUS_OK.
+	status = MCF5407_BUS_OK;
 	(void)g2::Board::onWrite(&board, 0x13000010u, g_byte, 0xf6u, &status);
-	checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+	checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 	           "the OS's command-port byte write at " + hex32(0x13000010u)
 		           + " completes with BUS_OK");
 
@@ -94,9 +94,9 @@ int main()
 	// in the register-file idiom, and the adapter widens rather than refuses,
 	// but the case pinned here is the smallest one: the byte read at the
 	// window base completes.
-	status = MCF5307_BUS_OK;
+	status = MCF5407_BUS_OK;
 	(void)g2::Board::onRead(&board, 0x13000000u, g_byte, &status);
-	checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+	checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 	           "a byte read at the CS3 window base " + hex32(0x13000000u)
 		           + " completes with BUS_OK");
 

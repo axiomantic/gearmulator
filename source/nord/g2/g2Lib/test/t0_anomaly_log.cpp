@@ -56,7 +56,7 @@ namespace
 	// the canonical anomaly, so the test drives exactly that number.
 	constexpr uint32_t g_rambar1Offset = 0x0C05u;
 
-	// The status the board returns from an access. MCF5307_BUS_OK means the
+	// The status the board returns from an access. MCF5407_BUS_OK means the
 	// access completed; the write is ACCEPTED even though it changes nothing.
 	enum class Status { Ok, Fault };
 

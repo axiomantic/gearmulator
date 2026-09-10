@@ -1,8 +1,8 @@
-// The Board's own MCF5307 core is reachable from outside the class: it can be
+// The Board's own MCF5407 core is reachable from outside the class: it can be
 // reset, stepped, read and asked whether it stopped. Tier T0: this test needs
 // no firmware artifact of any kind.
 //
-// This test builds no mcf5307_ctx of its own, and that is the point of it. A
+// This test builds no mcf5407_ctx of its own, and that is the point of it. A
 // check that created a core against Board::onRead and Board::onWrite would pass
 // against a Board whose own core is still unreachable, because the core it
 // asserted about would be the one it built. Every assertion below is about the
@@ -84,12 +84,12 @@ namespace
 	public:
 		explicit Ram(const uint32_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -97,17 +97,17 @@ namespace
 			for(int i = 0; i < count; ++i)
 				value = (value << 8) | uint32_t(m_bytes[_offset + uint32_t(i)]);
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return value;
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-		           mcf5307_bus_status& _status) override
+		           mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -117,7 +117,7 @@ namespace
 				m_bytes[_offset + uint32_t(i)] = uint8_t((_value >> shift) & 0xffu);
 			}
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 		}
 
 		void pokeWord(const uint32_t _offset, const uint16_t _value)
@@ -211,9 +211,9 @@ namespace
 		return config;
 	}
 
-	uint32_t boardReadLong(g2::Board& _board, const uint32_t _address, mcf5307_bus_status& _status)
+	uint32_t boardReadLong(g2::Board& _board, const uint32_t _address, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		return g2::Board::onRead(&_board, _address, 4, &_status);
 	}
 
@@ -262,9 +262,9 @@ int main()
 		checkEqual(board.mcuReg(17), g_codeEnd,
 		           "phase one, first: the Board's own core ran the program and stopped after the last instruction");
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		const uint32_t readBack = boardReadLong(board, g_dstAddr, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 		           "phase one, second: the destination address answers on the Board's own bus path");
 		checkEqual(readBack, g_operand,
 		           "phase one, second: the longword the program stored reads back through Board::onRead");

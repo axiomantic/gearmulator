@@ -67,7 +67,7 @@
 /* PSTCLK/BCLKO. The manual permits 2, 3 or 4, and nothing else.             */
 #define G2_MCU_BUS_DIVIDER            0u         /* not derived              */
 
-/* The core clock. This is the only one that may reach mcf5307_exec's
+/* The core clock. This is the only one that may reach mcf5407_exec's
  * max_cycles.
  *
  * Three times the 54 MHz the schematic itself labels at CLKIN. The oscillator
