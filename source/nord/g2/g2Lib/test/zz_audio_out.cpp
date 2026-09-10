@@ -889,6 +889,10 @@ int main()
 				"G2_AUDIO_WINSAMPLE", "G2_AUDIO_YWIN", "G2_AUDIO_SCRATCH",
 				"G2_AUDIO_SCRATCHADDR", "G2_AUDIO_WRITETRACE", "G2_AUDIO_TRACEHI",
 				"G2_AUDIO_SCRATCHWATCH", "G2_AUDIO_SWLO", "G2_AUDIO_SWHI",
+				"G2_AUDIO_PDUMP_LO", "G2_AUDIO_PDUMP_HI",
+				"G2_AUDIO_COEFF", "G2_AUDIO_COEFFSNAP",
+				"G2_AUDIO_COEFFLO", "G2_AUDIO_COEFFHI", "G2_AUDIO_DMATRACE",
+				"G2_AUDIO_INTONE",
 				"G2_LOG_ESAI_UNDERRUN"
 			};
 
@@ -1206,6 +1210,66 @@ int main()
 			scheduler->runFrames(1);
 		}
 
+		/* The coefficient window: the pages the uploaded payload's own pointers
+		 * name. Its hot loop streams `x:(r3)+` / `y:(r4)+` with `r3 = r4 = #$50`,
+		 * so everything the synthesis reads from memory comes from here.
+		 *
+		 * Two switches read it and NEITHER WRITES A WORD. That distinction is
+		 * the whole reason they exist: G2_AUDIO_SCRATCHWATCH covers the same
+		 * pages and answers a different question by filling them with a
+		 * sentinel, which changes what the synthesis computes. A probe that
+		 * supplies the coefficients cannot report what the coefficients are.
+		 *
+		 * The range starts BELOW $50 on purpose -- $45..$48 is the descriptor
+		 * ring and $42/$43 the firmware mailboxes, all four already known to
+		 * move every quantum, so they are the known positive that says the
+		 * recorder is not simply blind in this neighbourhood. */
+		dsp56k::TWord coLo = 0x0040u, coHi = 0x0140u;
+		if(const char* const v = std::getenv("G2_AUDIO_COEFFLO"))
+			coLo = dsp56k::TWord(std::strtoul(v, nullptr, 0));
+		if(const char* const v = std::getenv("G2_AUDIO_COEFFHI"))
+			coHi = dsp56k::TWord(std::strtoul(v, nullptr, 0));
+
+		/* G2_AUDIO_COEFFSNAP dumps the window's CONTENTS at the three points
+		 * the DSPSNAP digests are already taken at: before the firmware uploads
+		 * the patch, after it, and after the note phase. Three dumps answer
+		 * "what fills these pages and when" directly -- a page that is zero at
+		 * A, non-zero at B and identical at C was written once, by the upload,
+		 * and never again. */
+		const bool coeffSnap = std::getenv("G2_AUDIO_COEFFSNAP") != nullptr;
+
+		const auto dumpCoeff = [&](const char* const _label)
+		{
+			if(!coeffSnap)
+				return;
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+				for(int area = 0; area < 2; ++area)
+				{
+					const dsp56k::EMemArea ma = area == 0 ? dsp56k::MemArea_X : dsp56k::MemArea_Y;
+					uint64_t hash = 1469598103934665603ull;
+					unsigned nz = 0;
+					for(dsp56k::TWord w = coLo; w < coHi; ++w)
+					{
+						const dsp56k::TWord v = memory.get(ma, w);
+						if(v != 0)
+							++nz;
+						hash = (hash ^ uint64_t(v)) * 1099511628211ull;
+					}
+					std::cout << "COEFFSNAP " << _label << " dsp " << d
+					          << ' ' << (area == 0 ? "X" : "Y")
+					          << ' ' << hex32(coLo) << ".." << hex32(coHi)
+					          << " nonZero=" << nz << '/' << (coHi - coLo)
+					          << " digest=" << std::hex << hash << std::dec
+					          << " :";
+					for(dsp56k::TWord w = coLo; w < coHi; ++w)
+						std::cout << ' ' << hex32(memory.get(ma, w));
+					std::cout << std::endl;
+				}
+			}
+		};
+
 		// FNV-1a over the low 0x8000 words of each area, plus the instruction
 		// counter. Only equality, inequality and the non-zero counts are read.
 		const auto takeSnap = [&]() -> std::vector<DspSnap>
@@ -1237,6 +1301,7 @@ int main()
 
 		// A: patch handed to the transport, firmware has not yet uploaded it.
 		const std::vector<DspSnap> snapA = takeSnap();
+		dumpCoeff("A-preUpload");
 
 		// ------------------------------------------------------- the long window
 		//
@@ -1303,6 +1368,7 @@ int main()
 		// instrument -- the firmware uploads the patch during this window, so P
 		// memory must move here. If it does not, nothing below means anything.
 		const std::vector<DspSnap> snapB = takeSnap();
+		dumpCoeff("B-postUpload");
 
 		// Was the patch stored? Kept small: one needle from the middle of what
 		// went on the wire, so a silent run can say whether the patch was there
@@ -1641,6 +1707,7 @@ int main()
 		// answer, and it is asked with the same instrument that produced the
 		// A-to-B positive above.
 		const std::vector<DspSnap> snapC = takeSnap();
+		dumpCoeff("C-postNote");
 
 		{
 			const char* const names[3] = {"X", "Y", "P"};
@@ -1846,6 +1913,54 @@ int main()
 		 * payload's 34.8 million instructions leave no trace in memory. */
 		const bool scratchAddr = std::getenv("G2_AUDIO_SCRATCHADDR") != nullptr;
 
+		/* G2_AUDIO_COEFF records, once per quantum and WRITING NOTHING, the
+		 * VALUE at every address of the coefficient window in both spaces.
+		 *
+		 * The existing read-only sampler counts words that changed; it names no
+		 * value, so "the payload reads a stream of constants" and "the payload
+		 * reads a stream that moves" are the same row in its table whenever the
+		 * count happens to be the same. This records, per address: the first
+		 * value seen, the last, how many quanta it differed from the quantum
+		 * before, and up to eight distinct values.
+		 *
+		 * Its blind spot is stated rather than hidden: it samples at quantum
+		 * boundaries, so a word written and restored INSIDE one quantum is
+		 * invisible to it. The ISR fires once every four quanta, so this is
+		 * four samples per audio frame, and a coefficient the synthesis uses
+		 * from one frame to the next cannot hide from it -- but one used only
+		 * within a single ISR call can. G2_AUDIO_DMATRACE closes that. */
+		const bool coeffSample = std::getenv("G2_AUDIO_COEFF") != nullptr;
+		const size_t coSpan = size_t(coHi > coLo ? coHi - coLo : 0);
+
+		struct CoeffCell
+		{
+			bool     seen    = false;
+			uint32_t first   = 0;
+			uint32_t last    = 0;
+			uint32_t minVal  = 0;
+			uint32_t maxVal  = 0;
+			uint64_t changed = 0;
+			std::set<uint32_t> distinct;
+		};
+		// A cap, so one moving word cannot make the report unbounded. It is
+		// reported with a "+" when it is hit, so a saturated count is never
+		// mistaken for an exact one.
+		constexpr size_t g_coeffDistinctCap = 64;
+		std::vector<std::vector<CoeffCell>> coeffCells[2] = {
+			std::vector<std::vector<CoeffCell>>(dspCount),
+			std::vector<std::vector<CoeffCell>>(dspCount)};
+		if(coeffSample)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				coeffCells[0][d].assign(coSpan, CoeffCell{});
+				coeffCells[1][d].assign(coSpan, CoeffCell{});
+			}
+			std::cout << "coeff: READ-ONLY per-quantum value recorder over X and Y "
+			          << hex32(coLo) << ".." << hex32(coHi)
+			          << " on " << dspCount << " dsps" << std::endl;
+		}
+
 		/* G2_AUDIO_SCRATCHWATCH answers the one question no read-only sampler
 		 * can: does a store FIRE. Counting non-zero words cannot see a store
 		 * that writes zero over zero, and counting CHANGED words cannot see a
@@ -1966,7 +2081,25 @@ int main()
 		 *
 		 * This costs speed and nothing else: the writes performed are identical,
 		 * only the code path that performs them differs. */
-		const bool writeTrace = std::getenv("G2_AUDIO_WRITETRACE") != nullptr;
+		/* G2_AUDIO_DMATRACE attaches the same collector and DOES NOT flip
+		 * memoryWritesCallCpp. The JIT then keeps inlining the DSP core's own
+		 * writes, which is what makes G2_AUDIO_WRITETRACE cost ~3 s a quantum
+		 * on a patched DSP -- and every write performed in C++ still reaches
+		 * Memory::dspWrite, so the collector sees them.
+		 *
+		 * DmaChannel::memWrite is one of those: it calls DSP::memWrite, which
+		 * calls Memory::dspWrite, which calls the debugger. So this arm names
+		 * every word the RECEIVE DMA delivers, with its value, at full speed --
+		 * the one question the read-only window sampler cannot answer, because
+		 * a word the DMA writes and the firmware clear wipes inside the same
+		 * quantum reads as zero at every quantum boundary.
+		 *
+		 * It is NOT a substitute for G2_AUDIO_WRITETRACE: it is blind to the
+		 * payload's own stores by construction. Its own known negative is that
+		 * blindness, and its known positive is the firmware buffer clear, which
+		 * runs in DSP code and must therefore NOT appear. */
+		const bool dmaTrace   = std::getenv("G2_AUDIO_DMATRACE") != nullptr;
+		const bool writeTrace = dmaTrace || std::getenv("G2_AUDIO_WRITETRACE") != nullptr;
 		if(const char* const th = std::getenv("G2_AUDIO_TRACEHI"))
 			g_traceHi = dsp56k::TWord(std::strtoul(th, nullptr, 0));
 		std::vector<std::unique_ptr<WriteCollector>> collectors;
@@ -1981,10 +2114,13 @@ int main()
 			for(unsigned d = 0; d < dspCount; ++d)
 			{
 				dsp56k::DSP& dsp = board.dspSet().dsp(d);
-				dsp56k::JitConfig cfg = dsp.getJit().getConfig();
-				cfg.memoryWritesCallCpp = true;
-				dsp.getJit().setConfig(cfg);
-				dsp.getJit().destroyAllBlocks();
+				if(!dmaTrace)
+				{
+					dsp56k::JitConfig cfg = dsp.getJit().getConfig();
+					cfg.memoryWritesCallCpp = true;
+					dsp.getJit().setConfig(cfg);
+					dsp.getJit().destroyAllBlocks();
+				}
 
 				collectors.emplace_back(new WriteCollector(dsp));
 				dsp.setDebugger(collectors.back().get());
@@ -1992,6 +2128,8 @@ int main()
 			std::cout << "writetrace: armed on " << dspCount << " dsps"
 			          << " range X/Y " << hex32(0) << ".." << hex32(g_traceHi)
 			          << " DSP56300_DEBUGGER=" << debuggerBuilt
+			          << " memoryWritesCallCpp=" << (dmaTrace ? 0 : 1)
+			          << (dmaTrace ? " (DMATRACE: non-JIT writes only)" : "")
 			          << std::endl;
 		}
 
@@ -2006,12 +2144,43 @@ int main()
 
 			const g2::Frame silence{};
 
+			/* G2_AUDIO_INTONE pushes a DIFFERENT non-zero stereo pair every
+			 * quantum instead of silence.
+			 *
+			 * G2_AUDIO_IMPULSE drives exactly one frame, so it can be missed by
+			 * any probe that samples, and a single frame that fails to arrive
+			 * and an input path that carries nothing are the same observation.
+			 * A value that moves every quantum cannot be missed that way: it
+			 * either reaches `ChainAdapter::injectCodecSource`'s documented
+			 * destination -- slots 0 and 1 of mailbox 0, which the head DSP's
+			 * receive DMA places at X:$1x04 -- or the host audio input reaches
+			 * no DSP at all, and the difference is visible in one row of the
+			 * DMA trace.
+			 *
+			 * It is the known positive the receive-side zero needs, and it is
+			 * also the experiment the zero invites: if the payload's inputs are
+			 * constant only because the machine is fed silence, an input that
+			 * moves is what would make its output move. */
+			g2::Frame tone{};
+			const bool inTone = std::getenv("G2_AUDIO_INTONE") != nullptr;
+			if(inTone)
+				std::cout << "intone: pushing a moving non-zero stereo pair every quantum" << std::endl;
+
 			for(auto& c : collectors)
 				c->arm(true);
 
 			for(unsigned q = 0; q < walkQuanta; ++q)
 			{
-				const g2::Frame& in = (pushImpulse && q == 0) ? impulse : silence;
+				if(inTone)
+				{
+					// Bit 23 clear, so the frame conversion's sign extension is
+					// the identity on it; low bit set, so no quantum pushes a
+					// zero and a zero downstream is never this value arriving.
+					tone.slot[0] = int32_t(((uint32_t(q) * 0x00004EF7u) & 0x007FFFFEu) | 1u);
+					tone.slot[1] = int32_t(((uint32_t(q) * 0x00002B6Du) & 0x007FFFFEu) | 1u);
+				}
+
+				const g2::Frame& in = inTone ? tone : ((pushImpulse && q == 0) ? impulse : silence);
 
 				(void) scheduler->push(&in, 1);
 				scheduler->runFrames(1);
@@ -2145,6 +2314,40 @@ int main()
 								scratchMaxY[d]       = nzY;
 								scratchFirstAddrY[d] = firstAddr;
 								scratchFirstValY[d]  = firstVal;
+							}
+						}
+					}
+				}
+
+				if(coeffSample)
+				{
+					for(unsigned d = 0; d < dspCount; ++d)
+					{
+						dsp56k::Memory& memory = board.dspSet().dsp(d).memory();
+						for(int area = 0; area < 2; ++area)
+						{
+							const dsp56k::EMemArea ma = area == 0 ? dsp56k::MemArea_X : dsp56k::MemArea_Y;
+							std::vector<CoeffCell>& cells = coeffCells[area][d];
+							for(dsp56k::TWord w = coLo; w < coHi; ++w)
+							{
+								const uint32_t v = uint32_t(memory.get(ma, w));
+								CoeffCell& c = cells[size_t(w - coLo)];
+								if(!c.seen)
+								{
+									c.seen   = true;
+									c.first  = v;
+									c.minVal = v;
+									c.maxVal = v;
+								}
+								else if(v != c.last)
+								{
+									++c.changed;
+								}
+								if(v < c.minVal) c.minVal = v;
+								if(v > c.maxVal) c.maxVal = v;
+								c.last = v;
+								if(c.distinct.size() < g_coeffDistinctCap)
+									c.distinct.insert(v);
 							}
 						}
 					}
@@ -2620,6 +2823,72 @@ int main()
 							std::cout << " ...";
 						std::cout << std::endl;
 					}
+				}
+			}
+		}
+
+		if(coeffSample)
+		{
+			for(unsigned d = 0; d < dspCount; ++d)
+			{
+				for(int area = 0; area < 2; ++area)
+				{
+					const std::vector<CoeffCell>& cells = coeffCells[area][d];
+
+					uint64_t nonZero = 0, moved = 0;
+					for(const CoeffCell& c : cells)
+					{
+						if(c.last != 0)
+							++nonZero;
+						if(c.changed != 0)
+							++moved;
+					}
+
+					std::cout << "  dsp " << d << " coeff " << (area == 0 ? "X" : "Y")
+					          << ' ' << hex32(coLo) << ".." << hex32(coHi)
+					          << " addrsNonZeroAtEnd=" << nonZero << '/' << coSpan
+					          << " addrsThatEverMOVED=" << moved
+					          << std::endl;
+
+					// Every address whose value ever moved, with how often and
+					// how many distinct words it held. This is the row that
+					// separates a constant input from a varying one.
+					std::cout << "    dsp " << d << " coeff " << (area == 0 ? "X" : "Y") << " moving:";
+					for(size_t i = 0; i < cells.size(); ++i)
+					{
+						if(cells[i].changed == 0)
+							continue;
+						std::cout << ' ' << hex32(uint32_t(coLo + i))
+						          << "=c" << cells[i].changed
+						          << "/d" << cells[i].distinct.size()
+						          << (cells[i].distinct.size() >= g_coeffDistinctCap ? "+" : "")
+						          << "/[" << hex32(cells[i].minVal) << ".." << hex32(cells[i].maxVal) << ']'
+						          << "/first" << hex32(cells[i].first)
+						          << "/vals{";
+						size_t shown = 0;
+						for(const uint32_t dv : cells[i].distinct)
+						{
+							if(shown++)
+								std::cout << ',';
+							if(shown > 12)
+							{
+								std::cout << "...";
+								break;
+							}
+							std::cout << hex32(dv);
+						}
+						std::cout << '}';
+					}
+					std::cout << std::endl;
+
+					// And the full window, one word per address, so the VALUES
+					// the payload streams are on the record and not merely
+					// counted. A constant is only a finding if you can say
+					// which constant.
+					std::cout << "    dsp " << d << " coeff " << (area == 0 ? "X" : "Y") << " last:";
+					for(size_t i = 0; i < cells.size(); ++i)
+						std::cout << ' ' << hex32(cells[i].last);
+					std::cout << std::endl;
 				}
 			}
 		}
