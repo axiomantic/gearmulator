@@ -676,6 +676,15 @@ namespace g2
 
 		if(!isValid())
 		{
+			/* The staged MIDI is dropped, not held. sendMidi enqueues on every
+			 * event the host sends and this is the only other end of that
+			 * queue, so a branch that returned without draining it would grow
+			 * it for the whole pre-boot window and then for ever after a
+			 * fault, which is sticky. An unbooted or faulted machine cannot
+			 * deliver an event to anything, and dropping it is what that
+			 * answer costs. */
+			m_pendingMidi.clear();
+
 			m_inCallback.store(false, std::memory_order_release);
 
 			// The silence the boot window promises: zero the output buffers and

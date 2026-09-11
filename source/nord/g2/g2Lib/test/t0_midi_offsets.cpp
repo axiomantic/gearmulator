@@ -10,11 +10,12 @@
  *        absolute = m_numSamplesProcessed + getExtraLatencySamples() + offset
  *
  *      asserted per event through the staged events the harness reads back.
- *      The counter is advanced by driving the real processAudio: the
- *      conversion cannot be observed at all until the callback that moves
- *      the counter runs. The device is never valid in this fixture, so
- *      processAudio takes the not-ready path and still advances the counter,
- *      keeping this a T0 test with no machine.
+ *      Every read of the queue happens before the callback that would drain
+ *      it: the callback is the queue's only consumer and it drains on the
+ *      not-ready path too, which is also asserted here. The counter is
+ *      advanced by driving the real processAudio, and the device is never
+ *      valid in this fixture, so processAudio takes the not-ready path and
+ *      still advances the counter -- keeping this a T0 test with no machine.
  *
  *   2. The required-red mutation. The conversion is easy to get backwards.
  *      Reversing it -- `offset -=` instead of `+=` -- turns the arithmetic
@@ -168,20 +169,35 @@ int main()
 			check(response.empty(), "sendMidi's response is empty while no machine answers");
 		}
 
+		/* The stamps are read before the callback, because the callback is the
+		 * other end of the queue: it drains what sendMidi staged, on the ready
+		 * path and on the not-ready path alike, so a read taken after it reads
+		 * an empty queue by design. sendMidi stamps against the counter it sees,
+		 * which is what this case group is about. */
+		{
+			const auto& staged = device.staged();
+			checkEqual(staged.size(), kRelative.size(), "one staged event per delivered event");
+
+			for(size_t i = 0; i < staged.size(); ++i)
+			{
+				checkEqual(staged[i].offset, kRelative[i],
+					"staged offset " + std::to_string(i) + " is relative + counter + latency(0)");
+			}
+		}
+
 		// The counter moves only in processAudio. Drive one block; the
 		// events were submitted before it, which is exactly the framework's
 		// order (device.cpp stamps and enqueues, then runs audio).
 		runCallback(device, kFirstBlock);
 		checkEqual(device.samplesProcessed(), kFirstBlock, "the counter moved by the block the callback ran");
 
-		const auto& staged = device.staged();
-		checkEqual(staged.size(), kRelative.size(), "one staged event per delivered event");
-
-		for(size_t i = 0; i < staged.size(); ++i)
-		{
-			checkEqual(staged[i].offset, kRelative[i],
-				"staged offset " + std::to_string(i) + " is relative + counter + latency(0)");
-		}
+		/* The queue is drained by the NOT-READY callback too. sendMidi enqueues
+		 * unconditionally and the callback is the only consumer, so a not-ready
+		 * branch that returned without draining would grow the queue for the
+		 * whole pre-boot window and for ever after a fault, which is sticky. */
+		checkEqual(device.staged().size(), 0u,
+			"the not-ready callback DRAINED the staged queue, so a device that never boots does "
+			"not accumulate one event per host event for the life of the session");
 	}
 
 	/* ------------- Case group 2. The required-red mutation. The same
@@ -198,14 +214,16 @@ int main()
 		std::vector<synthLib::SMidiEvent> response;
 		check(device.sendMidi(hostEvent(kRelative), response), "the reversed device accepts the same event");
 
+		{
+			const auto& staged = device.staged();
+			checkEqual(staged.size(), 1u, "the reversed device staged one event");
+			checkEqual(staged[0].offset, static_cast<uint64_t>(kRelative),
+				"RED IF REACHED: the reversed arithmetic cannot produce counter + latency + offset");
+		}
+
 		runCallback(device, kBlock);
 
 		checkEqual(device.samplesProcessed(), kBlock, "the reversed device's counter moved identically");
-
-		const auto& staged = device.staged();
-		checkEqual(staged.size(), 1u, "the reversed device staged one event");
-		checkEqual(staged[0].offset, static_cast<uint64_t>(kRelative),
-			"RED IF REACHED: the reversed arithmetic cannot produce counter + latency + offset");
 	}
 
 	/* ------------- Case group 3. The extra-latency term. The framework's
@@ -231,10 +249,8 @@ int main()
 		std::vector<synthLib::SMidiEvent> response;
 		check(device.sendMidi(hostEvent(kRelative), response), "sendMidi accepted the event");
 
-		// The next callback: the conversion already stamped counter + latency
-		// + offset at submission time.
-		runCallback(device, kBlock);
-
+		// The conversion already stamped counter + latency + offset at
+		// submission time, and the next callback would drain it.
 		const auto& staged = device.staged();
 		checkEqual(staged.size(), 1u, "one staged event");
 		checkEqual(staged[0].offset, static_cast<uint64_t>(kBlock) + kLatency + kRelative,
