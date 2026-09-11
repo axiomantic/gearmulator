@@ -329,10 +329,9 @@ jobs:
       #
       # "run" counts gated tests that EXECUTED THEIR BODY. A skipped test is not
       # a run test, which is what makes "a run that executed zero gated tests"
-      # the condition run == 0. gatedFixture.h in the gearmulator fork carries
-      # the same verdict tokens and the same rule, and t0_skip_discipline
-      # is the check that proves the rule fires -- including the negative case,
-      # that a job which ran one gated test does NOT print NOT VERIFIED.
+      # the condition run == 0. t0_skip_discipline is the check that proves the
+      # rule fires -- including the negative case, that a job which ran one
+      # gated test does NOT print NOT VERIFIED.
       #
       # THE COUNT LABELS ARE LOWERCASE AND THE VERDICT TOKENS ARE UPPERCASE, so
       # that "the summary never prints PASS" is a case-sensitive property which

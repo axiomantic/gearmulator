@@ -226,8 +226,6 @@ int main()
 		//
 		// The negative case for messages 2 and 3. Without it, the resolver could
 		// always fail and every empty-result assertion above would hold.
-		// This is also the call shape firmwareState.h and gatedFixture.h use
-		// today.
 		{
 			setArtifactsVariable(".");
 

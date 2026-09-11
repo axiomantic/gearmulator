@@ -296,16 +296,6 @@ int main()
 		}
 
 		// ---- six lines: the required symbols plus one that is not one.
-		//
-		// The extra symbol is deliberately not one of the two unmeasured bus
-		// symbols. The configure-time guard fails the build when any source
-		// under g2Lib/ carries either name, and a negative case that broke the
-		// configure step would not be a negative case.
-		//
-		// Measured, and worth recording: that guard is a plain substring match
-		// over the file text, so it fires on a comment that names either symbol
-		// exactly as it fires on a use. This paragraph is therefore written
-		// without the two names in it.
 		{
 			const std::string sixLines =
 				"G2_DSP_CYCLES_PER_FRAME_NUM   150000000\n"
