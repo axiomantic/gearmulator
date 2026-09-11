@@ -1,18 +1,22 @@
-# The T0 job matrix.
+# What this workflow runs, and why it is not everything the tree registers.
 #
-# THIS MATRIX IS T0 ONLY, AND IT ALWAYS WILL BE. No T1 job, no T2 job and no
-# integer-comparison job runs here. All of them need a firmware byte, and no
-# public repository may hold a credential that could fetch one. Those jobs run
-# inside the private artifact repository instead. T0 only is what lets every job
-# here run on a pull request from a fork.
+# NO JOB HERE TOUCHES A FIRMWARE BYTE, AND THAT IS DELIBERATE. No public
+# repository may hold a credential that could fetch one, and the jobs that need
+# one run inside the private artifact repository instead. Not needing a
+# credential is what lets every job here run on a pull request from a fork.
 #
-# EVERY PER-TRACK UNIT IS A REUSABLE WORKFLOW AND IT CONTRIBUTES A JOB.
-# GitHub resolves a local reusable workflow only as `./.github/workflows/<file>`.
-# A file under `.github/jobs/` is not resolvable by `uses:` and never runs.
-# Nothing outside a callee workflow can insert a step into it, so each track
-# declares one job in its own file and adds its steps there.
+# `IntegrationTest` is excluded because a test carrying that label fetches its
+# data through rclone and aborts with a fatal error when the credential is
+# absent.
 #
-# A merge of every track's branch touches this file in ZERO places.
+# `PluginTest` is excluded for a different reason: those tests load a built
+# plugin into a host, which exercises the packaged product rather than this
+# fork's own code. Deleting a label from the regex below is how to turn its
+# tests on; nothing else needs changing.
+#
+# Everything else the tree registers runs. The suite is selected by what it is
+# NOT, so a test added anywhere in this tree is run by this workflow without
+# anyone editing this file.
 
 # CI is manual. Automatic push/pull_request runs were removed because the
 # matrix cost hours of runner time per push. Start a run from the
@@ -27,12 +31,12 @@ permissions:
   contents: read
 
 env:
-  # The T0 name prefix this repository registers.
-  T0_PATTERN: '^t0_'
+  # A CTest label regex, not a test-name regex. See the header for each label.
+  TEST_EXCLUDE_LABELS: 'IntegrationTest|PluginTest'
 
 jobs:
-  build-and-t0:
-    name: build-and-t0
+  build-and-test:
+    name: build-and-test
     strategy:
       fail-fast: false
       matrix:
@@ -59,8 +63,9 @@ jobs:
           submodules: recursive
 
       # CTest 3.20 is the floor because `--no-tests=error` is a CTest flag and
-      # the earlier releases do not carry it. Without that flag every `-R` check
-      # in this project passes against no code at all.
+      # the earlier releases do not carry it. Without that flag a filtered run
+      # that selects nothing exits 0, and a pass over no code at all is
+      # indistinguishable from a pass.
       - name: Require CMake and CTest 3.20 or newer
         shell: bash
         run: |
@@ -82,33 +87,12 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
 
-      # THE LISTING TEXT IS THE MECHANISM AND THE EXIT CODE IS NOT.
-      # `--no-tests=error` governs a test RUN. In `-N` listing mode it is inert:
-      # the listing exits 0 whether or not any test matched. So this step reads
-      # what the listing PRINTS.
-      #
-      # It tests for a presence and not for the absence of a failure string.
-      # `set -e` is dropped here so the message below is reached rather than
-      # pre-empted, which means a ctest that cannot run at all leaves `listing`
-      # empty. An empty string does not contain `Total Tests: 0`. A test for
-      # `Total Tests: [1-9]` cannot be satisfied by silence.
-      - name: Assert that the build registers at least one test
+      - name: Run the test suite
         shell: bash
-        run: |
-          set -uo pipefail
-          listing=$(ctest --test-dir build --no-tests=error -N)
-          printf '%s\n' "${listing}"
-          if ! printf '%s\n' "${listing}" | grep -qE 'Total Tests: [1-9]'; then
-            echo "FAILURE: the build tree of ${GITHUB_REPOSITORY} registers no test at all."
-            exit 1
-          fi
+        run: ctest --test-dir build --no-tests=error -LE "${TEST_EXCLUDE_LABELS}" --output-on-failure
 
-      - name: Run the T0 suite
-        shell: bash
-        run: ctest --test-dir build --no-tests=error -R "${T0_PATTERN}" --output-on-failure
-
-  sanitizer-t0:
-    name: sanitizer-t0
+  sanitizer-tests:
+    name: sanitizer-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,12 +107,5 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
           cmake --build build-asan --parallel
 
-      - name: Run the T0 suite under the sanitizers
-        run: ctest --test-dir build-asan --no-tests=error -R "${T0_PATTERN}" --output-on-failure
-
-
-  track-board:
-    uses: ./.github/workflows/track-board.yml
-
-  track-sched:
-    uses: ./.github/workflows/track-sched.yml
+      - name: Run the test suite under the sanitizers
+        run: ctest --test-dir build-asan --no-tests=error -LE "${TEST_EXCLUDE_LABELS}" --output-on-failure
