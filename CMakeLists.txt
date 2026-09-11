@@ -74,32 +74,37 @@ set(CPACK_RPM_PACKAGE_AUTOREQ "yes")
 set(CPACK_RPM_PACKAGE_URL ${CPACK_DEBIAN_PACKAGE_HOMEPAGE})
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 
-# ----------------- the MCF5307 core, for the G2
+# ----------------- the MCF5407 core, for the G2
 #
-# The core lives in its own repository, axiomantic/mcf5307. It is DECLARED here
+# The core lives in its own repository, axiomantic/mcf5407. It is DECLARED here
 # and POPULATED nowhere unless source/nord/g2/g2Lib/CMakeLists.txt turns
-# G2_LINK_MCF5307 on. A declaration that is never populated costs nothing.
+# G2_LINK_MCF5407 on. A declaration that is never populated costs nothing.
 #
-# Set G2_MCF5307_SOURCE_DIR to a sibling checkout to build against that instead
-# of a fetched tree. G2_MCF5307_GIT_TAG carries the pin.
+# Set G2_MCF5407_SOURCE_DIR to a sibling checkout to build against that instead
+# of a fetched tree. G2_MCF5407_GIT_TAG carries the pin.
 #
 # THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
 # clean configure, so a check against the core would measure a different core
 # from one run to the next. The pin is advanced by hand, and nothing in this
 # tree detects that it is stale.
 #
-# base.cmake appends `-Ofast` to the release flags of the whole build, mcf5307
+# base.cmake appends `-Ofast` to the release flags of the whole build, mcf5407
 # test targets carry `-Werror`, and a current Apple clang deprecates the flag,
-# so a pin that predates mcf5307's probed `-Wno-error=deprecated-ofast` fails
+# so a pin that predates mcf5407's probed `-Wno-error=deprecated-ofast` fails
 # to build on macOS/arm64.
+#
+# THE PIN MUST ALSO BE AT OR AFTER THE RENAME. The repository was mcf5307 until
+# 1279763, and a commit before it exports mcf5307::mcf5307 and the mcf5307_* C
+# ABI, neither of which this tree names any more. An older pin therefore fails
+# at the link step and not at the fetch, because the fetch still succeeds.
 
-set(G2_MCF5307_SOURCE_DIR "" CACHE PATH "Build the MCF5307 core from this checkout instead of fetching it")
-set(G2_MCF5307_GIT_TAG "ab1aa4813c828f781300e44b3d5037aa07a235f7" CACHE STRING "The commit or tag of axiomantic/mcf5307 to fetch")
+set(G2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
+set(G2_MCF5407_GIT_TAG "d082514ac59610d3bcd95c5f610179a38bbe569b" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
 
 include(FetchContent)
-FetchContent_Declare(mcf5307
-	GIT_REPOSITORY https://github.com/axiomantic/mcf5307.git
-	GIT_TAG ${G2_MCF5307_GIT_TAG}
+FetchContent_Declare(mcf5407
+	GIT_REPOSITORY https://github.com/axiomantic/mcf5407.git
+	GIT_TAG ${G2_MCF5407_GIT_TAG}
 )
 
 # ----------------- source
