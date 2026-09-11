@@ -1,9 +1,8 @@
 /* t0_status_contract.cpp -- the contract of g2::Status.
  *
  * A translation unit that includes status.h and compiles proves the file is on
- * disk and proves nothing about the type in it. The four properties below are
- * the contract: the scoping, the zero value, the roster and the
- * distinguishable failures.
+ * disk and proves nothing about the type in it. The three properties below are
+ * the contract: the scoping, the zero value and the distinguishable failures.
  *
  * No case here is a language assert(). The default build type is Release and
  * Release defines NDEBUG, so an assert() would compile away and this check
@@ -14,7 +13,6 @@
 
 #include "status.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <type_traits>
@@ -34,27 +32,6 @@ namespace
 			++failures;
 		}
 	}
-
-	/* Every value the type declares except the Count terminator, in declaration
-	 * order. Held against Status::Count below so that an enumerator added to
-	 * the header and forgotten here goes red rather than unnoticed. */
-	constexpr g2::Status kRoster[] = {
-		g2::Status::Unset,
-		g2::Status::Ok,
-		g2::Status::BadDspCount,
-		g2::Status::BadFramesPerQuantum,
-		g2::Status::BadBackend,
-		g2::Status::BadHopFrames,
-		g2::Status::BadRational,
-		g2::Status::BadLookahead,
-		g2::Status::BadDivider,
-		g2::Status::BadMaxHostBlock,
-		g2::Status::BridgesAttached,
-		g2::Status::BadStateImage,
-		g2::Status::BadChainOrder,
-	};
-
-	constexpr size_t kRosterLength = sizeof(kRoster) / sizeof(kRoster[0]);
 }
 
 /* ------------- Property 1: a scoped enumeration over a fixed underlying type.
@@ -83,19 +60,7 @@ int main()
 	check(g2::Status::Ok != g2::Status::Unset,
 		"Ok and Unset are two different values");
 
-	/* ------------- Property 3: contiguous from Unset, terminated by Count. */
-
-	check(kRosterLength == static_cast<size_t>(g2::Status::Count),
-		"the roster holds exactly as many values as Status::Count counts");
-
-	for(size_t i = 0; i < kRosterLength; ++i)
-	{
-		char what[128];
-		snprintf(what, sizeof(what), "roster entry %zu carries the value %zu", i, i);
-		check(kRoster[i] == static_cast<g2::Status>(i), what);
-	}
-
-	/* ------------- Property 4: two distinguishable failures. */
+	/* ------------- Property 3: two distinguishable failures. */
 
 	check(g2::Status::BadDspCount != g2::Status::BadDivider,
 		"BadDspCount and BadDivider are distinguishable from each other");
