@@ -19,6 +19,14 @@ jobs:
         os: [ ubuntu-latest, macos-14, windows-2022 ]
       fail-fast: true
     name:  ${{ matrix.os }} build
+    # This workflow has never run in this repository, so there is no measured
+    # healthy duration for it and the ceilings below are deliberately loose.
+    # It configures more plugin formats than the CMake workflow does, so its
+    # nearest comparable figure -- 67 minutes to build macOS on the nightly
+    # workflow -- is a floor rather than an estimate. A loose ceiling still
+    # separates slow from stuck; no ceiling at all lets a stuck step hold a
+    # runner for six hours.
+    timeout-minutes: 180
     steps:
     - name: Install Dependencies
       if: matrix.os == 'ubuntu-latest'
@@ -50,9 +58,21 @@ jobs:
       run: cmake --preset github-${{ runner.os }} -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
+      # 120 rather than the nightly workflow's 90: that figure came from a
+      # measured 67-minute macOS build of a smaller configure, and this one has
+      # no measurement of its own to narrow the margin with.
+      timeout-minutes: 120
       run: cmake --build --preset github-${{ runner.os }} --parallel 6
 
     - name: Pack
+      # No CMAKE_SKIP_INSTALL_ALL_DEPENDENCY here, unlike the other two
+      # workflows: the macOS preset selects the Xcode generator, which writes no
+      # preinstall target for cpack to re-drive the build through, so the flag
+      # would have nothing to switch off on the platform that hangs. The Linux
+      # preset does take the Makefile generator and does pay for the re-run --
+      # a few minutes there, not the macOS hang -- and is left for a separate
+      # decision rather than changed blind on a workflow that cuts releases.
+      timeout-minutes: 30
       run: cpack --preset github-${{ runner.os }}
 
     - name: Create Changelog
