@@ -22,7 +22,7 @@
  * only the driver's view could be satisfied by an accessor and never by a
  * turned quantum.
  *
- * Three properties:
+ * Four properties:
  *
  *   A. The driver the audio thread calls through holds the very Scheduler the
  *      boot published, which is the wiring itself.
@@ -34,6 +34,15 @@
  *   C. Repeated callbacks keep advancing it, by the sum of their counts, and
  *      the device stays valid across them -- a machine driven for real, not one
  *      touched once.
+ *
+ *   D. A RE-boot of the same Device withdraws readiness before it destroys
+ *      anything, and rewires to the machine it then publishes. This is the
+ *      production path -- Plugin::recreateScheduler takes a state snapshot,
+ *      which republishes readiness, and then calls boot() -- and the teardown
+ *      frees the Scheduler and the Board that a callback admitted in that
+ *      window would be holding. The window is observable only from inside the
+ *      boot, because boot() republishes before it returns, so readiness is read
+ *      at every step notification.
  *
  * The controls are ungated, they run before the boot, and they are the known
  * positive and the known negative for the wiring itself. The negative is the
@@ -149,6 +158,11 @@ namespace
 	// running for ever, not a prediction of where the boot ends.
 	constexpr uint64_t g_bootBudget = 500000;
 
+	// The re-boot's budget. Its subject is the teardown and the rewiring, which
+	// are complete after step 6 whatever step 4 ran, so it does not pay for a
+	// second full boot.
+	constexpr uint64_t g_rebootBudget = 4096;
+
 	/* The device the test drives. processAudio is protected, and a host is what
 	 * normally calls it; this subclass is the seam that lets the test be the
 	 * host. It adds no behaviour. */
@@ -178,20 +192,33 @@ namespace
 
 	/* The published machine, taken from the boot thread's own notification. It is
 	 * the Scheduler the boot handed to the audio thread, obtained without asking
-	 * the wiring about itself. */
+	 * the wiring about itself.
+	 *
+	 * It also records readiness at each step, which is the only way to observe
+	 * the teardown a RE-boot performs: the teardown runs before step 1, so by
+	 * the time boot() returns the machine has been republished and the window is
+	 * gone. Step 1's notification is the first moment after it. */
 	class PublishedScheduler final : public g2::Device::IBootObserver
 	{
 	public:
+		explicit PublishedScheduler(const g2::Device& _device) : m_device(_device) {}
+
 		void onBootStep(const g2::Device::BootStep _step, g2::Scheduler* const _scheduler) noexcept override
 		{
+			if(m_device.isValid() && _step != g2::Device::BootStep::Publish)
+				m_readyBeforePublish = true;
+
 			if(_step == g2::Device::BootStep::Publish)
 				m_published = _scheduler;
 		}
 
 		g2::Scheduler* published() const noexcept { return m_published; }
+		bool readyBeforePublish() const noexcept { return m_readyBeforePublish; }
 
 	private:
-		g2::Scheduler* m_published = nullptr;
+		const g2::Device& m_device;
+		g2::Scheduler*    m_published          = nullptr;
+		bool              m_readyBeforePublish = false;
 	};
 
 	/* The predicate, written once so that the controls can hand it the two
@@ -280,7 +307,7 @@ int main()
 		const synthLib::DeviceCreateParams params;
 
 		TestDevice         device(params);
-		PublishedScheduler publication;
+		PublishedScheduler publication(device);
 
 		device.installBootObserver(&publication);
 
@@ -347,6 +374,44 @@ int main()
 		check(device.isValid(),
 			"the machine did not fault across the callbacks, so the readiness the boot published "
 			"was never withdrawn");
+
+		/* Property D. The re-boot. It is given a small budget on purpose: the
+		 * subject is the teardown and the rewiring, and neither needs the
+		 * machine to reach its running state a second time. */
+		std::cout << "-- the re-boot, which is what Plugin::recreateScheduler does" << std::endl;
+
+		PublishedScheduler republication(device);
+		device.installBootObserver(&republication);
+
+		g2::Device::BootRequest reboot;
+		reboot.config      = makeConfig();
+		reboot.frameBudget = g_rebootBudget;
+
+		const g2::Device::BootResult rebootResult = device.boot(reboot);
+
+		check(rebootResult.booted, "the re-boot completed every step: " + rebootResult.why);
+
+		check(!republication.readyBeforePublish(),
+			"the re-boot WITHDREW READINESS before it destroyed the running machine: isValid() "
+			"answered false at every step before the new publication, so no callback could be "
+			"inside the ready branch holding the Scheduler and the Board the teardown freed");
+
+		g2::Scheduler* const rebooted = republication.published();
+
+		check(rebooted != nullptr && rebooted != machine,
+			"the re-boot published a DIFFERENT Scheduler, so the teardown really did replace the "
+			"machine rather than leaving the first one in place");
+
+		if(rebooted && rebooted != machine)
+		{
+			const uint64_t beforeReboot = rebooted->frameIndex();
+
+			device.callback(g_blockFrames);
+
+			check(rebooted->frameIndex() == beforeReboot + g_blockFrames,
+				"the callback drives the RE-BOOTED machine: the new Scheduler's clock advanced by "
+				"the block, so the rewiring followed the replacement");
+		}
 
 		reportSuppressedLogLines();
 

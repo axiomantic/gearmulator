@@ -281,7 +281,21 @@ namespace g2
 		 * the store, and the release order is the destruction order the
 		 * members already declare. The driver's pointer is cleared through
 		 * the same seam that installs it, so the audio thread's driver never
-		 * holds a pointer to a destroyed object. */
+		 * holds a pointer to a destroyed object.
+		 *
+		 * beginStateChange() FIRST, and it is not optional. Clearing the
+		 * driver's pointer bars a callback that has not started yet and does
+		 * nothing about one already past its readiness check: that callback
+		 * holds the Scheduler and the Board through the frames below and would
+		 * read both after they were destroyed. The hand-off pair is the only
+		 * thing that withdraws readiness and then waits for the callback in
+		 * flight to leave, which is what makes the teardown exclusive.
+		 *
+		 * There is no endStateChange() to match it. Readiness is republished
+		 * by step 6 and by nothing else, so a boot that returns early on a
+		 * missing firmware leaves the Device invalid -- which is what it is. */
+		beginStateChange();
+
 		installScheduler(nullptr);
 		m_ownedScheduler.reset();
 		m_executor.reset();
