@@ -47,7 +47,7 @@ namespace g2
 			size_t size = 0;
 			size_t pos = 0;
 
-			bool canRead(const size_t _n) const { return pos + _n <= size; }
+			bool canRead(const size_t _n) const { return stateReadFits<size_t>(pos, _n, size); }
 
 			bool readU16(uint16_t& _v)
 			{

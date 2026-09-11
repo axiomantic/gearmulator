@@ -412,6 +412,66 @@ int main()
 		std::cout << "ok   2000 plugin-shaped saves in a row, every one append-only" << std::endl;
 	}
 
+	/* ---------------------------------------------------------------
+	 * Case group 7. The reader's bound arithmetic, and the image that
+	 * reaches it.
+	 *
+	 * The layout's length fields are u32 and arrive out of the image, so
+	 * where size_t is 32 bits a cursor-plus-length sum wraps and passes the
+	 * bound. The predicate is driven at 32-bit width directly: on a host
+	 * whose size_t is 64 bits no image can make size_t wrap, so an image
+	 * alone cannot reach the case. */
+	{
+		constexpr uint32_t imageBytes = 64;
+		constexpr uint32_t cursor = 16;	// the first slot's length field, consumed
+
+		check(!g2::stateReadFits<uint32_t>(cursor, 0xFFFFFFFFu, imageBytes),
+			"at 32-bit width, a length of 0xFFFFFFFF does not fit a 64-byte image at cursor 16");
+		check(g2::stateReadFits<uint32_t>(cursor, imageBytes - cursor, imageBytes),
+			"at 32-bit width, exactly the remaining bytes fit");
+		check(!g2::stateReadFits<uint32_t>(cursor, imageBytes - cursor + 1, imageBytes),
+			"at 32-bit width, one byte beyond the remaining bytes does not fit");
+		check(!g2::stateReadFits<uint32_t>(cursor, 0xFFFFFFFFu - cursor, imageBytes),
+			"at 32-bit width, the length whose sum with the cursor is exactly zero does not fit");
+	}
+
+	/* The image the bound is reached through: a 64-byte G2ST whose first
+	 * slot length field is FF FF FF FF. It is refused, and a refused load
+	 * writes none of its out-parameters. */
+	{
+		std::vector<uint8_t> image;
+		for(const uint8_t m : g2::g_stateMagic)
+			image.push_back(m);
+
+		image.push_back(static_cast<uint8_t>(g2::g_stateFormatVersion & 0xFFu));
+		image.push_back(static_cast<uint8_t>(g2::g_stateFormatVersion >> 8));
+		image.push_back(0x00); image.push_back(0x00);	// the firmware word
+		image.push_back(0x00); image.push_back(0x00);	// the overflow count
+		image.push_back(0x00); image.push_back(0x00);
+
+		for(int i = 0; i < 4; ++i)	// the first slot's length field
+			image.push_back(0xFF);
+
+		while(image.size() < 64)
+			image.push_back(0x00);
+
+		checkEqual(image.size(), 64, "the crafted image is 64 bytes");
+
+		std::vector<uint8_t> perf{0xDE};
+		std::vector<uint8_t> bindings{0xAD};
+		std::vector<std::vector<uint8_t>> patches;
+		std::vector<uint16_t> ids;
+		uint32_t overflow = 99;
+
+		const g2::StateLoadResult parsed = g2::deserializeState(image,
+			perf, patches, ids, bindings, overflow, true, machineVersion);
+
+		check(!parsed.patchDataValid,
+			"a G2ST image whose first slot length is 0xFFFFFFFF is refused");
+		check(perf.size() == 1 && bindings.size() == 1 && patches.empty() && ids.empty() && overflow == 99,
+			"the refused load wrote none of its out-parameters");
+	}
+
 	if(g_failures)
 	{
 		std::cout << "t0_plugin_state: " << g_failures << " of " << g_cases

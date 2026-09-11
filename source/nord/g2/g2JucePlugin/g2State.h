@@ -68,6 +68,23 @@ namespace g2
 	/* The performance's slots, item 1. */
 	constexpr size_t g_stateSlotCount = 4;
 
+	/* The remaining-length test every read of the image goes through.
+	 *
+	 * A subtraction and not `_pos + _n <= _size`: the length fields in the
+	 * layout above are u32, so where size_t is 32 bits the sum wraps and a
+	 * wrapped sum passes the bound, admitting a read past the end of the
+	 * buffer. `_size - _pos` cannot wrap, because the cursor never passes
+	 * the end, which is what the first clause establishes.
+	 *
+	 * A template over the unsigned type rather than size_t alone, so the
+	 * narrow-size_t case stays expressible on a host whose size_t is 64
+	 * bits. */
+	template<typename T>
+	constexpr bool stateReadFits(const T _pos, const T _n, const T _size)
+	{
+		return _pos <= _size && _n <= _size - _pos;
+	}
+
 	/* What one restoration parsed and decided.
 	 *
 	 * The payload members hold what the image contained, whatever the
