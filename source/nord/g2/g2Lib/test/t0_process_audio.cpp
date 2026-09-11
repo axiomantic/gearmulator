@@ -195,6 +195,7 @@ namespace
 		}
 
 		using g2::Device::processAudio;
+		using g2::Device::kFramesPerChunk;
 
 		RecordingScheduler& recorder() { return m_recorder; }
 
@@ -233,6 +234,30 @@ namespace
 			}
 		}
 		check(true, "the not-ready path zeroed its output buffers");
+	}
+
+	/* The chunk predicate, written once so that the controls below can hand it
+	 * the case it must refuse. A callback covers its block when the push calls
+	 * sum to the block and no single one of them exceeds the buffer the Device
+	 * pushes from. Both halves are needed: a sum alone accepts one oversize
+	 * call, and a ceiling alone accepts a block rendered short. */
+	bool pushesCoverBlockWithinLimit(const std::vector<RecordingScheduler::Call>& _calls,
+		const size_t _samples, const size_t _limit)
+	{
+		size_t total = 0;
+
+		for(const auto& call : _calls)
+		{
+			if(call.phase != Phase::Push)
+				continue;
+
+			if(call.frames > _limit)
+				return false;
+
+			total += call.frames;
+		}
+
+		return total == _samples;
 	}
 
 	bool sameFrame(const g2::Frame& _a, const g2::Frame& _b)
@@ -327,6 +352,97 @@ int main()
 				outputsWritten = false;
 		}
 		check(outputsWritten, "pull's frames were converted into the outputs");
+	}
+
+	/* ------------- Case group 2b. A block larger than the frame buffer is
+	 * rendered in full, in passes no larger than the buffer.
+	 *
+	 * The buffers processAudio converts through are fixed, so a block larger
+	 * than one of them has exactly two honest treatments: refuse part of it, or
+	 * make more than one pass. It makes more than one pass, and the recorder is
+	 * what shows the passes. Before this bound existed the callback told push
+	 * and pull a count the buffers could not carry, guarded by an assert that
+	 * the shipping build deletes -- so the pre-fix behaviour of this case is
+	 * undefined and the controls below, not a planted fault, are what show the
+	 * predicate discriminates. */
+	{
+		std::printf("case group 2b: a block larger than the frame buffer\n");
+
+		constexpr size_t kLimit = ProcessAudioHarness::kFramesPerChunk;
+
+		// The controls, on hand-built logs: a correct pair of passes must be
+		// accepted, and the single oversize call the old shape made must be
+		// refused.
+		{
+			const std::vector<RecordingScheduler::Call> chunked =
+			{
+				{Phase::Push, kLimit}, {Phase::RunFrames, kLimit}, {Phase::Pull, kLimit},
+				{Phase::Push, 7}, {Phase::RunFrames, 7}, {Phase::Pull, 7}
+			};
+
+			const std::vector<RecordingScheduler::Call> oversize =
+			{
+				{Phase::Push, kLimit + 7}, {Phase::RunFrames, kLimit + 7}, {Phase::Pull, kLimit + 7}
+			};
+
+			const std::vector<RecordingScheduler::Call> short_ =
+			{
+				{Phase::Push, kLimit}, {Phase::RunFrames, kLimit}, {Phase::Pull, kLimit}
+			};
+
+			check(pushesCoverBlockWithinLimit(chunked, kLimit + 7, kLimit),
+				"CONTROL the chunk predicate ACCEPTS two passes that sum to the block, neither "
+				"larger than the frame buffer");
+
+			check(!pushesCoverBlockWithinLimit(oversize, kLimit + 7, kLimit),
+				"CONTROL the chunk predicate REFUSES ONE pass of the whole block, which is the "
+				"call the old shape made against a buffer that could not carry it");
+
+			check(!pushesCoverBlockWithinLimit(short_, kLimit + 7, kLimit),
+				"CONTROL the chunk predicate REFUSES passes that leave part of the block "
+				"unrendered, so it cannot be satisfied by clamping the block away");
+		}
+
+		ProcessAudioHarness device;
+		device.forceValid();
+
+		const size_t samples = kLimit + 7;
+
+		std::vector<float> inL(samples, 0.0f);
+		std::vector<float> inR(samples, 0.0f);
+		std::vector<float> outL(samples, 1.0f);
+		std::vector<float> outR(samples, 1.0f);
+
+		synthLib::TAudioInputs ins{};
+		ins[0] = inL.data();
+		ins[1] = inR.data();
+		synthLib::TAudioOutputs outs{};
+		outs[0] = outL.data();
+		outs[1] = outR.data();
+
+		device.processAudio(ins, outs, samples);
+
+		const auto& calls = device.recorder().calls;
+
+		check(pushesCoverBlockWithinLimit(calls, samples, kLimit),
+			"a block of " + std::to_string(samples) + " frames reached the Scheduler in passes "
+			"that sum to it and that never exceed the " + std::to_string(kLimit) +
+			"-frame buffer the callback pushes from");
+
+		checkEqual(device.recorder().pushedFrames.size(), samples,
+			"one pushed frame per sample, across every pass");
+
+		checkEqual(device.recorder().faultReads, 1u,
+			"faulted() is read once per CALLBACK and not once per pass");
+
+		bool outputsWritten = true;
+		for(size_t i = 0; i < samples; ++i)
+		{
+			if(outL[i] != 0.0f || outR[i] != 0.0f)
+				outputsWritten = false;
+		}
+		check(outputsWritten,
+			"every sample of the oversize block was written, so no part of it was clamped away");
 	}
 
 	/* ------------- Case group 3. The fault response. faulted() answers true

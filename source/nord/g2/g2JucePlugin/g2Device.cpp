@@ -22,7 +22,6 @@
 #include "dsp56kEmu/audio.h"
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -755,51 +754,59 @@ namespace g2
 
 	m_pendingMidi.clear();
 
-	// The ingress conversion. Host floats to Q23 frames, one per sample.
-	// The stack buffer is sized to the framework's largest sub-block the
-	// callback can be asked for; ResamplerInOut never exceeds it at 96 kHz,
-	// and the debug assert below keeps an unexpected block size loud.
-	std::array<g2::Frame, 2048> inFrames;
-	assert(_samples <= inFrames.size() && "host block exceeded the per-callback frame buffer");
-
-	for(uint32_t s = 0; s < _samples && s < inFrames.size(); ++s)
+	/* The block is rendered in chunks of at most kFramesPerChunk, and the loop
+	 * is a BOUND and not an optimisation: the buffers are fixed, so the only
+	 * two honest ways to meet a host block larger than one of them are to
+	 * refuse part of it or to make more than one pass. The previous shape made
+	 * one pass and told push and pull a count the buffers could not carry --
+	 * guarded by an assert, which the shipping build deletes.
+	 *
+	 * The call order holds per chunk, and so does the L + B capacity argument
+	 * it supports: push delivers a whole chunk before runFrames consumes any of
+	 * it, runFrames produces a whole chunk before pull takes any, and a chunk
+	 * is never larger than the host block the queues were sized for. */
+	for(size_t offset = 0; offset < _samples; offset += kFramesPerChunk)
 	{
-		inFrames[s].slot[0] = _inputs[0] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[0][s])) : 0;
-		inFrames[s].slot[1] = _inputs[1] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[1][s])) : 0;
-	}
+		const size_t chunk = _samples - offset < kFramesPerChunk ? _samples - offset : kFramesPerChunk;
 
-	// One call to Scheduler::push for the whole block -- the call order's
-	// first act, and the shape that makes the L + B capacity argument hold:
-	// the whole block is accepted BEFORE runFrames consumes any of it.
-	m_driver->push(inFrames.data(), _samples);
+		// The ingress conversion. Host floats to Q23 frames, one per sample.
+		for(size_t s = 0; s < chunk; ++s)
+		{
+			m_inFrames[s].slot[0] = _inputs[0] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[0][offset + s])) : 0;
+			m_inFrames[s].slot[1] = _inputs[1] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[1][offset + s])) : 0;
+		}
 
-	// One quantum entry point for the whole block. runFrames takes a frame
-	// count, and at the device rate one sample is one ESAI TDM frame, which
-	// is one 96 kHz sample period, so the callback's _samples IS the m the
-	// framework requested.
-	m_driver->runFrames(_samples);
+		// One call to Scheduler::push for the chunk, before runFrames consumes
+		// any of it.
+		m_driver->push(m_inFrames.data(), chunk);
 
-	// The egress. One call to Scheduler::pull for the whole block, into the
-	// same stack buffer -- the audio thread allocates nothing. The part
-	// pull could not supply reads as silence (CodecSink::pull's contract),
-	// and the tail loop below writes that silence explicitly so the host
-	// buffers are always fully written, never preserved.
-	std::array<g2::Frame, 2048> outFrames;
-	const size_t taken = m_driver->pull(outFrames.data(), _samples);
+		// One quantum entry point for the chunk. runFrames takes a frame count,
+		// and at the device rate one sample is one ESAI TDM frame, which is one
+		// 96 kHz sample period, so the count here IS the m the framework
+		// requested for these samples.
+		m_driver->runFrames(chunk);
 
-	for(uint32_t s = 0; s < taken; ++s)
-	{
-		if(_outputs[0])
-			_outputs[0][s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(outFrames[s].slot[0]));
-		if(_outputs[1])
-			_outputs[1][s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(outFrames[s].slot[1]));
-	}
-	for(uint32_t s = static_cast<uint32_t>(taken); s < _samples; ++s)
-	{
-		if(_outputs[0])
-			_outputs[0][s] = 0.0f;
-		if(_outputs[1])
-			_outputs[1][s] = 0.0f;
+		// The egress. One call to Scheduler::pull for the chunk -- the audio
+		// thread allocates nothing. The part pull could not supply reads as
+		// silence (CodecSink::pull's contract), and the tail loop below writes
+		// that silence explicitly so the host buffers are always fully written,
+		// never preserved.
+		const size_t taken = m_driver->pull(m_outFrames.data(), chunk);
+
+		for(size_t s = 0; s < taken; ++s)
+		{
+			if(_outputs[0])
+				_outputs[0][offset + s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[0]));
+			if(_outputs[1])
+				_outputs[1][offset + s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[1]));
+		}
+		for(size_t s = taken; s < chunk; ++s)
+		{
+			if(_outputs[0])
+				_outputs[0][offset + s] = 0.0f;
+			if(_outputs[1])
+				_outputs[1][offset + s] = 0.0f;
+		}
 	}
 
 	// The fault channel. The Device learns of a fault after runFrames

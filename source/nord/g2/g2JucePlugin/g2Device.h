@@ -47,12 +47,14 @@
 #include "board.h"
 #include "executor.h"
 #include "firmwareState.h"
+#include "frame.h"
 
 #include "g2State.h"
 #include "scheduler.h"
 
 #include "synthLib/midiBufferParser.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -342,6 +344,22 @@ namespace g2
 		/* The Uart0 MidiOutFn sink. Static because MidiOutFn is a plain
 		 * function pointer; _user carries the Device. */
 		static void uart0MidiOut(void* _user, uint8_t _byte);
+
+		/* The per-callback frame buffers, and the chunk size is what makes them
+		 * a bound rather than an assumption. processAudio converts, pushes,
+		 * runs and pulls at most kFramesPerChunk frames per pass and loops
+		 * until the block is finished, so a host block of any size is rendered
+		 * in full and neither buffer can be indexed past its end. The previous
+		 * shape asserted the block against a fixed array, and an assert is
+		 * deleted under NDEBUG -- which is the shipping build.
+		 *
+		 * Members rather than locals because the audio thread allocates
+		 * nothing: the two of them are 128 KiB together, which belongs on the
+		 * Device and not on the callback's stack. */
+		static constexpr size_t kFramesPerChunk = 2048;
+
+		std::array<g2::Frame, kFramesPerChunk> m_inFrames{};
+		std::array<g2::Frame, kFramesPerChunk> m_outFrames{};
 
 	private:
 		/* The machine this Device owns. The declaration order is the
