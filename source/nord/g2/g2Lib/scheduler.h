@@ -34,10 +34,10 @@
  * was the right answer while the factory was a single comparison; it is a
  * rejection table now.
  *
- * `g_useJIT` is a `static constexpr` at dsp.h:36, so the branch that reads it
- * folds at compile time and the interpreter build pays nothing for it. One
- * build carries one backend, and the property is structural with no run-time
- * observable.
+ * `g_useJIT` is a namespace-scope `static constexpr` in `dsp56kEmu/dsp.h`, so
+ * the branch that reads it folds at compile time and the interpreter build
+ * pays nothing for it. One build carries one backend, and the property is
+ * structural with no run-time observable.
  */
 
 #pragma once
@@ -65,9 +65,9 @@ namespace g2
 	class Board;
 
 	/* The backend. Fixed for the whole BINARY, by dsp56300's own
-	 * `static constexpr bool g_useJIT` at dsp.h:36. This enum therefore
-	 * records which backend the binary was built with; it does not select
-	 * one.
+	 * namespace-scope `static constexpr bool g_useJIT` in `dsp56kEmu/dsp.h`.
+	 * This enum therefore records which backend the binary was built with; it
+	 * does not select one.
 	 *
 	 * One rule governs `Config::backend`: create() succeeds only when
 	 * backend == Backend::Jit AND `g_useJIT` is true. Any other combination
@@ -144,8 +144,8 @@ namespace g2
 			 * legal because a test asked for it.
 			 *
 			 * False by default, so the escape is taken only by a caller that
-			 * names it. The golden-render path asserts it is false, so the one
-			 * path that records a reference cannot take it. */
+			 * names it. The golden-render path asserts it is false, so a
+			 * recorded reference cannot come from a run that took the escape. */
 			bool          testOverride          = false;
 
 			/* The position-to-port order the chain is wired by. Empty is the
@@ -179,8 +179,8 @@ namespace g2
 		 * rejected without saying why.
 		 *
 		 * No exception and no assertion: a release build removes an assertion,
- * so the rejections are observable there through the return value and
- * the status and through nothing else. */
+		 * so the rejections are observable there through the return value and
+		 * the status and through nothing else. */
 		static std::unique_ptr<Scheduler> create(const Config& _config, Executor& _executor, Board& _board,
 			Status& _outStatus);
 
@@ -191,8 +191,8 @@ namespace g2
 		 * through the Scheduler's own fault surface. A return value carrying
 		 * the fault would give that property a second home.
 		 *
-		 * A frame count and not a quantum count. `framesPerQuantum` is fixed at
-		 * 1 and every calling site counts frames.
+		 * A frame count and not a quantum count: the host block this drives is
+		 * measured in frames, so the caller converts nothing.
 		 *
 		 * The owning thread is the caller's and this object creates none. The
 		 * serial executor runs the jobs on this same thread; a parallel one may
@@ -430,8 +430,8 @@ namespace g2
 		bool m_faulted = false;
 
 		/* The job array, built once. `Job::ctx` points at each context's
-		 * LEADING JobContext, which dspContext.h's two static_asserts are what
-		 * make legal. */
+		 * LEADING JobContext, which the static_asserts in `dspContext.h` are
+		 * what make legal. */
 		DspContext    m_contexts[kJobCount]{};
 		Executor::Job m_jobs[kJobCount]{};
 

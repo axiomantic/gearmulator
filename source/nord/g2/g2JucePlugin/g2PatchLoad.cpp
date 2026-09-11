@@ -183,10 +183,12 @@ namespace g2
 			if(!writer.put(8, g_wireVariationCount) || !writer.put(4, morphCount) || !writer.put(20, reserved))
 				return false;
 
-			/* THE TENTH VARIATION IS THE NINTH WRITTEN AGAIN, so the ninth's
-			 * fields are held while the loop runs and emitted once more after
-			 * it. Re-reading the payload for the copy would need a second
-			 * reader positioned at a bit offset nothing records. */
+			/* THE TENTH VARIATION IS THE NINTH WRITTEN AGAIN. The ninth's
+			 * fixed-width fields are held in locals while the loop runs and
+			 * emitted once more after it; its parameter list is re-read below
+			 * with a second reader positioned at the recorded
+			 * `lastParameterBit`, because holding a list whose length the
+			 * payload supplies would need a buffer sized at run time. */
 			uint32_t lastIndex = 0, lastR0 = 0, lastR1 = 0, lastR2 = 0, lastCount = 0, lastTail = 0;
 			std::size_t lastParameterBit = 0;
 
@@ -571,10 +573,10 @@ namespace g2
 	Pch2LoadResult pch2LoadFramed(const uint8_t* const _file, const std::size_t _size, const char* const _name,
 		const uint8_t _slot, InternalClient& _client, uint8_t* const _scratch, const std::size_t _scratchSize) noexcept
 	{
-		/* THE MESSAGE IS COMPOSED AT OFFSET 2 so that the transfer envelope can
-		 * be written around it in place: the client writes the transfer total
-		 * ahead of it and the transfer CRC behind it, and no byte is copied a
-		 * second time. */
+		/* THE MESSAGE IS COMPOSED AT OFFSET 2, which is where
+		 * `InternalClient::sendTransfer` requires it. This call does not apply
+		 * a transfer envelope -- the block below says why -- so the offset only
+		 * keeps the scratch buffer usable by a caller that does. */
 		if(_scratch == nullptr || _scratchSize < 6)
 			return Pch2LoadResult::BufferTooSmall;
 

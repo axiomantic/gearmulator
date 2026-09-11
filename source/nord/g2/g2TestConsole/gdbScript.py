@@ -173,9 +173,12 @@ class ScriptRunner:
         self._out = out
         self._counts = {}
 
-    # One line per stop, named so a later reader can tell a hit from a miss
-    # without re-deriving which breakpoint was where. A miss is REPORTED as a
-    # miss: a stop that names no armed point prints hit=none.
+    # One line per stop. Only a watch stop carries an address in the stop
+    # reply, so only it can be named: it prints hit=<watch|rwatch|awatch>@
+    # 0x<addr>. Every other stop prints hit=bp@none -- a breakpoint hit and a
+    # stop that names no armed point are indistinguishable in this line. The
+    # pc field is what tells them apart, and it is read from the machine's
+    # register file rather than from the client's belief about what it armed.
     def report(self, stop):
         self._counts[stop["kind"]] = self._counts.get(stop["kind"], 0) + 1
         count = self._counts[stop["kind"]]

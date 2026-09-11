@@ -16,10 +16,11 @@
  * the assertion does not pin a property the build cannot exercise.
  *
  * It does not assert "one backend for one run". `g_useJIT` is
- * `static constexpr` at dsp.h:36 and the dispatch at dsp.h:172-178 is a plain
- * `if`, not `if constexpr`, so the branch folds at compile time because its
- * condition is a constant expression. A test asserting structural
- * one-backend-per-build would pass by exercising nothing.
+ * a namespace-scope `static constexpr` in `dsp56kEmu/dsp.h` and the dispatch
+ * in `dsp56k::DSP::exec()` is a plain `if`, not `if constexpr`, so the branch
+ * folds at compile time because its condition is a constant expression. A
+ * test asserting structural one-backend-per-build would pass by exercising
+ * nothing.
  *
  * The build mode is printed in the first line, so the configuration is visible
  * in the test log without a separate device.
@@ -93,10 +94,9 @@ int main()
 
 	/* ---------------- case 2: backend == Backend::Interpreter
 	 *
-	 * Unconditional. The semantic cross-check harness drives DSP::exec
-	 * directly and never constructs a Scheduler, so the enumerator exists
-	 * but is never accepted by create(). The rule rejects it on every
-	 * build. */
+	 * Unconditional. The enumerator exists because the semantic cross-check
+	 * harness drives DSP::exec directly rather than through a Scheduler;
+	 * create() accepts it on no build. */
 	{
 		g2::Scheduler::Config cfg;
 		cfg.backend = g2::Backend::Interpreter;

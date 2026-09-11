@@ -132,9 +132,8 @@ namespace
 
 		std::cout << "FAIL t1_gdb_dsp: the session did not finish within "
 		          << g_watchdogSeconds << " seconds, at stage <" << g_stage.load()
-		          << ">. THE MACHINE IS BUSY-WAITING ON A DSP THAT NEVER RAN: a "
-		             "continue that cannot cross an HDI08 handshake spins until "
-		             "its own bound and reports a plausible miss." << std::endl;
+		          << ">. The stage names where the session stopped; the bound "
+		             "expiring does not say why it stopped there." << std::endl;
 		std::cout << "FAIL t1_gdb_dsp: bound expired -- this is a FAILURE and not a skip"
 		          << std::endl;
 		std::cout.flush();
