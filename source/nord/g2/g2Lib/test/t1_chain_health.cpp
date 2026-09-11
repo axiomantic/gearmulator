@@ -61,6 +61,7 @@
 // assert().
 
 #include "gatedFixture.h"
+#include "rxArmed.h"
 
 #include "../board.h"
 #include "../chainAdapter.h"
@@ -423,19 +424,7 @@ namespace
 		bool     faulted    = false;
 	};
 
-	unsigned countRxArmed(g2::Board& _board, const unsigned _dspCount)
-	{
-		unsigned armed = 0;
-
-		for(unsigned port = 0; port < _dspCount; ++port)
-		{
-			if(_board.dspSet().peripherals(port).getDMA().hasTrigger(
-				dsp56k::DmaChannel::RequestSource::EsaiReceiveData))
-				++armed;
-		}
-
-		return armed;
-	}
+	using g2test::countRxArmed;
 
 	bool placeAndBoot(const std::string& _directory, Machine& _m)
 	{

@@ -1,9 +1,46 @@
 // This test needs the Clavia firmware artifacts and skips with a reason when
 // NMG2_ARTIFACTS does not resolve.
 //
-// A known pattern is injected at the codec source of a machine that has really
-// booted, and the frame index at which it reappears at the codec sink is compared
-// against the delay the chain's own geometry predicts.
+// A known pattern is injected at the codec source of a machine whose audio path
+// is really up, and the frame index at which it reappears at the codec sink is
+// compared against the delay the chain's own geometry predicts.
+//
+// "Really up" is the ESAI receive DMA request armed on every chain position, and
+// not the display banner and not programLanded. The boot section below states
+// why, and a run reports how far apart the three are.
+//
+// ---------------------------------------------------------------------------
+// THE ARRIVAL ASSERTIONS AT THE FOOT OF THIS FILE DO NOT HOLD ON THIS FIRMWARE,
+// and two plausible explanations for that have been measured and ruled out. They
+// are recorded here so that the next reader spends the effort somewhere new.
+//
+//   Not the boot predicate. The exit below is the receive DMA armed on every
+//   position, which is the predicate g2TestConsole's `--impulse` and
+//   t1_chain_health hold and the one this file used to lack. Adopting it moved
+//   nothing: a run reports the arming already complete at the quantum the event
+//   loop first runs, so the gate this file already had subsumed it.
+//
+//   Not the walk bound. The walk is D_chain + 1024 quanta and the sustained
+//   probe drives the impulse for 2048 more. Nothing arrives in either. Lengthening
+//   the window is therefore not the fix, and a window lengthened until an
+//   assertion passes would be measuring something other than D_chain.
+//
+// What a passing arrival would need is a chain that carries codec audio at all,
+// and no measurement in this repository has yet observed one. t1_patch_running
+// runs this same walk twice, once unpatched and once with a real `.pch2` the
+// Board's own hub accepted, and reports arrival=-1 with zero non-zero frames on
+// BOTH -- while its sink control passes on both, so the reporting path is sound.
+// That file REPORTS the figure where this one ASSERTS it, and it names this file
+// when it says arrival=-1 on an unpatched machine is not a claim about a patched
+// one. t0_impulse_outcome states the reason plainly: a Nord Modular does not make
+// sound until a patch routes it, so a silent chain can be the emulator agreeing
+// with the hardware.
+//
+// So these assertions are aspirational rather than regressive: they state where
+// the audio path is going, and they are the only place that states it. Deciding
+// between making them hold and restating this file's scope is a decision about
+// the emulator, not about this test, and it is not taken here.
+// ---------------------------------------------------------------------------
 //
 // Where the expected delay comes from, and why it is not a literal. The audio bus
 // is a Line of dspCount + 1 mailboxes. The ingress phase writes mailbox 0's read
@@ -23,6 +60,7 @@
 // not have.
 
 #include "gatedFixture.h"
+#include "rxArmed.h"
 
 #include "../board.h"
 #include "../executor.h"
@@ -369,6 +407,27 @@ namespace
 		uint64_t eventLoopHitsAtBanner = 0;
 		uint32_t eventLoopQuanta       = 0;
 		bool     programsLanded  = false;
+
+		// The quantum at which every DSP position first reported programLanded,
+		// and the arming count read at exactly that instant.
+		//
+		// Recorded and not asserted. The gap this pair was added to look for is
+		// the one g2TestConsole's `--impulse` documents between landing and
+		// arming, and on this firmware it does not survive the event-loop gate
+		// this file already had: both instants land on the same quantum with
+		// every position armed. Asserting a gap would be asserting a hypothesis
+		// about a machine other than the one under the test. The pair stays
+		// because the next reader's first question is what the distance is, and
+		// a run answers it instead of being re-instrumented.
+		uint32_t programsLandedQuanta = 0;
+		unsigned rxArmedAtLanded      = 0;
+
+		// The exit predicate: the ESAI receive DMA request registered on every
+		// position. rxArmedPorts is read after the drive so a run that never
+		// reached the poll still reports a measured number.
+		bool     rxArmed         = false;
+		unsigned rxArmedPorts    = 0;
+		uint32_t rxArmedQuanta   = 0;
 		bool     halted          = false;
 		bool     faulted         = false;
 
@@ -483,12 +542,28 @@ namespace
 
 		// ---------------------------------------------------------- the boot
 		//
-		// The drive leaves on the properties the play phase needs, and not on a
-		// fixed count: every DSP program has landed and the firmware has
-		// composed display content and been given the settle window to finish
-		// it. A fixed count would either cost the full bound every run or hand
-		// beginPlayPhase a machine that had not finished downloading its
-		// kernels.
+		// The drive leaves on a property of the AUDIO PATH, and not on program
+		// loading: the ESAI receive DMA request registered on every position.
+		//
+		// Why not programLanded, which this file used to exit on. Landing is a
+		// fact about the kernel download, and the arming code is not even
+		// resident when the boot-time DMA configuration runs -- it arrives in a
+		// later-loaded DSP program -- so on a machine where the two come apart, a
+		// drive leaving on landing hands beginPlayPhase a receive path that is
+		// still dead, and the silence the walk then measures is a statement about
+		// transport not yet existing rather than about the chain. That is the gap
+		// g2TestConsole's `--impulse` documents and holds this same predicate
+		// against.
+		//
+		// It is asserted here even though a run shows the event-loop gate this
+		// file already had arriving no earlier: the exit should name the property
+		// the measurement depends on rather than one that happens to imply it, so
+		// that a firmware or a gate whose order differs is caught by the drive
+		// instead of read as a silent chain.
+		//
+		// The event loop gate stays: it is a precondition for polling, because a
+		// machine still in reset arms nothing. Landing is likewise a
+		// precondition and no longer the exit.
 		uint32_t settle = 0;
 
 		for(uint32_t i = 0; i < g_bootQuantumBound; ++i)
@@ -525,13 +600,25 @@ namespace
 					++landed;
 			}
 
-			if(landed == _result.dspCount)
+			if(landed == _result.dspCount && !_result.programsLanded)
 			{
-				_result.programsLanded = true;
+				_result.programsLanded      = true;
+				_result.programsLandedQuanta = i + 1;
+				_result.rxArmedAtLanded      = g2test::countRxArmed(board, _result.dspCount);
+			}
+
+			if(!_result.programsLanded)
+				continue;
+
+			if(g2test::countRxArmed(board, _result.dspCount) == _result.dspCount)
+			{
+				_result.rxArmed       = true;
+				_result.rxArmedQuanta = i + 1;
 				break;
 			}
 		}
 
+		_result.rxArmedPorts = g2test::countRxArmed(board, _result.dspCount);
 		_result.halted  = board.mcuHalted();
 		_result.faulted = board.faulted();
 
@@ -701,8 +788,13 @@ namespace
 		std::cout << "egress: bootQuanta=" << _r.bootQuanta
 		          << " booted=" << (_r.booted ? 1 : 0)
 		          << " programsLanded=" << (_r.programsLanded ? 1 : 0)
+		          << " rxArmed=" << (_r.rxArmed ? 1 : 0)
+		          << " rxArmedPorts=" << _r.rxArmedPorts << "/" << _r.dspCount
 		          << " halted=" << (_r.halted ? 1 : 0)
 		          << " faulted=" << (_r.faulted ? 1 : 0) << std::endl;
+		std::cout << "egress: programsLandedQuanta=" << _r.programsLandedQuanta
+		          << " rxArmedAtLanded=" << _r.rxArmedAtLanded << "/" << _r.dspCount
+		          << " rxArmedQuanta=" << _r.rxArmedQuanta << std::endl;
 		std::cout << "egress: eventLoopQuanta=" << _r.eventLoopQuanta
 		          << " at 0x" << std::hex << g_eventLoopEntry << std::dec
 		          << "; the banner predicate fired at " << _r.bannerQuanta
@@ -794,6 +886,17 @@ int main()
 			+ std::to_string(result.bannerQuanta) + ", event loop at "
 			+ std::to_string(result.eventLoopQuanta));
 		check(result.programsLanded, "every DSP position took its program before the play phase began");
+
+		// ------------------------------------------ the audio path's own arming
+		//
+		// The receive path is up at the play transition. This is the precondition
+		// the walk below depends on and the one the old exit did not name, so a
+		// walk that measures silence cannot be a walk against a machine with no
+		// transport. The count is a positive reading of the same accessor the
+		// drive polled, so it is not a zero standing on its own.
+		check(result.rxArmed,
+			"egress: the ESAI receive DMA request is armed on every position within the boot bound; observed "
+			+ std::to_string(result.rxArmedPorts) + " of " + std::to_string(result.dspCount));
 		check(!result.halted, "the core is not halted at the play transition");
 		check(!result.faulted, "the board reports no fault at the play transition");
 
