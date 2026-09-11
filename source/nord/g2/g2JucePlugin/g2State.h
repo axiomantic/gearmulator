@@ -43,9 +43,10 @@
  * changes nothing.
  *
  * The version-mismatch policy, decided through decideFirmwareVersion():
- * matching versions load normally; differing versions load the machine,
- * withhold the patch data, and return a message naming both versions with an
- * offer to load anyway. Never reinterpreted silently.
+ * matching versions load normally; differing versions load the machine and
+ * withhold the patch data. Never reinterpreted silently. deserializeState
+ * also returns a message naming both versions and an offer to load anyway;
+ * StateLoadResult below says why nothing reads them yet.
  */
 
 #pragma once
@@ -90,9 +91,13 @@ namespace g2
 	 * The payload members hold what the image contained, whatever the
 	 * version decision was; `patchDataWithheld` says whether the caller may
 	 * apply the patch-shaped ones. On a firmware-version mismatch the
-	 * machine is loaded and the patch data is not -- the caller applies the
-	 * payload only after the user takes the offer, and the withheld flag is
-	 * what stops a silent application. */
+	 * machine is loaded and the patch data is not.
+	 *
+	 * `offerToLoadAnyway`, `patchDataWithheld` and `message` describe the
+	 * mismatch to a caller; presenting the offer and applying the withheld
+	 * payload afterwards needs a surface from the Device to the editor that
+	 * does not exist, so nothing consumes them yet. Deciding that surface is
+	 * what closes the gap -- not a second reader of these fields. */
 	struct StateLoadResult
 	{
 		bool machineLoaded = false;
