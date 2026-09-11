@@ -93,8 +93,8 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # so a pin that predates mcf5407's probed `-Wno-error=deprecated-ofast` fails
 # to build on macOS/arm64.
 #
-# THE PIN MUST ALSO BE AT OR AFTER THE RENAME. The repository was mcf5407 until
-# 1279763, and a commit before it exports mcf5407::mcf5407 and the mcf5407_* C
+# THE PIN MUST ALSO BE AT OR AFTER THE RENAME. The repository was mcf5307 until
+# 1279763, and a commit before it exports mcf5307::mcf5307 and the mcf5307_* C
 # ABI, neither of which this tree names any more. An older pin therefore fails
 # at the link step and not at the fetch, because the fetch still succeeds.
 
