@@ -644,7 +644,7 @@ namespace g2
 	 * completed events readMidiOut drains here.
 	 *
 	 * The Board owns its Uart0 and hands out references (g2Lib/board.h). The
-	 * Device holds its own byte sink (m_midiOutBuffer + m_midiOutParser), and
+	 * Device holds its own byte sink (m_midiOutParser), and
 	 * boot() installs this class's uart0MidiOut on Board::uart0() via
 	 * Uart0::setMidiOut.
 	 *
@@ -658,7 +658,6 @@ namespace g2
 	void Device::readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)
 	{
 		m_midiOutParser.getEvents(_midiOut);
-		m_midiOutBuffer.clear();
 	}
 
 	void Device::uart0MidiOut(void* _user, uint8_t _byte)

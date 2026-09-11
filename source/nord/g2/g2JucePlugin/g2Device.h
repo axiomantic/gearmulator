@@ -329,7 +329,6 @@ namespace g2
 		 * MidiOutFn callback installed on it (g2Lib/uart0.h), and the static
 		 * sink below feeds that stream into this parser; readMidiOut drains
 		 * the parser's completed events into _midiOut. */
-		std::vector<uint8_t> m_midiOutBuffer;
 		synthLib::MidiBufferParser m_midiOutParser{synthLib::MidiEventSource::Device};
 
 		/* The staged queue. sendMidi only stamps and enqueues; the converted
