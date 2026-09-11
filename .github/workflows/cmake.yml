@@ -18,6 +18,12 @@ jobs:
         cmake_generator: [ default, Ninja ]
       fail-fast: false
     name:  ${{ matrix.os }} build with ${{ matrix.cmake_generator }} cmake generator
+    # A backstop for every step that has no ceiling of its own. The slowest
+    # healthy job is macOS with Ninja at 67 minutes end to end, so 120 leaves
+    # room for a slow runner while still failing the same day. Without any
+    # ceiling a stuck step runs to GitHub's six-hour limit, and a run that
+    # stays in progress forever never reports a conclusion at all.
+    timeout-minutes: 120
     steps:
     - name: Install X
       if: matrix.os == 'ubuntu-latest'
@@ -35,17 +41,48 @@ jobs:
       if: matrix.os == 'windows-2022'
       uses: ilammy/msvc-dev-cmd@v1
 
+    - name: Install Nim
+      uses: jiro4989/setup-nim-action@v2
+      with:
+        # The MCF5407 core compiles its Nim sources during CMake configure and
+        # stops the configure on any version other than the one its own
+        # .nim-version names, so the pin here is an exact version and not a
+        # range. Advance it together with that file.
+        nim-version: '2.2.10'
+        # The compiler tree goes outside the workspace: the default puts it in
+        # the working directory, where it becomes a subtree of the checkout
+        # that the build's recursive source globs would walk.
+        parent-nim-install-directory: ${{ runner.temp }}
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Configure CMake with ${{ matrix.cmake_generator }}
       if: matrix.cmake_generator != 'default'
-      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON
 
     - name: Configure CMake with default generator
       if: matrix.cmake_generator == 'default'
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      # CMAKE_SKIP_INSTALL_ALL_DEPENDENCY drops the `preinstall: all` edge the
+      # Makefile generator writes. cpack runs the preinstall target before it
+      # packages, which without this re-drives the whole build with its output
+      # swallowed; on macOS that never returns. The Build step above has
+      # already built everything cpack installs, so the re-run only duplicates
+      # work, and anything genuinely missing now fails in cpack with a message
+      # instead of hanging in silence.
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON
 
     - name: Build
+      # The slowest healthy build measured is macOS at 61 minutes; ubuntu takes
+      # 15. 90 clears the macOS figure by half again, which a shared runner can
+      # plausibly need, and still catches a build that has stopped making
+      # progress rather than one that is merely slow.
+      timeout-minutes: 90
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 3
 
     - name: Pack
+      # Healthy packing runs between 1 and 4 minutes on every generator. 20 is
+      # far above that on purpose: the value only has to separate slow from
+      # stuck, and a wide margin keeps a busy runner from turning into a false
+      # failure here.
+      timeout-minutes: 20
       working-directory: ${{github.workspace}}/build
       run: cmake -P ${{github.workspace}}/scripts/pack.cmake

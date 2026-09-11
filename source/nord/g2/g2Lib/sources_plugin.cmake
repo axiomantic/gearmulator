@@ -1,0 +1,5 @@
+# Source list for the plugin track. Owned by the plugin track.
+#
+# Append every source name this track adds under source/nord/g2/g2Lib/ to
+# G2LIB_SOURCES, with a path relative to this directory. Edit no other CMake
+# file in this tree.
