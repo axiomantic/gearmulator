@@ -161,6 +161,7 @@ target_link_libraries(t0_handoff_flags PRIVATE Threads::Threads)
 set_property(TARGET t0_handoff_flags PROPERTY FOLDER "G2/test")
 
 add_test(NAME t0_handoff_flags COMMAND t0_handoff_flags)
+set_tests_properties(t0_handoff_flags PROPERTIES LABELS "UnitTest")
 
 # ----------------- readMidiOut
 #
