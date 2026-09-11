@@ -28,7 +28,7 @@
 #include <type_traits>
 #include <vector>
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include "dspSet.h"
 #include "flash.h"
@@ -137,7 +137,7 @@ namespace g2
 		 * `src/isp1181/isp1181.nim` gives that endpoint `(64, 1)`, and that
 		 * row is itself recorded there as a measurement of the emulated
 		 * firmware rather than a property of the part. The model exposes no
-		 * query for it -- `mcf5307.h` declares no `isp1181_max_packet` -- so
+		 * query for it -- `mcf5407.h` declares no `isp1181_max_packet` -- so
 		 * this figure is duplicated from a table this repository cannot read.
 		 * The durable repair is a query on that ABI; until it exists, the two
 		 * numbers are kept in step by hand and the drift fails loudly rather
@@ -196,12 +196,12 @@ namespace g2
 	class Board final
 	{
 	public:
-		/* Creates the MCF5307 core context, initialises the Nim runtime once,
+		/* Creates the MCF5407 core context, initialises the Nim runtime once,
 		 * and logs the G2_MCU_CORE_CLOCK_HZ placeholder line exactly once. */
 		Board();
 
 		/* Builds the units from `_config`, attaches each to the region it
-		 * answers, and points the MCF5307 core's bus callbacks at the decode.
+		 * answers, and points the MCF5407 core's bus callbacks at the decode.
 		 * Every base and every size comes from `_config`; this class chooses
 		 * none of them. */
 		explicit Board(const BoardConfig& _config);
@@ -214,24 +214,24 @@ namespace g2
 		Board& operator=(Board&&)      = delete;
 
 		/* One quantum of the MCU context. Returns the emulated cycles spent --
-		 * exactly what mcf5307_exec returns. It forwards directly to
-		 * mcf5307_exec, which already takes a cycle budget. uint32_t, not
+		 * exactly what mcf5407_exec returns. It forwards directly to
+		 * mcf5407_exec, which already takes a cycle budget. uint32_t, not
 		 * int64_t: it returns exactly what the core returned, and the Scheduler
 		 * widens at the call site.
 		 *
 		 * The return may exceed `wantCycles`, by up to the cost of one
-		 * instruction, because mcf5307_exec finishes the instruction it
+		 * instruction, because mcf5407_exec finishes the instruction it
 		 * started. That overrun is not a defect to absorb here: it is what
 		 * g2::runQuantum's cycle debt exists to carry, and clamping it in this
 		 * method would make the debt identically zero. */
 		uint32_t runMcu(uint32_t wantCycles) noexcept;
 
-		/* True when the MCF5307 core stopped because an instruction trapped --
+		/* True when the MCF5407 core stopped because an instruction trapped --
 		 * a bus error, an illegal instruction word, an illegal effective address
 		 * for the opcode, an illegal operand size or a divide by zero.
 		 *
 		 * Fault and halt are different flags and this method reports the fault.
-		 * mcf5307.h is the authority: a valid
+		 * mcf5407.h is the authority: a valid
 		 * opcode with no implemented semantics halts without faulting, and a
 		 * faulted core is always also halted. mcuHalted() below is the wider
 		 * condition. */
@@ -242,7 +242,7 @@ namespace g2
 		 *
 		 * mcuReg and setMcuReg take the register file's own index: 0 to 7 are
 		 * d0 to d7, 8 to 15 are a0 to a7, 16 is the status register and 17 is
-		 * the program counter. mcf5307.h owns that mapping and this class
+		 * the program counter. mcf5407.h owns that mapping and this class
 		 * restates none of it. setMcuReg answers false for an out-of-range index
 		 * and for a nil core, which is what the C call already answers. */
 		void     resetMcu(uint32_t initialSp, uint32_t initialPc) noexcept;
@@ -266,7 +266,7 @@ namespace g2
 
 		/* The MCU context's determinism-relevant state, embedded in the
 		 * Scheduler snapshot. This serialises the Board's own state only; the
-		 * core's mcf5307_state_* and isp1181_state_* blocks are not folded in.
+		 * core's mcf5407_state_* and isp1181_state_* blocks are not folded in.
 		 *
 		 * stateLoad reports Status::Ok, or Status::BadStateImage for an image
 		 * whose version word is not the one this build writes. An exception is
@@ -279,7 +279,7 @@ namespace g2
 		void   stateSave(void* dst) const noexcept;
 		Status stateLoad(const void* src) noexcept;
 
-		/* The reset covers the MCF5307 core, through the same mcf5307_reset the
+		/* The reset covers the MCF5407 core, through the same mcf5407_reset the
 		 * resetMcu above drives; this class's own snapshot state -- the fault
 		 * bit and the last frame index; and the DSP set, through DspSet::reset.
 		 *
@@ -298,12 +298,12 @@ namespace g2
 		 * `_size` here is a width in BITS -- 8, 16 or 32 -- which is the
 		 * MemoryMap's unit and not the core's. The two callbacks below take the
 		 * core's unit and convert; this pair is below that conversion. */
-		uint32_t busRead(uint32_t _address, int _size, mcf5307_bus_status& _status);
+		uint32_t busRead(uint32_t _address, int _size, mcf5407_bus_status& _status);
 		void     busWrite(uint32_t _address, int _size, uint32_t _value,
-		                  mcf5307_bus_status& _status);
+		                  mcf5407_bus_status& _status);
 
 		/* The installed callbacks, public on purpose: these are the exact
-		 * function pointers handed to mcf5307_create, so they are the path the
+		 * function pointers handed to mcf5407_create, so they are the path the
 		 * core takes.
 		 *
 		 * They are not a second route into the Board. Each one forwards to
@@ -311,16 +311,16 @@ namespace g2
 		 * between the two sides, and does nothing else.
 		 *
 		 * `size` here is a count of BYTES -- 1, 2 or 4 -- because that is what
-		 * mcf5307.h hands an mcf5307_read_fn and an mcf5307_write_fn, and these
+		 * mcf5407.h hands an mcf5407_read_fn and an mcf5407_write_fn, and these
 		 * two are that pair. busRead and busWrite above take bits, and the
 		 * conversion between the two units happens here and nowhere else. A
 		 * caller that drives these directly must therefore supply 1, 2 or 4; any
-		 * other value is refused as MCF5307_BUS_SIZE_ILLEGAL, 8, 16 and 32
+		 * other value is refused as MCF5407_BUS_SIZE_ILLEGAL, 8, 16 and 32
 		 * included, because those are legal widths in the other unit. */
 		static uint32_t onRead(void* user, uint32_t addr, int size,
-		                       mcf5307_bus_status* status);
+		                       mcf5407_bus_status* status);
 		static void     onWrite(void* user, uint32_t addr, int size,
-		                        uint32_t value, mcf5307_bus_status* status);
+		                        uint32_t value, mcf5407_bus_status* status);
 
 		/* The Board's transport hub. The attachments -- the internal
 		 * client, the forked G2-Edit socket and the usbip adapter -- share one
@@ -346,7 +346,7 @@ namespace g2
 		 * in the constructor's member initialiser list.
 		 *
 		 * A frame the device refuses is held and re-offered, not discarded.
-		 * `isp1181_rx` answers 0 for a NAK, and mcf5307.h states what that
+		 * `isp1181_rx` answers 0 for a NAK, and mcf5407.h states what that
 		 * costs: "THE PACKET IS GONE IN EVERY ONE OF THOSE CASES - a refusal
 		 * here is a dropped packet and not a deferred one". So the deferral
 		 * has to live on this side of the call, and it does: the refused
@@ -467,8 +467,8 @@ namespace g2
 			FlashWindow(Flash& _flash, const MemoryMap& _map, const Region _region)
 				: m_flash(_flash), m_map(_map), m_region(_region) {}
 
-			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+			uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 		private:
 			uint32_t absolute(uint32_t _offset) const;
@@ -496,8 +496,8 @@ namespace g2
 			MbarRouter(Sim& _sim, Uart0& _uart0, MBus& _mbus, InterruptController& _interrupts)
 				: m_sim(_sim), m_uart0(_uart0), m_mbus(_mbus), m_interrupts(_interrupts) {}
 
-			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+			uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 		private:
 			// True when the offset belongs to UART0's model rather than the
@@ -545,8 +545,8 @@ namespace g2
 			explicit Isp1181Window(isp1181_ctx*& _usb)
 				: m_usb(_usb) {}
 
-			uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-			void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+			uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+			void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 		private:
 			isp1181_ctx*& m_usb;
@@ -575,7 +575,7 @@ namespace g2
 		 * here would silently override the bit the firmware programmed.
 		 *
 		 * It is a no-op while the core handle is null. The controller exists
-		 * before `mcf5307_create` returns, and `Uart0`'s constructor programs
+		 * before `mcf5407_create` returns, and `Uart0`'s constructor programs
 		 * its vector into the controller, which presents; that presentation
 		 * has no core to reach. */
 		static void     onInterruptPresent(void* user, int level, uint8_t vector,
@@ -592,7 +592,7 @@ namespace g2
 		 * every change -- so the present callback runs while the members below
 		 * it are still raw storage. m_mcu is the member it reads, so it is
 		 * initialised before any unit that can present exists. */
-		mcf5307_ctx*        m_mcu;
+		mcf5407_ctx*        m_mcu;
 		InterruptController m_interrupts;
 
 		MemoryMap    m_memory;

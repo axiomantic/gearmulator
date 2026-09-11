@@ -28,8 +28,8 @@ namespace g2
 	public:
 		Sim();
 
-		uint32_t read(uint32_t _offset, int _size, mcf5307_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5307_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
 		// One line for every access the model rejected, and one for every
 		// access to an offset the manual assigns to no register this model

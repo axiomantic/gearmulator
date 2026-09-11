@@ -1,4 +1,4 @@
-// The GDB remote stub on the MCF5307. Tier T0: this test needs no firmware
+// The GDB remote stub on the MCF5407. Tier T0: this test needs no firmware
 // artifact of any kind.
 //
 // It drives the stub with a test client over a loopback socket and no `gdb`
@@ -125,12 +125,12 @@ namespace
 	public:
 		explicit Ram(const uint32_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -138,17 +138,17 @@ namespace
 			for(int i = 0; i < count; ++i)
 				value = (value << 8) | uint32_t(m_bytes[_offset + uint32_t(i)]);
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return value;
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-		           mcf5307_bus_status& _status) override
+		           mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -158,7 +158,7 @@ namespace
 				m_bytes[_offset + uint32_t(i)] = uint8_t((_value >> shift) & 0xffu);
 			}
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 		}
 
 		void pokeWord(const uint32_t _offset, const uint16_t _value)
@@ -527,7 +527,7 @@ namespace
 	// has to reproduce.
 	uint8_t boardByte(g2::Board& _board, const uint32_t _address)
 	{
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 		return uint8_t(g2::Board::onRead(&_board, _address, 1, &status) & 0xffu);
 	}
 }
@@ -674,12 +674,12 @@ int main()
 		for(int i = 0; i < g_regCount; ++i)
 			wanted[size_t(i)] = 0x11110000u + uint32_t(i);
 
-		// The status register keeps its low sixteen bits only: mcf5307.h says so
+		// The status register keeps its low sixteen bits only: mcf5407.h says so
 		// and machine.nim masks it, so the expected value is masked here rather
 		// than the assertion being loosened.
 		wanted[size_t(g_regSr)] = 0x00002700u;
 
-		// The program counter is read-only through this call. mcf5307.h states
+		// The program counter is read-only through this call. mcf5407.h states
 		// it at index 17 and machine.nim's regFileSet has no branch for it, so
 		// the stub sends the value and the core keeps its own.
 		const uint32_t pcBefore = board.mcuReg(g_regPc);

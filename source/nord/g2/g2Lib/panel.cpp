@@ -22,13 +22,13 @@ namespace g2
 	{
 	}
 
-	uint32_t Panel::read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status)
+	uint32_t Panel::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			return 0;
 		}
 
@@ -48,13 +48,13 @@ namespace g2
 		return value;
 	}
 
-	void Panel::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status)
+	void Panel::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5307_BUS_SIZE_ILLEGAL;
+			_status = MCF5407_BUS_SIZE_ILLEGAL;
 			return;
 		}
 

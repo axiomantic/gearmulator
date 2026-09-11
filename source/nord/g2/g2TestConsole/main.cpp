@@ -103,13 +103,13 @@ namespace
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
-	// The register indices of the mcf5307 C ABI. 17 is the program counter, 18
+	// The register indices of the mcf5407 C ABI. 17 is the program counter, 18
 	// is the vector base register.
 	constexpr int g_regPc  = 17;
 	constexpr int g_regVbr = 18;
 
 	// The size a byte access presents to Board::onRead, in the core's unit.
-	// mcf5307.h states it twice, once per callback typedef: `size` is a count of
+	// mcf5407.h states it twice, once per callback typedef: `size` is a count of
 	// bytes and never a width in bits.
 	constexpr int g_byte = 1;
 
@@ -216,7 +216,7 @@ namespace
 
 	/* One scheduler frame per iteration, and it is the whole drive. There is one
 	 * core, the Board's, so the frame turns the DSP set, the chain, the panel and
-	 * the MCU. No separate mcf5307_exec budget may be applied to the same core:
+	 * the MCU. No separate mcf5407_exec budget may be applied to the same core:
 	 * it would double-count the cycles the scheduler already allocated, and those
 	 * cycles feed the timers, so double-counting them would falsify a timer
 	 * tick. */
@@ -259,13 +259,13 @@ namespace
 		uint32_t contentWrites() const { return m_contentWrites; }
 		uint32_t clearWrites() const { return m_clearWrites; }
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -283,13 +283,13 @@ namespace
 			return value;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -364,7 +364,7 @@ namespace
 	}
 
 	// Reads through Board::onRead, which is the exact callback the Board hands
-	// to mcf5307_create and therefore the path the core itself takes. The
+	// to mcf5407_create and therefore the path the core itself takes. The
 	// CGRAM glyphs are decoded back to the characters they render; every other
 	// byte passes through untouched, so a genuinely wrong cell still reads as
 	// whatever it actually is.
@@ -377,7 +377,7 @@ namespace
 
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			const uint32_t byte = g2::Board::onRead(&_board, base + col, g_byte, &status);
 			out.push_back(cgramToAscii(uint8_t(byte & 0xffu)));
 		}
@@ -467,7 +467,7 @@ namespace
 
 		for(unsigned position = 0; position < _count; ++position)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			const uint32_t entry =
 				g2::Board::onRead(&_board, g_portTableBase + position * 4u, 4, &status);
 
@@ -2147,7 +2147,7 @@ namespace
 		std::cout << "  --gdb <port>     place the same machine and serve a GDB remote session on"
 		             " 127.0.0.1:<port>, blocking until a debugger attaches; 0 asks for a free"
 		             " port. The debugger drives the whole machine through the Scheduler, so a"
-		             " continue crosses a DSP handshake; breakpoints are MCF5307-side only"
+		             " continue crosses a DSP handshake; breakpoints are MCF5407-side only"
 		          << std::endl;
 		std::cout << "  --help           print this listing and exit 0" << std::endl;
 		std::cout << "  --impulse        TRANSPORT probe, and NOT an audio claim: boot, enter the"

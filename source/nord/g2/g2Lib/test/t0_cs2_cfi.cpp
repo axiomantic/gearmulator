@@ -37,7 +37,7 @@
 #include "../board.h"
 #include "../flash.h"
 
-#include <mcf5307.h>
+#include <mcf5407.h>
 
 #include <cstdint>
 #include <iomanip>
@@ -260,11 +260,11 @@ namespace
 	}
 
 	// Board::onRead and Board::onWrite are the function pointers handed to the
-	// MCF5307 core, so they are what the firmware will drive. They are called
+	// MCF5407 core, so they are what the firmware will drive. They are called
 	// here rather than busRead and busWrite for exactly that reason.
 	//
 	// That makes the size argument the core's unit, which is a count of BYTES.
-	// mcf5307.h states it twice, once per callback typedef. The three
+	// mcf5407.h states it twice, once per callback typedef. The three
 	// constants below are named rather than written as bare 1 and 2, because
 	// a file that passes 8 and 16 here -- the MemoryMap's unit -- and a
 	// silent swap of one unit for another is the defect the conversion in
@@ -273,16 +273,16 @@ namespace
 	constexpr int g_word = 2;
 
 	uint32_t boardRead(g2::Board& _board, const uint32_t _address, const int _size,
-		mcf5307_bus_status& _status)
+		mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		return g2::Board::onRead(&_board, _address, _size, &_status);
 	}
 
 	void boardWrite(g2::Board& _board, const uint32_t _address, const int _size,
-		const uint32_t _value, mcf5307_bus_status& _status)
+		const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		g2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 
@@ -292,7 +292,7 @@ namespace
 		bytes.reserve(kBlockLength);
 		for(uint32_t i = 0; i < kBlockLength; ++i)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 			bytes.push_back(static_cast<uint8_t>(
 				boardRead(_board, kCs2Base + kBlockStart + i, g_byte, status) & 0xffu));
 		}
@@ -453,7 +453,7 @@ int main()
 		g2::Board board(makeBoardConfig());
 		board.flash().loadCs2(makeContainerImage());
 
-		mcf5307_bus_status status = MCF5307_BUS_OK;
+		mcf5407_bus_status status = MCF5407_BUS_OK;
 
 		check(!board.flash().cs2InQueryMode(),
 			"through the board: the device starts OUT of query mode");
@@ -461,7 +461,7 @@ int main()
 			"through the board: the container header answers before the command");
 
 		boardWrite(board, kCs2Base + kQueryEnterOffset, g_word, kQueryEnterCommand, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 			"through the board: the 0x0098 write COMPLETES without a bus fault");
 		check(board.flash().cs2InQueryMode(),
 			"through the board: the 0x0098 write puts the device IN query mode");
@@ -469,7 +469,7 @@ int main()
 			"through the board: the CFI table answers after the command");
 
 		boardWrite(board, kCs2Base, g_word, kResetCommand, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5307_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
 			"through the board: the reset write COMPLETES without a bus fault");
 		check(!board.flash().cs2InQueryMode(),
 			"through the board: the reset command exits query mode");

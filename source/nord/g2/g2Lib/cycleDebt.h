@@ -8,7 +8,7 @@
  *
  *   - g2::runDspCycles  an adapter this project writes, because
  *                       dsp56k::DSP::exec has no budgeted call;
- *   - Board::runMcu     a direct call that forwards mcf5307_exec, which
+ *   - Board::runMcu     a direct call that forwards mcf5407_exec, which
  *                       already takes a cycle budget.
  *
  * Both return uint32_t, so `spent` below cannot be negative and the widening

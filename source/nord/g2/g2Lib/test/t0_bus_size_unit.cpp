@@ -1,9 +1,9 @@
-// The unit of the `size` argument the MCF5307 core hands to a board, proved by
+// The unit of the `size` argument the MCF5407 core hands to a board, proved by
 // running the core against the board. Tier T0: this test needs no firmware
 // artifact of any kind.
 //
 // The units disagree. The core passes `size` as a count of bytes -- 1, 2 or 4
-// -- and mcf5307.h states it twice, once per callback typedef. g2Lib's
+// -- and mcf5407.h states it twice, once per callback typedef. g2Lib's
 // MemoryMap takes a width in bits -- 8, 16 or 32 -- and memoryMap.h states
 // that. The two readings disagree on every access a core can make, so a board
 // that forwards the argument unconverted refuses all of them: the very first
@@ -123,12 +123,12 @@ namespace
 	public:
 		explicit RecordingMemory(const uint32_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				m_accesses.push_back(Access{false, _offset, _size, 0u});
 				return 0u;
 			}
@@ -137,18 +137,18 @@ namespace
 			for(int i = 0; i < count; ++i)
 				value = (value << 8) | uint32_t(m_bytes[_offset + uint32_t(i)]);
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			m_accesses.push_back(Access{false, _offset, _size, value});
 			return value;
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-		           mcf5307_bus_status& _status) override
+		           mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				m_accesses.push_back(Access{true, _offset, _size, _value});
 				return;
 			}
@@ -159,7 +159,7 @@ namespace
 				m_bytes[_offset + uint32_t(i)] = uint8_t((_value >> shift) & 0xffu);
 			}
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			m_accesses.push_back(Access{true, _offset, _size, _value});
 		}
 
@@ -265,16 +265,16 @@ namespace
 	// through Board::busRead. The callbacks are the path the core takes;
 	// driving busRead instead leaves them unexercised.
 	uint32_t boardRead(g2::Board& _board, const uint32_t _address, const int _size,
-	                   mcf5307_bus_status& _status)
+	                   mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		return g2::Board::onRead(&_board, _address, _size, &_status);
 	}
 
 	void boardWrite(g2::Board& _board, const uint32_t _address, const int _size,
-	                const uint32_t _value, mcf5307_bus_status& _status)
+	                const uint32_t _value, mcf5407_bus_status& _status)
 	{
-		_status = MCF5307_BUS_OK;
+		_status = MCF5407_BUS_OK;
 		g2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 
@@ -283,14 +283,14 @@ namespace
 	// what separates that from the decode's own UNMAPPED answer.
 	void checkRefused(g2::Board& _board, const int _size, const std::string& _what)
 	{
-		mcf5307_bus_status readStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status readStatus = MCF5407_BUS_OK;
 		(void)boardRead(_board, g_unmapped, _size, readStatus);
-		checkEqual(uint32_t(readStatus), uint32_t(MCF5307_BUS_SIZE_ILLEGAL),
+		checkEqual(uint32_t(readStatus), uint32_t(MCF5407_BUS_SIZE_ILLEGAL),
 		           "a read of " + _what + " is refused as an illegal size");
 
-		mcf5307_bus_status writeStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status writeStatus = MCF5407_BUS_OK;
 		boardWrite(_board, g_unmapped, _size, 0u, writeStatus);
-		checkEqual(uint32_t(writeStatus), uint32_t(MCF5307_BUS_SIZE_ILLEGAL),
+		checkEqual(uint32_t(writeStatus), uint32_t(MCF5407_BUS_SIZE_ILLEGAL),
 		           "a write of " + _what + " is refused as an illegal size");
 	}
 
@@ -299,14 +299,14 @@ namespace
 	// at an address in no window.
 	void checkAccepted(g2::Board& _board, const int _size, const std::string& _what)
 	{
-		mcf5307_bus_status readStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status readStatus = MCF5407_BUS_OK;
 		(void)boardRead(_board, g_unmapped, _size, readStatus);
-		checkEqual(uint32_t(readStatus), uint32_t(MCF5307_BUS_UNMAPPED),
+		checkEqual(uint32_t(readStatus), uint32_t(MCF5407_BUS_UNMAPPED),
 		           "a read of " + _what + " passes the width check and reaches the decode");
 
-		mcf5307_bus_status writeStatus = MCF5307_BUS_OK;
+		mcf5407_bus_status writeStatus = MCF5407_BUS_OK;
 		boardWrite(_board, g_unmapped, _size, 0u, writeStatus);
-		checkEqual(uint32_t(writeStatus), uint32_t(MCF5307_BUS_UNMAPPED),
+		checkEqual(uint32_t(writeStatus), uint32_t(MCF5407_BUS_UNMAPPED),
 		           "a write of " + _what + " passes the width check and reaches the decode");
 	}
 
@@ -367,7 +367,7 @@ int main()
 		/* The Board's own core is the one that runs, reached through the handle
 		 * the Board publishes. It already sits behind Board::onRead and
 		 * Board::onWrite -- they are the exact pair the Board hands to
-		 * mcf5307_create for it -- so the path under test is unchanged, and a
+		 * mcf5407_create for it -- so the path under test is unchanged, and a
 		 * core this file built would have been a second core beside the one the
 		 * Board owns. */
 		board.resetMcu(g_stackTop, g_codeBase);

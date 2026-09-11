@@ -27,13 +27,13 @@ namespace g2
 {
 	/* The faults a job can report.
 	 *
-	 * CoreHalted is the MCU context only: Board::faulted() is true, the MCF5307
+	 * CoreHalted is the MCU context only: Board::faulted() is true, the MCF5407
 	 * core took a fault during exception stacking and halted. No DSP job writes
 	 * it and no MCU fault carries one of the three above it.
 	 *
 	 * It is not a second fault code on the board. Board::faulted() stays one
 	 * bit, because the address, the width and the direction are already
-	 * recorded by mcf5307_bus_status and a second code could disagree with that
+	 * recorded by mcf5407_bus_status and a second code could disagree with that
 	 * record. This enumerator is the scheduler's mapping of that one bit into
 	 * its own channel, so that contextFault(i) != JobFault::None is a valid
 	 * fault test for every context index and not for the DSPs only. */

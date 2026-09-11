@@ -35,13 +35,13 @@ namespace g2
 
 		for(unsigned position = 0; position < _count; ++position)
 		{
-			mcf5307_bus_status status = MCF5307_BUS_OK;
+			mcf5407_bus_status status = MCF5407_BUS_OK;
 
 			const uint32_t entry =
 				Board::onRead(&_board, g_portTableBase + position * g_entryBytes,
 					int(g_entryBytes), &status);
 
-			if(status != MCF5307_BUS_OK)
+			if(status != MCF5407_BUS_OK)
 				continue;
 
 			/* A shift-and-invert written here would be a copy of hdi08Decode's
