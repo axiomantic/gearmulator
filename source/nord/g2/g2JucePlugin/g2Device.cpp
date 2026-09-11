@@ -211,6 +211,11 @@ namespace g2
 		// saves carries them empty and zero until the boot fills them.
 		m_stateData.slotPatches.resize(g_stateSlotCount);
 		m_stateData.slotPatchIds.resize(g_stateSlotCount);
+
+		// Here and not in prepareToPlay: sendMidi and processAudio are the
+		// only writers, both run on the audio thread, and the framework can
+		// call them before any prepare-shaped hook this class is given.
+		m_pendingMidi.reserve(kMaxPendingMidi);
 	}
 
 	/* The unique_ptrs tear down in the one order that is safe, which is why
@@ -867,6 +872,12 @@ namespace g2
 		// device that wants to batch incoming events batches them itself.
 		// With no machine to answer, the truthful answer is an empty
 		// response vector and success.
+		// The bound the constructor reserved. Refusing here is what keeps
+		// push_back from reallocating on the audio thread; the false is the
+		// honest answer for an event this device did not take.
+		if(m_pendingMidi.size() >= kMaxPendingMidi)
+			return false;
+
 		m_pendingMidi.push_back(std::move(e));
 		return true;
 	}

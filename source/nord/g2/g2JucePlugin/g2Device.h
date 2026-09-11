@@ -338,7 +338,20 @@ namespace g2
 		 * sample-accurate against the machine's own frame index.
 		 * Single-producer single-consumer on the audio thread itself -- the
 		 * framework calls sendMidi on the same thread that will run
-		 * processAudio (synthLib/device.cpp), so no lock is involved. */
+		 * processAudio (synthLib/device.cpp), so no lock is involved.
+		 *
+		 * That thread is the audio thread, so the element storage is
+		 * reserved once at construction and sendMidi refuses beyond the
+		 * reservation rather than letting push_back grow the vector under
+		 * the callback. Refusing costs one event of one block; reallocating
+		 * takes the allocator's lock and can cost the deadline for the whole
+		 * block, so the bound is the cheaper failure.
+		 *
+		 * clear() keeps the capacity, so the reservation holds for the life
+		 * of the object. It bounds this vector's own storage and not a
+		 * SysEx payload, which SMidiEvent carries in a vector of its own. */
+		static constexpr size_t kMaxPendingMidi = 4096;
+
 		std::vector<synthLib::SMidiEvent> m_pendingMidi;
 
 		/* The Uart0 MidiOutFn sink. Static because MidiOutFn is a plain

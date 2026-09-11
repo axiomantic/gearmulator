@@ -90,6 +90,7 @@ namespace
 		using g2::Device::processAudio;
 		using g2::Device::readMidiOut;
 		using g2::Device::uart0MidiOut;
+		using g2::Device::kMaxPendingMidi;
 
 		const std::vector<synthLib::SMidiEvent>& staged() const { return m_pendingMidi; }
 		uint32_t samplesProcessed() const { return m_numSamplesProcessed; }
@@ -282,6 +283,47 @@ int main()
 
 		checkEqual(midiOut.size(), 1u,
 			"readMidiOut carries exactly the machine-originated SysEx and nothing else");
+	}
+
+	/* ------------- The staged queue allocates nothing on the audio thread.
+	 *
+	 * sendMidi and processAudio both run on the audio thread, so the queue's
+	 * element storage is reserved at construction and sendMidi refuses past
+	 * the bound. The evidence is the address of that storage: a push_back
+	 * that grew the vector would move it. */
+	{
+		std::printf("case group 5: the staged queue's storage does not move\n");
+
+		OffsetsHarness device;
+
+		const auto* const storageAtRest = device.staged().data();
+		check(device.staged().capacity() >= OffsetsHarness::kMaxPendingMidi,
+			"a fresh device has already reserved the staged queue's storage");
+
+		bool allAccepted = true;
+		for(size_t i = 0; i < OffsetsHarness::kMaxPendingMidi; ++i)
+		{
+			std::vector<synthLib::SMidiEvent> response;
+			if(!device.sendMidi(hostEvent(0), response))
+			{
+				allAccepted = false;
+				break;
+			}
+		}
+
+		check(allAccepted, "every event up to the bound is accepted");
+		checkEqual(device.staged().size(), OffsetsHarness::kMaxPendingMidi,
+			"the queue holds exactly the bound");
+		check(device.staged().data() == storageAtRest,
+			"filling the queue to the bound did not move its storage");
+
+		std::vector<synthLib::SMidiEvent> response;
+		check(!device.sendMidi(hostEvent(0), response),
+			"the event past the bound is refused rather than staged");
+		checkEqual(device.staged().size(), OffsetsHarness::kMaxPendingMidi,
+			"the refused event did not enter the queue");
+		check(device.staged().data() == storageAtRest,
+			"the refusal did not move the queue's storage");
 	}
 
 	std::printf("t0_midi_offsets: %d failure(s) in %d case(s)\n", g_failures, g_cases);
