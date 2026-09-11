@@ -220,11 +220,21 @@ namespace g2
 		 * installed; a null m_scheduler makes every call inert, which is the
 		 * pre-boot state and unreachable on this path because the ready
 		 * branch reads m_ready only after the boot thread has stored the
-		 * pointer and released. */
+		 * pointer and released.
+		 *
+		 * The pointer is settable after construction, and it has to be: the
+		 * Device owns its driver as a member and therefore constructs it
+		 * before any Scheduler exists, so a constructor-only pointer would be
+		 * null for the whole life of the object. setScheduler is the seam
+		 * Device::installScheduler drives, and this pointer is the only
+		 * storage for it. */
 		class SchedulerDriver final : public ISchedulerDriver
 		{
 		public:
 			explicit SchedulerDriver(Scheduler* _scheduler) noexcept : m_scheduler(_scheduler) {}
+
+			void setScheduler(Scheduler* _scheduler) noexcept { m_scheduler = _scheduler; }
+			Scheduler* scheduler() const noexcept { return m_scheduler; }
 
 			size_t push(const g2::Frame* _in, const size_t _frames) noexcept override
 			{
@@ -249,7 +259,11 @@ namespace g2
 
 		/* The owning driver. The Device owns exactly one; the constructor
 		 * points m_driver at it, and a harness that replaces m_driver
-		 * through installDriver() leaves this one alive underneath. */
+		 * through installDriver() leaves this one alive underneath.
+		 *
+		 * Constructed with no Scheduler because no Scheduler exists yet;
+		 * installScheduler() is what gives it one, and until then every call
+		 * through it is inert. */
 		SchedulerDriver m_owningDriver{nullptr};
 
 	protected:
@@ -265,11 +279,21 @@ namespace g2
 		 * it after the installation.
 		 *
 		 * Borrowed, not owned: the Scheduler borrows its Board and the
-		 * Board outlives it (scheduler.h), and the Device owns the pair. */
+		 * Board outlives it (scheduler.h), and the Device owns the pair.
+		 *
+		 * The owning driver holds the pointer, rather than the Device holding
+		 * a second copy of it: the audio thread reaches the Scheduler only
+		 * through the driver, so a copy the driver does not read would leave
+		 * the driver inert while looking installed. */
 		void installScheduler(Scheduler* _scheduler) noexcept
 		{
-			m_scheduler = _scheduler;
+			m_owningDriver.setScheduler(_scheduler);
 		}
+
+		/* The Scheduler the owning driver forwards to, for a harness that
+		 * needs to observe the machine the audio thread actually reaches
+		 * rather than the one the boot returned. */
+		Scheduler* installedScheduler() const noexcept { return m_owningDriver.scheduler(); }
 
 		/* The message thread's half of the hand-off, shared by getState and
 		 * setState. beginStateChange() stores m_ready false with seq_cst and
@@ -286,8 +310,7 @@ namespace g2
 		/* The test seam. A harness subclass replaces the driver to observe
 		 * the ready branch's call order without a real booted machine. The
 		 * hook is protected, so only this class and its subclasses reach it,
-		 * and the production value is the owning SchedulerDriver over
-		 * m_scheduler. */
+		 * and the production value is m_owningDriver. */
 		void installDriver(ISchedulerDriver* _driver) noexcept { m_driver = _driver; }
 		ISchedulerDriver* driver() const noexcept { return m_driver; }
 
@@ -347,15 +370,8 @@ namespace g2
 
 		void notifyBootStep(BootStep _step, Scheduler* _scheduler) noexcept;
 
-		/* The boot thread installs it, the audio thread drives it, and the
-		 * hand-off pairing (below) is what makes the transfer total: the
-		 * pointer is written only while m_ready is false and no callback is
-		 * in flight. */
-		Scheduler* m_scheduler = nullptr;
-
-		/* The active driver. It is the SchedulerDriver over m_scheduler in
-		 * production; a harness subclass may replace it through
-		 * installDriver(). */
+		/* The active driver. It is m_owningDriver in production; a harness
+		 * subclass may replace it through installDriver(). */
 		ISchedulerDriver* m_driver = nullptr;
 
 		/* The two hand-off flags. Neither can do the other's job.

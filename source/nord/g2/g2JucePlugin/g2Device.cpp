@@ -279,9 +279,9 @@ namespace g2
 		 * A second boot() on the same Device replaces the machine, which is
 		 * what a restore is: the Scheduler goes first, then the Board, then
 		 * the store, and the release order is the destruction order the
-		 * members already declare. m_scheduler is cleared through the same
-		 * seam that installs it, so the audio thread's driver never holds a
-		 * pointer to a destroyed object. */
+		 * members already declare. The driver's pointer is cleared through
+		 * the same seam that installs it, so the audio thread's driver never
+		 * holds a pointer to a destroyed object. */
 		installScheduler(nullptr);
 		m_ownedScheduler.reset();
 		m_executor.reset();

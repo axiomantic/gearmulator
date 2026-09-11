@@ -589,3 +589,52 @@ if(G2_THREAD_SANITIZER)
 		set_property(TEST t1_state_handoff_load_negative APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
 	endif()
 endif()
+
+# ----------------- the audio callback reaches the booted machine
+#
+# Check: ctest --test-dir build --no-tests=error -R ^t1_audio_reaches_machine$
+#
+# Tier T1 and gated. It boots the real Clavia firmware through g2::Device::boot
+# and then calls processAudio on that Device, so it resolves NMG2_ARTIFACTS
+# through ArtifactResolver and reports the skip line when it is absent.
+#
+# It is the only audio test that installs no driver. t0_process_audio and
+# t1_state_handoff_load both call installDriver() to substitute a recording
+# driver, which is what lets them measure the call order -- and which replaces
+# the one object a wiring question is about. This test asks whether the
+# production driver reaches the Scheduler the boot produced, and the observable
+# is the Scheduler's own virtual clock rather than the driver's own report.
+#
+# Its two controls are ungated and run even on a machine with no artifacts: they
+# build their own Board and Scheduler and hand the predicate a SchedulerDriver
+# over a Scheduler and one over none, so a skipped run keeps the evidence that
+# the predicate separates a wired driver from an unwired one.
+#
+# SKIP_RETURN_CODE is what keeps a skipped run out of the Passed column. Without
+# it a machine with no artifacts scores this test exactly as a machine that
+# booted the firmware and drove the callback.
+#
+# TIMEOUT 600 guards the boot's 500,000-frame ceiling and not the measurement:
+# the boot leaves early on Scheduler::chainAttached().
+
+add_executable(t1_audio_reaches_machine
+	t1_audio_reaches_machine.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2Device.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../g2JucePlugin/g2State.cpp)
+target_link_libraries(t1_audio_reaches_machine PRIVATE g2Lib)
+set_property(TARGET t1_audio_reaches_machine PROPERTY FOLDER "G2/test")
+
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/gatedFixture.h" g2_audioReachesSkipExitCodeLine REGEX "g_gatedSkipExitCode = [0-9]+")
+
+if(NOT g2_audioReachesSkipExitCodeLine MATCHES "g_gatedSkipExitCode = ([0-9]+)")
+	message(FATAL_ERROR "gatedFixture.h defines no g_gatedSkipExitCode, so ctest cannot be told which exit code is a skip")
+endif()
+
+set(g2_audioReachesSkipExitCode "${CMAKE_MATCH_1}")
+
+add_test(NAME t1_audio_reaches_machine COMMAND t1_audio_reaches_machine)
+set_tests_properties(t1_audio_reaches_machine PROPERTIES LABELS "IntegrationTest" TIMEOUT 600 SKIP_RETURN_CODE ${g2_audioReachesSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_audio_reaches_machine APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
