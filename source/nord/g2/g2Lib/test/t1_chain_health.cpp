@@ -173,13 +173,13 @@ namespace
 	public:
 		explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -197,13 +197,13 @@ namespace
 			return value;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5307_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
 		{
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 

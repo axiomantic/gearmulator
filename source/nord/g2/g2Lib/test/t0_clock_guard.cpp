@@ -1059,11 +1059,11 @@ int main(const int argc, const char* const* const argv)
 			"add_subdirectory(\"" + forwardSlashes(g2LibSourceDir)
 			+ "\" g2Lib)\n");
 
-		/* The MCF5307 link is turned off for the scratch configure.
+		/* The MCF5407 link is turned off for the scratch configure.
 		 *
-		 * G2_LINK_MCF5307 is on by default, and g2Lib then
+		 * G2_LINK_MCF5407 is on by default, and g2Lib then
 		 * either adds a subdirectory the root CMakeLists.txt points it at or
-		 * calls FetchContent_MakeAvailable(mcf5307) against details the root
+		 * calls FetchContent_MakeAvailable(mcf5407) against details the root
 		 * declares. This scratch project is not that root, so the fetch has no
 		 * details and the configure fails before it reaches the guard -- which
 		 * makes both the control run and the negative run fail for a reason
@@ -1073,7 +1073,7 @@ int main(const int argc, const char* const* const argv)
 		 * that needs a root. The guard block itself is downstream of it and is
 		 * unaffected by the option, so the case still drives the real guard in
 		 * the real file. */
-		const std::string linkOptionOff = "-DG2_LINK_MCF5307=OFF";
+		const std::string linkOptionOff = "-DG2_LINK_MCF5407=OFF";
 
 		const std::string clockSymbol   = busSymbol("CLOCK_HZ");
 		const std::string dividerSymbol = busSymbol("DIVIDER");

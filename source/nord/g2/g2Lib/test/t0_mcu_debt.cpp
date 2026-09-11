@@ -2,7 +2,7 @@
  * return to its budget would make `spent <= want` hold on every call, the
  * difference would never be positive, the floor at zero would swallow it, and
  * `cycleDebt(0)` would be identically zero for every implementation, correct or
- * pinned. `mcf5307_exec` reports the whole cost of the instruction that crossed
+ * pinned. `mcf5407_exec` reports the whole cost of the instruction that crossed
  * the budget, so the overshoot is real and the debt accrues. Case 1 below
  * re-establishes that property from the linked library rather than trusting it,
  * because every later case is vacuous without it.
@@ -106,13 +106,13 @@ namespace
 	public:
 		explicit Ram(const uint32_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -121,18 +121,18 @@ namespace
 			for(int i = 0; i < count; ++i)
 				value = (value << 8) | uint32_t(m_bytes[_offset + uint32_t(i)]);
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return value;
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-			mcf5307_bus_status& _status) override
+			mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -142,7 +142,7 @@ namespace
 				m_bytes[_offset + uint32_t(i)] = uint8_t((_value >> shift) & 0xffu);
 			}
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 		}
 
 		void pokeWord(const uint32_t _offset, const uint16_t _value)
@@ -248,7 +248,7 @@ int main()
 	const int64_t instrCost     = static_cast<int64_t>(probeSpent);
 
 	check(probeSpent > 1u,
-		"case 1: a budget of one cycle reported MORE than one cycle -- the linked mcf5307 "
+		"case 1: a budget of one cycle reported MORE than one cycle -- the linked mcf5407 "
 		"reports the whole cost of the instruction that crossed the budget, so the cycle "
 		"debt can accrue at all");
 

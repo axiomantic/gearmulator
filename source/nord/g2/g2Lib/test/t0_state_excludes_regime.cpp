@@ -237,13 +237,13 @@ namespace
 	public:
 		explicit Ram(const uint32_t _size) : m_bytes(_size, 0u) {}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5307_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -252,18 +252,18 @@ namespace
 			for(int i = 0; i < count; ++i)
 				value = (value << 8) | uint32_t(m_bytes[_offset + uint32_t(i)]);
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 			return value;
 		}
 
 		void write(const uint32_t _offset, const int _size, const uint32_t _value,
-			mcf5307_bus_status& _status) override
+			mcf5407_bus_status& _status) override
 		{
 			const int count = byteCount(_size);
 
 			if(count == 0 || _offset + uint32_t(count) > m_bytes.size())
 			{
-				_status = MCF5307_BUS_SIZE_ILLEGAL;
+				_status = MCF5407_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -273,7 +273,7 @@ namespace
 				m_bytes[_offset + uint32_t(i)] = uint8_t((_value >> shift) & 0xffu);
 			}
 
-			_status = MCF5307_BUS_OK;
+			_status = MCF5407_BUS_OK;
 		}
 
 		void pokeWord(const uint32_t _offset, const uint16_t _value)

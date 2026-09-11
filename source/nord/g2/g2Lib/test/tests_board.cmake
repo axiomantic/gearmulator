@@ -4,24 +4,24 @@
 # source/nord/g2/g2Lib/test/. The NAME is the exact string passed to -r. Edit no
 # other CMake file in this tree.
 
-# ----------------- the mcf5307::mcf5307 link
+# ----------------- the mcf5407::mcf5407 link
 #
-# The test links g2Lib and nothing else. It never names mcf5307::mcf5307 on its
+# The test links g2Lib and nothing else. It never names mcf5407::mcf5407 on its
 # own link line, so the header and the symbol both have to arrive through
 # g2Lib's own PUBLIC link. Naming the core here as well would let this test pass
 # with that line deleted.
 #
 # The target is declared unconditionally and is not guarded by
-# if(G2_LINK_MCF5307). The guard would make the option-OFF build succeed by
+# if(G2_LINK_MCF5407). The guard would make the option-OFF build succeed by
 # building nothing; the negative case asserts that the option-OFF build fails at
-# the compile step on the missing mcf5307.h.
+# the compile step on the missing mcf5407.h.
 
-add_executable(t0_mcf5307_link t0_mcf5307_link.cpp)
-target_link_libraries(t0_mcf5307_link PRIVATE g2Lib)
-set_property(TARGET t0_mcf5307_link PROPERTY FOLDER "G2/test")
+add_executable(t0_mcf5407_link t0_mcf5407_link.cpp)
+target_link_libraries(t0_mcf5407_link PRIVATE g2Lib)
+set_property(TARGET t0_mcf5407_link PROPERTY FOLDER "G2/test")
 
-add_test(NAME t0_mcf5307_link COMMAND t0_mcf5307_link)
-set_tests_properties(t0_mcf5307_link PROPERTIES LABELS "UnitTest")
+add_test(NAME t0_mcf5407_link COMMAND t0_mcf5407_link)
+set_tests_properties(t0_mcf5407_link PROPERTIES LABELS "UnitTest")
 
 # ----------------- the memory decode and the two bus callbacks
 
@@ -75,12 +75,30 @@ set_tests_properties(t0_anomaly_log PROPERTIES LABELS "UnitTest")
 # this block is what puts it there. A cache variable names a sibling checkout
 # when a local engineer has one, and FetchContent fetches a pinned commit when
 # nobody has, mirroring the arrangement the root CMakeLists.txt uses for
-# mcf5307.
+# mcf5407.
 
 set(G2_NMG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools to use instead of fetching one")
 set(G2_NMG2_TOOLS_GIT_TAG "oracle-wire-compose-2026-09-01" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
 
 if(G2_NMG2_TOOLS_SOURCE_DIR)
+	# The override substitutes whatever branch the checkout happens to be on, and
+	# a branch that carries no Nord tooling has no `container` module. The oracle
+	# then dies inside a Python subprocess inside a test, and a
+	# ModuleNotFoundError arriving from there reads as an upstream deletion
+	# rather than as a local misconfiguration. It is diagnosed here, where the
+	# override is applied and the cause is still visible, and it is FATAL rather
+	# than a warning because a warning in a configure log is the signal this
+	# whole failure class already got past.
+	if(NOT EXISTS "${G2_NMG2_TOOLS_SOURCE_DIR}/nmg2_tools/container.py")
+		message(FATAL_ERROR
+			"G2_NMG2_TOOLS_SOURCE_DIR points at ${G2_NMG2_TOOLS_SOURCE_DIR}, which "
+			"has no nmg2_tools/container.py. That checkout carries no Nord tooling "
+			"and is most likely on a main-descended branch. Anything built from it "
+			"is a statement about that tree and not about the pin.\n"
+			"Unset G2_NMG2_TOOLS_SOURCE_DIR to build against the pin "
+			"(${G2_NMG2_TOOLS_GIT_TAG}), or check the sibling out onto a branch "
+			"that carries the tooling.")
+	endif()
 	set(G2_ORACLE_TOOLS_DIR "${G2_NMG2_TOOLS_SOURCE_DIR}")
 else()
 	include(FetchContent)
@@ -247,30 +265,30 @@ set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 1
 # This target compiles board.cpp and links no library, and that is the
 # observation mechanism rather than a shortcut. The behaviour under test is a
 # call the Board makes out to isp1181_tick, and the shipped Board exposes no way
-# to observe it. The test therefore supplies its own definitions of the mcf5307
-# entry points board.cpp uses, which requires that libmcf5307.a is absent from
+# to observe it. The test therefore supplies its own definitions of the mcf5407
+# entry points board.cpp uses, which requires that libmcf5407.a is absent from
 # this link: defining isp1181_tick while that archive is on the link line is a
 # duplicate-symbol error as soon as anything pulls the archive member that also
 # defines it. Linking g2Lib would put that archive on the line through g2Lib's
 # own PUBLIC link.
 #
-# The mcf5307 include directory is taken from the imported target's INTERFACE
+# The mcf5407 include directory is taken from the imported target's INTERFACE
 # property rather than linking it, so the header arrives and the archive does
 # not.
 #
 # The executable is declared unconditionally and only the include directory is
-# guarded. At G2_LINK_MCF5307=OFF the imported target does not exist, so naming
+# guarded. At G2_LINK_MCF5407=OFF the imported target does not exist, so naming
 # it in a generator expression fails the generate step of any configure that
 # turns the option off -- and t0_clock_guard's control configure is exactly such
 # a configure. Guarding the target instead of the executable keeps the negative
 # case intact: at OFF this target still builds and still fails at the compile
-# step on the missing mcf5307.h, rather than passing by building nothing.
+# step on the missing mcf5407.h, rather than passing by building nothing.
 
 add_executable(t0_sof_tick t0_sof_tick.cpp ../board.cpp)
 target_include_directories(t0_sof_tick PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-if(TARGET mcf5307::mcf5307)
+if(TARGET mcf5407::mcf5407)
 	target_include_directories(t0_sof_tick PRIVATE
-		$<TARGET_PROPERTY:mcf5307::mcf5307,INTERFACE_INCLUDE_DIRECTORIES>)
+		$<TARGET_PROPERTY:mcf5407::mcf5407,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 set_property(TARGET t0_sof_tick PROPERTY FOLDER "G2/test")
 
@@ -281,7 +299,7 @@ set_tests_properties(t0_sof_tick PROPERTIES LABELS "UnitTest")
 #
 # The test links g2Lib and names no other library. The funnel is a g2Lib source,
 # and the just-in-time compiler it must notify arrives through g2Lib's own
-# PUBLIC link of dsp56kEmu. Nothing here references mcf5307::mcf5307, so no
+# PUBLIC link of dsp56kEmu. Nothing here references mcf5407::mcf5407, so no
 # if(TARGET) guard is needed: this block is inert in the option-OFF configure
 # that t0_clock_guard runs as its control.
 #
@@ -299,13 +317,13 @@ set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
 #
 # The test links g2Lib and names no other library, and the distinction from
 # t0_sof_tick is deliberate. t0_sof_tick compiles ../board.cpp directly and
-# defines the mcf5307 entry points itself, so it must keep libmcf5307.a off the
+# defines the mcf5407 entry points itself, so it must keep libmcf5407.a off the
 # link line. This test needs the opposite: the real Flash, Panel, Latches,
 # Hdi08Adapter, MemoryMap, Sim and Uart0, all of which are g2Lib sources, plus
 # the real board.cpp that composes them. Linking g2Lib delivers every one of
-# them with the real mcf5307 behind it.
+# them with the real mcf5407 behind it.
 #
-# Nothing here references mcf5307::mcf5307, so no if(TARGET) guard is needed:
+# Nothing here references mcf5407::mcf5407, so no if(TARGET) guard is needed:
 # this block is inert in the option-OFF configure that t0_clock_guard runs as
 # its control.
 #
@@ -325,8 +343,8 @@ set_tests_properties(t0_board_routing PROPERTIES LABELS "UnitTest")
 # which includes "mc68k/hdi08.h". Every consumer of board.h therefore needs the
 # directory that resolves it. A target that links g2Lib gets it for free, since
 # g2Lib's PUBLIC hardwareLib link exports it. t0_sof_tick does not link g2Lib:
-# it compiles ../board.cpp directly and defines the mcf5307 entry points itself,
-# to keep libmcf5307.a off its link line.
+# it compiles ../board.cpp directly and defines the mcf5407 entry points itself,
+# to keep libmcf5407.a off its link line.
 #
 # The include directory is taken from hardwareLib's INTERFACE property and the
 # target is not linked, so the header arrives and no archive joins the link. The
@@ -347,9 +365,9 @@ endif()
 # ones name only what they add.
 #
 # It does not weaken what t0_sof_tick's own block protects. That block keeps
-# libmcf5307.a off the link line, because the test defines the mcf5307 entry
+# libmcf5407.a off the link line, because the test defines the mcf5407 entry
 # points itself and the archive would collide with them. No source added by any
-# of these blocks is an mcf5307 source, 68kEmu included.
+# of these blocks is an mcf5407 source, 68kEmu included.
 #
 # 68kEmu is linked because hdi08Adapter.cpp holds mc68k::Hdi08 instances by
 # value and needs their definitions. It is guarded on the same principle as the
@@ -369,7 +387,7 @@ target_sources(t0_sof_tick PRIVATE
 
 # 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
 # class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
-# onto the link line. None of the three is the mcf5307 archive, so the property
+# onto the link line. None of the three is the mcf5407 archive, so the property
 # t0_sof_tick's own block protects is untouched.
 
 foreach(lib 68kEmu dsp56kEmu baseLib)
@@ -386,8 +404,8 @@ endforeach()
 #
 # The test links g2Lib and nothing else, which is the arrangement
 # t0_board_routing already uses for the same reason: it drives Board::onRead and
-# Board::onWrite with the real mcf5307 behind them, and g2Lib carries that link
-# itself. Nothing here references mcf5307::mcf5307, so no if(TARGET) guard is
+# Board::onWrite with the real mcf5407 behind them, and g2Lib carries that link
+# itself. Nothing here references mcf5407::mcf5407, so no if(TARGET) guard is
 # needed and none is written.
 
 add_executable(t0_cs2_cfi t0_cs2_cfi.cpp)
@@ -407,8 +425,8 @@ set_tests_properties(t0_cs2_cfi PROPERTIES LABELS "UnitTest")
 #
 # The test links g2Lib and nothing else, which is the arrangement
 # t0_board_routing and t0_cs2_cfi already use: it drives Board::onRead and
-# Board::onWrite with the real mcf5307 core behind them. Nothing here references
-# mcf5307::mcf5307, so no if(TARGET) guard is needed and none is written.
+# Board::onWrite with the real mcf5407 core behind them. Nothing here references
+# mcf5407::mcf5407, so no if(TARGET) guard is needed and none is written.
 
 add_executable(t0_bus_size_unit t0_bus_size_unit.cpp)
 target_link_libraries(t0_bus_size_unit PRIVATE g2Lib)
@@ -424,8 +442,8 @@ set_tests_properties(t0_bus_size_unit PROPERTIES LABELS "UnitTest")
 # interlock the firmware requires, which no static status byte can satisfy.
 #
 # The test links g2Lib and nothing else: some of its cases drive Board::onRead
-# and Board::onWrite with the real mcf5307 core behind them. Nothing here
-# references mcf5307::mcf5307, so no if(TARGET) guard is needed and none is
+# and Board::onWrite with the real mcf5407 core behind them. Nothing here
+# references mcf5407::mcf5407, so no if(TARGET) guard is needed and none is
 # written.
 
 add_executable(t0_mbus t0_mbus.cpp)
@@ -493,7 +511,7 @@ set_tests_properties(t0_board_mcu_handle PROPERTIES LABELS "UnitTest")
 #
 # It links g2Lib and nothing else: it constructs a Board over its own
 # BoardConfig and drives Board::onRead / Board::onWrite, the exact pointers
-# mcf5307_create receives.
+# mcf5407_create receives.
 
 add_executable(t0_cs3_wire t0_cs3_wire.cpp)
 target_link_libraries(t0_cs3_wire PRIVATE g2Lib)
@@ -516,7 +534,7 @@ set_tests_properties(t0_cs3_wire PROPERTIES LABELS "UnitTest")
 # cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever include site
 # sets it first wins and the second set is a no-op with the same value.
 #
-# It links g2Lib and nothing else. Naming mcf5307::mcf5307 here would let the
+# It links g2Lib and nothing else. Naming mcf5407::mcf5407 here would let the
 # test pass with g2Lib's own link line deleted.
 
 add_executable(t1_sprintf_isolated t1_sprintf_isolated.cpp)
@@ -564,17 +582,17 @@ set_tests_properties(t0_timer PROPERTIES LABELS "UnitTest")
 # t0_interrupts already drives InterruptController directly and cannot see that
 # defect at all.
 #
-# This target compiles board.cpp and links no mcf5307 archive. The behaviour
-# under test is a call the Board makes out to mcf5307_set_irq, and mcf5307.h
+# This target compiles board.cpp and links no mcf5407 archive. The behaviour
+# under test is a call the Board makes out to mcf5407_set_irq, and mcf5407.h
 # publishes no getter for the presented interrupt state, so the test supplies
 # that entry point itself and records what arrives. The archive cannot be on the
-# link line: `nm -g libmcf5307.a` puts _mcf5307_set_irq in the same member as
+# link line: `nm -g libmcf5407.a` puts _mcf5407_set_irq in the same member as
 # _takeInterrupt and _pendingInterrupt, which the core needs, so the member is
 # always pulled and the test's own definition would be a duplicate symbol.
 # Linking g2Lib would put that archive on the line through g2Lib's own PUBLIC
 # link, so this target names the g2Lib sources board.cpp needs instead.
 #
-# The mcf5307 include directory is taken from the imported target's INTERFACE
+# The mcf5407 include directory is taken from the imported target's INTERFACE
 # property rather than linking it, so the header arrives and the archive does
 # not. The executable is declared unconditionally and only the property
 # references are guarded.
@@ -602,9 +620,9 @@ add_executable(t0_board_interrupts
 
 target_include_directories(t0_board_interrupts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-if(TARGET mcf5307::mcf5307)
+if(TARGET mcf5407::mcf5407)
 	target_include_directories(t0_board_interrupts PRIVATE
-		$<TARGET_PROPERTY:mcf5307::mcf5307,INTERFACE_INCLUDE_DIRECTORIES>)
+		$<TARGET_PROPERTY:mcf5407::mcf5407,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 if(TARGET hardwareLib)
@@ -614,7 +632,7 @@ endif()
 
 # 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
 # class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
-# onto the link line. None of the three is the mcf5307 archive, so the property
+# onto the link line. None of the three is the mcf5407 archive, so the property
 # this block protects is untouched.
 
 foreach(lib 68kEmu dsp56kEmu baseLib)
@@ -648,7 +666,7 @@ set_tests_properties(t0_board_interrupts PROPERTIES LABELS "UnitTest")
 #
 # It links g2Lib and nothing else: the real board.cpp with the real DspSet and
 # Hdi08Bridge behind it are all g2Lib sources. Nothing here references
-# mcf5307::mcf5307, so no if(TARGET) guard is needed.
+# mcf5407::mcf5407, so no if(TARGET) guard is needed.
 
 add_executable(t1_dsp_handshake t1_dsp_handshake.cpp)
 target_link_libraries(t1_dsp_handshake PRIVATE g2Lib)
@@ -743,9 +761,9 @@ endif()
 # ----------------- Board-to-TransportHub consequence: the two targets that
 #                   compile ../board.cpp on their own
 #
-# transportHub.cpp is not an mcf5307 source and pulls no library onto either
+# transportHub.cpp is not an mcf5407 source and pulls no library onto either
 # link line -- it includes only <atomic>, <cstring> and its own header -- so the
-# property both targets protect, that no mcf5307 archive reaches them, is
+# property both targets protect, that no mcf5407 archive reaches them, is
 # untouched.
 
 target_sources(t0_sof_tick PRIVATE ../transportHub.cpp)
