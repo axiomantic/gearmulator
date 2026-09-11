@@ -16,20 +16,17 @@
 #
 # g2TestConsole lives in a sibling directory that is added after this one, so
 # the path arrives as a generator expression and the build order as an explicit
-# dependency. Without the dependency the fixture that builds this directory's
-# executables would leave the console binary from the previous generation in
-# place, and the test would read a stale surface.
+# dependency. Without the dependency a build of this directory's executables
+# would leave the console binary from the previous generation in place, and the
+# test would read a stale surface.
 
 # Registered only when g2TestConsole is part of this configure, and the
 # condition is a question about the build and not about the source tree.
-# t0_clock_guard configures a scratch project whose whole content is one
-# add_subdirectory of g2Lib, so this file is read there too -- and there
-# g2TestConsole is never added and $<TARGET_FILE:g2TestConsole> fails the
-# generate step, taking that unrelated test red. `EXISTS` on the sibling path
-# cannot discriminate the two: it is the same source tree in both. What
-# discriminates them is g2Lib's parent directory: source/nord/g2 in the real
-# build, which adds g2TestConsole beside g2Lib, and t0_clock_guard's scratch
-# directory otherwise.
+# `EXISTS` on the sibling path cannot answer it: a tree that adds g2Lib without
+# adding g2TestConsole beside it has the same sources. What discriminates them
+# is g2Lib's parent directory: source/nord/g2 in a build of this repository,
+# which adds g2TestConsole beside g2Lib. Where g2Lib is added from anywhere
+# else, $<TARGET_FILE:g2TestConsole> would fail the generate step.
 get_directory_property(g2_parentOfG2Lib DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.." PARENT_DIRECTORY)
 
 if(EXISTS "${g2_parentOfG2Lib}/g2TestConsole/CMakeLists.txt")

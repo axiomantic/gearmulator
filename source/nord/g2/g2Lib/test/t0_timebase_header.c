@@ -1,28 +1,14 @@
 /* t0_timebase_header.c -- the C-compilation check of g2/timebase.h.
  *
  * This file is compiled AS C11 by t0_timebase_header.cmake at TEST time, not
- * at build time. That is deliberate: "g2/timebase.h
- * is a C header" a contract rather than a convention, and a contract that is
- * only asserted by the build cannot be reported by `ctest -R`.
- * A C++ reference parameter anywhere in the
- * header is a syntax error in C, so the compile IS the assertion.
+ * at build time. That is deliberate: it makes "g2/timebase.h is a C header" a
+ * contract rather than a convention, and a contract that is only asserted by
+ * the build cannot be reported by `ctest -R`. A C++ reference parameter
+ * anywhere in the header is a syntax error in C, so the compile IS the
+ * assertion.
  *
- * ------------------------------------------------------------------------
- * WHY TWO DECLARED MACROS ARE NOT ASSERTED HERE.
- *
- * g2Lib/CMakeLists.txt carries a configure-time guard for two UNMEASURED
- * symbols. It fails the CONFIGURE step if
- * any file under source/nord/g2/ names either one, and it exempts exactly one
- * file: their declaration site, g2/timebase.h. This file is under that tree, so
- * naming either symbol here would fail the configure before this test could be
- * compiled at all -- and it would fail it by NAMING the symbol, which is the
- * guard working as designed.
- *
- * The rule "one _Static_assert for each declared macro" is therefore satisfied
- * for those two INSIDE g2/timebase.h itself, which is the exempt file. Every
- * other declared macro is asserted below. No macro goes unasserted, and the
- * guard is neither weakened nor edited.
- * ------------------------------------------------------------------------
+ * The two MCU bus symbols are asserted at their declaration site in
+ * g2/timebase.h and are not repeated here.
  */
 
 #include <stdint.h>
@@ -65,10 +51,10 @@ _Static_assert(G2_SECOND_BUS_FRAME_DIVIDER == 4u,
 _Static_assert(G2_HOST_FRAMES_NUM == 96000u,
 	"The host-block mapping numerator is the frame rate.");
 
-/* 54,000,000 is the BUS clock, and the core symbol is the one place where
- * standing it in would do real damage. The assert closes that place without
- * writing the literal down, because t0_timebase_header.cmake still bans the
- * literal tree-wide. */
+/* 54,000,000 is the BUS clock. The core symbol is the one place where standing
+ * it in would do real damage, so the assert closes that place -- and it is
+ * written as a product rather than as the literal, so a reader cannot mistake
+ * the number for a recorded core-clock value. */
 _Static_assert(G2_MCU_CORE_CLOCK_HZ != 54000u * 1000u,
 	"54,000,000 is the bus clock, not the core clock.");
 
