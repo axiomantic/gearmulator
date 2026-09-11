@@ -49,7 +49,7 @@ namespace g2
 		/* Returns the directory, or an empty string. On an empty return, `why`
 		 * carries one of three messages:
 		 *
-		 *   1. G_artifactUnavailableMessage when the variable is unset or empty.
+		 *   1. g_artifactUnavailableMessage when the variable is unset or empty.
 		 *   2. "firmware artifact not available (NMG2_ARTIFACTS names no
 		 *      directory: <path>)" when the variable names something that is
 		 *      not an existing directory.

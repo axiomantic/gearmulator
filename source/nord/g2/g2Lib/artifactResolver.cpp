@@ -1,5 +1,6 @@
 #include "artifactResolver.h"
 
+#include <cstddef>
 #include <cstdlib>
 #include <cstdio>
 
@@ -9,7 +10,7 @@
 // and std::filesystem was introduced in macOS 10.15. Compiling
 // std::filesystem::status against this tree's deployment target is a hard
 // error: "'path' is unavailable: introduced in macOS 10.15". BaseLib takes the
-// same split for the same reason and states it at baseLib/filesystem.cpp:8.
+// same split for the same reason and states it in baseLib/filesystem.cpp.
 //
 // baseLib::filesystem::isDirectory() is the house function for this question
 // and this file DELIBERATELY does not call it. Its USE_DIRENT branch discards
@@ -74,18 +75,24 @@ namespace g2
 		// The wording must be word-for-word identical to the Python half in
 		// nmg2_tools/artifacts.py.
 		//
-		// The buffer must hold the longest message: 79 bytes of fixed text plus
-		// a name and a path. 8 KiB is well above a 4096-byte path.
-		void writeNoDirectoryMessage(char* _out, const char* _value)
+		// Each takes the buffer BY REFERENCE TO ITS ARRAY TYPE rather than as a
+		// pointer and a size. The caller owns the buffer, so a size passed
+		// separately is a second statement of the same fact and can disagree
+		// with the declaration; the array reference makes the two the same
+		// statement and snprintf cannot be handed a length the buffer does not
+		// have.
+		template<std::size_t N>
+		void writeNoDirectoryMessage(char (&_out)[N], const char* _value)
 		{
-			std::snprintf(_out, 8192,
+			std::snprintf(_out, N,
 				"firmware artifact not available (NMG2_ARTIFACTS names no directory: %s)",
 				_value);
 		}
 
-		void writeNotFoundMessage(char* _out, const char* _name, const char* _value)
+		template<std::size_t N>
+		void writeNotFoundMessage(char (&_out)[N], const char* _name, const char* _value)
 		{
-			std::snprintf(_out, 8192,
+			std::snprintf(_out, N,
 				"firmware artifact not available (%s not found under NMG2_ARTIFACTS: %s)",
 				_name, _value);
 		}
@@ -119,6 +126,9 @@ namespace g2
 		// an operator with a wrong path sees the path they actually typed.
 		if(!isExistingDirectory(value))
 		{
+			// 8 KiB, which is above a 4096-byte path plus the message's fixed
+			// text. snprintf truncates rather than overruns if that is ever
+			// wrong.
 			char buffer[8192];
 			writeNoDirectoryMessage(buffer, value);
 			_why = buffer;

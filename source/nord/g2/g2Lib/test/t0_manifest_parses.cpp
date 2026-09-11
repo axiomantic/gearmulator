@@ -223,12 +223,22 @@ int main()
 			const std::vector<TimebaseEntry> entries = parseTimebase(timebaseText, failures);
 
 			check(failures.empty(), "golden.timebase: the committed manifest parses with no failure" + joined(failures));
-			check(entries.size() == 5, "golden.timebase: the committed manifest holds exactly five values");
+			// The expected count is the size of the required set and is never
+			// written as a literal here: a literal would be a second copy of it,
+			// and adding a required symbol would leave this line asserting the
+			// old number.
+			const size_t requiredCount = g_requiredTimebaseSymbols.size();
+
+			check(entries.size() == requiredCount,
+				"golden.timebase: the committed manifest holds one value per required symbol (" +
+				std::to_string(entries.size()) + " of " + std::to_string(requiredCount) + ")");
 
 			// The line count is asserted on the file and not only on the parse,
 			// because the parse skips blank lines.
 			const size_t newlineCount = static_cast<size_t>(std::count(timebaseText.begin(), timebaseText.end(), '\n'));
-			check(newlineCount == 5, "golden.timebase: the file holds exactly five lines");
+			check(newlineCount == requiredCount,
+				"golden.timebase: the file holds one line per required symbol (" +
+				std::to_string(newlineCount) + " of " + std::to_string(requiredCount) + ")");
 
 			for(const std::string& required : g_requiredTimebaseSymbols)
 			{

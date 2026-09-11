@@ -204,7 +204,13 @@ int main()
 		//
 		// The negative case for message 3. Without it, the resolver could
 		// always fire message 3 and every message-3 assertion above would hold.
+		// Every case sets the variable itself. A case that inherited the value
+		// its predecessor left would pass or fail for a reason that is not in
+		// the case, and reordering the cases would move the verdict.
 		{
+			const std::string presentDir = ".";
+			setArtifactsVariable(presentDir.c_str());
+
 			std::ofstream presentFile("REPO-5-present.bin");
 			presentFile << "not a real artifact\n";
 			presentFile.close();
@@ -214,7 +220,7 @@ int main()
 
 			check(!resultFoundFile.empty(),
 				"directory with named artifact: resolve() returns a non-empty result");
-			check(resultFoundFile == ".",
+			check(resultFoundFile == presentDir,
 				"directory with named artifact: the resolved directory is the one the variable named");
 			check(whyFoundFile.empty(),
 				"directory with named artifact: a successful resolve writes no reason");
