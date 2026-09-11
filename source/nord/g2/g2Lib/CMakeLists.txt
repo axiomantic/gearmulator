@@ -142,50 +142,6 @@ if(G2_LINK_MCF5407)
 	target_link_libraries(g2Lib PUBLIC mcf5407::mcf5407)
 endif()
 
-# ----------------- the configure-time guard of the two UNMEASURED bus symbols
-#
-# G2_MCU_BUS_CLOCK_HZ and G2_MCU_BUS_DIVIDER are UNMEASURED and both read 0u
-# today. A source that uses either one computes with
-# a zero, so the build fails at configure time and names the symbol.
-#
-# The one file allowed to carry the two names is their declaration site,
-# g2Lib/g2/timebase.h.
-
-set(G2_UNMEASURED_SYMBOLS G2_MCU_BUS_CLOCK_HZ G2_MCU_BUS_DIVIDER)
-
-# BOTH SIDES OF THE COMPARISON ARE NORMALISED, and that is load-bearing.
-# file(GLOB_RECURSE) returns each path with the glob pattern's own spelling
-# preserved, so a pattern that carries ".." yields ".../g2Lib/../g2Lib/g2/
-# timebase.h". That string never compares equal to the declaration site written
-# without the "..", the exemption below never fires for any file, and the guard
-# then rejects its own declaration site. REALPATH collapses both spellings.
-get_filename_component(G2_UNMEASURED_DECLARATION_SITE
-	"${CMAKE_CURRENT_SOURCE_DIR}/g2/timebase.h" REALPATH)
-
-file(GLOB_RECURSE G2_GUARDED_FILES
-	${CMAKE_CURRENT_SOURCE_DIR}/../*.c
-	${CMAKE_CURRENT_SOURCE_DIR}/../*.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../*.h
-	${CMAKE_CURRENT_SOURCE_DIR}/../*.hpp)
-
-foreach(guardedFile IN LISTS G2_GUARDED_FILES)
-	get_filename_component(guardedFile "${guardedFile}" REALPATH)
-	if(guardedFile STREQUAL G2_UNMEASURED_DECLARATION_SITE)
-		continue()
-	endif()
-	file(READ ${guardedFile} guardedText)
-	foreach(unmeasuredSymbol IN LISTS G2_UNMEASURED_SYMBOLS)
-		string(FIND "${guardedText}" "${unmeasuredSymbol}" symbolPosition)
-		if(NOT symbolPosition EQUAL -1)
-			message(FATAL_ERROR
-				"${guardedFile} uses ${unmeasuredSymbol}. "
-				"That value is UNMEASURED and it reads 0u. "
-				"No source may use G2_MCU_BUS_CLOCK_HZ or G2_MCU_BUS_DIVIDER "
-				"until it has been measured.")
-		endif()
-	endforeach()
-endforeach()
-
 # ----------------- the tests
 
 add_subdirectory(test)

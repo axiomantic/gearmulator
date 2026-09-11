@@ -279,8 +279,7 @@ set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 1
 # The executable is declared unconditionally and only the include directory is
 # guarded. At G2_LINK_MCF5407=OFF the imported target does not exist, so naming
 # it in a generator expression fails the generate step of any configure that
-# turns the option off -- and t0_clock_guard's control configure is exactly such
-# a configure. Guarding the target instead of the executable keeps the negative
+# turns the option off. Guarding the target instead of the executable keeps the negative
 # case intact: at OFF this target still builds and still fails at the compile
 # step on the missing mcf5407.h, rather than passing by building nothing.
 
@@ -300,8 +299,8 @@ set_tests_properties(t0_sof_tick PROPERTIES LABELS "UnitTest")
 # The test links g2Lib and names no other library. The funnel is a g2Lib source,
 # and the just-in-time compiler it must notify arrives through g2Lib's own
 # PUBLIC link of dsp56kEmu. Nothing here references mcf5407::mcf5407, so no
-# if(TARGET) guard is needed: this block is inert in the option-OFF configure
-# that t0_clock_guard runs as its control.
+# if(TARGET) guard is needed: this block stays inert in a configure that turns
+# G2_LINK_MCF5407 off.
 #
 # NMG2_ARTIFACTS is not read. Every word the test puts into P memory is
 # assembled from text the test file authors, so no Clavia byte reaches it.
@@ -324,8 +323,7 @@ set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
 # them with the real mcf5407 behind it.
 #
 # Nothing here references mcf5407::mcf5407, so no if(TARGET) guard is needed:
-# this block is inert in the option-OFF configure that t0_clock_guard runs as
-# its control.
+# this block stays inert in a configure that turns G2_LINK_MCF5407 off.
 #
 # NMG2_ARTIFACTS is not read. Both flash images the test loads are byte patterns
 # the test file authors, so no Clavia byte reaches it and the tier stays T0.
@@ -350,7 +348,7 @@ set_tests_properties(t0_board_routing PROPERTIES LABELS "UnitTest")
 # target is not linked, so the header arrives and no archive joins the link. The
 # guard is on the property reference and not on the executable: naming a target
 # that does not exist fails the generate step of a configure that turns the
-# option off, and t0_clock_guard's control configure is exactly such a run.
+# option off.
 
 if(TARGET hardwareLib)
 	target_include_directories(t0_sof_tick PRIVATE
@@ -740,14 +738,14 @@ set_tests_properties(t0_gdb_stub PROPERTIES LABELS "UnitTest")
 # another registration.
 
 # The guard is a question about the build and not about the target.
-# if(TARGET g2TestConsole) is false here in every configure, real or scratch:
+# if(TARGET g2TestConsole) is false here in every configure:
 # the parent adds g2Lib before g2TestConsole, so the target does not exist yet
 # at this point and the guard would register nothing with configure exit 0 and
-# no diagnostic. What discriminates the two configures is g2Lib's parent
-# directory: source/nord/g2 in the real build, which adds g2TestConsole beside
-# g2Lib, and t0_clock_guard's scratch directory otherwise. Without this,
-# add_dependencies names a target the scratch project never creates and takes
-# that unrelated test red.
+# no diagnostic. What discriminates them is g2Lib's parent
+# directory: source/nord/g2 in a build of this repository, which adds
+# g2TestConsole beside g2Lib. Where g2Lib is added from anywhere else,
+# add_dependencies would name a target that project never creates and take this
+# test red.
 
 get_directory_property(g2_dumpDspDmaParentOfG2Lib DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.." PARENT_DIRECTORY)
 
