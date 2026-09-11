@@ -253,8 +253,8 @@ set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 1
 # The test links g2Lib and names no other library. The funnel is a g2Lib source,
 # and the just-in-time compiler it must notify arrives through g2Lib's own
 # PUBLIC link of dsp56kEmu. Nothing here references mcf5407::mcf5407, so no
-# if(TARGET) guard is needed: this block is inert in the option-OFF configure
-# that t0_clock_guard runs as its control.
+# if(TARGET) guard is needed: this block stays inert in a configure that turns
+# G2_LINK_MCF5407 off.
 #
 # NMG2_ARTIFACTS is not read. Every word the test puts into P memory is
 # assembled from text the test file authors, so no Clavia byte reaches it.

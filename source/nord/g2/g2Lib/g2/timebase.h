@@ -54,10 +54,10 @@
  * labels `CPU Ck 54MHz` at CLKIN, and into `DSP Ck` at every DSP's EXTAL. The
  * internal PLL multiplies CLKIN by 3 for the core and the bus runs at CLKIN.
  *
- * The two bus symbols below are not derived here and read 0u. A source that
- * used either one would compute with a zero, so g2Lib/CMakeLists.txt fails the
- * configure step if any file under source/nord/g2/ names either symbol. This
- * file is exempt from that guard, because it is their declaration site.
+ * The two bus symbols below are not derived here and read 0u, which the
+ * assertions at the foot of this file state. A source that used either one
+ * would compute with a zero, so neither may reach a cycle budget until it has
+ * been measured.
  */
 
 /* The bus clock, BCLKO. Nothing in the scheduler may use it as a cycle
@@ -123,10 +123,10 @@ G2_STATIC_ASSERT(G2_DSP_CYCLES_PER_FRAME_DEN != 0u,
 G2_STATIC_ASSERT(G2_MCU_CYCLES_PER_FRAME_DEN != 0u,
 	"MCU rational denominator");
 
-/* The unmeasured bus symbols. These assertions sit here rather than in a test
- * because this file is what the configure guard exempts. They also make the
- * eventual measurement a deliberate edit: giving either symbol a value fails
- * these lines. */
+/* The unmeasured bus symbols. The assertions sit at the declaration site rather
+ * than in a test so that the acceptance is stated once, where the value is. They
+ * also make the eventual measurement a deliberate edit: giving either symbol a
+ * value fails these lines. */
 G2_STATIC_ASSERT(G2_MCU_BUS_CLOCK_HZ == 0u,
 	"BCLKO is UNMEASURED.");
 G2_STATIC_ASSERT(G2_MCU_BUS_DIVIDER == 0u,
