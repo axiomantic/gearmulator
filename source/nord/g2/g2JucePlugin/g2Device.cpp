@@ -644,9 +644,8 @@ namespace g2
 	 * completed events readMidiOut drains here.
 	 *
 	 * The Board owns its Uart0 and hands out references (g2Lib/board.h). The
-	 * Device holds its own byte sink (m_midiOutParser), and
-	 * boot() installs this class's uart0MidiOut on Board::uart0() via
-	 * Uart0::setMidiOut.
+	 * Device holds its own byte sink in m_midiOutParser, and boot() installs
+	 * this class's uart0MidiOut on Board::uart0() via Uart0::setMidiOut.
 	 *
 	 * Until that installation happens the parser receives nothing, so this
 	 * function appends nothing -- which is the correct answer for a machine
@@ -866,17 +865,17 @@ namespace g2
 		auto e = _ev;
 		e.offset += m_numSamplesProcessed + getExtraLatencySamples();
 
-		// Synchronous answer: a reply to a message the host sent comes back
-		// in _response, in the same call, and NOT through readMidiOut -- a
-		// device that wants to batch incoming events batches them itself.
-		// With no machine to answer, the truthful answer is an empty
-		// response vector and success.
 		// The bound the constructor reserved. Refusing here is what keeps
 		// push_back from reallocating on the audio thread; the false is the
 		// honest answer for an event this device did not take.
 		if(m_pendingMidi.size() >= kMaxPendingMidi)
 			return false;
 
+		// Synchronous answer: a reply to a message the host sent comes back
+		// in _response, in the same call, and NOT through readMidiOut -- a
+		// device that wants to batch incoming events batches them itself.
+		// With no machine to answer, the truthful answer is an empty
+		// response vector and success.
 		m_pendingMidi.push_back(std::move(e));
 		return true;
 	}
