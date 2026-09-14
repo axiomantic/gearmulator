@@ -448,8 +448,9 @@ one of them. Check the branch before you report a file as absent.
 
 ## Git
 
-Never push to a default branch without permission. Never force push without
-stating what it discards first.
+Never push to a default branch without permission. Merging your own verified
+pull request into `main` of `mcf5407`, `nmg2-tools` or `nmg2-artifacts` needs no
+permission. Never force push without stating what it discards first.
 
 Never run a tree-wide git operation in a checkout you share with anyone:
 `git stash`, `git checkout .`, `git restore .`, `git clean -fd`,
@@ -481,8 +482,8 @@ The project-wide copy of this rule is §10.1 of `nmg2-artifacts/AGENTS.md`.
 
 **Scope.** This rule applies to the forks: `dsp56300`, `mc68k`, `gearmulator`
 and `G2-Edit`. It does not apply to `mcf5407`, `nmg2-tools` or `nmg2-artifacts`.
-Those repositories belong to this project and have no upstream. Their pull
-requests merge into `main` in the usual way, with the operator's approval.
+Those repositories are the operator's own and have no upstream. An agent opens
+its pull request into `main` and merges it when its own verification is done.
 
 A **rehearsal pull request** holds the work of a fork against its upstream base.
 It stays ready for a future submission to the upstream project.
