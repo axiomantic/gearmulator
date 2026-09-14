@@ -126,7 +126,11 @@ namespace g2
 		}
 	}
 
-	void dspJob(JobContext* const jobCtx) noexcept
+	/* The parameter is deliberately not `JobContext* const`. MSVC mangles a
+	 * top-level const on a pointer parameter into the symbol, so a definition
+	 * spelled that way does not link against a caller that declares
+	 * `dspJob(JobContext*)`; clang and gcc ignore the const. */
+	void dspJob(JobContext* jobCtx) noexcept
 	{
 		auto* const c = reinterpret_cast<DspContext*>(jobCtx);
 
