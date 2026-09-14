@@ -62,11 +62,16 @@ namespace
 		// A Probe is never constructed; the bindings are the whole check.
 		Probe() = delete;
 
-		static constexpr void (Probe::*const kReadMidiOut)(std::vector<synthLib::SMidiEvent>&) = &Probe::readMidiOut;
-		static constexpr void (Probe::*const kProcessAudio)(const synthLib::TAudioInputs&, const synthLib::TAudioOutputs&, size_t) = &Probe::processAudio;
-		static constexpr bool (Probe::*const kSendMidi)(const synthLib::SMidiEvent&, std::vector<synthLib::SMidiEvent>&) = &Probe::sendMidi;
-		static constexpr void (Probe::*const kBeginStateChange)() noexcept = &Probe::beginStateChange;
-		static constexpr void (Probe::*const kEndStateChange)() noexcept = &Probe::endStateChange;
+		/* `&Probe::f` names a member G2Device declares, so its type is a
+		 * pointer to member of G2Device, and it is bound as that type. Binding
+		 * it as a pointer to member of Probe needs a base-to-derived conversion
+		 * inside Probe's own definition, where Probe is incomplete, and MSVC
+		 * rejects that with C2440. The signature match is the same either way. */
+		static constexpr void (G2Device::*const kReadMidiOut)(std::vector<synthLib::SMidiEvent>&) = &Probe::readMidiOut;
+		static constexpr void (G2Device::*const kProcessAudio)(const synthLib::TAudioInputs&, const synthLib::TAudioOutputs&, size_t) = &Probe::processAudio;
+		static constexpr bool (G2Device::*const kSendMidi)(const synthLib::SMidiEvent&, std::vector<synthLib::SMidiEvent>&) = &Probe::sendMidi;
+		static constexpr void (G2Device::*const kBeginStateChange)() noexcept = &Probe::beginStateChange;
+		static constexpr void (G2Device::*const kEndStateChange)() noexcept = &Probe::endStateChange;
 	};
 
 	void touchAllPointers()

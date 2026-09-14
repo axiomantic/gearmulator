@@ -85,6 +85,14 @@ namespace
 
 	constexpr uint32_t g_entryPc = 0x30000400u;
 
+	// std::search and not memmem: memmem is a GNU extension MSVC does not have,
+	// and this target is built on windows-2022.
+	const uint8_t* findBytes(const std::vector<uint8_t>& _haystack, const uint8_t* const _needle, const size_t _size)
+	{
+		const auto it = std::search(_haystack.begin(), _haystack.end(), _needle, _needle + _size);
+		return it == _haystack.end() ? nullptr : &*it;
+	}
+
 	// One DSP's observable state at a moment. The note phase and the patch
 	// upload are then measured by the SAME instrument in the SAME run, which is
 	// the whole point: a note phase measured with a different probe than the one
@@ -1377,17 +1385,17 @@ int main()
 		// at all.
 		{
 			const std::vector<uint8_t>& mem = ram.bytes();
-			const void* found = nullptr;
+			const uint8_t* found = nullptr;
 			if(delivered.size() > 424)
-				found = ::memmem(mem.data(), mem.size(), delivered.data() + 400, 24);
+				found = findBytes(mem, delivered.data() + 400, 24);
 			std::cout << "patch chain in SDRAM: "
-			          << (found ? hex32(g2::g_sdramBase + uint32_t(static_cast<const uint8_t*>(found) - mem.data()))
+			          << (found ? hex32(g2::g_sdramBase + uint32_t(found - mem.data()))
 			                    : std::string(delivered.empty() ? "(nothing delivered)" : "absent"))
 			          << std::endl;
 
-			const void* const byName = ::memmem(mem.data(), mem.size(), patchName.data(), patchName.size());
+			const uint8_t* const byName = findBytes(mem, reinterpret_cast<const uint8_t*>(patchName.data()), patchName.size());
 			std::cout << "patch name in SDRAM: "
-			          << (byName ? hex32(g2::g_sdramBase + uint32_t(static_cast<const uint8_t*>(byName) - mem.data()))
+			          << (byName ? hex32(g2::g_sdramBase + uint32_t(byName - mem.data()))
 			                     : std::string("absent")) << std::endl;
 		}
 
