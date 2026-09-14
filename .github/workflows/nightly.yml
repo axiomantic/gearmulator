@@ -16,6 +16,15 @@ jobs:
         os: [ ubuntu-latest, macos-14, windows-2022 ]
       fail-fast: true
     name:  ${{ matrix.os }} build
+    # A backstop for every step that has no ceiling of its own. The slowest
+    # healthy job measured on this workflow is macOS at 156 minutes, but 86 of
+    # those are the Pack step re-driving the whole build, which the configure
+    # flag below removes; the remainder is about 75. 120 clears that with room
+    # for a slow runner and still sits below the re-driving total, so a run
+    # where the flag fails to take effect fails here instead of passing slowly.
+    # Without any ceiling a stuck step runs to GitHub's six-hour limit, and on
+    # a nightly schedule nobody is watching it do so.
+    timeout-minutes: 120
     steps:
     - name: Install Dependencies
       if: matrix.os == 'ubuntu-latest'
@@ -44,11 +53,31 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      # CMAKE_SKIP_INSTALL_ALL_DEPENDENCY drops the `preinstall: all` edge the
+      # Makefile generator writes. cpack runs the preinstall target before it
+      # packages, which without this re-drives the whole build with its output
+      # swallowed: measured here at 77 to 93 minutes of "packing" on macOS
+      # against 3 to 5 on Linux. The Build step above has already built
+      # everything cpack installs, so the re-run only duplicates work, and
+      # anything genuinely missing now fails in cpack with a message instead of
+      # rebuilding in silence.
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON
 
     - name: Build
+      # The slowest healthy build measured on this workflow is macOS at 67
+      # minutes; Linux takes 16 and Windows 62. 90 clears the macOS figure by
+      # a third, which a shared runner can plausibly need, and still catches a
+      # build that has stopped making progress rather than one merely slow.
+      timeout-minutes: 90
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 3
 
     - name: Pack
+      # Packing without the preinstall re-drive runs in single-digit minutes;
+      # the Linux rows, which barely pay for the re-drive, measure 3 to 5. 20 is
+      # far above that on purpose: the value only has to separate slow from
+      # stuck. It is also far below the 77-to-93-minute macOS figure this step
+      # showed while re-driving the build, so that state fails here rather than
+      # quietly costing an hour and a half.
+      timeout-minutes: 20
       working-directory: ${{github.workspace}}/build
       run: cmake -P ${{github.workspace}}/scripts/pack.cmake
