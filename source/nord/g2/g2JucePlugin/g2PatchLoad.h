@@ -110,12 +110,12 @@ namespace g2
 	 * decodes through the nine-variation bit layout gains a full tenth
 	 * variation -- a copy of the last, 297 bytes for the measured file. A
 	 * single filler byte does not work: the firmware's reader walks a
-	 * continuous bit stream whose per-variation footprint is an 8-bit index,
-	 * MorphCount 7-bit fields, an 8-bit parameter count and that many 29-bit
-	 * parameters, so a short tenth leaves it reading the FOLLOWING chunk's
-	 * bytes as a parameter count and overshooting the section by 37 bytes. A
-	 * 0x4D payload, and any 0x65 the layout does not fully describe, take the
-	 * count rewrite and one zero filler byte.
+	 * continuous bit stream whose per-variation footprint is 72 fixed bits
+	 * around a list of 29-bit parameters, partitioned as `morphTenthVariation`
+	 * in `g2PatchLoad.cpp` reads it, so a short tenth leaves it reading the
+	 * FOLLOWING chunk's bytes as a parameter count and overshooting the
+	 * section by 37 bytes. A 0x4D payload, and any 0x65 the layout does not
+	 * fully describe, take the count rewrite and one zero filler byte.
 	 *
 	 * Returns the number of bytes written and sets `_result` to Loaded, or
 	 * returns 0 with `_result` naming the refusal. Nothing is allocated: the
@@ -126,9 +126,10 @@ namespace g2
 	/* Validates `_file`, composes its patch-load message and originates it as
 	 * one transfer through `_client`.
 	 *
-	 * `_scratch` holds the message at offset 2 so that InternalClient can write
-	 * the transfer envelope around it in place, which is why the buffer must
-	 * hold the message plus four bytes. `_scratchSize` below
+	 * `_scratch` is laid out to `InternalClient::sendTransfer`'s buffer
+	 * contract -- message at offset 2, room for the message plus four bytes --
+	 * even though this call originates the message frame alone and applies no
+	 * transfer envelope; the body says why. `_scratchSize` below
 	 * g_maxPatchLoadMessageBytes + 4 is accepted -- a composition that outgrows
 	 * it returns BufferTooSmall. */
 	Pch2LoadResult pch2LoadFramed(const uint8_t* _file, std::size_t _size, const char* _name, uint8_t _slot,

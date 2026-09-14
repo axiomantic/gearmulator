@@ -430,12 +430,12 @@ namespace
 	// everywhere would satisfy a printer while failing the table.
 	//
 	// Head and tail are position 0 and position dspCount-1, read off the code
-	// and not assumed. chainAdapter.cpp:206 states the head: injectCodecSource
+	// and not assumed. ChainAdapter::injectCodecSource states the head: it
 	// writes mailbox 0's ingress frame and "the head's DMA then places them at
 	// X:$001C04, not X:$001C00" -- the head is the position whose receive
 	// callback reads mailbox 0, which audioRxCallback makes position 0.
-	// chainAdapter.cpp:301 states the tail: "The tail position N - 1 therefore
-	// writes mailbox N, which is the mailbox the egress phase reads."
+	// ChainAdapter::audioTxCallback states the tail: "The tail position N - 1
+	// therefore writes mailbox N, which is the mailbox the egress phase reads."
 	constexpr dsp56k::TWord g_ddr2Chain    = 0x001C00u;
 	constexpr dsp56k::TWord g_ddr2Head     = 0x001C04u;
 	constexpr dsp56k::TWord g_dcoChain     = 0x007001u;
