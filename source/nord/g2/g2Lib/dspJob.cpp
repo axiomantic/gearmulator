@@ -130,7 +130,7 @@ namespace g2
 	 * top-level const on a pointer parameter into the symbol, so a definition
 	 * spelled that way does not link against a caller that declares
 	 * `dspJob(JobContext*)`; clang and gcc ignore the const. */
-	void dspJob(JobContext* jobCtx) noexcept
+	void dspJob(JobContext* const jobCtx) noexcept
 	{
 		auto* const c = reinterpret_cast<DspContext*>(jobCtx);
 
