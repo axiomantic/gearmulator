@@ -104,10 +104,6 @@ namespace g2
 		GdbStub(GdbStub&&)                 = delete;
 		GdbStub& operator=(GdbStub&&)      = delete;
 
-		/* Bind and listen on 127.0.0.1. A port of zero asks the operating system
-		 * for a free one, so that two runs cannot collide. Returns the port actually bound, and zero on failure -- the
-		 * caller has no listening socket in that case and nothing else here will
-		 * answer. */
 		/* Gives the session the whole machine. Without this the stub drives
 		 * `Board::runMcu` and nothing else, and a breakpoint past an HDI08
 		 * handshake reports a clean, plausible miss rather than being reached.
@@ -118,6 +114,10 @@ namespace g2
 		 * before the stub, so that it is destroyed after it. */
 		void attachScheduler(Scheduler& _scheduler);
 
+		/* Bind and listen on 127.0.0.1. A port of zero asks the operating
+		 * system for a free one, so that two runs cannot collide. Returns the
+		 * port actually bound, and zero on failure -- the caller has no
+		 * listening socket in that case and nothing else here will answer. */
 		uint16_t listenOn(uint16_t _port);
 
 		uint16_t port() const { return m_port; }
