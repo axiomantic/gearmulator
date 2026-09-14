@@ -475,6 +475,42 @@ push either fails or writes the wrong ref.
 
 Work in a clone you created yourself. Never delete a path you did not create.
 
+## Rehearsal pull requests are never merged. Pull requests stack.
+
+The project-wide copy of this rule is §10.1 of `nmg2-artifacts/AGENTS.md`.
+
+**Scope.** This rule applies to the forks: `dsp56300`, `mc68k`, `gearmulator`
+and `G2-Edit`. It does not apply to `mcf5407`, `nmg2-tools` or `nmg2-artifacts`.
+Those repositories belong to this project and have no upstream. Their pull
+requests merge into `main` in the usual way, with the operator's approval.
+
+A **rehearsal pull request** holds the work of a fork against its upstream base.
+It stays ready for a future submission to the upstream project.
+
+- `gearmulator`: the `g2/band-*` stack. The lowest band is based on `main`. Each
+  higher band is based on the band below it.
+- `dsp56300` and `mc68k`: the `fork/carry-*` branch, based on the default branch.
+- `G2-Edit`: if it gets a rehearsal pull request, the same model applies.
+
+**Never merge a rehearsal pull request.** It stays open. Consumers pin its branch.
+
+**Another pull request merges only into a rehearsal branch.** Never merge it into
+`main` or `master`. Merge it only when the operator approves that merge. A pull
+request that shows as mergeable, with green checks, is not a request to merge it.
+The one exception is a change that the operator requests for a fork's default
+branch itself, for example to this file.
+
+**Pull requests are stacked.** The base of a pull request is the branch that it
+needs. If a change needs another change, base it on the branch of that change.
+Do not put two dependent changes side by side on one parent. To get the work of a
+lower branch, merge the lower branch into the higher branch. A rebase needs a
+force push, so rebase only when the operator approves that force push.
+
+**Find the kind of a pull request first.** Do this before you call it "ready to
+merge" and before you suggest a merge order. Read its head and its base:
+`gh pr view <number> --repo axiomantic/<repo> --json headRefName,baseRefName`.
+Give `--repo` explicitly; in a fork, `gh` defaults to the upstream project.
+
 ## Isolated working copies
 
 **Use a separate clone, not a `git worktree`, for this repository.** A worktree
@@ -524,14 +560,15 @@ Open every pull request against this project's own fork. **Never open one
 against an upstream repository.** Confirm the base repository after you create
 it; the command line tool defaults a fork's base to the upstream project.
 
-Some repositories in this project are forks of other people's work. Their
-default branch is this project's working branch. It carries the upstream project
-plus the tooling this project needs to work on it, and it is never submitted. A
-pull request in one of those forks is a FIRST DRAFT of what this project may one
-day offer that project's maintainers. It is based on the FORK's default branch,
-so it inherits this project's tooling while the work is in progress; a
-submission is eventually rebased onto the UPSTREAM default branch, so none of
-that tooling reaches it.
+Some repositories in this project are forks of other people's work. In this
+fork, the default branch carries the upstream project plus the tooling this
+project needs to work on it, and it is never submitted. In `dsp56300` and
+`mc68k`, the default branch is an exact mirror of upstream and carries no
+tooling. The rehearsal pull request of a fork is a FIRST DRAFT of what this
+project may one day offer that project's maintainers. `## Rehearsal pull
+requests are never merged. Pull requests stack.` above gives its branches and
+its bases. A submission is eventually rebased onto the UPSTREAM default branch,
+so none of this project's tooling reaches it.
 
 So sort every change in a fork by kind.
 
@@ -540,11 +577,13 @@ So sort every change in a fork by kind.
   request. A build or continuous-integration change belongs here whenever it
   fixes something real for every builder, not only for this project.
 - **Tooling for operating the fork.** The review bot and these instructions.
-  This goes on the fork's default branch and is never submitted.
+  This goes on the fork's default branch, only where that branch is not an
+  upstream mirror, and is never submitted.
 - **A correction to this project's own unsubmitted work.** A comment sweep, a
-  rubric pass, a fix to something written in a draft. Squash it into the pull
-  request it corrects. Never open a pull request that repairs a change nobody
-  outside this project has seen.
+  rubric pass, a fix to something written in a draft. Put it on the branch it
+  corrects, or in a pull request based on that branch. A squash rewrites that
+  branch and needs a force push, so squash only when the operator approves that
+  force push. Never open a pull request into `main` or `master` for it.
 - **Nothing else.** A change that matches none of the first three does not
   belong in the fork.
 
