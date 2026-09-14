@@ -27,11 +27,25 @@
 
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
-#include <unistd.h>
+/* The client below answers the same Winsock differences gdbStub.cpp does,
+ * rather than leaving this test out of the windows-2022 build: the stub it
+ * drives is built and served there, so the test belongs there too. */
+#ifdef _WIN32
+#	ifndef WIN32_LEAN_AND_MEAN
+#		define WIN32_LEAN_AND_MEAN
+#	endif
+#	ifndef NOMINMAX
+#		define NOMINMAX
+#	endif
+#	include <winsock2.h>
+#	include <ws2tcpip.h>
+#else
+#	include <arpa/inet.h>
+#	include <netinet/in.h>
+#	include <netinet/tcp.h>
+#	include <sys/socket.h>
+#	include <unistd.h>
+#endif
 
 #include <condition_variable>
 #include <cstdint>
@@ -307,7 +321,12 @@ namespace
 	public:
 		bool connect(const uint16_t _port)
 		{
-			m_fd = ::socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+			WSADATA data{};
+			if(::WSAStartup(MAKEWORD(2, 2), &data) != 0)
+				return false;
+#endif
+			m_fd = std::intptr_t(::socket(AF_INET, SOCK_STREAM, 0));
 			if(m_fd < 0)
 				return false;
 
@@ -316,22 +335,22 @@ namespace
 			addr.sin_port        = htons(_port);
 			addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-			if(::connect(m_fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0)
+			if(::connect(fd(), reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0)
 			{
-				::close(m_fd);
+				closeFd();
 				m_fd = -1;
 				return false;
 			}
 
-			int one = 1;
-			::setsockopt(m_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+			const int one = 1;
+			::setsockopt(fd(), IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof one);
 			return true;
 		}
 
 		void close()
 		{
 			if(m_fd >= 0)
-				::close(m_fd);
+				closeFd();
 			m_fd = -1;
 		}
 
@@ -339,11 +358,11 @@ namespace
 		{
 			const std::string out = framed(_payload);
 
-			if(::send(m_fd, out.data(), out.size(), 0) != ssize_t(out.size()))
+			if(::send(fd(), out.data(), int(out.size()), 0) != long(out.size()))
 				return "<send failed>";
 
 			char ack = 0;
-			if(::recv(m_fd, &ack, 1, 0) != 1)
+			if(recvOne(ack) != 1)
 				return "<no ack>";
 			if(ack != '+')
 				return std::string("<nak ") + ack + ">";
@@ -351,19 +370,19 @@ namespace
 			std::string payload;
 			char        c = 0;
 
-			while(::recv(m_fd, &c, 1, 0) == 1 && c != '$')
+			while(recvOne(c) == 1 && c != '$')
 			{
 			}
 			if(c != '$')
 				return "<no packet>";
 
-			while(::recv(m_fd, &c, 1, 0) == 1 && c != '#')
+			while(recvOne(c) == 1 && c != '#')
 				payload += c;
 			if(c != '#')
 				return "<unterminated packet>";
 
 			char sum[2] = {0, 0};
-			if(::recv(m_fd, &sum[0], 1, 0) != 1 || ::recv(m_fd, &sum[1], 1, 0) != 1)
+			if(recvOne(sum[0]) != 1 || recvOne(sum[1]) != 1)
 				return "<no checksum>";
 
 			unsigned expected = 0;
@@ -377,13 +396,35 @@ namespace
 				return "<bad checksum>";
 
 			const char plus = '+';
-			if(::send(m_fd, &plus, 1, 0) != 1)
+			if(::send(fd(), &plus, 1, 0) != 1)
 				return "<ack failed>";
 
 			return payload;
 		}
 
 	private:
+#ifdef _WIN32
+		using Socket = SOCKET;
+#else
+		using Socket = int;
+#endif
+
+		Socket fd() const { return static_cast<Socket>(m_fd); }
+
+		void closeFd()
+		{
+#ifdef _WIN32
+			::closesocket(fd());
+#else
+			::close(fd());
+#endif
+		}
+
+		long recvOne(char& _c)
+		{
+			return long(::recv(fd(), &_c, 1, 0));
+		}
+
 		static std::string framed(const std::string& _payload)
 		{
 			unsigned sum = 0;
@@ -395,7 +436,10 @@ namespace
 			return "$" + _payload + tail;
 		}
 
-		int m_fd = -1;
+		// intptr_t, not int: Winsock's SOCKET is a UINT_PTR and its
+		// INVALID_SOCKET is all bits set, which is -1 in this type, so the
+		// `< 0` tests above hold on both platforms.
+		std::intptr_t m_fd = -1;
 	};
 
 	void clientLoop(Channel& _channel, RspClient& _client)
