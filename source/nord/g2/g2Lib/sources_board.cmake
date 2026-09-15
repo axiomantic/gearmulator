@@ -66,6 +66,16 @@ list(APPEND G2LIB_SOURCES
 	pmemFunnel.cpp
 )
 
+# ----------------- the Board class
+#
+# The translation unit is listed and not only the header: a build that compiles
+# the test without compiling this source fails at the link step on g2::Board.
+
+list(APPEND G2LIB_SOURCES
+	board.h
+	board.cpp
+)
+
 # ----------------- the M-Bus controller and the MAX1039 slave
 #
 # Both translation units are listed: a build that compiles the test without
