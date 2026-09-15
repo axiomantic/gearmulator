@@ -193,7 +193,7 @@ static inline uint32_t alloc(Rational r, uint32_t* acc)
 {
 	uint32_t whole = r.num / r.den;                /* 1687 for the MCU      */
 	*acc += r.num % r.den;                         /* 48000 for the MCU     */
-	if(*acc >= r.den) { *acc -= r.den; ++whole; }  /* 1563 on alternate     */
+	if(*acc >= r.den) { *acc -= r.den; ++whole; }  /* 1688 on alternate     */
 	return whole;                                  /* frames                */
 }
 
