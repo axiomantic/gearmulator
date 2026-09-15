@@ -27,8 +27,8 @@
 _Static_assert(G2_FRAME_RATE_HZ == 96000u,
 	"G2_FRAME_RATE_HZ is the ESAI frame rate, 96 kHz.");
 
-_Static_assert(G2_DSP_CYCLES_PER_FRAME_NUM == 150000000u,
-	"DSP clock in Hz. PROVISIONAL, and unmeasured.");
+_Static_assert(G2_DSP_CYCLES_PER_FRAME_NUM == 147456000u,
+	"The DSP core clock in Hz: every internally clocked ESAI divides it by 1,536 into a 96 kHz frame.");
 
 _Static_assert(G2_DSP_CYCLES_PER_FRAME_DEN == 96000u,
 	"The DSP rational denominator is the frame rate, and it is fixed.");
@@ -45,8 +45,8 @@ _Static_assert(G2_MCU_CORE_CLOCK_HZ == 162000000u,
 _Static_assert(G2_CHAIN_HOP_FRAMES == 1u,
 	"H, provisional 1, and unmeasured.");
 
-_Static_assert(G2_SECOND_BUS_FRAME_DIVIDER == 4u,
-	"Provisional 4, from the recorded 24 kHz control rate.");
+_Static_assert(G2_SECOND_BUS_FRAME_DIVIDER == 1u,
+	"The second bus runs at the frame rate.");
 
 _Static_assert(G2_HOST_FRAMES_NUM == 96000u,
 	"The host-block mapping numerator is the frame rate.");
@@ -104,25 +104,35 @@ int main(void)
 	uint32_t i = 0u;
 	uint64_t total = 0u;
 	Rational dsp;
+	Rational mcu;
 
 	dsp.num = G2_DSP_CYCLES_PER_FRAME_NUM;
 	dsp.den = G2_DSP_CYCLES_PER_FRAME_DEN;
+	mcu.num = G2_MCU_CYCLES_PER_FRAME_NUM;
+	mcu.den = G2_MCU_CYCLES_PER_FRAME_DEN;
 
-	/* The DSP sequence is 1562, 1563, 1562, 1563 and the mean
-	 * is exactly 1562.5. A scalar constant cannot produce it, which is the
-	 * whole reason the rational exists. */
-	check(allocPtr(dsp, &acc) == 1562u, "alloc frame 0 is 1562");
-	check(allocPtr(dsp, &acc) == 1563u, "alloc frame 1 is 1563");
-	check(allocPtr(dsp, &acc) == 1562u, "alloc frame 2 is 1562");
-	check(allocPtr(dsp, &acc) == 1563u, "alloc frame 3 is 1563");
+	/* The DSP frame is a whole number of cycles, so every allocation is the
+	 * same and the accumulator never moves. */
+	check(allocPtr(dsp, &acc) == 1536u, "DSP alloc frame 0 is 1536");
+	check(allocPtr(dsp, &acc) == 1536u, "DSP alloc frame 1 is 1536");
+	check(acc == 0u, "the DSP accumulator stays at zero");
 
-	/* Two frames are exactly 3125 cycles, with no drift over many frames. */
+	/* The MCU sequence is 1687, 1688, 1687, 1688 and the mean is exactly
+	 * 1687.5. A scalar constant cannot produce it, which is the whole reason
+	 * the rational exists. */
+	acc = 0u;
+	check(allocPtr(mcu, &acc) == 1687u, "MCU alloc frame 0 is 1687");
+	check(allocPtr(mcu, &acc) == 1688u, "MCU alloc frame 1 is 1688");
+	check(allocPtr(mcu, &acc) == 1687u, "MCU alloc frame 2 is 1687");
+	check(allocPtr(mcu, &acc) == 1688u, "MCU alloc frame 3 is 1688");
+
+	/* Two MCU frames are exactly 3375 cycles, with no drift over many frames. */
 	acc = 0u;
 	total = 0u;
 	for(i = 0u; i < 9600u; ++i)
-		total += allocPtr(dsp, &acc);
-	check(total == 9600ull * G2_DSP_CYCLES_PER_FRAME_NUM
-		/ G2_DSP_CYCLES_PER_FRAME_DEN, "alloc has no drift over 9600 frames");
+		total += allocPtr(mcu, &acc);
+	check(total == 9600ull * G2_MCU_CYCLES_PER_FRAME_NUM
+		/ G2_MCU_CYCLES_PER_FRAME_DEN, "alloc has no drift over 9600 frames");
 	check(acc == 0u, "the accumulator returns to zero on an exact boundary");
 
 	/* The hard case: 44.1 kHz, r = 320/147, n = 32. m takes one

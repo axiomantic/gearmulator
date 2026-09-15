@@ -218,8 +218,7 @@ namespace
 			static_cast<unsigned long long>(kForcedIdleFrames));
 
 		/* One idle quantum every 13, each losing 20 cycles. 20 is well below a
-		 * full allocation (1562/1563), so each idle quantum loses at most one
-		 * allocation. */
+		 * full allocation, so each idle quantum loses at most one allocation. */
 		const uint64_t idleEvery = 13;
 		const int64_t  idleLoss  = 20;
 
@@ -276,8 +275,8 @@ namespace
 		 * lost to the floor are totalIdeal - totalSpent + debt (the current
 		 * debt is the only positive positional offset). Each idle quantum
 		 * loses at most one full allocation. maxAllocation is the largest
-		 * single budget alloc() can return for this rational: num/den rounded
-		 * up, which is 1563 at 150 MHz / 96 kHz. */
+		 * single budget alloc() can return for this rational, bounded above by
+		 * num/den rounded down plus one. */
 		const int64_t loss =
 			totalIdeal - totalSpent + ctx.debt;
 		const int64_t maxAllocation =

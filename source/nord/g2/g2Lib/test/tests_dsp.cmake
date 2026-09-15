@@ -79,6 +79,18 @@ add_test(NAME t0_dynamic_fast_interrupts COMMAND t0_dynamic_fast_interrupts
 	${CMAKE_CURRENT_SOURCE_DIR}/fixtures/bit_test_spin.asm)
 set_tests_properties(t0_dynamic_fast_interrupts PROPERTIES LABELS "UnitTest")
 
+# ----------------- the dispatch unit of every slot's JitConfig
+#
+# dspJob moves the ESAI slot transfers between dispatches, so the longest
+# dispatch is how late a transfer can land.
+
+add_executable(t0_dsp_dispatch_unit t0_dsp_dispatch_unit.cpp)
+target_link_libraries(t0_dsp_dispatch_unit PRIVATE g2Lib)
+set_property(TARGET t0_dsp_dispatch_unit PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_dsp_dispatch_unit COMMAND t0_dsp_dispatch_unit)
+set_tests_properties(t0_dsp_dispatch_unit PROPERTIES LABELS "UnitTest")
+
 # ----------------- t1_kernel_load, the kernel download and the DMA constants
 #
 # Gated. The test boots the real firmware out of CODE_30000400.bin and reads the
