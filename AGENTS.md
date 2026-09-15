@@ -498,14 +498,30 @@ It stays ready for a future submission to the upstream project.
 **Another pull request merges only into a rehearsal branch.** Never merge it into
 `main` or `master`. Merge it only when the operator approves that merge. A pull
 request that shows as mergeable, with green checks, is not a request to merge it.
+This rule is about pull requests. It does not cover a merge of a lower branch into
+a higher branch; "Keeping the stack correct" below covers that merge.
 The one exception is a change that the operator requests for a fork's default
 branch itself, for example to this file.
 
 **Pull requests are stacked.** The base of a pull request is the branch that it
 needs. If a change needs another change, base it on the branch of that change.
 Do not put two dependent changes side by side on one parent. To get the work of a
-lower branch, merge the lower branch into the higher branch. A rebase needs a
-force push, so rebase only when the operator approves that force push.
+lower branch, merge the lower branch into the higher branch.
+
+**Keeping the stack correct is routine work.** Do it without operator approval.
+This work includes:
+
+- Merge each lower branch into the branch above it, up the full stack.
+- Put a commit on the branch where it belongs, then merge it forward.
+- Change the base of a pull request to the branch that it needs.
+
+These actions still need the operator:
+
+- A merge of a pull request into a rehearsal branch.
+- A force push or other history rewrite. A rebase that needs a force push is
+  one of these actions. The approval covers the force push, not the merges.
+
+Never merge a rehearsal pull request.
 
 **Find the kind of a pull request first.** Do this before you call it "ready to
 merge" and before you suggest a merge order. Read its head and its base:
