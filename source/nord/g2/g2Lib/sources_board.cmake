@@ -99,3 +99,14 @@ list(APPEND G2LIB_SOURCES
 	timer.h
 	timer.cpp
 )
+
+# ----------------- the GDB remote stub
+#
+# The translation unit is listed and not only the header: a build that compiled
+# the header alone would fail at the link step on `g2::GdbStub` when `--gdb`
+# reaches it.
+
+list(APPEND G2LIB_SOURCES
+	gdbStub.h
+	gdbStub.cpp
+)

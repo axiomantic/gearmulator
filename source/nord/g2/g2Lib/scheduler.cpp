@@ -55,11 +55,11 @@ namespace g2
 
 	namespace
 	{
-		/* Above this the framework silently truncates the reported latency and
-		 * logs that audio will be out of sync. The bound is on the sum, and
-		 * `D_codec` is written as a named term rather than folded away
-		 * so that a future decision to model the converter has one place to
-		 * change. */
+		/* Above this `synthLib::Device::setExtraLatencySamples` clamps the
+		 * reported latency to its own maximum and logs that audio will be out of
+		 * sync. The bound is on the sum, and `D_codec` is written as a named
+		 * term rather than folded away so that a future decision to model the
+		 * converter has one place to change. */
 		constexpr uint64_t kMaxTotalLookaheadFrames = 16384;
 		constexpr uint64_t kDelayCodecFrames        = 0;
 
