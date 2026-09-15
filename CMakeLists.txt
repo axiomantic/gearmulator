@@ -74,6 +74,39 @@ set(CPACK_RPM_PACKAGE_AUTOREQ "yes")
 set(CPACK_RPM_PACKAGE_URL ${CPACK_DEBIAN_PACKAGE_HOMEPAGE})
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 
+# ----------------- the MCF5407 core, for the G2
+#
+# The core lives in its own repository, axiomantic/mcf5407. It is DECLARED here
+# and POPULATED nowhere unless source/nord/g2/g2Lib/CMakeLists.txt turns
+# G2_LINK_MCF5407 on. A declaration that is never populated costs nothing.
+#
+# Set G2_MCF5407_SOURCE_DIR to a sibling checkout to build against that instead
+# of a fetched tree. G2_MCF5407_GIT_TAG carries the pin.
+#
+# THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
+# clean configure, so a check against the core would measure a different core
+# from one run to the next. The pin is advanced by hand, and nothing in this
+# tree detects that it is stale.
+#
+# base.cmake appends `-Ofast` to the release flags of the whole build, mcf5407
+# test targets carry `-Werror`, and a current Apple clang deprecates the flag,
+# so a pin that predates mcf5407's probed `-Wno-error=deprecated-ofast` fails
+# to build on macOS/arm64.
+#
+# THE PIN MUST ALSO BE AT OR AFTER THE RENAME. The repository was mcf5307 until
+# 1279763, and a commit before it exports mcf5307::mcf5307 and the mcf5307_* C
+# ABI, neither of which this tree names any more. An older pin therefore fails
+# at the link step and not at the fetch, because the fetch still succeeds.
+
+set(G2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
+set(G2_MCF5407_GIT_TAG "e868b6f580de6114c1810996a5bb2f898e8bb032" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
+
+include(FetchContent)
+FetchContent_Declare(mcf5407
+	GIT_REPOSITORY https://github.com/axiomantic/mcf5407.git
+	GIT_TAG ${G2_MCF5407_GIT_TAG}
+)
+
 # ----------------- source
 
 add_subdirectory(source)

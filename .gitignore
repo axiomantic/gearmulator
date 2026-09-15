@@ -19,3 +19,9 @@ _copilot.bat
 target/logs/
 claude*.bat
 .mcp.json
+
+# Raw t1_boot traces: large, repetitive, and reproducible from a run. A glob
+# rather than a roster of names, so a new trace needs no edit here and a name
+# cannot go stale.
+artifacts/boot/t1_boot_*.log
+build-*/
