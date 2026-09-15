@@ -45,6 +45,18 @@ namespace g2
 		}
 	}
 
+	void Hdi08Adapter::armWordCapture(const std::size_t _perPortLimit)
+	{
+		for(std::vector<CapturedEntry>& v : m_captured)
+			v.clear();
+		m_captureLimit = _perPortLimit;
+	}
+
+	void Hdi08Adapter::disarmWordCapture()
+	{
+		m_captureLimit = 0;
+	}
+
 	bool Hdi08Adapter::isLegalWidth(const int _size) const
 	{
 		return _size == 8 || _size == 16 || _size == 32;
@@ -86,6 +98,8 @@ namespace g2
 		uint32_t value = 0;
 		for(int i = 0; i < byteCount; ++i)
 		{
+			++m_counts.reads[portIndex][(selection.portOffset + uint32_t(i)) & 7u];
+
 			const uint8_t byte = m_ports[portIndex].read8(
 				static_cast<mc68k::PeriphAddress>(selection.portOffset + i));
 
@@ -127,6 +141,41 @@ namespace g2
 			{
 				if(((selection.ports >> portIndex) & 1u) == 0)
 					continue;
+
+				const uint32_t reg = (selection.portOffset + uint32_t(i)) & 7u;
+
+				++m_counts.writes[portIndex][reg];
+
+				// The word the port will assemble, tracked here so the capture
+				// can report it rather than three unrelated bytes.
+				if(reg == uint32_t(mc68k::PeriphAddress::HdiTXH))
+					m_txAssembly[portIndex] = (m_txAssembly[portIndex] & 0x00ffffu) | (uint32_t(byte) << 16);
+				else if(reg == uint32_t(mc68k::PeriphAddress::HdiTXM))
+					m_txAssembly[portIndex] = (m_txAssembly[portIndex] & 0xff00ffu) | (uint32_t(byte) << 8);
+
+				// TXL completes the 24-bit word in mc68k::Hdi08, so a TXL cycle
+				// is one word handed to the DSP side.
+				if(reg == uint32_t(mc68k::PeriphAddress::HdiTXL))
+				{
+					++m_counts.words[portIndex];
+					m_txAssembly[portIndex] = (m_txAssembly[portIndex] & 0xffff00u) | uint32_t(byte);
+
+					if(m_captureLimit && m_captured[portIndex].size() < m_captureLimit)
+						m_captured[portIndex].push_back(CapturedEntry{false, m_txAssembly[portIndex]});
+				}
+
+				// A CVR write carrying HC is the host command that vectors the
+				// DSP core. The vector is the value the port itself computes.
+				if(reg == uint32_t(mc68k::PeriphAddress::HdiCVR) && (byte & mc68k::Hdi08::Hc))
+				{
+					++m_counts.hostCommands[portIndex];
+
+					const uint32_t vector = uint32_t(byte & mc68k::Hdi08::Hv) << 1;
+					++m_counts.vectorCounts[portIndex][(vector >> 1) & 127u];
+
+					if(m_captureLimit && m_captured[portIndex].size() < m_captureLimit)
+						m_captured[portIndex].push_back(CapturedEntry{true, vector});
+				}
 
 				m_ports[portIndex].write8(
 					static_cast<mc68k::PeriphAddress>(selection.portOffset + i), byte);

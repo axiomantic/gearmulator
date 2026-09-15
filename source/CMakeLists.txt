@@ -34,6 +34,31 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(dsp56300/source)
 
+# G2_DSP_WRITE_HOOK compiles dsp56kEmu with DSP56300_DEBUGGER=1 WITHOUT turning on
+# the submodule's own DSP56300_DEBUGGER option, which additionally builds a
+# wxWidgets debugger GUI this repository has no use for and cannot configure.
+#
+# The define is what Memory::dspWrite tests before calling the attached
+# DebuggerInterface, so it is the switch that makes an exact per-address DSP
+# memory write trace possible. It is OFF by default: it costs a branch on every
+# memory access, and paired with JitConfig::memoryWritesCallCpp it removes the
+# JIT's inlined memory path entirely.
+option(G2_DSP_WRITE_HOOK "Compile dsp56kEmu with the DebuggerInterface memory hooks" OFF)
+
+if(G2_DSP_WRITE_HOOK)
+	get_target_property(_g2_dspdefs dsp56kEmu INTERFACE_COMPILE_DEFINITIONS)
+	list(REMOVE_ITEM _g2_dspdefs "DSP56300_DEBUGGER=0")
+	list(APPEND _g2_dspdefs "DSP56300_DEBUGGER=1")
+	set_target_properties(dsp56kEmu PROPERTIES INTERFACE_COMPILE_DEFINITIONS "${_g2_dspdefs}")
+
+	get_target_property(_g2_dspdefs_priv dsp56kEmu COMPILE_DEFINITIONS)
+	if(_g2_dspdefs_priv)
+		list(REMOVE_ITEM _g2_dspdefs_priv "DSP56300_DEBUGGER=0")
+		list(APPEND _g2_dspdefs_priv "DSP56300_DEBUGGER=1")
+		set_target_properties(dsp56kEmu PROPERTIES COMPILE_DEFINITIONS "${_g2_dspdefs_priv}")
+	endif()
+endif()
+
 # ----------------- Common libraries used by all synths
 
 add_subdirectory(baseLib)

@@ -21,6 +21,8 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+#include <vector>
 
 #include "hdi08Decode.h"
 #include "memoryMap.h"
@@ -75,11 +77,71 @@ namespace g2
 
 		const Hdi08Decode& decode() const { return m_decode; }
 
+		/* Exact per-port accounting of MCU accesses to the host ports.
+		 *
+		 * This class is the SINGLE funnel: every CS1 cycle the MCU makes to any
+		 * HDI08 port passes through read() or write() below, so a count taken
+		 * here is exact rather than sampled, and a zero here means the MCU made
+		 * no such cycle rather than that a sampler missed one.
+		 *
+		 * `words` counts TXL cycles, and TXL is what completes a 24-bit host
+		 * word in `mc68k::Hdi08`, so it is the count of words handed to the DSP
+		 * side. `hostCommands` counts CVR writes carrying HC, which is the host
+		 * command that vectors the DSP core; `commandVectors` records which
+		 * vectors, in the (val & Hv) << 1 form the port computes. */
+		struct AccessCounts
+		{
+			std::array<std::array<uint64_t, 8>, g_hdi08PortCount> writes{};
+			std::array<std::array<uint64_t, 8>, g_hdi08PortCount> reads{};
+			std::array<uint64_t, g_hdi08PortCount> words{};
+			std::array<uint64_t, g_hdi08PortCount> hostCommands{};
+			/* Per-vector host-command counts, per port. A vector is
+			 * (val & Hv) << 1 and is therefore always EVEN, so the index is
+			 * vector/2 and 128 entries cover the whole seven-bit Hv field
+			 * exactly. A count rather than a set: a set answers "did this
+			 * command ever issue", and the question a phase delta asks is "how
+			 * many times", which a set cannot answer and which is what
+			 * distinguishes a command the note causes from one the machine
+			 * issues anyway. */
+			std::array<std::array<uint64_t, 128>, g_hdi08PortCount> vectorCounts{};
+		};
+
+		/* An optional bounded capture of the 24-bit words the MCU completes on
+		 * each port, and of the host commands interleaved with them in the order
+		 * they were issued.
+		 *
+		 * The counts above say how much moved. They cannot say WHAT moved, and a
+		 * note-on that reaches a DSP must carry a note number somewhere. The
+		 * capture is bounded and off by default because the machine drives tens
+		 * of thousands of words per port per phase; a caller arms it around the
+		 * phase it wants and reads the entries back. */
+		void armWordCapture(std::size_t _perPortLimit);
+		void disarmWordCapture();
+
+		struct CapturedEntry
+		{
+			bool     isCommand = false;	// true: a CVR host command; false: a TX word
+			uint32_t value = 0;			// the vector, or the 24-bit word
+		};
+
+		const std::vector<CapturedEntry>& capturedEntries(int _port) const { return m_captured[_port]; }
+
+		const AccessCounts& accessCounts() const { return m_counts; }
+
 	private:
 		bool isLegalWidth(int _size) const;
 
 		Hdi08Decode m_decode;
 		std::array<mc68k::Hdi08, g_hdi08PortCount> m_ports;
+		AccessCounts m_counts;
+
+		std::size_t m_captureLimit = 0;
+		std::array<std::vector<CapturedEntry>, g_hdi08PortCount> m_captured;
+
+		// The partially assembled transmit word per port, so the capture can
+		// report the 24-bit word the port itself will assemble rather than three
+		// unrelated bytes.
+		std::array<uint32_t, g_hdi08PortCount> m_txAssembly{};
 	};
 
 	/* The two functions below act on the DSP side, not on the `mc68k::Hdi08`
