@@ -20,8 +20,9 @@
  *
  * where maxDispatchCost is the cost of the longest single dispatch unit the
  * context's backend can issue. That upper half is not a value this file owns:
- * it is unmeasured, and dsp56300's shipped default config leaves
- * maxInstructionsPerBlock uncapped, so no bound read from the build exists.
+ * it is unmeasured, and the G2's DSP slots cap a block by its instruction
+ * count, which is not a cycle count, so no bound in cycles can be read from the
+ * build.
  * Every test that names the bound takes it from its own fixture; this file
  * states the shape of the debt and enforces no numeric cap.
  *
