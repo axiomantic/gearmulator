@@ -614,17 +614,28 @@ namespace
 	 * quantum's successor. The settling quantum itself stays a literal 1: frame
 	 * index 0 is a window at every divider and is keyed to neither field.
 	 *
-	 * Deriving from this Config keeps the arm honest when a provisional constant
-	 * moves; it establishes NOTHING about the hop or the divider the ADAPTER was
-	 * handed, because this arm drives the default Config where both fields ARE
-	 * the build constants and the comparison is a constant against itself. The
-	 * off-window probe below exists only while the divider is at least 2: at 1
-	 * every quantum is a window and the non-arrival has nothing to assert.
+	 * THE FORWARDING. The arm drives a divider of 4, which the build does not
+	 * ship. The off-window probe needs a divider of at least 2 -- at 1 every
+	 * quantum is a window and the non-arrival has nothing to assert -- and a
+	 * divider other than G2_SECOND_BUS_FRAME_DIVIDER is what makes the adapter's
+	 * copy observable: a Scheduler that handed the adapter that macro instead of
+	 * the Config's value advances the second bus on frame index 1 and fails the
+	 * off-window probe. A divider of 4 needs Config::testOverride, which is the
+	 * escape from the equality row and nothing else.
+	 *
+	 * The hop is the default, so this arm establishes nothing about the hop the
+	 * adapter was handed; case 4 separates that forwarding.
 	 */
 	void caseSecondBusForwarded(g2::Board& _board, g2::Executor& _executor)
 	{
 		g2::Scheduler::Config config;
 		config.chainOrder = identityChainOrder();
+		config.secondBusFrameDivider = 4;
+		config.testOverride          = true;
+
+		check(config.secondBusFrameDivider != G2_SECOND_BUS_FRAME_DIVIDER,
+			"the driven divider differs from the build constant (an arm that drove "
+			"the constant would compare it against itself)");
 
 		g2::Status status{};
 
@@ -632,7 +643,7 @@ namespace
 			g2::Scheduler::create(config, _executor, _board, status);
 
 		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
-			"the default Config is accepted for the second-bus case");
+			"a divider of 4 with the override taken is accepted for the second-bus case");
 
 		if(!scheduler)
 		{
@@ -704,34 +715,18 @@ namespace
 	}
 
 	/* ---------------------------------------------------------------------
-	 * CASE 5b. The second-bus divider at its other ordered configuration, and
-	 * it is the arm that makes the argument's forwarding observable.
+	 * CASE 5b. The second-bus divider the build ships, 1, and the cadence it
+	 * gives: every quantum is an advance window.
 	 *
-	 * WHY CASE 5 alone could not report it. Case 5 drives the DEFAULT Config,
-	 * whose divider IS G2_SECOND_BUS_FRAME_DIVIDER -- so a Scheduler that
-	 * handed the adapter that macro instead of the Config's value satisfies it
-	 * at every position. MEASURED against this file as it stood WITHOUT this
-	 * case: with the macro substituted for Config::secondBusFrameDivider at the
-	 * adapter's construction, every case in it stayed green. The comparison was
-	 * against a constant equal to itself.
+	 * Case 5 drives a divider of 4, so a frame primed after the settling quantum
+	 * does not cross on frame index 1 there. Here it does, and the pair is what
+	 * pins the cadence to the divider from both sides: an adapter that skipped
+	 * non-multiples of any divider above 1 fails this arm, and one that advanced
+	 * every quantum fails case 5.
 	 *
-	 * Why the context member does not cover it either. Case 7 asserts
-	 * DspContext::secondBusFrameDivider at a non-default value, which is the
-	 * value the JOB reads. The adapter's own copy is what the SWAP reads, and
-	 * the two are separate forwardings of one Config field: the mutation above
-	 * moves the swap's copy and leaves every context's untouched.
-	 *
-	 * The discriminator is a cadence. The swap advances the second bus only on
-	 * a quantum whose frame index is a multiple of the divider. Frame index 1
-	 * is such a quantum at a divider of 1 and is not one at the shipped 4, so
-	 * a frame primed after the settling quantum crosses here and does not
-	 * cross in case 5. The mutation and its red: hand the adapter
-	 * G2_SECOND_BUS_FRAME_DIVIDER instead of the Config's value and this
-	 * crossing stops happening, because the adapter then skips the quantum the
-	 * Config asked it to advance on.
-	 *
-	 * A divider of 1 NEEDS Config::testOverride, which is the escape from the
-	 * equality row and nothing else; the value is required in any case.
+	 * This arm drives the default Config, whose divider IS
+	 * G2_SECOND_BUS_FRAME_DIVIDER, so it says nothing about forwarding; case 5
+	 * reports that.
 	 *
 	 * The quantum count is derived and not a literal, for the reason case 3
 	 * states: every quantum is an advance window at a divider of 1, so the
@@ -742,16 +737,13 @@ namespace
 	 * nothing about a DSP having run either -- every run gate is shut here, as
 	 * it is everywhere in this file.
 	 */
-	void caseSecondBusDividerOneForwarded(g2::Board& _board, g2::Executor& _executor)
+	void caseSecondBusDividerOne(g2::Board& _board, g2::Executor& _executor)
 	{
 		g2::Scheduler::Config config;
 		config.chainOrder = identityChainOrder();
-		config.secondBusFrameDivider = 1;
-		config.testOverride          = true;
 
-		check(config.secondBusFrameDivider != G2_SECOND_BUS_FRAME_DIVIDER,
-			"the driven divider differs from the build constant (an arm that drove "
-			"the constant would compare it against itself)");
+		checkEqual(config.secondBusFrameDivider, 1u,
+			"the default Config carries the shipped divider of 1");
 
 		g2::Status status{};
 
@@ -759,11 +751,11 @@ namespace
 			g2::Scheduler::create(config, _executor, _board, status);
 
 		checkEqual(static_cast<uint64_t>(status), static_cast<uint64_t>(g2::Status::Ok),
-			"a divider of 1 with the override taken is accepted");
+			"the default Config is accepted for the divider-of-1 case");
 
 		if(!scheduler)
 		{
-			check(false, "a divider of 1 with the override taken yields a Scheduler");
+			check(false, "the default Config yields a Scheduler for the divider-of-1 case");
 			return;
 		}
 
@@ -792,10 +784,10 @@ namespace
 			source.writeTX(2u, 0u);
 		}
 
-		/* Frame index 1 onwards. NOT a window quantum at the shipped divider
-		 * of 4; every one of them IS a window at a divider of 1, so the hop is
-		 * the whole count and the job bodies' own receive frames latch what
-		 * each swap delivered. */
+		/* Frame index 1 onwards. NOT a window quantum at case 5's divider of 4;
+		 * every one of them IS a window at a divider of 1, so the hop is the
+		 * whole count and the job bodies' own receive frames latch what each
+		 * swap delivered. */
 		scheduler->runFrames(config.hopFrames);
 
 		for(unsigned i = 0; i < g2::kJobCount; ++i)
@@ -807,7 +799,7 @@ namespace
 			char what[256];
 			std::snprintf(what, sizeof(what),
 				"at a divider of 1, position %u's second-bus frame reached position %u on a "
-				"quantum the shipped divider would have skipped",
+				"quantum a divider of 4 would have skipped",
 				i, static_cast<unsigned>((i + 1u) % g2::kJobCount));
 			checkEqual(sink.readRX(0u), sample, what);
 		}
@@ -1057,7 +1049,7 @@ int main()
 	{
 		caseHopForwarded(board, executor);
 		caseSecondBusForwarded(board, executor);
-		caseSecondBusDividerOneForwarded(board, executor);
+		caseSecondBusDividerOne(board, executor);
 		caseSecondBusTopologyForwarded(board, executor);
 		caseConfigValuesReachContexts(board);
 	}
