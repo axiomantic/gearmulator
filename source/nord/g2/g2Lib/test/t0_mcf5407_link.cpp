@@ -35,7 +35,7 @@
 
 #include <mcf5407.h>
 
-#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <string>
 
@@ -61,68 +61,42 @@ namespace
 	}
 }
 
-// Nothing below executes a program: mcf5407_exec has its address taken but is
-// never called, because calling it needs a context and a program and would be
-// a behavioural assertion about the core rather than about the link.
-
 int main()
 {
-	// Case 1. The symbol resolved to a real address.
+	// Both symbols have to arrive through g2Lib's own PUBLIC link, so both
+	// addresses are taken here. The pointers are volatile: a direct call gives
+	// the compiler an inline no-op it may erase, and an erased call proves
+	// nothing about the link, while an indirect call through a volatile pointer
+	// forces the address to be materialised and forces the linker to resolve
+	// the symbol.
 	//
-	// The pointer is volatile and every call goes through it. A direct call
-	// gives the compiler an inline no-op it may erase, and an erased call
-	// proves nothing about the link. An indirect call through a volatile
-	// pointer forces the address to be materialised and forces the linker to
-	// resolve the symbol.
+	// mcf5407_exec is resolved and never called. Calling it needs a context and
+	// a program, and what it returned would be a statement about the core
+	// rather than about the link.
 	int (*volatile runtimeInit)() = &mcf5407_runtime_init;
-
-	check(runtimeInit != nullptr,
-		"mcf5407_runtime_init resolved to a non-null address through g2Lib");
-
-	// Case 1b. The execution entry point resolved too, and through the same
-	// link line.
-	//
-	// The pointer is volatile for the reason above: the address must be
-	// materialised. Board::runMcu forwards to this symbol.
-	//
-	// The address is taken and NOT called. Calling it needs a context and a
-	// program, and what it returned would be a statement about the core rather
-	// than about the link.
 	uint32_t (*volatile exec)(mcf5407_ctx*, uint32_t) = &mcf5407_exec;
+	(void) exec;
 
-	check(exec != nullptr,
-		"mcf5407_exec resolved to a non-null address through g2Lib");
-
-	// Case 2. The runtime entry point runs, and it runs repeatedly.
+	// The runtime reports itself usable, and keeps reporting it.
 	//
-	// It is the procedure a C++ caller must use in place of ever naming
-	// NimMain, and src/mcf5407.nim states that it is idempotent behind a
-	// latch that is set AFTER the call. A latch set
-	// before the call would be written back by module initialisation and
-	// every later call would run the initialiser again.
+	// mcf5407_runtime_init is the procedure a C++ caller must use in place of
+	// ever naming NimMain, and src/mcf5407.nim states that it is idempotent
+	// behind a latch that is set AFTER the call. A latch set before the call
+	// would be written back by module initialisation and every later call would
+	// run the initialiser again.
 	//
-	// The counter is volatile, so the compiler cannot fold the comparison,
-	// and it is incremented AFTER each call. A runtime built with --panics:on
+	// The status is a truth value and not a POSIX error code: 1 is usable, 0 is
+	// a latch that reached its deadline and was abandoned, which is terminal.
+	// Summing rather than checking the last call is what keeps a latch that
+	// answered 1 and then 0 from passing. The counter is volatile, so the
+	// compiler cannot fold the comparison, and a runtime built with --panics:on
 	// ends the process on a defect rather than returning a wrong value.
-	volatile int returnedCalls = 0;
 	volatile int initialisedCalls = 0;
 
 	initialisedCalls += runtimeInit();
-	++returnedCalls;
 	initialisedCalls += runtimeInit();
-	++returnedCalls;
 	initialisedCalls += runtimeInit();
-	++returnedCalls;
 
-	check(returnedCalls == 3,
-		"mcf5407_runtime_init returned from all three of three calls");
-
-	// Case 3. The runtime reports itself usable, and keeps reporting it.
-	//
-	// The status is a truth value and not a POSIX error code: 1 is usable, 0
-	// is a latch that reached its deadline and was abandoned, which is
-	// terminal. Summing rather than checking the last call is what keeps a
-	// latch that answered 1 and then 0 from passing.
 	check(initialisedCalls == 3,
 		"mcf5407_runtime_init reported the runtime usable on all three calls");
 
