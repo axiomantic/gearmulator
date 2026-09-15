@@ -71,8 +71,19 @@ namespace g2
 		 * the program counter only on its TAKEN path, so a conditional bit-test
 		 * spin down there re-enters its own block for ever.
 		 *
+		 * The block length is bounded because dspJob places the ESAI slot
+		 * transfers between dispatches, so a transfer lands at best one
+		 * dispatch after its place in the frame. Unbounded, one dispatch of the
+		 * firmware runs for hundreds of cycles, the transfers of a frame bunch
+		 * behind it, and which slots latch fresh data then depends on the cycle
+		 * budget. 32 instructions keeps a dispatch of straight-line code under a
+		 * quarter of a second-bus slot, which t0_dsp_dispatch_unit asserts.
+		 *
+		 * HAZARD: a bound of 8 or less leaves every DSP idle and the output
+		 * silent. The cause is not known.
+		 *
 		 * It is a read-modify-write and not a fresh JitConfig, so every field
- * this one does not name keeps whatever the library chose for it.
+ * this constructor does not name keeps whatever the library chose for it.
  * n2xdsp.cpp carries the same shape.
  *
  * It sits in the slot constructor because that runs once for each DSP
@@ -80,6 +91,7 @@ namespace g2
  * per-slot property rather than a property of the set. */
 		dsp56k::JitConfig config = dsp.getJit().getConfig();
 		config.dynamicFastInterrupts = true;
+		config.maxInstructionsPerBlock = 32;
 		dsp.getJit().setConfig(config);
 	}
 

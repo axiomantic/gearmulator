@@ -25,7 +25,7 @@
  *
  * The count is double-checked against an independent branch model. The exact
  * number of long-dispatch quanta a spike produces is asserted once against a
- * hard-coded expectation (one full allocation is about 1562/1563, so a 1580
+ * hard-coded expectation (one full allocation is 1536 cycles, so a 1580
  * overshoot exhausts in one quantum, 4000 in two, 5000 in three) and once
  * against BranchModel, a pure re-derivation of the long-dispatch count and debt
  * bookkeeping that never calls g2::runQuantum. A regression that changed the
@@ -288,7 +288,7 @@ int main()
 {
 	printf("t0_long_dispatch: the long-dispatch counter\n");
 
-	/* One whole allocation is about 1562/1563 at 150 MHz / 96 kHz. A spike of
+	/* One whole allocation is 1536 cycles at the frame budget. A spike of
 	 * 1580 exceeds one allocation, so it exhausts in exactly one long-dispatch
 	 * quantum; 4000 exceeds two in a row, so exactly two; 5000 exceeds three
 	 * in a row, so exactly three. Each count is asserted against both the
