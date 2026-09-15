@@ -21,3 +21,8 @@ list(APPEND G2LIB_SOURCES mailbox.cpp mailbox.h)
 #
 # Both stay in the same source group so the IDE shows them together.
 list(APPEND G2LIB_SOURCES chainAdapter.h chainAdapter.cpp)
+
+# Which hardware port carries which chain position. The firmware chooses it and
+# it is not the identity, so nothing may assume it; chainOrder.h carries the
+# derivation and why it cannot be answered before the firmware has run.
+list(APPEND G2LIB_SOURCES chainOrder.h chainOrder.cpp)
