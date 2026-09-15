@@ -498,10 +498,10 @@ It stays ready for a future submission to the upstream project.
 **Another pull request merges only into a rehearsal branch.** Never merge it into
 `main` or `master`. Merge it only when the operator approves that merge. A pull
 request that shows as mergeable, with green checks, is not a request to merge it.
-This rule is about pull requests. It does not cover a merge of a lower branch into
-a higher branch; "Keeping the stack correct" below covers that merge.
 The one exception is a change that the operator requests for a fork's default
 branch itself, for example to this file.
+This rule is about pull requests. It does not cover a merge of a lower branch into
+a higher branch; "Keeping the stack correct" below covers that merge.
 
 **Pull requests are stacked.** The base of a pull request is the branch that it
 needs. If a change needs another change, base it on the branch of that change.
