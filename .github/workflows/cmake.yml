@@ -12,6 +12,21 @@ jobs:
       matrix:
         os: [ ubuntu-latest, macos-14, windows-2022 ]
         cmake_generator: [ default, Ninja ]
+        include:
+          # Windows configures the G2 alone. These branches change the G2, and a
+          # Windows build of every synth does not finish inside the Build
+          # ceiling, so it reports a timeout instead of a verdict on that code.
+          # The other synths still build here on Linux and macOS, in upstream's
+          # CI, and in nightly and release.
+          - os: windows-2022
+            synth_flags: >-
+              -Dgearmulator_SYNTH_OSIRUS=OFF
+              -Dgearmulator_SYNTH_OSTIRUS=OFF
+              -Dgearmulator_SYNTH_VAVRA=OFF
+              -Dgearmulator_SYNTH_XENIA=OFF
+              -Dgearmulator_SYNTH_NODALRED2X=OFF
+              -Dgearmulator_SYNTH_JE8086=OFF
+              -Dgearmulator_SYNTH_G2=ON
       fail-fast: false
     name:  ${{ matrix.os }} build with ${{ matrix.cmake_generator }} cmake generator
     # A backstop for every step that has no ceiling of its own. The slowest
@@ -53,7 +68,7 @@ jobs:
 
     - name: Configure CMake with ${{ matrix.cmake_generator }}
       if: matrix.cmake_generator != 'default'
-      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON
+      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
 
     - name: Configure CMake with default generator
       if: matrix.cmake_generator == 'default'
@@ -64,7 +79,7 @@ jobs:
       # already built everything cpack installs, so the re-run only duplicates
       # work, and anything genuinely missing now fails in cpack with a message
       # instead of hanging in silence.
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
 
     - name: Build
       # The slowest healthy build measured is macOS at 61 minutes; ubuntu takes
