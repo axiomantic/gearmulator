@@ -82,10 +82,10 @@ jobs:
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
 
     - name: Build
-      # The slowest healthy build measured is macOS at 61 minutes; ubuntu takes
-      # 15. 90 clears the macOS figure by half again, which a shared runner can
-      # plausibly need, and still catches a build that has stopped making
-      # progress rather than one that is merely slow.
+      # The ceiling follows the slowest healthy build, macOS with every synth,
+      # plus the margin a shared runner can plausibly need. Windows builds the
+      # G2 alone and finishes far inside it. The ceiling still catches a build
+      # that has stopped making progress rather than one that is merely slow.
       timeout-minutes: 90
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 3
 
