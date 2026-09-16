@@ -48,6 +48,7 @@
 #include "executor.h"
 #include "firmwareState.h"
 #include "frame.h"
+#include "panelSram.h"
 
 #include "g2State.h"
 #include "scheduler.h"
@@ -406,6 +407,7 @@ namespace g2
 		class Sdram;
 
 		std::unique_ptr<Sdram>          m_sdram;
+		std::unique_ptr<PanelSram>      m_panelSram;
 		std::unique_ptr<Board>          m_board;
 		std::unique_ptr<SerialExecutor> m_executor;
 		std::unique_ptr<Scheduler>      m_ownedScheduler;

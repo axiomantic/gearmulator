@@ -60,11 +60,12 @@ namespace
 	constexpr uint32_t g_cs2Size = 0x00800000u;
 
 	// Invented by the harnesses and copied here unchanged. No authority
-	// records CS0's or CS4's base. Neither is a measurement.
+	// records CS0's base. It is not a measurement.
+	//
+	// CS4 is no longer invented here: g_panelSramCs4Window is the window that
+	// reaches the panel board's static RAM.
 	constexpr uint32_t g_cs0Base = 0x00000000u;
 	constexpr uint32_t g_cs0Size = 0x00020000u;
-	constexpr uint32_t g_cs4Base = 0x14000000u;
-	constexpr uint32_t g_cs4Size = 0x00010000u;
 
 	// Measured: CS3 is a 64 KiB window.
 	constexpr uint32_t g_cs3Size   = 0x00010000u;
@@ -344,7 +345,7 @@ namespace g2
 		boardConfig.memory.cs1   = {g_cs1Base,   g_cs1Size};
 		boardConfig.memory.cs2   = {g_cs2Base,   g_cs2Size};
 		boardConfig.memory.cs3   = {g_cs3Base,   g_cs3Size};
-		boardConfig.memory.cs4   = {g_cs4Base,   g_cs4Size};
+		boardConfig.memory.cs4   = g_panelSramCs4Window;
 		boardConfig.memory.cs5   = {g_cs5Base,   g_cs5Size};
 		boardConfig.memory.mbar  = {g_mbarBase,  g_simSpaceSize};
 		boardConfig.memory.sdram = {g_sdramBase, g_sdramSize};
@@ -356,6 +357,21 @@ namespace g2
 
 		m_board = std::make_unique<Board>(boardConfig);
 		m_board->memory().attach(Region::Sdram, m_sdram.get());
+
+		/* The panel board's static RAM. The converter above is only half of
+		 * the panel: the firmware's boot calibration accepts a panel at rest
+		 * and then reads this bank, and a Device that wired one without the
+		 * other faulted on the way out of the calibration. */
+		m_panelSram = std::make_unique<PanelSram>(m_board->memory());
+
+		if(!m_panelSram->place(g_panelSramImageBase, readFile(directory + "/" + g_panelSramImageName)))
+		{
+			result.why = std::string(g_panelSramImageName)
+				+ " is empty, unreadable or does not fit the bank under " + directory;
+			return result;
+		}
+
+		m_board->memory().attach(Region::Cs4, m_panelSram.get());
 
 		/* A new Board carries the panel's rest potentials, not whatever the
 		 * host had moved a control to, so the staged positions are re-applied
