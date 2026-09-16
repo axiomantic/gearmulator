@@ -1,7 +1,7 @@
 // Tier T0: this test needs no firmware artifact of any kind.
 //
-// What it asserts: that a Board nobody configured presents the panel's own
-// analogue potentials to the firmware's scan, rather than ground. It drives the
+// What it asserts: that a Board given the panel's description presents the
+// panel's own potentials to the firmware's scan, rather than ground. It drives the
 // MAX1039 with the setup and configuration bytes the firmware is measured to
 // send, reads the seven-byte sweep back through the M-Bus, and holds each
 // result against the code the firmware's own consumers require.
@@ -93,9 +93,13 @@ namespace
 
 int main()
 {
-	// Default construction, because that is the claim: a caller who supplies
-	// no configuration at all gets the panel this machine has.
-	g2::Board board;
+	/* The panel description assigned the way a caller modelling this machine
+	 * assigns it, and through a Board rather than a bare converter, so that a
+	 * description the Board failed to carry through would fail here. */
+	g2::BoardConfig config;
+	config.adc = g2::panelAdcConfig();
+
+	g2::Board board(config);
 
 	const std::vector<uint8_t> results = sweep(board.adc());
 
