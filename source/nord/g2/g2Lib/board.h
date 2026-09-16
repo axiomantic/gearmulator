@@ -82,12 +82,20 @@ namespace g2
 		 * window. */
 		Hdi08Decode hdi08{g_hdi08ExpandedPorts};
 
-		/* The one two-wire slave the machine carries, configured as the panel
-		 * board wires it. A caller modelling other hardware replaces the whole
-		 * structure; a caller modelling this machine gets the panel, because a
-		 * converter that answers ground on every channel is not a neutral
-		 * starting point -- it is a machine with its volume shut. */
-		Max1039Config adc = panelAdcConfig();
+		/* The one two-wire slave the machine carries. Its potentials start at
+		 * zero: the part has no opinion about what a board connects to it, and
+		 * a Board is composed by callers that model different amounts of the
+		 * machine. panelAdcConfig() above is the panel's own description, and a
+		 * caller that means to model the panel assigns it here.
+		 *
+		 * It is not the default, and the reason is measured rather than
+		 * stylistic. A panel at rest converts to values the firmware's boot
+		 * calibration accepts, so the firmware leaves that calibration and runs
+		 * on into code that reads the panel's static RAM. A Board composed
+		 * without that window then faults there. Wiring the panel and mapping
+		 * what the panel needs are one decision, and this is the field that
+		 * would silently take half of it. */
+		Max1039Config adc;
 
 		/* The ISP1181 endpoint the G2 protocol runs over. It is configuration
 		 * and not a constant this file invents; a caller may name another one.
