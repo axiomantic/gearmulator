@@ -1,0 +1,77 @@
+mode=framed sram=1 windowQuanta=400000 walkQuanta=8192 note=1 impulse=0 deadline=2400s
+patch="BackTo72 demo" bytes=3868
+board: G2_MCU_CORE_CLOCK_HZ = 162000000 is derived from the schematic CLKIN label and the PLL multiplier, and is not scope-measured
+sram image bytes = 1946
+dspCount=8 hopFrames=1 lookaheadFrames=1
+boot: quanta=44516 booted=1 programsLanded=1 halted=0 chainAttached=1 pc=0x3004B562 t=5.37048s
+pch2LoadFramed = PCH2-LOADED
+composed message bytes = 3818
+  progress q=50000 pc=0x30055FBC chainAttached=1 t=11.6631s
+  progress q=100000 pc=0x30003F70 chainAttached=1 t=16.7077s
+  progress q=150000 pc=0x30005CFA chainAttached=1 t=20.8045s
+  progress q=200000 pc=0x3003A6D2 chainAttached=1 t=24.6484s
+  progress q=250000 pc=0x3004B55A chainAttached=1 t=28.2279s
+  progress q=300000 pc=0x300E1156 chainAttached=1 t=30.9773s
+  progress q=350000 pc=0x30029E08 chainAttached=1 t=34.0286s
+  progress q=400000 pc=0x30029E06 chainAttached=1 t=36.9383s
+window: ranQuanta=400000 totalQuanta=444517 pc=0x30029E06 halted=0 faulted=0 chainAttached=1 frameIndex=444517 t=36.9384s
+patch chain in SDRAM: 0x30257B7B
+patch name in SDRAM: 0x30267A0A
+cs4: bankWrites=0 holeWrites=2098540
+midi: before any byte, usr=0xc interruptAsserted=0 uivr=0x42
+midi: posted=12 accepted=12 dropped=0 consumedByFirmware=12 usrAfter=0xc
+midi known negative: burst posted 8 without running the machine, acceptedBeforeFull=3 usr=0xf
+note: ran 40000 further quanta, pc=0x3004B526 t=39.1459s
+play: primedPulled=1 of 1
+WALK: framesRequested=8192 framesReturned=8192 nonZeroFrames=0 firstNonZeroQuantum=-1 range=[0, 0]
+WALK: firstNonZero slot0=0 slot1=0
+WALK: nonZero per slot = [0]=0 [1]=0 [2]=0 [3]=0 [4]=0 [5]=0 [6]=0 [7]=0
+WALK: magnitude buckets (2^n, non-empty) = 0:65536
+  dsp 0 instructionsInWalk=6447363 enabledTx=3 txWords=2 dmaSource=7938 txBufferNonZeroWords=0 of 8 firstNonZero=0 cycleDebt=9 longDispatch=0
+  dsp 1 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 2 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 3 instructionsInWalk=6873167 enabledTx=3 txWords=8 dmaSource=7426 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=4 longDispatch=0
+  dsp 4 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 5 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 6 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 7 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 0 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 1 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 2 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 3 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 4 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 5 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 6 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 7 audio neighbourhood X:0x1C00..0x2000 nonZeroX=0/1024 nonZeroY=0/1024 firstX=0x00000000:0
+  dsp 0 memory digest X=7ca1072990c87e8f/nz=1625 Y=fa910bd34a159522/nz=2681 P=3f664a4997c237f1/nz=434
+  dsp 1 memory digest X=cfe5e0fb4d1462ff/nz=1624 Y=4d6be027aa977413/nz=2681 P=0416150e3d454510/nz=417
+  dsp 2 memory digest X=645acdd19d9be08f/nz=1625 Y=876c5b87239d5722/nz=2681 P=0416150e3d454510/nz=417
+  dsp 3 memory digest X=e2db4644f892f519/nz=1735 Y=851335a5a1624d04/nz=2766 P=f110e9d8476f157a/nz=1546
+  dsp 4 memory digest X=cfe5e0fb4d1462ff/nz=1624 Y=4d6be027aa977413/nz=2681 P=0416150e3d454510/nz=417
+  dsp 5 memory digest X=645acdd19d9be08f/nz=1625 Y=876c5b87239d5722/nz=2681 P=0416150e3d454510/nz=417
+  dsp 6 memory digest X=cfe5e0fb4d1462ff/nz=1624 Y=4d6be027aa977413/nz=2681 P=0416150e3d454510/nz=417
+  dsp 7 memory digest X=3730a59e6e0cae83/nz=1625 Y=876c5b87239d5722/nz=2681 P=0416150e3d454510/nz=417
+  dsp 0 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  dsp 1 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  dsp 2 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  dsp 3 pc regions (256-word, top 6 of 2): 0x00000200=7183 0x00000000=1009
+  dsp 4 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  dsp 5 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  dsp 6 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  dsp 7 pc regions (256-word, top 6 of 1): 0x00000200=8192
+  mcu cycleDebt=6 longDispatch=0
+chain health: starved=0 overflow=0 dropped=0 underflow=0 chainAttached=1
+  position 0 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 1 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 2 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 3 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 4 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 5 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 6 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 7 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+known positive: tailPortFound=1 tailPort=0
+known positive: quantaTried=1 arrival=0 exact=1 slot0=2846033 slot1=2846033 expected=2846033
+log lines seen = 162826
+elapsed = 39.615s
+NOT VERIFIED diagnostic instrument; no assertion is made here
+gated tests: run=1 passed=1 failed=0 skipped=0 -- PASS

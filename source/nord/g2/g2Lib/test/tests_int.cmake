@@ -19,7 +19,7 @@ add_executable(t1_boot t1_boot.cpp)
 target_link_libraries(t1_boot PRIVATE g2Lib)
 set_property(TARGET t1_boot PROPERTY FOLDER "G2/test")
 
-# ----------------- t1_egress, audio through the chain: the egress arrival
+# ----------------- t1_egress, the two codec edges of the audio chain
 #
 # Gated exactly as t1_boot is.
 

@@ -1,0 +1,48 @@
+mode=none sram=1 windowQuanta=400000 walkQuanta=8192 note=0 impulse=1 deadline=1800s
+patch="BackTo72 demo" bytes=3868
+board: G2_MCU_CORE_CLOCK_HZ = 162000000 is derived from the schematic CLKIN label and the PLL multiplier, and is not scope-measured
+sram image bytes = 1946
+dspCount=8 hopFrames=1 lookaheadFrames=1
+boot: quanta=44516 booted=1 programsLanded=1 halted=0 chainAttached=1 pc=0x3004B562 t=1.00413s
+no delivery (the negative control arm)
+  progress q=50000 pc=0x30055FBC chainAttached=1 t=2.09022s
+  progress q=100000 pc=0x30003E30 chainAttached=1 t=3.37875s
+  progress q=150000 pc=0x30005C60 chainAttached=1 t=4.56188s
+  progress q=200000 pc=0x30001B38 chainAttached=1 t=5.75955s
+  progress q=250000 pc=0x30003926 chainAttached=1 t=6.98002s
+  progress q=300000 pc=0x30026E38 chainAttached=1 t=8.08622s
+  progress q=350000 pc=0x3005BDB6 chainAttached=1 t=9.15026s
+  progress q=400000 pc=0x30029DCA chainAttached=1 t=10.2223s
+window: ranQuanta=400000 totalQuanta=444517 pc=0x30029DCA halted=0 faulted=0 chainAttached=1 frameIndex=444517 t=10.2223s
+patch chain in SDRAM: (nothing delivered)
+patch name in SDRAM: absent
+cs4: bankWrites=0 holeWrites=2099015
+play: primedPulled=1 of 1
+WALK: framesRequested=8192 framesReturned=8192 nonZeroFrames=0 firstNonZeroQuantum=-1 range=[0, 0]
+WALK: firstNonZero slot0=0 slot1=0
+WALK: nonZero per slot = [0]=0 [1]=0 [2]=0 [3]=0 [4]=0 [5]=0 [6]=0 [7]=0
+WALK: magnitude buckets (2^n, non-empty) = 0:65536
+  dsp 0 instructionsInWalk=6447363 enabledTx=3 txWords=2 dmaSource=7938 txBufferNonZeroWords=0 of 8 firstNonZero=0 cycleDebt=9 longDispatch=0
+  dsp 1 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7938 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 2 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7938 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 3 instructionsInWalk=6467826 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=7 longDispatch=0
+  dsp 4 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7938 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 5 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7938 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 6 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7938 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  dsp 7 instructionsInWalk=6433025 enabledTx=3 txWords=8 dmaSource=7682 txBufferNonZeroWords=0 of 32 firstNonZero=0 cycleDebt=5 longDispatch=0
+  mcu cycleDebt=3 longDispatch=0
+chain health: starved=0 overflow=0 dropped=0 underflow=0 chainAttached=1
+  position 0 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 1 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 2 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 3 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 4 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 5 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 6 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+  position 7 underrunFrames=0 secondBusUnderrunFrames=0 phaseErrorFrames=0
+known positive: tailPortFound=1 tailPort=0
+known positive: quantaTried=1 arrival=0 exact=1 slot0=2846033 slot1=2846033 expected=2846033
+log lines seen = 150696
+elapsed = 10.407s
+NOT VERIFIED diagnostic instrument; no assertion is made here
+gated tests: run=1 passed=1 failed=0 skipped=0 -- PASS
