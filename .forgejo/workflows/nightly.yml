@@ -1,0 +1,44 @@
+name: Nightly
+
+# The Linux half of .github/workflows/nightly.yml. Same scripts, same schedule.
+# The macOS and Windows legs stay on GitHub: private CI is a single
+# Linux/Podman runner.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    name: ubuntu build
+    runs-on: docker
+    container:
+      image: nimlang/nim:2.2.10
+    timeout-minutes: 120
+    env:
+      CI_BUILD_TYPE: Release
+    steps:
+      - name: Check out the repository
+        run: |
+          set -euo pipefail
+          git init -q .
+          git remote add origin \
+            "https://${{ github.actor }}:${{ github.token }}@git.axiomantic.dev/${{ github.repository }}.git"
+          git fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+          git submodule update --init --recursive --depth 1
+
+      - name: Install build dependencies
+        run: ./scripts/ci/install-linux-deps.sh
+
+      - name: Configure CMake
+        run: ./scripts/ci/configure.sh
+
+      - name: Build
+        timeout-minutes: 90
+        run: ./scripts/ci/build.sh
+
+      - name: Pack
+        timeout-minutes: 20
+        run: ./scripts/ci/pack.sh
