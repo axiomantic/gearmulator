@@ -260,10 +260,11 @@ set_tests_properties(t0_automation PROPERTIES LABELS "UnitTest")
 # It is built, so it cannot rot unnoticed, and it is deliberately NOT registered
 # with ctest: it asserts nothing. Its output is a table for a person to read.
 #
-# It is not a test because there is no known input that makes this firmware
-# produce sound. Until one exists, an assertion here could only encode the
-# current silence as correct, and a future change that produced audio would turn
-# that assertion red for the right reason -- which is the wrong way round.
+# It is not a test because its verdicts are figures rather than conditions: a
+# pitch, a level, a per-slot count. Turning one into an assertion means choosing
+# a tolerance for a number the machine is free to change when a patch, a note or
+# a panel position changes, and this target's whole use is reading those numbers
+# while they move.
 #
 # g2PatchLoad.cpp lives in g2JucePlugin rather than g2Lib, so it is compiled in
 # directly, the same way the neighbouring targets do it.

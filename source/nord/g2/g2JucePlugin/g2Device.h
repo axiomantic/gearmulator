@@ -90,6 +90,24 @@ namespace g2
 		uint32_t getDspClockPercent() const override;
 		uint64_t getDspClockHz() const override;
 
+		/* The panel's analogue controls, as normalised positions: 0 is the
+		 * bottom of a control's travel and 1 the top. A Device nobody has
+		 * touched reports where the panel board rests each control, so a host
+		 * that never writes one still gets the machine the board builds.
+		 *
+		 * The setter is callable from any thread. It stores one atomic and
+		 * raises a flag; processAudio applies the staged positions to the
+		 * emulated converter beside the MIDI drain, which is the one place this
+		 * class already knows it is the thread that turns the machine. There is
+		 * no lock and no allocation on either side, and the converter itself is
+		 * reached from one thread only.
+		 *
+		 * The firmware sees a change at its next sweep of the two-wire bus and
+		 * ignores a change of a single code, which is the deadband its own
+		 * driver applies. Neither is worked around here. */
+		void  setPanelControl(PanelControl _control, float _position) noexcept;
+		float panelControl(PanelControl _control) const noexcept;
+
 		/* The firmware state, resolved exactly once at construction: the plugin
 		 * does not retry, so the constructor asks once and never again. */
 		const g2::FirmwareStatus& firmwareStatus() const noexcept { return m_firmwareStatus; }
@@ -411,6 +429,22 @@ namespace g2
 		 * processAudio that is already in progress. */
 		std::atomic<bool> m_ready{false};
 		std::atomic<bool> m_inCallback{false};
+
+		/* The staged panel positions and the flag that says one moved.
+		 *
+		 * The flag rather than a per-cell comparison: a block in which nothing
+		 * was touched -- which is nearly all of them -- then costs one relaxed
+		 * load and no work at all on the converter. */
+		void applyPanelControls() noexcept;
+
+		std::array<std::atomic<float>, g_panelControlCount> m_panelControls{};
+		std::atomic<bool> m_panelControlsDirty{true};
+
+		/* The reference the current Board was built with. The converter's own
+		 * reference getter answers whichever source the firmware's setup byte
+		 * selected, which is the supply until the firmware writes it, so a
+		 * position scaled by that would be zero for the whole boot window. */
+		float m_panelReferenceVolts = 0.0f;
 
 		FirmwareStatus m_firmwareStatus;
 

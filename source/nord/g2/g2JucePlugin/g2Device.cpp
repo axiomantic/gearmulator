@@ -207,6 +207,11 @@ namespace g2
 			? g_expectedFirmwareVersion
 			: 0;
 
+		/* The panel starts where the board rests it, read from the same
+		 * description the Board is built from rather than restated here. */
+		for(size_t control = 0; control < g_panelControlCount; ++control)
+			m_panelControls[control].store(panelControlRestPosition(PanelControl(control)), std::memory_order_relaxed);
+
 		// The slots exist before the machine does: the state this device
 		// saves carries them empty and zero until the boot fills them.
 		m_stateData.slotPatches.resize(g_stateSlotCount);
@@ -346,6 +351,12 @@ namespace g2
 
 		m_board = std::make_unique<Board>(boardConfig);
 		m_board->memory().attach(Region::Sdram, m_sdram.get());
+
+		/* A new Board carries the panel's rest potentials, not whatever the
+		 * host had moved a control to, so the staged positions are re-applied
+		 * rather than assumed to have survived the re-create. */
+		m_panelReferenceVolts = boardConfig.adc.externalReferenceVolts;
+		m_panelControlsDirty.store(true, std::memory_order_release);
 
 		/* The MIDI-out installation, performed here because this is where
 		 * the Board exists. The Uart0 the Board owns delivers every byte the
@@ -665,6 +676,41 @@ namespace g2
 		self->m_midiOutParser.write(_byte);
 	}
 
+	void Device::setPanelControl(const PanelControl _control, const float _position) noexcept
+	{
+		const size_t index = size_t(_control);
+
+		if(index >= g_panelControlCount)
+			return;
+
+		/* Clamped here rather than at the converter. The converter saturates
+		 * too, but it saturates a POTENTIAL, so a position outside [0, 1] would
+		 * be readable back through panelControl() as something no control can
+		 * be set to. */
+		const float clamped = _position < 0.0f ? 0.0f : (_position > 1.0f ? 1.0f : _position);
+
+		m_panelControls[index].store(clamped, std::memory_order_relaxed);
+		m_panelControlsDirty.store(true, std::memory_order_release);
+	}
+
+	float Device::panelControl(const PanelControl _control) const noexcept
+	{
+		const size_t index = size_t(_control);
+
+		return index < g_panelControlCount ? m_panelControls[index].load(std::memory_order_relaxed) : 0.0f;
+	}
+
+	void Device::applyPanelControls() noexcept
+	{
+		if(!m_panelControlsDirty.exchange(false, std::memory_order_acquire))
+			return;
+
+		Max1039& adc = m_board->adc();
+
+		for(size_t control = 0; control < g_panelControlCount; ++control)
+			adc.setChannelVolts(uint8_t(control), m_panelControls[control].load(std::memory_order_relaxed) * m_panelReferenceVolts);
+	}
+
 	void Device::processAudio(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs, const size_t _samples)
 	{
 		// The audio thread's sequence. The set-before-test order is half of
@@ -735,6 +781,10 @@ namespace g2
 	 * state. */
 	if(m_board)
 	{
+		/* Before the MIDI, because a control the host moved in this block is
+		 * part of the state the block's notes are played into. */
+		applyPanelControls();
+
 		Uart0& uart = m_board->uart0();
 
 		for(const auto& e : m_pendingMidi)

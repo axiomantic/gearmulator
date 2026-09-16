@@ -40,6 +40,7 @@
 #include "../status.h"
 #include "../transportHub.h"
 #include "../crc16.h"
+#include "g2/timebase.h"
 #include "../uart0.h"
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
@@ -54,6 +55,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -673,11 +675,50 @@ namespace
 		int32_t  maxSample       = 0;
 		uint64_t nonZeroSlots[g2::Frame::kSlots] = {0,0,0,0,0,0,0,0};
 		uint64_t distinctBuckets = 0;   // how many of 64 magnitude buckets were seen
+
+		/* A pitch and a level for slot 0, because a magnitude histogram
+		 * separates a moving signal from a constant one and says nothing about
+		 * what note it is or how loud.
+		 *
+		 * The pitch is a zero-crossing rate: crossings of the signed midpoint,
+		 * halved for the two per cycle, over the walk's duration. It is right
+		 * for one dominant partial and wrong for a waveform that crosses more
+		 * than twice a cycle, which a report must say rather than hide -- the
+		 * crossing count is printed beside the estimate so a reader can see
+		 * which case they have. */
+		uint64_t crossings   = 0;
+		double   sumSquares  = 0.0;
+		uint64_t squareCount = 0;
+		int32_t  previous    = 0;
+		bool     havePrevious = false;
+
+		/* Slot 0 kept, so a fundamental can be estimated by autocorrelation
+		 * rather than by the crossing rate. A waveform with harmonics above the
+		 * fundamental crosses zero more than twice a cycle, so the crossing
+		 * rate reports an overtone -- which is a wrong answer, not a noisy one.
+		 * Both figures are printed: they agree on a sine and disagree on
+		 * anything else, and that disagreement is information. */
+		std::vector<int32_t> left;
 	};
 
 	void observe(AudioReading& _r, const g2::Frame& _f, const unsigned _q, uint64_t* _buckets)
 	{
 		bool any = false;
+
+		{
+			const int32_t left = _f.slot[0];
+
+			_r.sumSquares += double(left) * double(left);
+			++_r.squareCount;
+
+			if(_r.havePrevious && ((_r.previous < 0) != (left < 0)))
+				++_r.crossings;
+
+			_r.previous     = left;
+			_r.havePrevious = true;
+
+			_r.left.push_back(left);
+		}
 
 		for(unsigned s = 0; s < g2::Frame::kSlots; ++s)
 		{
@@ -748,6 +789,82 @@ namespace
 			if(_buckets[b] != 0)
 				std::cout << " " << b << ":" << _buckets[b];
 		std::cout << std::endl;
+
+		/* The tone line. The frame rate is the one the whole machine is built
+		 * on, so the seconds below are emulated seconds and not wall clock.
+		 * Full scale is the DSP's own: a Q23 sample's largest magnitude. */
+		{
+			constexpr double g_fullScale = 8388607.0;
+
+			const double seconds = _r.squareCount != 0
+				? double(_r.squareCount) / double(G2_FRAME_RATE_HZ)
+				: 0.0;
+
+			const double hz = seconds > 0.0 ? double(_r.crossings) / (2.0 * seconds) : 0.0;
+
+			const double rms = _r.squareCount != 0 ? std::sqrt(_r.sumSquares / double(_r.squareCount)) : 0.0;
+
+			/* The fundamental, by normalised autocorrelation over the lags that
+			 * bracket the audible range a note could land in. The peak of the
+			 * normalisation is taken rather than the peak of the raw sum,
+			 * because a raw sum falls away with lag and biases the answer high.
+			 * The correlation value at the winning lag is printed: a periodic
+			 * tone scores near 1 and noise scores near 0, so a reader can see
+			 * whether the estimate is about anything. */
+			double bestHz = 0.0;
+			double bestCorrelation = 0.0;
+			{
+				constexpr double g_lowestHz  = 40.0;
+				constexpr double g_highestHz = 4000.0;
+
+				const size_t minLag = size_t(double(G2_FRAME_RATE_HZ) / g_highestHz);
+				const size_t maxLag = size_t(double(G2_FRAME_RATE_HZ) / g_lowestHz);
+
+				if(_r.left.size() > 2 * maxLag)
+				{
+					for(size_t lag = minLag; lag <= maxLag; ++lag)
+					{
+						const size_t span = _r.left.size() - lag;
+
+						double sum = 0.0, energyA = 0.0, energyB = 0.0;
+						for(size_t i = 0; i < span; ++i)
+						{
+							const double a = double(_r.left[i]);
+							const double b = double(_r.left[i + lag]);
+							sum     += a * b;
+							energyA += a * a;
+							energyB += b * b;
+						}
+
+						const double denominator = std::sqrt(energyA * energyB);
+						if(denominator <= 0.0)
+							continue;
+
+						const double correlation = sum / denominator;
+						if(correlation > bestCorrelation)
+						{
+							bestCorrelation = correlation;
+							bestHz          = double(G2_FRAME_RATE_HZ) / double(lag);
+						}
+					}
+				}
+			}
+
+			std::cout << _label << ": tone slot0 fundamentalHz=" << bestHz
+			          << " correlation=" << bestCorrelation
+			          << " crossings=" << _r.crossings
+			          << " seconds=" << seconds
+			          << " hz=" << hz
+			          << " rms=" << rms
+			          << " dBFS=";
+
+			if(rms > 0.0)
+				std::cout << (20.0 * std::log10(rms / g_fullScale));
+			else
+				std::cout << "-inf";
+
+			std::cout << std::endl;
+		}
 	}
 
 	/* The MCU-to-DSP direction, counted exactly rather than sampled.
@@ -900,7 +1017,7 @@ int main()
 				"G2_AUDIO_PDUMP_LO", "G2_AUDIO_PDUMP_HI",
 				"G2_AUDIO_COEFF", "G2_AUDIO_COEFFSNAP",
 				"G2_AUDIO_COEFFLO", "G2_AUDIO_COEFFHI", "G2_AUDIO_DMATRACE",
-				"G2_AUDIO_INTONE",
+				"G2_AUDIO_INTONE", "G2_AUDIO_VOLUME",
 				"G2_AUDIO_NOTEWATCH", "G2_AUDIO_NWLO", "G2_AUDIO_NWHI",
 				"G2_AUDIO_NWY",
 				"G2_LOG_ESAI_UNDERRUN"
@@ -994,6 +1111,26 @@ int main()
 		g2::Board board(makeConfig(withSram));
 		Ram ram(g_sdramSize);
 		SparseCs4 cs4;
+
+		/* G2_AUDIO_VOLUME moves the master volume to a normalised position
+		 * before the boot reads it. The arithmetic is the Device's own --
+		 * position times the reference, written to the panel channel -- so a
+		 * figure taken here describes the path a host parameter drives.
+		 *
+		 * Before the boot and not during it, because the firmware reads this
+		 * channel once at boot and writes the tail's level from it directly;
+		 * a later move goes through a ramp instead, which is a different
+		 * measurement and not the one this switch is for. */
+		if(const char* const v = std::getenv("G2_AUDIO_VOLUME"))
+		{
+			const float position = float(std::atof(v));
+			const float reference = makeConfig(withSram).adc.externalReferenceVolts;
+
+			board.adc().setChannelVolts(uint8_t(g2::PanelControl::MasterVolume), position * reference);
+
+			std::cout << "volume: requested position=" << position
+			          << " volts=" << (position * reference) << std::endl;
+		}
 
 		if(withSram)
 		{
@@ -1475,6 +1612,18 @@ int main()
 			}
 
 			std::cout << "kbd channelByte=" << rd8(0x30115cc8u) << std::endl;
+
+			/* The master volume, as the firmware holds it. It reads the panel
+			 * converter's first channel once at boot, halves the result, and
+			 * indexes a 128-entry table with it; the entry it picks is the
+			 * value it writes to the tail's output-level word. A zero here and
+			 * a zero at the codec are the same finding and must not be read as
+			 * two. The target and the ramped current value are separate words
+			 * and both are printed: a ramp caught mid-flight is a third state. */
+			std::cout << "volume: target=" << hex32(rd32(0x30115780u))
+			          << " current=" << hex32(rd32(0x30115784u))
+			          << " calibration=" << hex32(rd32(0x302a0da4u) >> 16)
+			          << std::endl;
 
 			/* The performance-settings object the message layer parses INTO,
 			 * read one level above the keyboard record. `FUN_3002473e` reads
