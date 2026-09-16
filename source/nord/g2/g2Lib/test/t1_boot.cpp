@@ -40,6 +40,7 @@
 #include "../board.h"
 #include "../executor.h"
 #include "../memoryMap.h"
+#include "../panelSram.h"
 #include "../scheduler.h"
 #include "../status.h"
 
@@ -344,17 +345,16 @@ namespace
 	constexpr uint32_t g_cs3Size = 0x00010000u;
 
 	// Invented by this harness and labelled as such. No authority records CS0's
-	// or CS4's base. CS0 carries the boot loader image, which loads at
-	// 0x00000000, so 0 is the one value consistent with the image this harness
-	// does not execute. CS4's base is a free choice: the panel hardware is on
-	// the CS5 latch at 0x15000004, so the banner path does not read through CS4
-	// at all, and this window exists only so an access to it is decoded rather
-	// than logged as unmapped. Neither number is a measurement and neither may
-	// be copied into a shipped header.
+	// base. CS0 carries the boot loader image, which loads at 0x00000000, so 0
+	// is the one value consistent with the image this harness does not execute.
+	// The number is not a measurement and may not be copied into a shipped
+	// header.
+	//
+	// CS4 is no longer a free choice here: the window g2::g_panelSramCs4Window
+	// names is what reaches the panel board's static RAM, which the firmware
+	// reads once its boot calibration has accepted the converter below.
 	constexpr uint32_t g_cs0Base = 0x00000000u;
 	constexpr uint32_t g_cs0Size = 0x00020000u;
-	constexpr uint32_t g_cs4Base = 0x14000000u;
-	constexpr uint32_t g_cs4Size = 0x00010000u;
 
 	// The SDRAM the firmware executes from. The base is memoryMap.h's
 	// g_sdramBase; the size is this harness's, chosen to cover the image
@@ -536,10 +536,17 @@ namespace
 		config.memory.cs1   = {g2::g_cs1Base, g_cs1Size};
 		config.memory.cs2   = {g_cs2Base,     g_cs2Size};
 		config.memory.cs3   = {g2::g_cs3Base, g_cs3Size};
-		config.memory.cs4   = {g_cs4Base,     g_cs4Size};
+		config.memory.cs4   = g2::g_panelSramCs4Window;
 		config.memory.cs5   = {g2::g_cs5Base, g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,    g2::g_simSpaceSize};
 		config.memory.sdram = {g2::g_sdramBase, g_sdramSize};
+
+		/* The panel, so that this harness boots the machine the plugin composes
+		 * rather than a machine with its converter at ground. The firmware's
+		 * boot calibration accepts a panel at rest and runs on into code that
+		 * reads the static RAM the CS4 window above reaches; a run that wires
+		 * one without the other faults there instead. */
+		config.adc = g2::panelAdcConfig();
 
 		return config;
 	}
@@ -810,6 +817,27 @@ namespace
 
 		// The SDRAM, attached by the harness. See the Ram comment above.
 		Ram ram(g_sdramSize);
+
+		/* The panel board's static RAM, behind the CS4 window makeConfig gives
+		 * it. It is attached before the machine is reset because the firmware
+		 * reads it on the way out of its boot calibration, which is earlier
+		 * than anything this harness observes. */
+		g2::PanelSram panelSram(board.memory());
+
+		{
+			const std::vector<uint8_t> image =
+				readFile(_directory + "/" + g2::g_panelSramImageName);
+
+			if(!panelSram.place(g2::g_panelSramImageBase, image))
+			{
+				std::cout << "FAIL " << g2::g_panelSramImageName
+				          << " is empty, unreadable or does not fit the bank under "
+				          << _directory << std::endl;
+				return false;
+			}
+
+			board.memory().attach(g2::Region::Cs4, &panelSram);
+		}
 
 		// The image goes where its name says it goes: 0x30000400, which is
 		// offset 0x400 into the SDRAM window at 0x30000000.
