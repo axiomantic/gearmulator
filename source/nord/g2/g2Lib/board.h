@@ -94,7 +94,8 @@ namespace g2
 		 * on into code that reads the panel's static RAM. A Board composed
 		 * without that window then faults there. Wiring the panel and mapping
 		 * what the panel needs are one decision, and this is the field that
-		 * would silently take half of it. */
+		 * would silently take half of it. panelSram.h carries the other half:
+		 * the bank, and the CS4 window that reaches it. */
 		Max1039Config adc;
 
 		/* The ISP1181 endpoint the G2 protocol runs over. It is configuration
