@@ -15,6 +15,7 @@
 #include "executor.h"
 #include "gdbStub.h"
 #include "memoryMap.h"
+#include "panelSram.h"
 #include "scheduler.h"
 #include "status.h"
 #include "artifactResolver.h"
@@ -123,13 +124,15 @@ namespace
 	constexpr uint32_t g_cs2Base = 0x12000000u;
 	constexpr uint32_t g_cs2Size = 0x00800000u;
 
-	// Invented by this harness. No authority records CS0's or CS4's base, and
-	// both are still open. Neither value below is a measurement and neither may
-	// be copied into a shipped header.
+	// Invented by this harness. No authority records CS0's base and it is still
+	// open. The value below is not a measurement and may not be copied into a
+	// shipped header.
+	//
+	// CS4 is no longer open here: g2::g_panelSramCs4Window is the window that
+	// reaches the panel board's static RAM, which the firmware reads once its
+	// boot calibration has accepted the converter.
 	constexpr uint32_t g_cs0Base = 0x00000000u;
 	constexpr uint32_t g_cs0Size = 0x00020000u;
-	constexpr uint32_t g_cs4Base = 0x14000000u;
-	constexpr uint32_t g_cs4Size = 0x00010000u;
 
 	// Measured from the workspace logbook: CS3 is a 64 KiB window,
 	// derived from CSMR3 at 0x100000A8. The OS touches only 0x13000000 and
@@ -355,12 +358,31 @@ namespace
 		config.memory.cs1   = {g2::g_cs1Base,   g_cs1Size};
 		config.memory.cs2   = {g_cs2Base,       g_cs2Size};
 		config.memory.cs3   = {g2::g_cs3Base,   g_cs3Size};
-		config.memory.cs4   = {g_cs4Base,       g_cs4Size};
+		config.memory.cs4   = g2::g_panelSramCs4Window;
 		config.memory.cs5   = {g2::g_cs5Base,   g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,      g2::g_simSpaceSize};
 		config.memory.sdram = {g2::g_sdramBase, g_sdramSize};
 
+		/* The panel, so that every subcommand drives the machine the plugin
+		 * composes rather than one with its converter at ground. The boot
+		 * calibration accepts a panel at rest and runs on into code that reads
+		 * the static RAM the CS4 window above reaches; a machine that wires one
+		 * without the other faults there instead. */
+		config.adc = g2::panelAdcConfig();
+
 		return config;
+	}
+
+	/* Fills the panel board's static RAM and puts it behind that window. The
+	 * caller owns the bank because it has to outlive the run. */
+	bool attachPanelSram(g2::Board& _board, g2::PanelSram& _sram, const std::string& _directory)
+	{
+		if(!_sram.place(g2::g_panelSramImageBase, readFile(_directory + "/" + g2::g_panelSramImageName)))
+			return false;
+
+		_board.memory().attach(g2::Region::Cs4, &_sram);
+
+		return true;
 	}
 
 	// Reads through Board::onRead, which is the exact callback the Board hands
@@ -642,7 +664,15 @@ namespace
 		}
 
 		g2::Board board(makeConfig());
+		g2::PanelSram panelSram(board.memory());
 		Ram ram(g_sdramSize);
+
+		if(!attachPanelSram(board, panelSram, directory))
+		{
+			std::cout << g2::g_panelSramImageName
+			          << " is empty, unreadable or does not fit the bank under " << directory << std::endl;
+			return 2;
+		}
 
 		// The image goes where its name says it goes: 0x30000400, which is
 		// offset 0x400 into the SDRAM window at 0x30000000.
@@ -1153,7 +1183,14 @@ namespace
 		}
 
 		g2::Board board(makeConfig());
+		g2::PanelSram panelSram(board.memory());
 		Ram ram(g_sdramSize);
+
+		if(!attachPanelSram(board, panelSram, directory))
+		{
+			return impulseDidNotRun(std::string(g2::g_panelSramImageName)
+				+ " is empty, unreadable or does not fit the bank under " + directory);
+		}
 
 		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
 		{
@@ -2029,7 +2066,15 @@ namespace
 		}
 
 		g2::Board board(makeConfig());
+		g2::PanelSram panelSram(board.memory());
 		Ram ram(g_sdramSize);
+
+		if(!attachPanelSram(board, panelSram, directory))
+		{
+			std::cout << g2::g_panelSramImageName
+			          << " is empty, unreadable or does not fit the bank under " << directory << std::endl;
+			return 2;
+		}
 
 		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
 		{
