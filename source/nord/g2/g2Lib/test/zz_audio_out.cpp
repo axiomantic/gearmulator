@@ -36,6 +36,7 @@
 #include "../board.h"
 #include "../internalClient.h"
 #include "../memoryMap.h"
+#include "../panelSram.h"
 #include "../scheduler.h"
 #include "../status.h"
 #include "../transportHub.h"
@@ -531,84 +532,6 @@ namespace
 		uint64_t m_contentWrites = 0;
 	};
 
-	/* zz_patch_store's stretched CS4 window: base 0x14000000, size 0x1C000000,
-	 * so absolute 0x20000800 -- where SRAM_20000800.bin belongs -- is inside it
-	 * and SDRAM at 0x30000000 is not. Storage exists only for the SRAM bank;
-	 * every offset below it reads zero, which is what the corpus records the
-	 * panel/latch hole must do or the boot hangs in the vector handler. */
-	class SparseCs4 final : public g2::BusTarget
-	{
-	public:
-		static constexpr uint32_t kWindowBase = 0x14000000u;
-		static constexpr uint32_t kWindowSize = 0x1C000000u;
-		static constexpr uint32_t kBankBase   = 0x20000000u;
-		static constexpr uint32_t kBankSize   = 0x00800000u;
-
-		SparseCs4() : m_bank(kBankSize, 0u) {}
-
-		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
-		{
-			_status = MCF5407_BUS_OK;
-			if(_size != 8 && _size != 16 && _size != 32)
-			{
-				_status = MCF5407_BUS_SIZE_ILLEGAL;
-				return 0u;
-			}
-			const uint32_t count = uint32_t(_size) / 8u;
-			uint32_t value = 0u;
-			for(uint32_t i = 0; i < count; ++i)
-			{
-				value <<= 8;
-				const uint32_t abs = kWindowBase + _offset + i;
-				if(abs >= kBankBase && abs < kBankBase + kBankSize)
-					value |= m_bank[abs - kBankBase];
-			}
-			return value;
-		}
-
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
-		{
-			_status = MCF5407_BUS_OK;
-			if(_size != 8 && _size != 16 && _size != 32)
-			{
-				_status = MCF5407_BUS_SIZE_ILLEGAL;
-				return;
-			}
-			const uint32_t count = uint32_t(_size) / 8u;
-			for(uint32_t i = 0; i < count; ++i)
-			{
-				const uint32_t abs = kWindowBase + _offset + i;
-				const int shift = int(8u * (count - 1u - i));
-				const uint8_t byte = uint8_t((_value >> shift) & 0xffu);
-				if(abs >= kBankBase && abs < kBankBase + kBankSize)
-				{
-					m_bank[abs - kBankBase] = byte;
-					++m_bankWrites;
-				}
-				else
-				{
-					++m_holeWrites;
-				}
-			}
-		}
-
-		bool place(const uint32_t _absolute, const std::vector<uint8_t>& _image)
-		{
-			if(_absolute < kBankBase || size_t(_absolute - kBankBase) + _image.size() > m_bank.size())
-				return false;
-			std::memcpy(m_bank.data() + (_absolute - kBankBase), _image.data(), _image.size());
-			return true;
-		}
-
-		uint64_t bankWrites() const { return m_bankWrites; }
-		uint64_t holeWrites() const { return m_holeWrites; }
-
-	private:
-		std::vector<uint8_t> m_bank;
-		uint64_t m_bankWrites = 0;
-		uint64_t m_holeWrites = 0;
-	};
-
 	std::vector<uint8_t> readFile(const std::string& _path)
 	{
 		std::ifstream in(_path, std::ios::binary);
@@ -623,7 +546,7 @@ namespace
 		config.memory.cs2   = {g_cs2Base,       g_cs2Size};
 		config.memory.cs3   = {g2::g_cs3Base,   g_cs3Size};
 		config.memory.cs4   = _stretchCs4
-			? g2::Window{SparseCs4::kWindowBase, SparseCs4::kWindowSize}
+			? g2::g_panelSramCs4Window
 			: g2::Window{g_cs4Base, g_cs4Size};
 		config.memory.cs5   = {g2::g_cs5Base,   g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,      g2::g_simSpaceSize};
@@ -683,28 +606,11 @@ namespace
 		uint64_t nonZeroSlots[g2::Frame::kSlots] = {0,0,0,0,0,0,0,0};
 		uint64_t distinctBuckets = 0;   // how many of 64 magnitude buckets were seen
 
-		/* A pitch and a level for slot 0, because a magnitude histogram
-		 * separates a moving signal from a constant one and says nothing about
-		 * what note it is or how loud.
-		 *
-		 * The pitch is a zero-crossing rate: crossings of the signed midpoint,
-		 * halved for the two per cycle, over the walk's duration. It is right
-		 * for one dominant partial and wrong for a waveform that crosses more
-		 * than twice a cycle, which a report must say rather than hide -- the
-		 * crossing count is printed beside the estimate so a reader can see
-		 * which case they have. */
-		uint64_t crossings   = 0;
-		double   sumSquares  = 0.0;
-		uint64_t squareCount = 0;
-		int32_t  previous    = 0;
-		bool     havePrevious = false;
-
-		/* Slot 0 kept, so a fundamental can be estimated by autocorrelation
-		 * rather than by the crossing rate. A waveform with harmonics above the
-		 * fundamental crosses zero more than twice a cycle, so the crossing
-		 * rate reports an overtone -- which is a wrong answer, not a noisy one.
-		 * Both figures are printed: they agree on a sine and disagree on
-		 * anything else, and that disagreement is information. */
+		/* Every slot-0 sample of the walk, kept whole rather than reduced as it
+		 * arrives. A level and a pitch both have to be taken about the signal
+		 * with its mean removed, and the mean is not known until the last
+		 * sample has been seen, so nothing that depends on it can be
+		 * accumulated incrementally. */
 		std::vector<int32_t> left;
 	};
 
@@ -712,20 +618,7 @@ namespace
 	{
 		bool any = false;
 
-		{
-			const int32_t left = _f.slot[0];
-
-			_r.sumSquares += double(left) * double(left);
-			++_r.squareCount;
-
-			if(_r.havePrevious && ((_r.previous < 0) != (left < 0)))
-				++_r.crossings;
-
-			_r.previous     = left;
-			_r.havePrevious = true;
-
-			_r.left.push_back(left);
-		}
+		_r.left.push_back(_f.slot[0]);
 
 		for(unsigned s = 0; s < g2::Frame::kSlots; ++s)
 		{
@@ -774,6 +667,480 @@ namespace
 		}
 	}
 
+	/* A Q23 sample's largest magnitude: the DSP's own full scale, and what
+	 * every level below is a fraction of. */
+	constexpr double g_fullScale = 8388607.0;
+
+	constexpr double g_pi = 3.14159265358979323846;
+
+	/* An in-place complex transform. The estimator reads magnitudes only, so a
+	 * real-input specialisation would halve the work and change no result; the
+	 * walk's block is small enough that the second code path costs more to read
+	 * than it saves to run. Twiddles are computed rather than carried through a
+	 * recurrence, because a recurrence's error grows with the transform and
+	 * this one is long enough for that to reach the interpolated peak. */
+	void fft(std::vector<double>& _re, std::vector<double>& _im)
+	{
+		const size_t n = _re.size();
+
+		for(size_t i = 1, j = 0; i < n; ++i)
+		{
+			size_t bit = n >> 1;
+			for(; (j & bit) != 0; bit >>= 1)
+				j ^= bit;
+			j ^= bit;
+
+			if(i < j)
+			{
+				std::swap(_re[i], _re[j]);
+				std::swap(_im[i], _im[j]);
+			}
+		}
+
+		for(size_t len = 2; len <= n; len <<= 1)
+		{
+			const size_t half = len / 2;
+
+			for(size_t i = 0; i < n; i += len)
+			{
+				for(size_t k = 0; k < half; ++k)
+				{
+					const double angle = -2.0 * g_pi * double(k) / double(len);
+					const double wr = std::cos(angle);
+					const double wi = std::sin(angle);
+
+					const double ur = _re[i + k];
+					const double ui = _im[i + k];
+					const double vr = _re[i + k + half] * wr - _im[i + k + half] * wi;
+					const double vi = _re[i + k + half] * wi + _im[i + k + half] * wr;
+
+					_re[i + k] = ur + vr;
+					_im[i + k] = ui + vi;
+					_re[i + k + half] = ur - vr;
+					_im[i + k + half] = ui - vi;
+				}
+			}
+		}
+	}
+
+	// One resolved spectral peak: its interpolated frequency and its height.
+	struct Partial
+	{
+		double hz        = 0.0;
+		double magnitude = 0.0;
+	};
+
+	/* The peaks of a magnitude spectrum, strongest first.
+	 *
+	 * Each peak's frequency is refined by a parabola through the log magnitudes
+	 * of the bin and its two neighbours. A window main lobe is close enough to
+	 * a Gaussian for that to be near-exact, and without it the estimate is
+	 * quantised to the bin spacing and a note lands tens of cents from where it
+	 * is.
+	 *
+	 * The floor is relative to the strongest peak rather than absolute, so a
+	 * quiet block and a loud one are read the same way, and it is set below the
+	 * window's sidelobes. A sidelobe admitted here is a partial the signal does
+	 * not have, and it arrives at a frequency the window put it at, so the
+	 * harmonic report would show structure belonging to the instrument. */
+	std::vector<Partial> resolvePartials(const std::vector<double>& _magnitude, const double _binHz)
+	{
+		constexpr double g_floorBelowStrongest = 1.0e-4;   // -80 dB
+		constexpr size_t g_mostPartials        = 32;
+
+		std::vector<Partial> peaks;
+
+		for(size_t k = 1; k + 1 < _magnitude.size(); ++k)
+		{
+			if(_magnitude[k] <= _magnitude[k - 1] || _magnitude[k] < _magnitude[k + 1])
+				continue;
+
+			const double a = std::log(_magnitude[k - 1] + 1.0e-300);
+			const double b = std::log(_magnitude[k]     + 1.0e-300);
+			const double c = std::log(_magnitude[k + 1] + 1.0e-300);
+
+			const double curvature = a - 2.0 * b + c;
+			const double delta     = curvature < 0.0 ? 0.5 * (a - c) / curvature : 0.0;
+
+			peaks.push_back({(double(k) + delta) * _binHz, _magnitude[k]});
+		}
+
+		std::sort(peaks.begin(), peaks.end(),
+			[](const Partial& _a, const Partial& _b) { return _a.magnitude > _b.magnitude; });
+
+		if(!peaks.empty())
+		{
+			const double floor = peaks.front().magnitude * g_floorBelowStrongest;
+
+			peaks.erase(std::remove_if(peaks.begin(), peaks.end(),
+				[floor](const Partial& _p) { return _p.magnitude < floor; }), peaks.end());
+		}
+
+		if(peaks.size() > g_mostPartials)
+			peaks.resize(g_mostPartials);
+
+		return peaks;
+	}
+
+	/* The fundamental, by the normalised square difference of the mean-removed
+	 * block over its whole lag range.
+	 *
+	 * Three faults are designed out of it, and each was measured on this
+	 * instrument or on synthetic blocks written for it:
+	 *
+	 * - It cannot lock onto DC. The block is mean-removed, so a constant
+	 *   pedestal contributes nothing to correlate.
+	 * - It cannot lock onto the lag range it was pointed at, because it is not
+	 *   pointed at one. A hand-chosen low end is what let a pedestal's own
+	 *   offset be scored as a tone.
+	 * - It cannot lock onto a partial, or onto a subharmonic. The first local
+	 *   maximum within a fixed ratio of the largest is taken, not the largest:
+	 *   the maxima at two and three periods are as high as the one at the
+	 *   period, so taking the largest answers an octave or a twelfth below at
+	 *   random, and taking the first that is nearly as high answers the period.
+	 *   The zero-lag lobe falls away monotonically and so is not a local
+	 *   maximum at all, which is what excludes it without naming a lag.
+	 *
+	 * A harmonic comb over the resolved partials is the obvious alternative and
+	 * is not fit for this signal. Scoring a candidate by the partials it
+	 * explains rewards a deep subharmonic: a patch carrying two detuned voices
+	 * has partials that are integer multiples of neither voice, and a comb fine
+	 * enough has a slot near each of them. The comb is kept below, as a REPORT
+	 * at the period this function returns, where it says whether the spectrum
+	 * agrees rather than deciding the answer. */
+	struct PitchEstimate
+	{
+		double hz      = 0.0;
+		double clarity = 0.0;   // the normalised difference at the chosen lag
+		double lag     = 0.0;
+	};
+
+	PitchEstimate nsdfFundamental(const std::vector<double>& _centred)
+	{
+		// A maximum this close to the largest is the same periodicity, and then
+		// the earliest of them is the period rather than a multiple of it.
+		constexpr double g_samePeriodicity = 0.9;
+
+		PitchEstimate estimate;
+
+		const size_t n = _centred.size();
+
+		if(n < 8)
+			return estimate;
+
+		const size_t longestLag = n / 2;
+
+		std::vector<double> nsdf(longestLag + 2, 0.0);
+
+		for(size_t lag = 1; lag <= longestLag; ++lag)
+		{
+			const size_t span = n - lag;
+
+			double product = 0.0, energy = 0.0;
+
+			for(size_t i = 0; i < span; ++i)
+			{
+				product += _centred[i] * _centred[i + lag];
+				energy  += _centred[i] * _centred[i] + _centred[i + lag] * _centred[i + lag];
+			}
+
+			nsdf[lag] = energy > 0.0 ? 2.0 * product / energy : 0.0;
+		}
+
+		double largest = 0.0;
+
+		for(size_t lag = 2; lag + 1 <= longestLag; ++lag)
+			if(nsdf[lag] > nsdf[lag - 1] && nsdf[lag] >= nsdf[lag + 1])
+				largest = std::max(largest, nsdf[lag]);
+
+		if(largest <= 0.0)
+			return estimate;
+
+		for(size_t lag = 2; lag + 1 <= longestLag; ++lag)
+		{
+			if(nsdf[lag] <= nsdf[lag - 1] || nsdf[lag] < nsdf[lag + 1])
+				continue;
+			if(nsdf[lag] < g_samePeriodicity * largest)
+				continue;
+
+			// A parabola through the maximum and its neighbours, so the period
+			// is not quantised to whole samples: at the top of the range one
+			// sample is tens of cents.
+			const double curvature = nsdf[lag - 1] - 2.0 * nsdf[lag] + nsdf[lag + 1];
+			const double delta     = curvature < 0.0
+				? 0.5 * (nsdf[lag - 1] - nsdf[lag + 1]) / curvature
+				: 0.0;
+
+			estimate.lag     = double(lag) + delta;
+			estimate.clarity = nsdf[lag];
+			estimate.hz      = double(G2_FRAME_RATE_HZ) / estimate.lag;
+			return estimate;
+		}
+
+		return estimate;
+	}
+
+	/* The partials that belong to the estimate, and how much of the block's
+	 * partial magnitude they account for.
+	 *
+	 * The comb is REPORTED here and not searched: the period is already known,
+	 * so this says whether the spectrum agrees with it -- a run of occupied
+	 * slots does, and an estimate whose own low slots are empty does not. The
+	 * tolerance is tight because the period is known to within a few cents
+	 * before this runs. */
+	struct HarmonicFamily
+	{
+		std::vector<Partial> slot;              // slot k-1 is the k-th harmonic
+		double               explained = 0.0;   // of the block's partial magnitude
+		double               level     = 0.0;   // mean magnitude of the occupied slots
+		double               refinedHz = 0.0;
+	};
+
+	HarmonicFamily harmonicFamily(const std::vector<Partial>& _partials, const double _hz,
+		const double _binHz, const double _nyquistHz)
+	{
+		constexpr unsigned g_mostSlots = 64;
+
+		HarmonicFamily family;
+
+		family.refinedHz = _hz;
+
+		if(_partials.empty() || _hz <= 0.0)
+			return family;
+
+		double total = 0.0;
+		for(const Partial& p : _partials)
+			total += p.magnitude;
+
+		const unsigned slots = std::min(g_mostSlots, unsigned(_nyquistHz / _hz));
+
+		family.slot.resize(slots);
+
+		std::vector<char> used(_partials.size(), 0);
+
+		double occupied = 0.0;
+		unsigned filled = 0;
+
+		for(unsigned k = 1; k <= slots; ++k)
+		{
+			const double target    = _hz * double(k);
+			const double tolerance = 3.0 * _binHz + 0.005 * target;
+
+			size_t pick = _partials.size();
+
+			for(size_t i = 0; i < _partials.size(); ++i)
+			{
+				if(used[i] != 0 || std::fabs(_partials[i].hz - target) > tolerance)
+					continue;
+				if(pick != _partials.size() && _partials[i].magnitude <= _partials[pick].magnitude)
+					continue;
+				pick = i;
+			}
+
+			if(pick == _partials.size())
+				continue;
+
+			used[pick]      = 1;
+			family.slot[k - 1] = _partials[pick];
+			occupied       += _partials[pick].magnitude;
+			++filled;
+		}
+
+		if(filled == 0)
+			return family;
+
+		family.explained = total > 0.0 ? occupied / total : 0.0;
+		family.level     = occupied / double(filled);
+
+		/* Refit to the whole family at once. A partial at harmonic k carries k
+		 * times the frequency resolution of the fundamental, so the high slots
+		 * -- weighted by their own height -- decide the answer, and the lag the
+		 * period came from no longer does. */
+		double numerator = 0.0, denominator = 0.0;
+
+		for(size_t i = 0; i < family.slot.size(); ++i)
+		{
+			const double k = double(i + 1);
+			const double w = family.slot[i].magnitude;
+
+			numerator   += w * k * family.slot[i].hz;
+			denominator += w * k * k;
+		}
+
+		if(denominator > 0.0)
+			family.refinedHz = numerator / denominator;
+
+		return family;
+	}
+
+	// A fraction of full scale, as decibels, with zero spelled out rather than
+	// printed as the -inf that an unguarded logarithm produces.
+	void printDbfs(const double _fraction)
+	{
+		if(_fraction > 0.0)
+			std::cout << (20.0 * std::log10(_fraction));
+		else
+			std::cout << "-inf";
+	}
+
+	/* The level and the pitch of slot 0, both taken about the signal's own
+	 * mean.
+	 *
+	 * Removing the mean is what makes either figure true. An all-positive
+	 * pedestal is most of the energy of a run that is not making sound, so a
+	 * root-mean-square over the raw samples reports the offset and calls it a
+	 * level; and the offset correlates with itself at every lag, so a
+	 * correlation over raw samples reports near 1 at whichever lag it is asked
+	 * about and calls it a tone. Both readings are confident and neither is
+	 * about the audio. */
+	void reportTone(const char* _label, const AudioReading& _r)
+	{
+		const size_t n = _r.left.size();
+
+		const double seconds = double(n) / double(G2_FRAME_RATE_HZ);
+
+		if(n == 0)
+		{
+			std::cout << _label << ": tone slot0 samples=0" << std::endl;
+			return;
+		}
+
+		double mean = 0.0;
+		for(const int32_t v : _r.left)
+			mean += double(v);
+		mean /= double(n);
+
+		std::vector<double> centred(n);
+		double peak = 0.0, sumSquares = 0.0;
+
+		for(size_t i = 0; i < n; ++i)
+		{
+			centred[i] = double(_r.left[i]) - mean;
+			peak        = std::max(peak, std::fabs(centred[i]));
+			sumSquares += centred[i] * centred[i];
+		}
+
+		const double rms = std::sqrt(sumSquares / double(n));
+
+		std::cout << _label << ": level slot0 mean=" << mean
+		          << " peakLsb=" << peak
+		          << " peakOfFullScale=" << (peak / g_fullScale)
+		          << " peakDBFS=";
+		printDbfs(peak / g_fullScale);
+		std::cout << " rmsLsb=" << rms
+		          << " rmsOfFullScale=" << (rms / g_fullScale)
+		          << " rmsDBFS=";
+		printDbfs(rms / g_fullScale);
+		std::cout << " samples=" << n << " seconds=" << seconds << std::endl;
+
+		/* Zero-padded so the interpolated peak is not asked to do the work of
+		 * resolution the transform never had, and windowed with a four-term
+		 * Blackman-Harris rather than a Hann.
+		 *
+		 * The window is chosen for its SIDELOBES and not for its main lobe: a
+		 * Hann's reach only about 30 dB below the peak it belongs to, which is
+		 * within the range real harmonics occupy, so the peak finder below
+		 * cannot tell them apart and the comb scores an instrument artifact as
+		 * signal. The wider main lobe costs resolution the zero-padding and the
+		 * interpolation give back. */
+		size_t fftSize = 1;
+		while(fftSize < 4 * n)
+			fftSize <<= 1;
+
+		std::vector<double> re(fftSize, 0.0), im(fftSize, 0.0);
+
+		for(size_t i = 0; i < n; ++i)
+		{
+			double window = 1.0;
+
+			if(n > 1)
+			{
+				const double phase = 2.0 * g_pi * double(i) / double(n - 1);
+
+				window = 0.35875
+				       - 0.48829 * std::cos(phase)
+				       + 0.14128 * std::cos(2.0 * phase)
+				       - 0.01168 * std::cos(3.0 * phase);
+			}
+			re[i] = centred[i] * window;
+		}
+
+		fft(re, im);
+
+		std::vector<double> magnitude(fftSize / 2);
+		for(size_t k = 0; k < magnitude.size(); ++k)
+			magnitude[k] = std::sqrt(re[k] * re[k] + im[k] * im[k]);
+
+		const double binHz = double(G2_FRAME_RATE_HZ) / double(fftSize);
+
+		const std::vector<Partial> partials = resolvePartials(magnitude, binHz);
+
+		const PitchEstimate pitch = nsdfFundamental(centred);
+
+		const HarmonicFamily family =
+			harmonicFamily(partials, pitch.hz, binHz, 0.5 * double(G2_FRAME_RATE_HZ));
+
+		/* The floor the family is read against. A median over the whole
+		 * spectrum is the level of the bins that are NOT partials whatever the
+		 * partials are doing, so the ratio below says whether this block has a
+		 * tone in it at all -- which a pitch estimate on its own never says,
+		 * because one can be computed from anything. */
+		std::vector<double> sorted = magnitude;
+		std::sort(sorted.begin(), sorted.end());
+		const double floorMagnitude = sorted.empty() ? 0.0 : sorted[sorted.size() / 2];
+
+		std::cout << _label << ": tone slot0 fundamentalHz=" << family.refinedHz
+		          << " lagHz=" << pitch.hz
+		          << " periodSamples=" << pitch.lag
+		          << " clarity=" << pitch.clarity
+		          << " familyOverFloorDB=";
+		if(floorMagnitude > 0.0 && family.level > 0.0)
+			std::cout << (20.0 * std::log10(family.level / floorMagnitude));
+		else
+			std::cout << "-inf";
+		std::cout << " explainedFraction=" << family.explained
+		          << " binHz=" << binHz
+		          << " partials=" << partials.size() << std::endl;
+
+		/* The family, so a reader can see what the estimate is made of: a run
+		 * of occupied slots is a fundamental, and an estimate whose own first
+		 * slots are empty is not one.
+		 *
+		 * Printed up to the highest occupied slot. The empty tail above it says
+		 * only that the comb ran to the Nyquist frequency, which is not a
+		 * property of the signal. */
+		size_t highest = 0;
+		for(size_t i = 0; i < family.slot.size(); ++i)
+			if(family.slot[i].magnitude > 0.0)
+				highest = i + 1;
+
+		std::cout << _label << ": harmonic family =";
+		if(highest == 0)
+		{
+			std::cout << " none";
+		}
+		else
+		{
+			const double strongest = partials.front().magnitude;
+
+			for(size_t i = 0; i < highest; ++i)
+			{
+				std::cout << " " << (i + 1) << ":";
+
+				if(family.slot[i].magnitude <= 0.0)
+				{
+					std::cout << "-";
+					continue;
+				}
+
+				std::cout << family.slot[i].hz << "Hz@";
+				printDbfs(family.slot[i].magnitude / strongest);
+				std::cout << "dB";
+			}
+		}
+		std::cout << std::endl;
+	}
+
 	void reportAudio(const char* _label, const AudioReading& _r, const uint64_t* _buckets)
 	{
 		std::cout << _label << ": framesRequested=" << _r.framesRequested
@@ -797,81 +1164,7 @@ namespace
 				std::cout << " " << b << ":" << _buckets[b];
 		std::cout << std::endl;
 
-		/* The tone line. The frame rate is the one the whole machine is built
-		 * on, so the seconds below are emulated seconds and not wall clock.
-		 * Full scale is the DSP's own: a Q23 sample's largest magnitude. */
-		{
-			constexpr double g_fullScale = 8388607.0;
-
-			const double seconds = _r.squareCount != 0
-				? double(_r.squareCount) / double(G2_FRAME_RATE_HZ)
-				: 0.0;
-
-			const double hz = seconds > 0.0 ? double(_r.crossings) / (2.0 * seconds) : 0.0;
-
-			const double rms = _r.squareCount != 0 ? std::sqrt(_r.sumSquares / double(_r.squareCount)) : 0.0;
-
-			/* The fundamental, by normalised autocorrelation over the lags that
-			 * bracket the audible range a note could land in. The peak of the
-			 * normalisation is taken rather than the peak of the raw sum,
-			 * because a raw sum falls away with lag and biases the answer high.
-			 * The correlation value at the winning lag is printed: a periodic
-			 * tone scores near 1 and noise scores near 0, so a reader can see
-			 * whether the estimate is about anything. */
-			double bestHz = 0.0;
-			double bestCorrelation = 0.0;
-			{
-				constexpr double g_lowestHz  = 40.0;
-				constexpr double g_highestHz = 4000.0;
-
-				const size_t minLag = size_t(double(G2_FRAME_RATE_HZ) / g_highestHz);
-				const size_t maxLag = size_t(double(G2_FRAME_RATE_HZ) / g_lowestHz);
-
-				if(_r.left.size() > 2 * maxLag)
-				{
-					for(size_t lag = minLag; lag <= maxLag; ++lag)
-					{
-						const size_t span = _r.left.size() - lag;
-
-						double sum = 0.0, energyA = 0.0, energyB = 0.0;
-						for(size_t i = 0; i < span; ++i)
-						{
-							const double a = double(_r.left[i]);
-							const double b = double(_r.left[i + lag]);
-							sum     += a * b;
-							energyA += a * a;
-							energyB += b * b;
-						}
-
-						const double denominator = std::sqrt(energyA * energyB);
-						if(denominator <= 0.0)
-							continue;
-
-						const double correlation = sum / denominator;
-						if(correlation > bestCorrelation)
-						{
-							bestCorrelation = correlation;
-							bestHz          = double(G2_FRAME_RATE_HZ) / double(lag);
-						}
-					}
-				}
-			}
-
-			std::cout << _label << ": tone slot0 fundamentalHz=" << bestHz
-			          << " correlation=" << bestCorrelation
-			          << " crossings=" << _r.crossings
-			          << " seconds=" << seconds
-			          << " hz=" << hz
-			          << " rms=" << rms
-			          << " dBFS=";
-
-			if(rms > 0.0)
-				std::cout << (20.0 * std::log10(rms / g_fullScale));
-			else
-				std::cout << "-inf";
-
-			std::cout << std::endl;
-		}
+		reportTone(_label, _r);
 	}
 
 	/* The MCU-to-DSP direction, counted exactly rather than sampled.
@@ -1117,7 +1410,14 @@ int main()
 
 		g2::Board board(makeConfig(withSram));
 		Ram ram(g_sdramSize);
-		SparseCs4 cs4;
+
+		/* The panel bank the firmware reads, and with it the CS5 latches:
+		 * the stretched CS4 window spans the latch base and the decode reaches
+		 * CS4 first, so a bank that answered that sub-range itself would take
+		 * the panel identifier strap off the machine and the firmware would
+		 * report the wrong model. The constructor takes the map, so the
+		 * hand-back cannot be forgotten. */
+		g2::PanelSram cs4(board.memory());
 
 		/* G2_AUDIO_VOLUME moves the master volume to a normalised position
 		 * before the boot reads it. The arithmetic is the Device's own --
@@ -1141,10 +1441,11 @@ int main()
 
 		if(withSram)
 		{
-			const std::vector<uint8_t> sram = readFile(directory + "/SRAM_20000800.bin");
-			if(sram.empty() || !cs4.place(0x20000800u, sram))
+			const std::vector<uint8_t> sram = readFile(directory + "/" + g2::g_panelSramImageName);
+			if(!cs4.place(g2::g_panelSramImageBase, sram))
 			{
-				std::cout << "FAIL SRAM_20000800.bin missing or does not fit the bank" << std::endl;
+				std::cout << "FAIL " << g2::g_panelSramImageName
+				          << " missing or does not fit the bank" << std::endl;
 				return false;
 			}
 			std::cout << "sram image bytes = " << sram.size() << std::endl;
