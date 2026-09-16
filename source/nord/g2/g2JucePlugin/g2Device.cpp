@@ -349,6 +349,11 @@ namespace g2
 		boardConfig.memory.mbar  = {g_mbarBase,  g_simSpaceSize};
 		boardConfig.memory.sdram = {g_sdramBase, g_sdramSize};
 
+		/* The panel. This is the Device, so it models the whole machine and
+		 * not a part of it, which is what makes the panel's own potentials the
+		 * right thing to hand the converter here. */
+		boardConfig.adc = panelAdcConfig();
+
 		m_board = std::make_unique<Board>(boardConfig);
 		m_board->memory().attach(Region::Sdram, m_sdram.get());
 

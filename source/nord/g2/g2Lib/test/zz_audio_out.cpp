@@ -628,6 +628,13 @@ namespace
 		config.memory.cs5   = {g2::g_cs5Base,   g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,      g2::g_simSpaceSize};
 		config.memory.sdram = {g2::g_sdramBase, g_sdramSize};
+
+		/* The panel, because this instrument models the whole machine: the
+		 * firmware reads the master volume once at boot and writes the tail's
+		 * output level from it, so a converter at ground is a run whose every
+		 * sample is zero for a reason that has nothing to do with audio. */
+		config.adc = g2::panelAdcConfig();
+
 		return config;
 	}
 
