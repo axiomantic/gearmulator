@@ -10,10 +10,11 @@
 // address passes every bus-level case in this file while hiding a wrong
 // address, so the discriminating case comes before the ones that depend on it.
 //
-// Every voltage and every reference in this file is this fixture's. The
-// schematic's 3.033 V is a configuration argument and no shipped header carries
-// it; the values below are powers of two so that every expected conversion
-// result is an exact integer rather than a rounding of one.
+// Every voltage and every reference in this file is this fixture's, supplied
+// through a Max1039Config this file builds rather than taken from the panel
+// default a BoardConfig carries. The values below are powers of two so that
+// every expected conversion result is an exact integer rather than a rounding
+// of one.
 
 #include "board.h"
 #include "max1039.h"

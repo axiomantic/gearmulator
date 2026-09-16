@@ -350,6 +350,69 @@ namespace g2
 		 * receiver. */
 	}
 
+	namespace
+	{
+		/* "AD Ref 3.033 V", as the panel schematic annotates the divider that
+		 * feeds pin 13 of the converter from the 3.3 V rail through R44 and
+		 * R84. Every code below is a fraction of it. */
+		constexpr float g_panelReferenceVolts = 3.033f;
+
+		/* Where the pitch stick rests, as a fraction of the reference.
+		 *
+		 * The firmware fixes this, not the stick's mechanism. Its boot
+		 * calibration histograms the stick's channel, carries the modal bin in
+		 * units of a thirty-second of an LSB, and subtracts 0x1010 -- 128.5
+		 * codes, the midpoint of the eight-bit range -- to get the error it
+		 * trims out. It accepts a position in [0x1000, 0x1020), which is code
+		 * 128 up to but not including 129, and seeds its trim word with 0x200,
+		 * four times code 128.
+		 *
+		 * So the figure below is the firmware's own centre. The truncating
+		 * transfer function renders it as code 128, inside that window; the
+		 * next code up is the first one outside it, which is why the half LSB
+		 * is written rather than rounded away.
+		 *
+		 * The schematic cannot supply this. The stick reaches the converter
+		 * through a calibration amplifier whose two trimmers are set per unit,
+		 * so the divider alone gives no rest potential. */
+		constexpr float g_pitchStickRestFraction = 128.5f / 256.0f;
+
+		/* The master volume's pot is wired across the reference with no
+		 * divider, so a wiper at the top of its travel presents the reference
+		 * itself. The firmware halves the result and indexes its volume table
+		 * with it; the table rises monotonically and its top entry is the
+		 * loudest. */
+		constexpr float g_masterVolumeRestFraction = 1.0f;
+
+		constexpr float g_panelRestFractions[g_panelControlCount] =
+		{
+			g_masterVolumeRestFraction,   // master volume
+			0.0f,                         // control pedal
+			0.0f,                         // aftertouch
+			g_pitchStickRestFraction,     // pitch stick
+			0.0f                          // mod wheel
+		};
+	}
+
+	Max1039Config panelAdcConfig()
+	{
+		Max1039Config config;
+
+		config.externalReferenceVolts = g_panelReferenceVolts;
+
+		for(size_t control = 0; control < g_panelControlCount; ++control)
+			config.channelVolts[control] = g_panelReferenceVolts * g_panelRestFractions[control];
+
+		return config;
+	}
+
+	float panelControlRestPosition(const PanelControl _control)
+	{
+		const size_t index = size_t(_control);
+
+		return index < g_panelControlCount ? g_panelRestFractions[index] : 0.0f;
+	}
+
 	/* The unconfigured Board. It delegates rather than repeating the body, so
 	 * there is one construction path and the core-clock line below cannot be
 	 * emitted twice or differ between the two forms. A default BoardConfig
