@@ -44,6 +44,7 @@ namespace g2
 		, m_externalReferenceVolts(_config.externalReferenceVolts)
 		, m_supplyVolts(_config.supplyVolts)
 		, m_internalReferenceVolts(_config.internalReferenceVolts)
+		, m_channelVolts(_config.channelVolts)
 	{
 	}
 

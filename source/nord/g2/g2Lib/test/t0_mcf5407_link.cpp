@@ -70,9 +70,9 @@ int main()
 	// forces the address to be materialised and forces the linker to resolve
 	// the symbol.
 	//
-	// mcf5407_exec is resolved and never called. Calling it needs a context and
-	// a program, and what it returned would be a statement about the core
-	// rather than about the link.
+	// mcf5407_exec is the symbol Board::runMcu forwards to. It is resolved and
+	// never called. Calling it needs a context and a program, and what it
+	// returned would be a statement about the core rather than about the link.
 	int (*volatile runtimeInit)() = &mcf5407_runtime_init;
 	uint32_t (*volatile exec)(mcf5407_ctx*, uint32_t) = &mcf5407_exec;
 	(void) exec;
