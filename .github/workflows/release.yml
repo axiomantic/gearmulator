@@ -1,5 +1,10 @@
 name: Release
 
+# GITHUB-ONLY WORKFLOW. It publishes a GitHub Release, so it has no Forgejo
+# counterpart at all, and its macos-14 and windows-2022 legs have no
+# self-hosted host to run on either. Its build, pack and changelog steps still
+# call the shared scripts so the release build cannot drift from the CI build.
+
 on:
   workflow_dispatch:
     inputs:
@@ -19,10 +24,16 @@ jobs:
         os: [ ubuntu-latest, macos-14, windows-2022 ]
       fail-fast: true
     name:  ${{ matrix.os }} build
+    env:
+      CI_BUILD_TYPE: Release
+      CI_PRESET: github-${{ runner.os }}
+      CI_PARALLEL: 6
     steps:
     - name: Install Dependencies
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt update && sudo apt install -y libgl1-mesa-dev xorg-dev libasound2-dev
+      shell: bash
+      run: |
+        sudo apt update && sudo apt install -y libgl1-mesa-dev xorg-dev libasound2-dev
 
     - uses: actions/checkout@v4
       with:
@@ -46,17 +57,42 @@ jobs:
         parent-nim-install-directory: ${{ runner.temp }}
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Configure CMake
+    # Windows keeps inline commands: see the note in cmake.yml.
+    - name: Configure CMake (Windows)
+      if: matrix.os == 'windows-2022'
       run: cmake --preset github-${{ runner.os }} -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
-    - name: Build
+    - name: Build (Windows)
+      if: matrix.os == 'windows-2022'
       run: cmake --build --preset github-${{ runner.os }} --parallel 6
 
-    - name: Pack
+    - name: Pack (Windows)
+      if: matrix.os == 'windows-2022'
       run: cpack --preset github-${{ runner.os }}
 
-    - name: Create Changelog
+    - name: Create Changelog (Windows)
+      if: matrix.os == 'windows-2022'
       run: ${{github.workspace}}/bin/tools/changelogGenerator -i ${{github.workspace}}/doc/changelog.txt -o ${{github.workspace}}/doc/changelog_split
+
+    - name: Configure CMake
+      if: matrix.os != 'windows-2022'
+      shell: bash
+      run: ./scripts/ci/configure.sh
+
+    - name: Build
+      if: matrix.os != 'windows-2022'
+      shell: bash
+      run: ./scripts/ci/build.sh
+
+    - name: Pack
+      if: matrix.os != 'windows-2022'
+      shell: bash
+      run: ./scripts/ci/pack.sh
+
+    - name: Create Changelog
+      if: matrix.os != 'windows-2022'
+      shell: bash
+      run: ./scripts/ci/changelog.sh
 
     - name: Release
       uses: softprops/action-gh-release@v2
