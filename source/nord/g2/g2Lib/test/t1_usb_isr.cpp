@@ -70,6 +70,7 @@
 #include "../frame.h"
 #include "../internalClient.h"
 #include "../memoryMap.h"
+#include "../panelSram.h"
 #include "../scheduler.h"
 #include "../status.h"
 #include "../transportHub.h"
@@ -168,8 +169,6 @@ namespace
 	constexpr uint32_t g_cs3Size   = 0x00010000u;
 	constexpr uint32_t g_cs0Base   = 0x00000000u;
 	constexpr uint32_t g_cs0Size   = 0x00020000u;
-	constexpr uint32_t g_cs4Base   = 0x14000000u;
-	constexpr uint32_t g_cs4Size   = 0x00010000u;
 	constexpr uint32_t g_sdramSize = 0x00800000u;
 	constexpr uint32_t g_cs1Size   = 0x00010000u;
 	constexpr uint32_t g_cs5Size   = 0x00000010u;
@@ -715,10 +714,17 @@ namespace
 		config.memory.cs1   = {g2::g_cs1Base,   g_cs1Size};
 		config.memory.cs2   = {g_cs2Base,       g_cs2Size};
 		config.memory.cs3   = {g2::g_cs3Base,   g_cs3Size};
-		config.memory.cs4   = {g_cs4Base,       g_cs4Size};
+		config.memory.cs4   = g2::g_panelSramCs4Window;
 		config.memory.cs5   = {g2::g_cs5Base,   g_cs5Size};
 		config.memory.mbar  = {g_mbarBase,      g2::g_simSpaceSize};
 		config.memory.sdram = {g2::g_sdramBase, g_sdramSize};
+
+		/* The panel, so that this harness drives the machine the plugin
+		 * composes rather than one with its converter at ground. The boot
+		 * calibration accepts a panel at rest and runs on into code that reads
+		 * the static RAM the CS4 window above reaches; a machine that wires one
+		 * without the other faults there instead. */
+		config.adc = g2::panelAdcConfig();
 
 		config.usbProtocolEndpoint = _endpoint;
 
@@ -858,6 +864,16 @@ namespace
 		}
 
 		g2::Board board(makeConfig(_r.endpoint));
+		g2::PanelSram panelSram(board.memory());
+
+		if(!panelSram.place(g2::g_panelSramImageBase, readFile(_directory + "/" + g2::g_panelSramImageName)))
+		{
+			std::cout << "FAIL " << g2::g_panelSramImageName
+			          << " is empty, unreadable or does not fit the bank under " << _directory << std::endl;
+			return false;
+		}
+
+		board.memory().attach(g2::Region::Cs4, &panelSram);
 		Ram ram(g_sdramSize);
 
 		if(!ram.place(g_entryPc - g2::g_sdramBase, code))
