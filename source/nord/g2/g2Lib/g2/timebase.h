@@ -28,19 +28,27 @@
 
 /* ---------------- the DSP contexts
  *
- * At a 150 MHz DSP clock one frame is 150,000,000 / 96,000 = 1562.5 cycles.
- * That is not an integer, so it cannot be one scalar constant. A rational is
- * named instead, and alloc() below turns it into the sequence 1562, 1563,
- * 1562, 1563 whose mean is exactly 1562.5.
+ * One frame is 1,536 cycles of the DSP core clock, whatever the crystal is.
+ * Every DSP is a DSP56367, and every ESAI the firmware clocks internally divides
+ * the core clock by the same 1,536 to make a 96 kHz frame. The bit clock is the
+ * core clock divided by 2, by the prescaler, by the prescale modulus and by the
+ * high frequency divider (DSP56367 UM Figure 10-3), and the firmware programs:
  *
- * The numerator is provisional and unmeasured. The denominator is fixed at
- * the frame rate.
+ *   the voice DSPs' ESAI_1 receive   2 x 1 x 4 x 1 =  8, 24-bit slots, 8 slots
+ *   DSP 0's codec transmit           2 x 1 x 4 x 3 = 24, 32-bit slots, 2 slots
+ *   DSP 3's codec receive            2 x 1 x 3 x 4 = 24, 32-bit slots, 2 slots
+ *
+ * The numerator is the core clock that makes a frame 1,536 cycles. It stays a
+ * rational because a Config may carry a clock that does not divide the frame
+ * rate, and alloc() below spreads the remainder exactly.
+ *
+ * The denominator is fixed at the frame rate.
  *
  * The cadence guarantee does not depend on the numerator: the ESAI frame is
  * driven by the scheduler and not by a clock, so this rational decides only
  * how many cycles a context is given for each quantum.
  */
-#define G2_DSP_CYCLES_PER_FRAME_NUM   150000000u /* DSP clock, Hz            */
+#define G2_DSP_CYCLES_PER_FRAME_NUM   147456000u /* DSP core clock, Hz       */
 #define G2_DSP_CYCLES_PER_FRAME_DEN   G2_FRAME_RATE_HZ
 
 /* ---------------- the MCU clocks
@@ -99,10 +107,15 @@
  * phase relation between the two buses depends on both being derived from one
  * symbol.
  *
- * Provisional 4, from the machine's 24 kHz control rate against the 96 kHz
- * frame rate. What is settled is that the machine has a 24 kHz control rate;
- * which bus carries it is not.                                              */
-#define G2_SECOND_BUS_FRAME_DIVIDER   4u         /* provisional              */
+ * 1: the second bus runs at the frame rate. The firmware programs the second
+ * ESAI's clock and slot registers with the same divider, prescaler, frame-rate
+ * divider, slot width and slot count as the audio ESAI, and each DSP's sample
+ * interrupt is the second ESAI's receive-last-slot interrupt. The 24 kHz
+ * control rate is produced inside the firmware: its main loop runs the control
+ * pass once for every four of those interrupts. A divider of 4 would apply that
+ * decimation a second time, so every DSP would compute one sample for every
+ * four frames and the codec would hold each value for four frames.          */
+#define G2_SECOND_BUS_FRAME_DIVIDER   1u
 
 /* ---------------- the host-block to frame mapping
  *
@@ -164,8 +177,8 @@ typedef struct {
 /* alloc() is exact. It uses no floating point anywhere.
  *
  * Each context carries one unsigned integer accumulator and computes its
- * whole-cycle allocation for each quantum. For the DSP the sequence is 1562,
- * 1563, 1562, 1563 and the mean is exactly 1562.5. The accumulator is part of
+ * whole-cycle allocation for each quantum. For the MCU the sequence is 1687,
+ * 1688, 1687, 1688 and the mean is exactly 1687.5. The accumulator is part of
  * the context state and part of the scheduler snapshot, and it never reads
  * wall-clock time, so the allocation is a pure function of the frame index and
  * the initial state.
@@ -178,9 +191,9 @@ typedef struct {
  */
 static inline uint32_t alloc(Rational r, uint32_t* acc)
 {
-	uint32_t whole = r.num / r.den;                /* 1562 for the DSP      */
-	*acc += r.num % r.den;                         /* 48000 for the DSP     */
-	if(*acc >= r.den) { *acc -= r.den; ++whole; }  /* 1563 on alternate     */
+	uint32_t whole = r.num / r.den;                /* 1687 for the MCU      */
+	*acc += r.num % r.den;                         /* 48000 for the MCU     */
+	if(*acc >= r.den) { *acc -= r.den; ++whole; }  /* 1688 on alternate     */
 	return whole;                                  /* frames                */
 }
 
