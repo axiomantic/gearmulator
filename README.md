@@ -39,6 +39,11 @@ The emulator compiles on any platform that supports C++17.
 
 The build system used is [cmake](https://cmake.org/).
 
+The build steps CI runs are plain scripts under `scripts/ci/`, runnable from a
+shell: `./scripts/ci/configure.sh && ./scripts/ci/build.sh`. See
+[doc/ci.md](doc/ci.md) for the scripts, their environment variables, and which
+workflow file covers what.
+
 #### cmake options
 
 | Variable | Description | Default |
