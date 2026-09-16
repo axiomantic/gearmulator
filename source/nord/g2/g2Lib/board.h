@@ -46,6 +46,29 @@
 
 namespace g2
 {
+	/* The panel board's analogue controls, in the order the converter scans
+	 * them. The two channels the firmware also scans past these are tied to
+	 * ground on the panel PCB, so they are not controls and are not named. */
+	enum class PanelControl : uint8_t
+	{
+		MasterVolume = 0,
+		ControlPedal = 1,
+		Aftertouch   = 2,
+		PitchStick   = 3,
+		ModWheel     = 4
+	};
+
+	constexpr size_t g_panelControlCount = 5u;
+
+	/* The potentials the panel board presents to the converter when nobody is
+	 * touching anything. See the definition for where each figure comes from. */
+	Max1039Config panelAdcConfig();
+
+	/* Where a control rests, as a fraction of the reference, so that a caller
+	 * driving a control from a normalised position starts from the same place
+	 * panelAdcConfig() puts it rather than from a second copy of the figure. */
+	float panelControlRestPosition(PanelControl _control);
+
 	/* The whole board layout a caller supplies. It carries no default address
 	 * of its own: `memory` starts with every window absent (size zero), which
 	 * answers at no address at all, and a caller fills in the windows the
@@ -59,11 +82,12 @@ namespace g2
 		 * window. */
 		Hdi08Decode hdi08{g_hdi08ExpandedPorts};
 
-		/* The one two-wire slave the machine carries. Its potentials start at
-		 * zero, because the only figure anyone has for this board is a schematic
-		 * annotation and a shipped default would make it look measured. A caller
-		 * that wants conversions supplies them. */
-		Max1039Config adc;
+		/* The one two-wire slave the machine carries, configured as the panel
+		 * board wires it. A caller modelling other hardware replaces the whole
+		 * structure; a caller modelling this machine gets the panel, because a
+		 * converter that answers ground on every channel is not a neutral
+		 * starting point -- it is a machine with its volume shut. */
+		Max1039Config adc = panelAdcConfig();
 
 		/* The ISP1181 endpoint the G2 protocol runs over. It is configuration
 		 * and not a constant this file invents; a caller may name another one.
