@@ -452,6 +452,24 @@ add_test(NAME t0_mbus COMMAND t0_mbus)
 set_tests_properties(t0_mbus PROPERTIES LABELS "UnitTest")
 
 
+# ----------------- the panel potentials a Board carries by default
+#
+# Tier T0 and ungated. It needs no firmware artifact: it drives the converter
+# with the two register bytes the firmware is measured to send and holds each
+# result against the code that firmware's consumers require.
+#
+# It is separate from t0_mbus on purpose. That file supplies its own electrical
+# values so that a hardcoded reference cannot pass it, which means it cannot
+# also be the test that the shipped panel default is present.
+
+add_executable(t0_panel_defaults t0_panel_defaults.cpp)
+target_link_libraries(t0_panel_defaults PRIVATE g2Lib)
+set_property(TARGET t0_panel_defaults PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_panel_defaults COMMAND t0_panel_defaults)
+set_tests_properties(t0_panel_defaults PROPERTIES LABELS "UnitTest")
+
+
 # ----------------- t0_sof_tick's own sources: the M-Bus and its slave.
 
 target_sources(t0_sof_tick PRIVATE

@@ -22,6 +22,11 @@ namespace g2
 	 * separates them at the bus. */
 	constexpr uint8_t g_max1039Address = 0x65u;
 
+	// AIN0 to AIN10. AIN11 is the reference pin and takes its potential from
+	// the reference argument rather than from a setter. It is stated at
+	// namespace scope because the configuration below is sized by it.
+	constexpr uint8_t g_max1039SettableChannels = 11u;
+
 	/* Everything a caller must supply. The potentials have no default that
 	 * means anything: a board nobody configured converts to zero, which is the
 	 * honest answer and not a claim about any machine. */
@@ -31,14 +36,17 @@ namespace g2
 		float supplyVolts            = 0.0f;
 		float internalReferenceVolts = 0.0f;
 		uint8_t address              = g_max1039Address;
+
+		/* The potential each settable input sits at before anything drives it.
+		 * The part has no opinion about what a board connects to its pins, so
+		 * this is zero for the same reason the references are. */
+		std::array<float, g_max1039SettableChannels> channelVolts{};
 	};
 
 	class Max1039 final : public BusSlave
 	{
 	public:
-		// AIN0 to AIN10. AIN11 is the reference pin and takes its potential
-		// from the reference argument rather than from a setter.
-		static constexpr uint8_t g_settableChannels = 11u;
+		static constexpr uint8_t g_settableChannels = g_max1039SettableChannels;
 		static constexpr uint8_t g_referenceChannel = 11u;
 
 		enum class ReferenceSource { Supply, External, Internal };
