@@ -1,0 +1,64 @@
+name: CMake
+
+# The Linux half of .github/workflows/cmake.yml, running on the self-hosted
+# Forgejo runner. Both files call the same scripts under scripts/ci, so the
+# build logic has one home and this file only sets up a toolchain and picks a
+# matrix leg.
+#
+# The macOS and Windows legs are not here and are not coming: private CI is a
+# single Linux/Podman runner, so there is no host that could run them. They stay
+# in .github/workflows/cmake.yml.
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: ubuntu build with ${{ matrix.cmake_generator }} cmake generator
+    runs-on: docker
+    # The MCF5407 core compiles its Nim sources during CMake configure and stops
+    # the configure on any version other than the one its own .nim-version
+    # names, so the image is pinned to an exact Nim version, matching what
+    # setup-nim-action installs on the GitHub legs. Advance it together with
+    # that file.
+    container:
+      image: nimlang/nim:2.2.10
+    strategy:
+      matrix:
+        cmake_generator: [ default, Ninja ]
+      fail-fast: false
+    # A backstop for every step that has no ceiling of its own. Without any
+    # ceiling a stuck step runs until the runner gives up, and a run that stays
+    # in progress forever never reports a conclusion at all.
+    timeout-minutes: 120
+    env:
+      CI_BUILD_TYPE: Release
+      # No synth is switched off here. This leg is the Linux leg of
+      # .github/workflows/cmake.yml, which builds every synth; the G2-only
+      # narrowing there applies to Windows alone, for a build-ceiling reason
+      # that does not hold on this runner.
+    steps:
+      - name: Check out the repository
+        run: |
+          set -euo pipefail
+          git init -q .
+          git remote add origin \
+            "https://${{ github.actor }}:${{ github.token }}@git.axiomantic.dev/${{ github.repository }}.git"
+          git fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+          git submodule update --init --recursive --depth 1
+
+      - name: Install build dependencies
+        run: ./scripts/ci/install-linux-deps.sh
+
+      - name: Configure CMake
+        run: ./scripts/ci/configure.sh
+        env:
+          CI_CMAKE_GENERATOR: ${{ matrix.cmake_generator == 'Ninja' && 'Ninja' || '' }}
+
+      - name: Build
+        timeout-minutes: 90
+        run: ./scripts/ci/build.sh
+
+      - name: Pack
+        timeout-minutes: 20
+        run: ./scripts/ci/pack.sh

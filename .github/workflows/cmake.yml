@@ -1,5 +1,14 @@
 name: CMake
 
+# The build logic lives in scripts/ci/*.sh, shared with
+# .forgejo/workflows/cmake.yml so the two CI systems cannot drift apart. This
+# file sets up a toolchain and picks a matrix leg; it does not carry build
+# commands of its own except on Windows, below.
+#
+# GITHUB-ONLY LEGS: macos-14 and windows-2022. Private CI is a single
+# Linux/Podman Forgejo runner, so there is no self-hosted host that could run
+# them. They stay here and have no Forgejo counterpart.
+
 on: [push, pull_request]
 
 env:
@@ -35,14 +44,19 @@ jobs:
     # ceiling a stuck step runs to GitHub's six-hour limit, and a run that
     # stays in progress forever never reports a conclusion at all.
     timeout-minutes: 120
+    env:
+      CI_BUILD_TYPE: Release
+      CI_CMAKE_GENERATOR: ${{ matrix.cmake_generator == 'Ninja' && 'Ninja' || '' }}
+      CI_CMAKE_ARGS: ${{ matrix.synth_flags }}
     steps:
-    - name: Install X
-      if: matrix.os == 'ubuntu-latest'
-      run: sudo apt update && sudo apt install -y libgl1-mesa-dev xorg-dev libasound2-dev
-
     - uses: actions/checkout@v4
       with:
         submodules: "recursive"
+
+    - name: Install X
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: ./scripts/ci/install-linux-deps.sh
 
     - name: Setting up Ninja build system
       if: matrix.cmake_generator == 'Ninja'
@@ -66,34 +80,50 @@ jobs:
         parent-nim-install-directory: ${{ runner.temp }}
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Configure CMake with ${{ matrix.cmake_generator }}
-      if: matrix.cmake_generator != 'default'
-      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
+    # Windows keeps inline commands. The shared scripts are bash, and Git Bash
+    # on a Windows runner hands CMake MSYS-style paths that the MSVC generator
+    # does not read back the way it wrote them. Nothing about that is worth
+    # discovering in a build that takes an hour to fail.
+    - name: Configure CMake (Windows)
+      if: matrix.os == 'windows-2022'
+      run: cmake ${{ matrix.cmake_generator != 'default' && format('-G {0}', matrix.cmake_generator) || '' }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
 
-    - name: Configure CMake with default generator
-      if: matrix.cmake_generator == 'default'
-      # CMAKE_SKIP_INSTALL_ALL_DEPENDENCY drops the `preinstall: all` edge the
-      # Makefile generator writes. cpack runs the preinstall target before it
-      # packages, which without this re-drives the whole build with its output
-      # swallowed; on macOS that never returns. The Build step above has
-      # already built everything cpack installs, so the re-run only duplicates
-      # work, and anything genuinely missing now fails in cpack with a message
-      # instead of hanging in silence.
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
-
-    - name: Build
-      # The ceiling follows the slowest healthy build, macOS with every synth,
-      # plus the margin a shared runner can plausibly need. Windows builds the
-      # G2 alone and finishes far inside it. The ceiling still catches a build
-      # that has stopped making progress rather than one that is merely slow.
+    - name: Build (Windows)
+      if: matrix.os == 'windows-2022'
       timeout-minutes: 90
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 3
 
+    - name: Pack (Windows)
+      if: matrix.os == 'windows-2022'
+      timeout-minutes: 20
+      working-directory: ${{github.workspace}}/build
+      run: cmake -P ${{github.workspace}}/scripts/pack.cmake
+
+    - name: Configure CMake
+      if: matrix.os != 'windows-2022'
+      shell: bash
+      run: ./scripts/ci/configure.sh
+
+    - name: Build
+      if: matrix.os != 'windows-2022'
+      # The ceiling follows the slowest healthy build, macOS with every synth,
+      # plus the margin a shared runner can plausibly need. The ceiling catches
+      # a build that has stopped making progress rather than one that is merely
+      # slow.
+      timeout-minutes: 90
+      shell: bash
+      env:
+        # A GitHub-hosted runner reports more cores than it can keep busy on
+        # this build. Three is what this matrix has always used.
+        CI_PARALLEL: 3
+      run: ./scripts/ci/build.sh
+
     - name: Pack
+      if: matrix.os != 'windows-2022'
       # Healthy packing runs between 1 and 4 minutes on every generator. 20 is
       # far above that on purpose: the value only has to separate slow from
       # stuck, and a wide margin keeps a busy runner from turning into a false
       # failure here.
       timeout-minutes: 20
-      working-directory: ${{github.workspace}}/build
-      run: cmake -P ${{github.workspace}}/scripts/pack.cmake
+      shell: bash
+      run: ./scripts/ci/pack.sh
