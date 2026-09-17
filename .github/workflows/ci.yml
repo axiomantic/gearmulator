@@ -1,0 +1,111 @@
+# What this workflow runs, and why it is not everything the tree registers.
+#
+# NO JOB HERE TOUCHES A FIRMWARE BYTE, AND THAT IS DELIBERATE. No public
+# repository may hold a credential that could fetch one, and the jobs that need
+# one run inside the private artifact repository instead. Not needing a
+# credential is what lets every job here run on a pull request from a fork.
+#
+# `IntegrationTest` is excluded because a test carrying that label fetches its
+# data through rclone and aborts with a fatal error when the credential is
+# absent.
+#
+# `PluginTest` is excluded for a different reason: those tests load a built
+# plugin into a host, which exercises the packaged product rather than this
+# fork's own code. Deleting a label from the regex below is how to turn its
+# tests on; nothing else needs changing.
+#
+# Everything else the tree registers runs. The suite is selected by what it is
+# NOT, so a test added anywhere in this tree is run by this workflow without
+# anyone editing this file.
+
+# CI is manual. Automatic push/pull_request runs were removed because the
+# matrix cost hours of runner time per push. Start a run from the
+# Actions tab or with `gh workflow run`.
+
+name: CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # A CTest label regex, not a test-name regex. See the header for each label.
+  TEST_EXCLUDE_LABELS: 'IntegrationTest|PluginTest'
+
+jobs:
+  build-and-test:
+    name: build-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-arm64 is EXCLUDED here, not unsupported. macOS/arm64 is the
+          # development platform and is exercised locally. It left CI after
+          # this repository's INHERITED CMake run 31033322092, where the macOS
+          # jobs were CANCELLED at >=4h 32m without completing, against 19m 46s
+          # for the comparable Ubuntu job: >=13.8x, and unbounded, because a
+          # cancelled job gives a lower bound and not a duration. That run is
+          # cmake.yml, not this workflow. No equivalent measurement exists for
+          # this workflow's own build.
+          # Uncomment the lines below to restore the macOS job.
+          # - target: macos-arm64
+          #   runs-on: macos-14
+          - target: linux-x86-64
+            runs-on: ubuntu-latest
+          - target: windows-x86-64
+            runs-on: windows-2022
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # CTest 3.20 is the floor because `--no-tests=error` is a CTest flag and
+      # the earlier releases do not carry it. Without that flag a filtered run
+      # that selects nothing exits 0, and a pass over no code at all is
+      # indistinguishable from a pass.
+      - name: Require CMake and CTest 3.20 or newer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --version
+          ctest --version
+          have=$(cmake --version | head -1 | grep -Eo '[0-9]+\.[0-9]+' | head -1)
+          major=${have%%.*}
+          minor=${have##*.}
+          if [ "${major}" -lt 3 ] || { [ "${major}" -eq 3 ] && [ "${minor}" -lt 20 ]; }; then
+            echo "FAILURE: CMake ${have} is older than the 3.20 floor."
+            exit 1
+          fi
+
+      - name: Configure and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      - name: Run the test suite
+        shell: bash
+        run: ctest --test-dir build --no-tests=error -LE "${TEST_EXCLUDE_LABELS}" --output-on-failure
+
+  sanitizer-tests:
+    name: sanitizer-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure and build with the address and undefined sanitizers
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build build-asan --parallel
+
+      - name: Run the test suite under the sanitizers
+        run: ctest --test-dir build-asan --no-tests=error -LE "${TEST_EXCLUDE_LABELS}" --output-on-failure
