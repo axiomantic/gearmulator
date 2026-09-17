@@ -20,11 +20,11 @@ namespace g2
 		}
 	}
 
-	Latches::Latches(const uint32_t _windowSize)
+	Latches::Latches(const uint32_t _windowSize, const Model _model)
 		: m_latch(_windowSize, 0u)
 	{
 		if(m_latch.size() > g_panelIdentifierOffset)
-			m_latch[g_panelIdentifierOffset] = g_panelIdentifierG2X;
+			m_latch[g_panelIdentifierOffset] = panelIdentifierByte(_model);
 	}
 
 	uint32_t Latches::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)

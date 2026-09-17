@@ -77,6 +77,13 @@ namespace g2
 	{
 		MemoryMapConfig memory;
 
+		/* Which machine of the family the straps present. It reaches two units
+		 * that are decoded far apart -- the CS5 latch the panel identifier
+		 * lives in, and the SIM's UIPCR byte -- and detect_model() reads both,
+		 * so setting only one presents a machine that does not exist. This
+		 * field is what makes that pair inseparable. */
+		Model model = Model::G2X;
+
 		/* The populated-port set of the HDI08 array. The expanded machine is the
 		 * default; it reaches no address unless the caller also gives CS1 a
 		 * window. */
@@ -587,7 +594,7 @@ namespace g2
 
 		// The strap offset the SIM answers inside the UART block. sim.cpp's
 		// register table carries it as UIPCR.
-		static constexpr uint32_t g_simUartStrapOffset = 0x1D0u;
+		static constexpr uint32_t g_simUartStrapOffset = g_simUipcrOffset;
 
 		/* Attach every unit to the region it answers. It is called from the
 		 * constructor and takes nothing: an absent window (size zero) decodes

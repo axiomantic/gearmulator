@@ -451,8 +451,9 @@ namespace g2
 		, m_flash(_config.memory.cs0.base, _config.memory.cs0.size,
 		          _config.memory.cs2.base, _config.memory.cs2.size)
 		, m_panel(_config.memory.cs4.size)
-		, m_latches(_config.memory.cs5.size)
+		, m_latches(_config.memory.cs5.size, _config.model)
 		, m_hdi08(_config.hdi08)
+		, m_sim(_config.model)
 		, m_uart0(&m_interrupts)
 		, m_adc(_config.adc)
 		, m_mbus(&m_adc)

@@ -36,6 +36,7 @@
 #include "../board.h"
 #include "../internalClient.h"
 #include "../memoryMap.h"
+#include "../model.h"
 #include "../panelSram.h"
 #include "../scheduler.h"
 #include "../status.h"
@@ -538,9 +539,10 @@ namespace
 		return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 	}
 
-	g2::BoardConfig makeConfig(const bool _stretchCs4)
+	g2::BoardConfig makeConfig(const bool _stretchCs4, const g2::Model _model)
 	{
 		g2::BoardConfig config;
+		config.model = _model;
 		config.memory.cs0   = {g_cs0Base,       g_cs0Size};
 		config.memory.cs1   = {g2::g_cs1Base,   g_cs1Size};
 		config.memory.cs2   = {g_cs2Base,       g_cs2Size};
@@ -1252,6 +1254,21 @@ int main()
 
 		const bool withSram = std::getenv("G2_AUDIO_NOSRAM") == nullptr;
 
+		/* Which machine the straps present. A name this harness does not know
+		 * STOPS the run: the failure this switch exists to prevent is a
+		 * selector that is silently ignored, which measures the default while
+		 * reading exactly like the run that was asked for. */
+		g2::Model model = g2::Model::G2X;
+		if(const char* const m = std::getenv("G2_AUDIO_MODEL"))
+		{
+			if(!g2::modelFromName(m, model))
+			{
+				std::cout << "FAIL G2_AUDIO_MODEL='" << m << "' names no model; valid: "
+				          << g2::g_modelNames << std::endl;
+				return false;
+			}
+		}
+
 		// The quanta the machine runs after the patch is handed over. The
 		// findings record the event loop not running until past 180,000, so a
 		// window that closes before that reports a machine that was never given
@@ -1286,7 +1303,8 @@ int main()
 		if(const char* const d = std::getenv("G2_AUDIO_DEADLINE"))
 			deadlineSeconds = std::strtod(d, nullptr);
 
-		std::cout << "mode=" << mode << " sram=" << (withSram ? 1 : 0)
+		std::cout << "mode=" << mode << " model=" << g2::modelName(model)
+		          << " sram=" << (withSram ? 1 : 0)
 		          << " windowQuanta=" << windowQuanta
 		          << " walkQuanta=" << walkQuanta
 		          << " note=" << (sendNote ? 1 : 0)
@@ -1304,7 +1322,7 @@ int main()
 		{
 			static const char* const g_switches[] =
 			{
-				"G2_AUDIO_MODE", "G2_AUDIO_PATCH", "G2_AUDIO_NAME",
+				"G2_AUDIO_MODE", "G2_AUDIO_MODEL", "G2_AUDIO_PATCH", "G2_AUDIO_NAME",
 				"G2_AUDIO_QUANTA", "G2_AUDIO_WALK", "G2_AUDIO_DEADLINE",
 				"G2_AUDIO_NOTE", "G2_AUDIO_NOTEIDLE", "G2_AUDIO_NOTEQUANTA",
 				"G2_AUDIO_IMPULSE", "G2_AUDIO_NOSRAM", "G2_AUDIO_PCBUCKET",
@@ -1408,7 +1426,7 @@ int main()
 		Logging::setLogFunc(&countLog);
 		baseLib::logging::setLogFunc(&countLog);
 
-		g2::Board board(makeConfig(withSram));
+		g2::Board board(makeConfig(withSram, model));
 		Ram ram(g_sdramSize);
 
 		/* The panel bank the firmware reads, and with it the CS5 latches:
@@ -1431,7 +1449,7 @@ int main()
 		if(const char* const v = std::getenv("G2_AUDIO_VOLUME"))
 		{
 			const float position = float(std::atof(v));
-			const float reference = makeConfig(withSram).adc.externalReferenceVolts;
+			const float reference = makeConfig(withSram, model).adc.externalReferenceVolts;
 
 			board.adc().setChannelVolts(uint8_t(g2::PanelControl::MasterVolume), position * reference);
 
@@ -1546,6 +1564,26 @@ int main()
 		          << " chainAttached=" << (scheduler->chainAttached() ? 1 : 0)
 		          << " pc=" << hex32(board.mcuReg(g_regPc))
 		          << " t=" << seconds() << "s" << std::endl;
+
+		/* The firmware's own answer to which machine it is running on, rather
+		 * than this harness's. detect_model() at 0x30050864 reads the two
+		 * straps and stores its verdict here, so a plumbing change that reaches
+		 * neither strap leaves this byte where it was. */
+		{
+			constexpr uint32_t g_firmwareModelByte = 0x30119848u;
+			mcf5407_bus_status modelStatus = MCF5407_BUS_OK;
+
+			// A longword read, so the byte is the top one of a big-endian word.
+			const uint32_t word =
+				g2::Board::onRead(&board, g_firmwareModelByte, 4, &modelStatus);
+
+			std::cout << "model: requested=" << g2::modelName(model)
+			          << " panelStrap=" << unsigned(g2::panelStrapCode(model))
+			          << " engineStrap=" << (g2::isEngineStrapSet(model) ? 1 : 0)
+			          << " modelByte@" << hex32(g_firmwareModelByte) << "=" << ((word >> 24) & 0xffu)
+			          << " word=" << hex32(word)
+			          << " status=" << uint32_t(modelStatus) << std::endl;
+		}
 
 		/* The MCU-to-DSP host-port accounting, phase by phase. The counters live
 		 * on the adapter and start at zero, so the boot row is a delta against a

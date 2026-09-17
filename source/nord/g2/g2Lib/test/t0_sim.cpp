@@ -29,6 +29,7 @@
 // access may use.
 
 #include "memoryMap.h"
+#include "model.h"
 #include "sim.h"
 
 #include <mcf5407.h>
@@ -181,7 +182,8 @@ namespace
 	class Bus
 	{
 	public:
-		Bus()
+		explicit Bus(const g2::Model _model = g2::Model::G2X)
+			: m_sim(_model)
 		{
 			g2::MemoryMapConfig config;
 			config.mbar = {g_mbarBase, g_mbarSize};
@@ -456,6 +458,45 @@ int main()
 		bus.read(0x1d0, 8, status);
 		checkEqual(status, MCF5407_BUS_OK, "an 8-bit read of UIPCR is accepted");
 		checkEqual(bus.sim().log().size(), size_t(0), "an accepted access writes no log line");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 5a. The Engine strap.
+	//
+	// detect_model() at 0x30050864 tests UIPCR bit 0 before it reads the panel
+	// strap, so this bit alone separates an Engine from every other model. The
+	// three that are not Engines share this byte and are told apart at CS5.
+	{
+		struct Expectation
+		{
+			g2::Model model;
+			uint32_t  uipcr;
+			const char* what;
+		};
+
+		const Expectation expectations[] =
+		{
+			{g2::Model::G2,     0x0eu, "a plain G2 presents UIPCR $0E, so bit 0 is low"},
+			{g2::Model::G2X,    0x0eu, "a G2X presents UIPCR $0E"},
+			{g2::Model::Rack,   0x0eu, "a Rack presents UIPCR $0E"},
+			{g2::Model::Engine, 0x0fu, "an Engine drives UIPCR bit 0 high, so the byte is $0F"},
+		};
+
+		for(const Expectation& expectation : expectations)
+		{
+			Bus bus(expectation.model);
+			mcf5407_bus_status status = MCF5407_BUS_OK;
+
+			checkEqual(bus.read(0x1d0, 8, status), expectation.uipcr, expectation.what);
+			checkEqual(status, MCF5407_BUS_OK, "the strap read completes");
+		}
+
+		// The strap is a strap on every model, not only on the default.
+		Bus engine(g2::Model::Engine);
+		mcf5407_bus_status status = MCF5407_BUS_OK;
+		engine.write(0x1d0, 8, 0x00u, status);
+		checkEqual(engine.read(0x1d0, 8, status), uint32_t(0x0fu),
+			"a write cannot clear the Engine strap, because a write reaches UACR");
 	}
 
 	// -----------------------------------------------------------------------
