@@ -1,15 +1,21 @@
+; Relative, so the URL follows whatever host the superproject was cloned from.
+; The fork lives in a private Forgejo repository, and CI checks the superproject
+; out over HTTPS with a token; a relative URL inherits those credentials, where
+; an absolute SSH URL would need a key the CI container does not carry.
 [submodule "source/dsp56300"]
 	path = source/dsp56300
-	url = https://github.com/axiomantic/dsp56300
+	url = ../dsp56300.git
 [submodule "source/JUCE"]
 	path = source/JUCE
 	url = https://github.com/dsp56300/JUCE
 [submodule "source/cpp-terminal"]
 	path = source/cpp-terminal
 	url = https://github.com/dsp56300/cpp-terminal
+; Relative for the same reason as source/dsp56300 above: a private Forgejo fork
+; reached with the superproject's own credentials rather than a key.
 [submodule "source/mc68k"]
 	path = source/mc68k
-	url = https://github.com/axiomantic/mc68k.git
+	url = ../mc68k.git
 [submodule "source/clap-juce-extensions"]
 	path = source/clap-juce-extensions
 	url = https://github.com/dsp56300/clap-juce-extensions.git
