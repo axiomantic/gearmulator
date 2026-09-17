@@ -13,15 +13,24 @@ jobs:
   build:
     name: ubuntu build
     runs-on: docker
+    # See the note on the image in cmake.yml.
     container:
-      image: nimlang/nim:2.2.10
+      image: ubuntu:24.04
     timeout-minutes: 120
     env:
       CI_BUILD_TYPE: Release
     steps:
+      # A bare distribution image has no git, and the checkout below is git.
+      - name: Bootstrap git
+        run: |
+          set -eux
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates
+
       - name: Check out the repository
         run: |
-          set -euo pipefail
+          set -eux
           git init -q .
           git remote add origin \
             "https://${{ github.actor }}:${{ github.token }}@git.axiomantic.dev/${{ github.repository }}.git"
@@ -31,6 +40,9 @@ jobs:
 
       - name: Install build dependencies
         run: ./scripts/ci/install-linux-deps.sh
+
+      - name: Install the pinned Nim toolchain
+        run: echo "$(./scripts/ci/install-nim.sh | tail -1)" >> "$GITHUB_PATH"
 
       - name: Configure CMake
         run: ./scripts/ci/configure.sh
