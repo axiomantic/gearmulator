@@ -10,6 +10,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -108,6 +109,6 @@ namespace g2
 		bool m_reading  = false;
 
 		std::vector<uint8_t> m_sequence;
-		size_t m_position = 0u;
+		std::size_t m_position = 0u;
 	};
 }
