@@ -35,6 +35,7 @@
 #include "../../g2JucePlugin/g2PatchLoad.h"
 
 #include "../artifactResolver.h"
+#include "../crc16.h"
 #include "../internalClient.h"
 #include "../transportHub.h"
 
@@ -211,13 +212,45 @@ with open(sys.argv[4], "wb") as handle:
 		std::vector<g2::StampedFrame> drained(4);
 		const std::size_t got = hub.drainToDevice(drained.data(), drained.size());
 
-		// One transfer, not a sequence. The repair replaces the per-object
-		// framing rather than wrapping it, so a run that drained several frames
-		// is still originating objects one at a time.
-		if(got != 1)
+		// The patch is ONE transfer and not a sequence -- the repair replaces
+		// the per-object framing rather than wrapping it, so a run that drained
+		// the patch as several frames is still originating objects one at a
+		// time. The framed path originates the performance/settings message
+		// behind it, and that second frame is checked below.
+		const std::size_t expected = _transferLevel ? 1u : 2u;
+
+		if(got != expected)
 		{
-			_why = "the hub drained " + std::to_string(got) + " frame(s) where one transfer was expected";
+			_why = "the hub drained " + std::to_string(got) + " frame(s) where "
+				+ std::to_string(expected) + " was expected";
 			return false;
+		}
+
+		if(!_transferLevel)
+		{
+			const g2::ProtocolFrame& settings = drained[1].frame;
+
+			if(settings.size != g2::g_perfSettingsMessageBytes)
+			{
+				_why = "the settings frame is " + std::to_string(settings.size) + " byte(s)";
+				return false;
+			}
+
+			// The four header bytes the firmware's object parser reads, and the
+			// CRC over the body it checks before it reads any of them.
+			if(settings.data[2] != 0x01 || settings.data[3] != 0x2C
+				|| settings.data[4] != 0x40 || settings.data[5] != 0x11)
+			{
+				_why = "the settings frame does not open with the performance-settings header";
+				return false;
+			}
+
+			if(g2::crc16(settings.data + 2, settings.size - 4)
+				!= g2::crc16Load(settings.data + settings.size - 2))
+			{
+				_why = "the settings frame's stored CRC does not cover its body";
+				return false;
+			}
 		}
 
 		const g2::ProtocolFrame& frame = drained[0].frame;

@@ -73,6 +73,47 @@ namespace g2
 		constexpr uint8_t g_newPatch   = 0x53;
 		constexpr uint8_t g_create     = 0x37;
 
+		/* THE PERFORMANCE/SETTINGS MESSAGE, field by field, each byte measured
+		 * against the firmware's own parser.
+		 *
+		 * 0x2C is the command byte: bit 0x20 is required to reach the object
+		 * parser at all and the low three bits must read 4. 0x40 is the version
+		 * byte, whose top bit bypasses the version check. 0x11 is the object
+		 * type the firmware's serializer writes for performance settings, and
+		 * the 2-byte big-endian size counts the payload behind it.
+		 *
+		 * THE PERF-MODE MESSAGE 0x3E IS NOT SENT AHEAD OF THIS ONE. The
+		 * reference editor sends it first; it rebuilds the keyboard records
+		 * after this object has been applied, which puts the enable byte back
+		 * to zero. The 0x11 message alone is what leaves. */
+		constexpr uint8_t g_perfCmd     = 0x2C;
+		constexpr uint8_t g_perfVersion = 0x40;
+		constexpr uint8_t g_perfObject  = 0x11;
+
+		/* The payload is these eight bytes, then the four slot records. Every
+		 * global is carried as zero: the one this plugin would otherwise have
+		 * to state is the global keyboard channel, and a panel arm boots it at
+		 * zero, which is the channel a slot record here already names. */
+		constexpr std::size_t g_perfGlobalBytes = 8;
+
+		/* ONE SLOT RECORD, AND ITS POSITION IS THE SLOT -- the object carries
+		 * no slot field, so four of these follow one another for slots 0 to 3.
+		 *
+		 * A record is a Clavia string and then ten bytes, of which the parser
+		 * reads seven. The first three after the name are enabled, keyboard-
+		 * enabled and hold; the four behind them are carried as they were
+		 * measured on an accepted message and their fields are not derived
+		 * here. The last three the parser skips. */
+		constexpr uint8_t g_perfSlotRecord[] =
+		{
+			'S', '0', 0x00,
+			0x01, 0x01, 0x00,
+			0x00, 0x7F, 0x00, 0x00,
+			0x00, 0x00, 0x00
+		};
+
+		constexpr std::size_t g_perfSlots = 4;
+
 		/* The variation count a file carries and the one the wire carries. */
 		constexpr uint8_t g_fileVariationCount = 9;
 		constexpr uint8_t g_wireVariationCount = 10;
@@ -373,6 +414,45 @@ namespace g2
 		return "PCH2-UNNAMED-RESULT";
 	}
 
+	std::size_t composePerfSettings(uint8_t* const _out, const std::size_t _outCapacity) noexcept
+	{
+		constexpr std::size_t g_payload = g_perfGlobalBytes + g_perfSlots * sizeof(g_perfSlotRecord);
+
+		static_assert(g_perfSettingsMessageBytes == 2 + 6 + g_payload + 2,
+			"the header's frame size and the payload this composer writes must be the same number");
+
+		if(_out == nullptr || _outCapacity < g_perfSettingsMessageBytes)
+			return 0;
+
+		std::size_t written = 2;
+
+		_out[written++] = g_cmd;
+		_out[written++] = g_perfCmd;
+		_out[written++] = g_perfVersion;
+		_out[written++] = g_perfObject;
+		_out[written++] = static_cast<uint8_t>(g_payload >> 8);
+		_out[written++] = static_cast<uint8_t>(g_payload & 0xFFu);
+
+		for(std::size_t i = 0; i < g_perfGlobalBytes; ++i)
+			_out[written++] = 0x00;
+
+		for(std::size_t slot = 0; slot < g_perfSlots; ++slot)
+		{
+			for(const uint8_t byte : g_perfSlotRecord)
+				_out[written++] = byte;
+		}
+
+		const std::size_t bodyLength = written - 2;
+		const std::size_t total      = written + 2;
+
+		_out[0] = static_cast<uint8_t>(total >> 8);
+		_out[1] = static_cast<uint8_t>(total & 0xFFu);
+
+		crc16Store(_out + written, crc16(_out + 2, bodyLength));
+
+		return total;
+	}
+
 	Pch2LoadResult pch2Load(const uint8_t* const _file, const std::size_t _size, InternalClient& _client) noexcept
 	{
 		if(_file == nullptr)
@@ -598,6 +678,28 @@ namespace g2
 		 * the callers that need it, and the composition above is what it
 		 * carries. */
 		if(!_client.send(ProtocolFrame{ _scratch + 2, message }))
+			return Pch2LoadResult::SendRefused;
+
+		/* THE SETTINGS MESSAGE FOLLOWS THE PATCH, in that order, because that
+		 * is the order the run whose notes the firmware accepted carried them.
+		 * Nothing derived says the reverse order fails; nothing measured says
+		 * it works either, and the patch object chain and the settings object
+		 * are applied by different parsers.
+		 *
+		 * The scratch buffer is reused from its front: the hub copies a frame
+		 * it accepts, so the patch message above no longer owns these bytes.
+		 *
+		 * A refused settings frame reports SendRefused, the same verdict a
+		 * refused patch frame reports. The refusal means the same thing in both
+		 * places -- the device is holding part of what this call originated --
+		 * and a separate name would suggest the two are recovered differently
+		 * when they are not. */
+		const std::size_t settings = composePerfSettings(_scratch, _scratchSize);
+
+		if(settings == 0)
+			return Pch2LoadResult::BufferTooSmall;
+
+		if(!_client.send(ProtocolFrame{ _scratch, settings }))
 			return Pch2LoadResult::SendRefused;
 
 		return Pch2LoadResult::Loaded;

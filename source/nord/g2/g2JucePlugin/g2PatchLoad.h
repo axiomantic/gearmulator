@@ -123,12 +123,37 @@ namespace g2
 	std::size_t pch2ComposePatchLoad(const uint8_t* _file, std::size_t _size, const char* _name, uint8_t _slot,
 		uint8_t* _out, std::size_t _outCapacity, Pch2LoadResult& _result) noexcept;
 
-	/* Validates `_file`, composes its patch-load message and originates it as
-	 * one transfer through `_client`.
+	/* The whole performance/settings message frame. Fixed: the message carries
+	 * eight global bytes and four positional slot records, and no field of it
+	 * varies with the patch. */
+	constexpr std::size_t g_perfSettingsMessageBytes = 70;
+
+	/* Composes the performance/settings message that makes a loaded patch
+	 * playable -- all four slots enabled, keyboard-enabled, over the full key
+	 * range -- into `_out`.
+	 *
+	 * The firmware's note-on router refuses a note unless the addressed slot's
+	 * keyboard-enable byte is set, and on a panel strap that byte boots zero.
+	 * No object of a `.pch2` names slot enablement, so the values here are
+	 * fixed and not derived from the file: the container has nothing to derive
+	 * them from.
+	 *
+	 * Returns the number of bytes written, or 0 when `_out` cannot hold
+	 * g_perfSettingsMessageBytes. Nothing is allocated. */
+	std::size_t composePerfSettings(uint8_t* _out, std::size_t _outCapacity) noexcept;
+
+	/* Validates `_file`, composes its patch-load message and originates it
+	 * through `_client`, then originates the performance/settings message
+	 * behind it.
+	 *
+	 * TWO FRAMES LEAVE, and the patch is the first of them. A patch delivered
+	 * alone loads and cannot sound; the settings message is what the firmware
+	 * needs before it will accept a note for the slot, and it is not part of
+	 * the patch container. `composePerfSettings` above states what it carries.
 	 *
 	 * `_scratch` is laid out to `InternalClient::sendTransfer`'s buffer
 	 * contract -- message at offset 2, room for the message plus four bytes --
-	 * even though this call originates the message frame alone and applies no
+	 * even though this call originates message frames alone and applies no
 	 * transfer envelope; the body says why. `_scratchSize` below
 	 * g_maxPatchLoadMessageBytes + 4 is accepted -- a composition that outgrows
 	 * it returns BufferTooSmall. */
