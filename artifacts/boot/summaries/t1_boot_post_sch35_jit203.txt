@@ -1,0 +1,14 @@
+# t1_boot_post_sch35_jit203
+# Condensed from 864 lines. Bus-trace lines omitted; the raw log was not retained.
+
+103: ok   CONTROL clear-shaped: sixteen 0x20 spaces written into display 0 line 0 through Board::onWrite count 0 content writes and 16 clear writes; counted 0 and 16
+103: ok   CONTROL banner-shaped: "Nord Modular G2 " written by the same route counts 13 content writes and 3 clear writes; counted 13 and 3
+103: ok   CONTROL banner-shaped: the same sixteen cells read back through Board::onRead equal "Nord Modular G2 "; read "Nord Modular G2 "
+103: ok   CONTROL landmark: one 2-byte read at 0x3001B7FA and one at 0x3001B7FC leave the counter at 0x3001B7FC reading exactly 1, so it answers that address and not its neighbour; read 1
+103: *** JIT errNotImplemented: opcode=$000203
+103: Assertion failed: (0 && "instruction not implemented"), function errNotImplemented, file jitops.cpp, line 431.
+103: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+103: hdiWriteTX@59: DSP Boot: finished
+103: hdiWriteTX@42: DSP Boot: 573 words, initial PC 000000
+The following tests passed:
+50% tests passed, 1 tests failed out of 2
