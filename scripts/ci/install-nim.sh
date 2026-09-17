@@ -20,8 +20,7 @@
 # stops the run.
 #
 # This exists because the Forgejo jobs run in a plain distribution image rather
-# than through a marketplace action. It is the only script here that a GitHub
-# workflow does not call.
+# than through a marketplace action.
 
 . "$(cd "${BASH_SOURCE[0]%/*}" && pwd)/lib.sh"
 

@@ -47,9 +47,9 @@ jobs:
       # Not left to default. lib.sh falls back to the host's core count, and on
       # a shared runner that is every core on the box; a JUCE translation unit
       # wants roughly a gigabyte while it compiles, so an uncapped build is one
-      # busy neighbour away from being killed for memory. Three is what the
-      # GitHub legs have always used. Raise it when the runner is known to be
-      # alone on its hardware.
+      # busy neighbour away from being killed for memory. The GitHub legs use
+      # the same cap. Raise it when the runner is known to be alone on its
+      # hardware.
       CI_PARALLEL: 3
       CI_CMAKE_GENERATOR: ${{ matrix.cmake_generator == 'Ninja' && 'Ninja' || '' }}
       # The G2 alone. These branches change G2 code, and a build of every synth
