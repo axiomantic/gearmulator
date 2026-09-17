@@ -52,7 +52,7 @@ command -v ninja >/dev/null 2>&1 || packages+=(ninja-build)
 command -v git   >/dev/null 2>&1 || packages+=(git)
 # Clang is not the project compiler. The mcf5407 ABI gate reads a C syntax tree
 # that only Clang prints, and refuses to configure without it; the alternative it
-# offers is turning the gate off, which drops a check this migration must keep.
+# offers is turning the gate off, which drops a check this project keeps.
 command -v clang >/dev/null 2>&1 || packages+=(clang)
 cmake_too_old && packages+=(cmake)
 
