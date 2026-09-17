@@ -54,10 +54,10 @@ to turn its tests on.
 
 | File | Runs on | Covers |
 |--|--|--|
-| `.forgejo/workflows/cmake.yml` | Forgejo, `docker`, `nimlang/nim:2.2.10` | Linux build and pack, default and Ninja generators, on every push and pull request. |
+| `.forgejo/workflows/cmake.yml` | Forgejo, `docker`, `ubuntu:24.04` | Linux build and pack, default and Ninja generators, on every push and pull request. |
 | `.forgejo/workflows/nightly.yml` | Forgejo, same image | The nightly Linux build and pack. |
 | `.github/workflows/cmake.yml` | GitHub | The same matrix across Linux, macOS and Windows. |
-| `.github/workflows/nightly.yml` | GitHub | The nightly build across the three. |
+| `.github/workflows/nightly.yml` | GitHub | The nightly build across Linux, macOS and Windows. |
 | `.github/workflows/ci.yml` | GitHub | Build and test, plus the sanitizer run. `main` only. |
 | `.github/workflows/release.yml` | GitHub | Release build and the GitHub Release upload. |
 | `.github/workflows/momus.yml` | GitHub | The review bot. |
@@ -96,7 +96,7 @@ Everything the build needs goes on at job time:
   Nim sources during CMake configure and stops on any version but the one its
   `.nim-version` names, so it is an exact version. Advance it together with the
   `nim-version:` pins in `.github/workflows/`.
-- CMake comes from the distribution, at 3.28. The tree's own floor is 3.26, set by
+- CMake comes from the distribution. The tree's own floor is 3.26, set by
   the mcf5407 dependency; `require-cmake-version.sh` enforces a separate, lower
   3.20 floor, which is what `ctest --no-tests=error` needs.
 
