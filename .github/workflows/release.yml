@@ -46,10 +46,13 @@ jobs:
     - name: Install Nim
       uses: jiro4989/setup-nim-action@v2
       with:
-        # The MCF5407 core compiles its Nim sources during CMake configure and
-        # stops the configure on any version other than the one its own
-        # .nim-version names, so the pin here is an exact version and not a
-        # range. Advance it together with that file.
+        # mcf5407's .nim-version is the authority for this number: the core
+        # compiles its Nim sources during CMake configure and stops the
+        # configure on any other version. This is a second spelling of it
+        # because setup-nim-action takes the version as an input and cannot
+        # read a file out of a dependency; advance the two together. The
+        # Forgejo legs need no literal -- scripts/ci/install-nim.sh reads that
+        # file directly.
         nim-version: '2.2.10'
         # The compiler tree goes outside the workspace: the default puts it in
         # the working directory, where it becomes a subtree of the checkout
