@@ -36,6 +36,11 @@ jobs:
             git ca-certificates
 
       - name: Check out the repository
+        env:
+          # Read-only, and scoped to the submodule repositories. The per-job
+          # token below reaches this repository alone, so the submodule clones
+          # need a credential of their own.
+          SUBMODULE_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN }}
         run: |
           set -eux
           git init -q .
@@ -43,6 +48,17 @@ jobs:
             "https://${{ github.actor }}:${{ github.token }}@git.axiomantic.dev/${{ github.repository }}.git"
           git fetch -q --depth 1 origin "${{ github.sha }}"
           git checkout -q FETCH_HEAD
+          # A submodule clone does not inherit the credential embedded in the
+          # superproject's remote URL, and the private forks refuse the job
+          # token. A credential helper is the mechanism rather than a URL
+          # rewrite or an extraheader because it is the only one that never
+          # puts the secret in a URL or on a command line: the helper body
+          # stores the variable's NAME, so `set -x`, `git config --list` and a
+          # failing clone's error text all show `$SUBMODULE_READ_TOKEN` and not
+          # its value. Scoped to this host, so the public GitHub submodules
+          # never see it.
+          git config --global credential."https://git.axiomantic.dev".helper \
+            '!f() { test "$1" = get || return 0; printf "username=x-access-token\npassword=%s\n" "$SUBMODULE_READ_TOKEN"; }; f'
           git submodule update --init --recursive --depth 1
 
       - name: Install build dependencies
