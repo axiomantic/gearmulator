@@ -1,22 +1,53 @@
 // This test needs the Clavia firmware artifacts and skips with a reason when
 // NMG2_ARTIFACTS does not resolve.
 //
-// A known pattern is injected at the codec source of a machine that has really
-// booted, and the frame index at which it reappears at the codec sink is compared
-// against the delay the chain's own geometry predicts.
+// A distinct pattern is injected at the codec source of a machine whose audio
+// path is really up, once for every quantum of a walk, and the test follows it as
+// far as this repository's code carries it.
 //
-// Where the expected delay comes from, and why it is not a literal. The audio bus
-// is a Line of dspCount + 1 mailboxes. The ingress phase writes mailbox 0's read
-// frame and the egress phase reads the last mailbox's write frame, so neither
-// codec edge carries a delay of its own: D_codec is 0. Every DSP-to-DSP hand-off
-// costs one mailbox hop of `hopFrames` quanta, and a chain of dspCount positions
-// has dspCount - 1 of them. So
+// ---------------------------------------------------------------------------
+// THE TWO CODEC EDGES ARE ASSERTED. WHAT LIES BETWEEN THEM IS REPORTED.
 //
-//     D_chain = (dspCount - 1) * hopFrames
+// The edges are this repository's code, and each is held against the pattern
+// that crossed it:
 //
-// with dspCount read off the booted machine (Board::dspSet().dspCount()) and
-// hopFrames read off the Scheduler::Config this file hands to the factory.
-// Neither number is typed here.
+//   The SOURCE edge. injectCodecSource writes the host pair into slots 0 and 1
+//   of mailbox 0's ingress frame; the head position's receive callback converts
+//   it through toEsaiFrame; the kernel's own receive DMA moves it into the head
+//   DSP's X memory. The probe below reads that destination every quantum -- the
+//   channel found by its DMA request source, the bank by that channel's own
+//   destination register, so neither is typed -- and requires every pushed pair
+//   to arrive there unchanged, in order, at an unchanging lag.
+//
+//   The SINK edge. The control at the foot of this file places a sentinel at the
+//   tail position's transmit source and requires it back out of Scheduler::pull
+//   unchanged, on the first control quantum.
+//
+// Between the two edges the audio bus is carried by the DSPs and by nothing
+// else. Mailbox k + 1's write frame is assigned in exactly one place --
+// ChainAdapter::audioTxCallback(k), which a DSP56300 core drives from its own
+// ESAI transmit -- and Mailbox::advance moves a frame along one mailbox's own
+// ring and never between mailboxes. So no code here copies mailbox 0 towards
+// mailbox N: whether a value entering the head leaves the tail is decided by the
+// program the machine is running, and the default state of a Nord Modular routes
+// nothing. A silent sink on an unpatched machine is therefore the emulator
+// agreeing with the hardware and not a defect for this file to catch.
+//
+// The walk's own arrival figures are REPORTED and not asserted. An assertion on
+// them would need the chain to forward its input at all, to forward slots 0 and
+// 1 into slots 0 and 1 -- the chain's interior carries the eight-slot inter-DSP
+// bus and only its two ends carry the codec pair -- and to forward them
+// unscaled. None of the three is a property of the machine, so an assertion on
+// any of them states an intention about the emulator rather than a predicate the
+// emulator can fail.
+//
+// D_chain = (dspCount - 1) * hopFrames is the delay the mailbox geometry would
+// impose if the chain forwarded what it receives. It sets the walk's length and
+// it is reported beside the arrival figures it would explain; nothing is
+// asserted against it. dspCount is read off the booted machine
+// (Board::dspSet().dspCount()) and hopFrames off the Scheduler::Config this file
+// hands to the factory, so neither number is typed here.
+// ---------------------------------------------------------------------------
 //
 // Every verdict is an observable and not an assert(): a release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
@@ -32,6 +63,9 @@
 #include "../status.h"
 
 #include "dsp56kBase/logging.h"
+
+#include "dsp56kEmu/dma.h"
+#include "dsp56kEmu/peripherals.h"
 
 #include <atomic>
 #include <cstdint>
@@ -239,14 +273,41 @@ namespace
 		return config;
 	}
 
-	// ------------------------------------------------------ the impulse pattern
+	// ------------------------------------------------------ the injected pattern
 	//
-	// Two different non-zero Q23 values, one for each codec slot. They differ
-	// from each other so that a chain that carried slot 0 into both slots is a
-	// failure here rather than a pass, and neither is a power of two, so a
-	// value the chain shifted or masked does not land back on itself.
-	constexpr int32_t g_impulseLeft  = 0x0055AA33;
-	constexpr int32_t g_impulseRight = 0x00337799;
+	// One distinct non-zero Q23 pair for every quantum of the walk. A word that
+	// arrives therefore names the quantum it was pushed on, so a delivery of the
+	// wrong frame, of the same frame twice, or of one slot into both is a
+	// failure here rather than a pass. The two slots differ by a single high bit
+	// that the counter never reaches, which is what lets a word be decoded back
+	// into a quantum and a slot without a table.
+	//
+	// Bit 23 is clear in both, so fromEsaiFrame's sign extension is the identity
+	// on them, and neither is ever zero.
+	constexpr int32_t g_slotMark = 0x00400000;
+
+	int32_t injectedSlot(const unsigned _quantum, const unsigned _slot)
+	{
+		return int32_t(_quantum + 1u) | (_slot == 0u ? 0 : g_slotMark);
+	}
+
+	// Decodes a word read out of the machine back into the quantum and the slot
+	// it was injected on. Returns false for a word that is not an injected
+	// value, which is what makes a stale or a firmware-authored word readable as
+	// "not one of ours" rather than as a delivery.
+	bool decodeInjected(const uint32_t _word, const unsigned _walk,
+		unsigned& _quantum, unsigned& _slot)
+	{
+		const uint32_t counter = _word & ~uint32_t(g_slotMark);
+
+		if(counter == 0u || counter > _walk)
+			return false;
+
+		_quantum = counter - 1u;
+		_slot    = (_word & uint32_t(g_slotMark)) != 0u ? 1u : 0u;
+
+		return true;
+	}
 
 	// How far past the predicted arrival the walk keeps looking. "Arrived late"
 	// and "never arrived" are different findings and a walk that stopped at the
@@ -276,8 +337,19 @@ namespace
 
 	static_assert((g_sinkControlWord & 0x800000u) == 0u,
 		"the sentinel's sign bit must be clear, or fromEsaiFrame's sign extension moves it");
-	static_assert(g_sinkControlExpected != g_impulseLeft && g_sinkControlExpected != g_impulseRight,
-		"the control's sentinel must not be either impulse word");
+	static_assert((g_sinkControlWord & uint32_t(g_slotMark)) == 0u,
+		"the sentinel must not carry the slot mark, or decodeInjected would read it as a right slot");
+
+	// The DMA channel's request source, in DCR. The field is the chip's, not
+	// this project's.
+	constexpr uint32_t      g_dcrRequestShift = 11u;
+	constexpr uint32_t      g_dcrRequestMask  = 0x1fu;
+	constexpr dsp56k::TWord g_dmaChannels     = 6u;
+
+	// The receive bank the kernel rotates the DMA destination through. The
+	// destination register names a word inside one; this is the mask that takes
+	// it back to the bank's first word.
+	constexpr dsp56k::TWord g_bankMask = 0xfu;
 
 	constexpr uint32_t g_esaiTransmitters  = 6u;
 	constexpr unsigned g_sinkControlQuanta = 64u;
@@ -331,6 +403,19 @@ namespace
 		bool     halted          = false;
 		bool     faulted         = false;
 
+		// The audio path's own arming, which is what the source-edge measurement
+		// below needs and what the banner and programLanded do not supply: the
+		// banner is the firmware drawing and programLanded is the kernel
+		// download, and neither says the receive DMA request is registered. The
+		// two quanta are both recorded so a run reports how far apart they are,
+		// and rxArmedAtLanded is read at the instant programLanded fires, which
+		// makes every run carry its own earlier-stopped machine.
+		unsigned rxArmedAtLanded = 0;
+		bool     rxArmed         = false;
+		unsigned rxArmedPorts    = 0;
+		uint32_t landedQuanta    = 0;
+		uint32_t rxArmedQuanta   = 0;
+
 		size_t   primedPulled    = 0;       // frames the sink held at hand-off
 		unsigned walkQuanta      = 0;
 
@@ -362,7 +447,164 @@ namespace
 		bool     sinkControlExact     = false;
 		int32_t  sinkControlL         = 0;
 		int32_t  sinkControlR         = 0;
+
+		// ------------------------------- the source edge's own measurement
+		//
+		// The head position's receive destination, read once per walk quantum.
+		// headLag is latched from the first delivery and every later one is held
+		// against it, so the lag is a measurement the run reports and not a
+		// figure typed into this file -- a faster path moves the number and
+		// keeps the run green, while a path that drops, duplicates or reorders a
+		// frame moves a counter that is asserted to be zero.
+		unsigned headPort          = 0;
+		bool     headPortFound     = false;
+		int      headRxChannel     = -1;
+		unsigned headRxFrameWords  = 0;
+
+		unsigned headDeliveries    = 0;   // quanta whose bank held a complete pair
+		int      headLag           = -1;  // quanta between the push and the read
+		unsigned headIncomplete    = 0;   // a bank holding one slot of a pair
+		unsigned headOutOfOrder    = 0;   // a delivery whose lag was not headLag
+		int      headSlot0Offset   = -1;
+		int      headSlot1Offset   = -1;
+		unsigned headOffsetMoved   = 0;   // a pair that landed at other offsets
 	};
+
+	/* The audio path's own arming predicate: Dma::hasTrigger(EsaiReceiveData) on
+	 * every chain position, which is the DMA request registration itself and not
+	 * a proxy for it.
+	 *
+	 * What would make it wrong, stated here because a predicate whose failure
+	 * mode is unstated is a predicate nobody can re-check:
+	 *
+	 *   - hasTrigger is sticky only because finishTransfer clears DE without
+	 *     calling removeTriggerTarget. Were dsp56300 to unregister on
+	 *     completion, the predicate would go false between transfers and a
+	 *     healthy machine could run its drive to the bound.
+	 *   - setDCR unregisters the trigger target on any reconfiguration, so a
+	 *     kernel that arms the channel and then rewrites DCR shows a window of
+	 *     false. A caller that polls every quantum and leaves on the first
+	 *     all-armed reading cannot miss such a window, but what it saw would be
+	 *     an arming since withdrawn.
+	 *   - It reports registration, not traffic. A channel registered against a
+	 *     source that never asserts satisfies it forever. The head-receive probe
+	 *     below is the separate instrument that reads the destination itself. */
+	unsigned countRxArmed(g2::Board& _board, const unsigned _dspCount)
+	{
+		unsigned armed = 0;
+
+		for(unsigned port = 0; port < _dspCount; ++port)
+		{
+			if(_board.dspSet().peripherals(port).getDMA().hasTrigger(
+				dsp56k::DmaChannel::RequestSource::EsaiReceiveData))
+				++armed;
+		}
+
+		return armed;
+	}
+
+	/* ------------------------------------------- the source edge's own probe
+	 *
+	 * Reads the head position's receive destination once per walk quantum and
+	 * holds what is there against what was pushed.
+	 *
+	 * Nothing here is typed. The DMA channel is the one whose request source is
+	 * the ESAI receive, found by reading DCR rather than by naming a number; the
+	 * bank is that channel's own destination register, read every quantum
+	 * because the kernel rotates the destination through several banks and a
+	 * fixed window would read a bank the DMA had already left; and the two
+	 * offsets the pair lands at are latched from the first delivery and then
+	 * required to stay put.
+	 *
+	 * The newest pair in the bank is the one this quantum is about. Older words
+	 * from earlier quanta are still readable there and every one of them decodes
+	 * as a valid injected value, so the quantum is taken from the largest
+	 * counter present and not from the first word that decodes. */
+	void readHeadReceive(g2::Board& _board, const unsigned _walk, const unsigned _quantum,
+		EgressResult& _result)
+	{
+		if(!_result.headPortFound)
+			return;
+
+		dsp56k::Peripherals56311& peripherals = _board.dspSet().peripherals(_result.headPort);
+		dsp56k::Dma&              dma         = peripherals.getDMA();
+
+		if(_result.headRxChannel < 0)
+		{
+			for(dsp56k::TWord channel = 0; channel < g_dmaChannels; ++channel)
+			{
+				const uint32_t dcr = uint32_t(dma.getDCR(channel));
+
+				if(((dcr >> g_dcrRequestShift) & g_dcrRequestMask)
+					== uint32_t(dsp56k::DmaChannel::RequestSource::EsaiReceiveData))
+				{
+					_result.headRxChannel    = int(channel);
+					_result.headRxFrameWords = unsigned(peripherals.getEsai().getRxWordCount() + 1u);
+					break;
+				}
+			}
+
+			if(_result.headRxChannel < 0)
+				return;
+		}
+
+		const dsp56k::TWord destination = dma.getDDR(dsp56k::TWord(_result.headRxChannel));
+		const dsp56k::TWord base        = destination & ~dsp56k::TWord(g_bankMask);
+
+		dsp56k::Memory& memory = _board.dspSet().dsp(_result.headPort).memory();
+
+		unsigned newest      = 0;
+		bool     newestFound = false;
+		int      offset[2]   = {-1, -1};
+
+		for(dsp56k::TWord i = 0; i <= g_bankMask; ++i)
+		{
+			const uint32_t word = uint32_t(memory.get(dsp56k::MemArea_X, base + i));
+
+			unsigned sourceQuantum = 0, slot = 0;
+
+			if(!decodeInjected(word, _walk, sourceQuantum, slot))
+				continue;
+
+			if(!newestFound || sourceQuantum > newest)
+			{
+				newest      = sourceQuantum;
+				newestFound = true;
+				offset[0]   = -1;
+				offset[1]   = -1;
+			}
+
+			if(sourceQuantum == newest)
+				offset[slot] = int(i);
+		}
+
+		if(!newestFound)
+			return;
+
+		if(offset[0] < 0 || offset[1] < 0)
+		{
+			++_result.headIncomplete;
+			return;
+		}
+
+		++_result.headDeliveries;
+
+		const int lag = int(_quantum) - int(newest);
+
+		if(_result.headLag < 0)
+		{
+			_result.headLag         = lag;
+			_result.headSlot0Offset = offset[0];
+			_result.headSlot1Offset = offset[1];
+			return;
+		}
+
+		if(lag != _result.headLag)
+			++_result.headOutOfOrder;
+
+		if(offset[0] != _result.headSlot0Offset || offset[1] != _result.headSlot1Offset)
+			++_result.headOffsetMoved;
+	}
 
 	// Runs the whole thing on one booted machine. Returns false only when the
 	// machine could not be placed at all; a machine that ran and moved nothing
@@ -441,12 +683,13 @@ namespace
 
 		// ---------------------------------------------------------- the boot
 		//
-		// The drive leaves on the properties the play phase needs, and not on a
-		// fixed count: every DSP program has landed and the firmware has
-		// composed display content and been given the settle window to finish
-		// it. A fixed count would either cost the full bound every run or hand
-		// beginPlayPhase a machine that had not finished downloading its
-		// kernels.
+		// The drive leaves on the property the measurement needs, and not on a
+		// fixed count: the ESAI receive DMA request armed on every chain
+		// position. The banner and programLanded are recorded on the way past
+		// and are not the exit, because the banner is the firmware drawing and
+		// programLanded is the kernel download; a machine that satisfies either
+		// can still be one whose receive path is not registered, and a source
+		// edge measured behind such a gate would read not-yet as never.
 		uint32_t settle = 0;
 
 		for(uint32_t i = 0; i < g_bootQuantumBound; ++i)
@@ -474,12 +717,25 @@ namespace
 					++landed;
 			}
 
-			if(landed == _result.dspCount)
+			if(landed != _result.dspCount)
+				continue;
+
+			if(!_result.programsLanded)
 			{
 				_result.programsLanded = true;
+				_result.landedQuanta   = i + 1;
+				_result.rxArmedAtLanded = countRxArmed(board, _result.dspCount);
+			}
+
+			if(countRxArmed(board, _result.dspCount) == _result.dspCount)
+			{
+				_result.rxArmed       = true;
+				_result.rxArmedQuanta = i + 1;
 				break;
 			}
 		}
+
+		_result.rxArmedPorts = countRxArmed(board, _result.dspCount);
 
 		_result.halted  = board.mcuHalted();
 		_result.faulted = board.faulted();
@@ -499,27 +755,40 @@ namespace
 
 		// ------------------------------------------------------------ the walk
 		//
-		// One frame in and one frame out for each quantum. The pattern goes in
-		// on the first quantum of the walk and silence on every one after it, so
-		// the index of the pulled frame that carries the pattern is the delay in
-		// frames, measured from the injection.
+		// One frame in and one frame out for each quantum, and a distinct pair on
+		// every quantum rather than one impulse and then silence. A single frame
+		// can be missed by any probe that samples, and a frame that failed to
+		// arrive then reads exactly like a path that carries nothing; a value
+		// that moves every quantum cannot be missed that way, and it is what
+		// lets the source edge below be held against every frame rather than
+		// against one.
 		const unsigned expected = (_result.dspCount > 0 ? _result.dspCount - 1u : 0u) * _result.hopFrames;
 		const unsigned walk     = expected + g_overrunQuanta;
 
-		g2::Frame impulse{};
-		impulse.slot[0] = g_impulseLeft;
-		impulse.slot[1] = g_impulseRight;
-
 		const g2::Frame silence{};
+
+		// The head of the chain, through the firmware's own port table. The
+		// hardware port and the chain position are not the same number.
+		{
+			const unsigned headPort = portOfChainPosition(board, 0u, _result.dspCount);
+			_result.headPortFound = headPort < _result.dspCount;
+			_result.headPort      = _result.headPortFound ? headPort : 0u;
+		}
 
 		for(unsigned q = 0; q < walk; ++q)
 		{
-			const g2::Frame& in = (q == 0) ? impulse : silence;
+			g2::Frame injected{};
+			injected.slot[0] = injectedSlot(q, 0u);
+			injected.slot[1] = injectedSlot(q, 1u);
+
+			const g2::Frame& in = injected;
 
 			if(scheduler->push(&in, 1) != 1)
 				++_result.pushedShort;
 
 			scheduler->runFrames(1);
+
+			readHeadReceive(board, walk, q, _result);
 
 			g2::Frame out{};
 
@@ -534,8 +803,18 @@ namespace
 			if(_result.arrival < 0 && (out.slot[0] != 0 || out.slot[1] != 0))
 			{
 				_result.arrival = int(q);
+
+				// A sink frame that carries an injected pair, both slots, from
+				// one quantum. Reported: whether the chain forwards its input is
+				// the running program's business and not this file's.
+				unsigned sourceQuantum = 0, sourceSlot = 0;
+				unsigned otherQuantum  = 0, otherSlot  = 0;
+
 				_result.arrivalExact =
-					out.slot[0] == g_impulseLeft && out.slot[1] == g_impulseRight;
+					decodeInjected(uint32_t(out.slot[0]), walk, sourceQuantum, sourceSlot)
+					&& decodeInjected(uint32_t(out.slot[1]), walk, otherQuantum, otherSlot)
+					&& sourceQuantum == otherQuantum
+					&& sourceSlot == 0u && otherSlot == 1u;
 			}
 		}
 
@@ -550,7 +829,11 @@ namespace
 
 			for(unsigned q = 0; q < g_sustainedQuanta; ++q)
 			{
-				(void) scheduler->push(&impulse, 1);
+				g2::Frame sustained{};
+				sustained.slot[0] = injectedSlot(q, 0u);
+				sustained.slot[1] = injectedSlot(q, 1u);
+
+				(void) scheduler->push(&sustained, 1);
 				scheduler->runFrames(1);
 
 				g2::Frame out{};
@@ -652,6 +935,11 @@ namespace
 		          << " programsLanded=" << (_r.programsLanded ? 1 : 0)
 		          << " halted=" << (_r.halted ? 1 : 0)
 		          << " faulted=" << (_r.faulted ? 1 : 0) << std::endl;
+		std::cout << "egress: landedQuanta=" << _r.landedQuanta
+		          << " rxArmedAtLanded=" << _r.rxArmedAtLanded << "/" << _r.dspCount
+		          << " rxArmedQuanta=" << _r.rxArmedQuanta
+		          << " rxArmed=" << (_r.rxArmed ? 1 : 0)
+		          << " rxArmedPorts=" << _r.rxArmedPorts << "/" << _r.dspCount << std::endl;
 		std::cout << "egress: primedPulled=" << _r.primedPulled
 		          << " walkQuanta=" << _r.walkQuanta
 		          << " arrival=" << _r.arrival
@@ -670,6 +958,16 @@ namespace
 		          << " sinkControlExact=" << (_r.sinkControlExact ? 1 : 0)
 		          << " sinkControlValue=" << _r.sinkControlL << "/" << _r.sinkControlR
 		          << std::endl;
+
+		std::cout << "egress: headPort=" << (_r.headPortFound ? int(_r.headPort) : -1)
+		          << " rxChannel=" << _r.headRxChannel
+		          << " rxFrameWords=" << _r.headRxFrameWords
+		          << " deliveries=" << _r.headDeliveries << "/" << _r.walkQuanta
+		          << " lag=" << _r.headLag
+		          << " slotOffsets=" << _r.headSlot0Offset << "/" << _r.headSlot1Offset
+		          << " incomplete=" << _r.headIncomplete
+		          << " outOfOrder=" << _r.headOutOfOrder
+		          << " offsetMoved=" << _r.headOffsetMoved << std::endl;
 
 		std::cout << "egress: head of walk =";
 		for(size_t i = 0; i < _r.pulled.size(); ++i)
@@ -702,9 +1000,12 @@ int main()
 		if(!runEgress(directory, result))
 			return false;
 
-		// D_chain, derived. dspCount is read off the booted machine and
-		// hopFrames off the Config the factory accepted; no arrival figure is
-		// typed into this file.
+		// D_chain: the delay the mailbox geometry would impose if the chain
+		// forwarded what it receives. It sets the walk's length and it is
+		// reported beside the arrival figures it would explain; nothing is
+		// asserted against it, because the forwarding it assumes is the running
+		// program's and not this repository's. dspCount is read off the booted
+		// machine and hopFrames off the Config the factory accepted.
 		const unsigned expected =
 			(result.dspCount > 0 ? result.dspCount - 1u : 0u) * result.hopFrames;
 
@@ -718,6 +1019,16 @@ int main()
 		check(result.hopFrames > 0, "the Scheduler Config carries a non-zero hop");
 		check(result.booted, "the firmware composed display content, so the machine really booted");
 		check(result.programsLanded, "every DSP position took its program before the play phase began");
+
+		// The arming is the exit this drive takes, and the two figures beside it
+		// make the gate's own floor a measurement: rxArmedAtLanded is read with
+		// the same counter, on the same machine, at the earlier instant the
+		// previous gate would have stopped at, so a run states how much of the
+		// audio path that gate would have handed to the walk.
+		check(result.rxArmed,
+			"the ESAI receive DMA request is armed on every chain position within the boot bound; observed "
+			+ std::to_string(result.rxArmedPorts) + " of " + std::to_string(result.dspCount));
+
 		check(!result.halted, "the core is not halted at the play transition");
 		check(!result.faulted, "the board reports no fault at the play transition");
 
@@ -760,17 +1071,35 @@ int main()
 			+ std::to_string(result.sinkControlR) + " against "
 			+ std::to_string(g_sinkControlExpected));
 
-		check(result.arrival >= 0,
-			"the injected pattern reached the codec sink at all within "
-			+ std::to_string(result.walkQuanta) + " quanta");
+		// ------------------------------------------- the source edge's arrival
+		//
+		// The host pair reaches the head DSP's receive destination. This is the
+		// widest claim this file can make about the codec source, and it stops
+		// exactly where this repository's code stops: what the head DSP then
+		// does with the pair is the running program's business.
+		//
+		// The counters come before the totals, so a run that delivered something
+		// broken is reported as broken rather than as a short count.
+		check(result.headPortFound,
+			"the firmware's port table names a port at chain position 0");
 
-		check(result.arrival == int(expected),
-			"the injected pattern arrived at EXACTLY D_chain + D_codec = "
-			+ std::to_string(expected) + " frames; observed arrival frame "
-			+ std::to_string(result.arrival));
+		check(result.headDeliveries > 0,
+			"the injected pair reached the head DSP's receive destination on at least one walk quantum, "
+			"so the reading below is a measurement and not an unrun probe");
 
-		check(result.arrivalExact,
-			"the frame that arrived carries the injected pattern bit for bit in both codec slots");
+		checkEqual(result.headIncomplete, 0u,
+			"every receive bank that carried an injected word carried BOTH slots of one quantum's pair");
+
+		checkEqual(result.headOutOfOrder, 0u,
+			"every delivery arrived at the same lag, so no frame was dropped, duplicated or reordered");
+
+		checkEqual(result.headOffsetMoved, 0u,
+			"every pair landed at the same two words of the receive bank");
+
+		check(result.headLag >= 0 && result.headDeliveries == result.walkQuanta - unsigned(result.headLag),
+			"every walk quantum after the first " + std::to_string(result.headLag)
+			+ " delivered its pair to the head DSP: " + std::to_string(result.headDeliveries)
+			+ " deliveries over " + std::to_string(result.walkQuanta) + " quanta");
 
 		return g_failures == 0;
 	});
