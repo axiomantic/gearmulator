@@ -26,7 +26,7 @@ fi
 if ! command -v apt-get >/dev/null 2>&1; then
 	echo "FAILURE: this script installs with apt-get, which is not on PATH." >&2
 	echo "Install the equivalents of: libgl1-mesa-dev xorg-dev libasound2-dev" >&2
-	echo "build-essential clang ninja-build git, and CMake" \
+	echo "build-essential clang ninja-build git file, and CMake" \
 		"${CI_CMAKE_FLOOR_MAJOR}.${CI_CMAKE_FLOOR_MINOR} or newer." >&2
 	exit 1
 fi
@@ -54,6 +54,13 @@ command -v git   >/dev/null 2>&1 || packages+=(git)
 # that only Clang prints, and refuses to configure without it; the alternative it
 # offers is turning the gate off, which drops a check this project keeps.
 command -v clang >/dev/null 2>&1 || packages+=(clang)
+# Nothing compiles with file(1), but CPack's Debian generator shells out to it
+# for its shlibdeps pass and aborts the whole pack step when it is missing.
+command -v file  >/dev/null 2>&1 || packages+=(file)
+# ccache is an optimisation, not a dependency: configure.sh points the compiler
+# launchers at it only when it finds it on PATH, so a host without it still
+# configures and builds.
+command -v ccache >/dev/null 2>&1 || packages+=(ccache)
 cmake_too_old && packages+=(cmake)
 
 ci_log "installing: ${packages[*]}"
