@@ -7,6 +7,14 @@
 
 . "$(cd "${BASH_SOURCE[0]%/*}" && pwd)/lib.sh"
 
+# Probed rather than hardcoded: naming a launcher that is not installed makes
+# every compile fail, so a developer without ccache must still configure. CMake
+# resolves the name against PATH at build time, so the bare name is enough.
+launcher=()
+if command -v ccache >/dev/null 2>&1; then
+	launcher=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+fi
+
 if [ -n "${CI_PRESET}" ]; then
 	# The preset path is the release build, and it packages with `cpack
 	# --preset`. CMAKE_SKIP_INSTALL_ALL_DEPENDENCY is deliberately NOT set
@@ -14,7 +22,8 @@ if [ -n "${CI_PRESET}" ]; then
 	# the package picks them up, and dropping that edge would ship a package
 	# built from whatever the `all` target happened to leave behind.
 	ci_log "configure with preset ${CI_PRESET}"
-	exec cmake --preset "${CI_PRESET}" -DCMAKE_BUILD_TYPE="${CI_BUILD_TYPE}"
+	exec cmake --preset "${CI_PRESET}" -DCMAKE_BUILD_TYPE="${CI_BUILD_TYPE}" \
+		"${launcher[@]}"
 fi
 
 # CMAKE_SKIP_INSTALL_ALL_DEPENDENCY drops the `preinstall: all` edge the Makefile
@@ -33,4 +42,4 @@ while IFS= read -r a; do
 done < <(ci_split_args "${CI_CMAKE_ARGS}")
 
 ci_log "configure ${CI_BUILD_DIR} (${CI_BUILD_TYPE}, generator '${CI_CMAKE_GENERATOR:-default}')"
-exec cmake "${args[@]}" "${common[@]}" "${extra[@]}"
+exec cmake "${args[@]}" "${common[@]}" "${launcher[@]}" "${extra[@]}"
