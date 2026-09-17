@@ -466,7 +466,7 @@ When `Device::getState()` is called, `Plugin::getState()` has already pushed hea
 
 ## Git Conventions
 
-- Do NOT include `Co-authored-by` trailers in commit messages
+- A `Co-authored-by` trailer is permitted in this fork (upstream omits it)
 - Do NOT commit without explicit user approval
 - User stages changes themselves — only commit when asked
 
