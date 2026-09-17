@@ -7,6 +7,7 @@
 // No authority records the CS0 and CS2 bases and sizes, so the caller supplies
 // them and no shipped header carries a number.
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -27,11 +28,11 @@ namespace g2
 		// rest of g2Lib reports through a return value rather than an
 		// exception, and because a truncating load would put an image the
 		// caller never asked for in front of the boot vector.
-		[[nodiscard]] bool loadCs0(const uint8_t* _data, size_t _size);
+		[[nodiscard]] bool loadCs0(const uint8_t* _data, std::size_t _size);
 		[[nodiscard]] bool loadCs0(const std::vector<uint8_t>& _data);
 
 		// Load the CS2 image. Same contract as loadCs0.
-		[[nodiscard]] bool loadCs2(const uint8_t* _data, size_t _size);
+		[[nodiscard]] bool loadCs2(const uint8_t* _data, std::size_t _size);
 		[[nodiscard]] bool loadCs2(const std::vector<uint8_t>& _data);
 
 		// Address-range predicates.
