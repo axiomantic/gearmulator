@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -37,7 +38,7 @@ namespace g2
 			(void)frameIndex;
 		}
 
-		size_t stateSize() const noexcept
+		std::size_t stateSize() const noexcept
 		{
 			return 0;
 		}

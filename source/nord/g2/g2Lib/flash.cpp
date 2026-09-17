@@ -86,7 +86,7 @@ namespace g2
 
 	Flash::~Flash() = default;
 
-	bool Flash::loadCs0(const uint8_t* _data, size_t _size)
+	bool Flash::loadCs0(const uint8_t* _data, std::size_t _size)
 	{
 		if(_size > m_cs0.size())
 		{
@@ -104,7 +104,7 @@ namespace g2
 		return loadCs0(_data.data(), _data.size());
 	}
 
-	bool Flash::loadCs2(const uint8_t* _data, size_t _size)
+	bool Flash::loadCs2(const uint8_t* _data, std::size_t _size)
 	{
 		if(_size > m_cs2.size())
 		{
