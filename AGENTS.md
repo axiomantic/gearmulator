@@ -476,14 +476,25 @@ push either fails or writes the wrong ref.
 
 Work in a clone you created yourself. Never delete a path you did not create.
 
-## Rehearsal pull requests are never merged. Pull requests stack.
+## Do not merge a pull request. Rehearsal pull requests stay open.
 
 The project-wide copy of this rule is §10.1 of `nmg2-artifacts/AGENTS.md`.
 
-**Scope.** This rule applies to the forks: `dsp56300`, `mc68k`, `gearmulator`
-and `G2-Edit`. It does not apply to `mcf5407`, `nmg2-tools` or `nmg2-artifacts`.
-Those repositories are the operator's own and have no upstream. An agent opens
-its pull request into `main` and merges it when its own verification is done.
+**Merge no pull request unless the operator asks for that specific one.** A pull
+request that shows as mergeable, with green checks, or at the top of a tidy
+stack, is not a request to merge it.
+
+**Why the rehearsal pull requests stay open.** They are how the operator keeps
+this project's components separate, in reviewable chunks, for the upstream
+projects. They stay open until this project is completely done. Not until the
+checks are green. Not until a reviewer is satisfied. Not until the stack looks
+mergeable.
+
+**The one standing exception.** `mcf5407`, `nmg2-tools` and `nmg2-artifacts` are
+the operator's own and have no upstream. There an agent opens its pull request
+into `main` and merges it when its own verification is done. That exception
+stops there. It does not extend to the forks: `dsp56300`, `mc68k`, `gearmulator`
+and `G2-Edit`.
 
 A **rehearsal pull request** holds the work of a fork against its upstream base.
 It stays ready for a future submission to the upstream project.
@@ -496,10 +507,9 @@ It stays ready for a future submission to the upstream project.
 **Never merge a rehearsal pull request.** It stays open. Consumers pin its branch.
 
 **Another pull request merges only into a rehearsal branch.** Never merge it into
-`main` or `master`. Merge it only when the operator approves that merge. A pull
-request that shows as mergeable, with green checks, is not a request to merge it.
-The one exception is a change that the operator requests for a fork's default
-branch itself, for example to this file.
+`main` or `master`. Merge it only when the operator approves that merge. The one
+exception is a change that the operator requests for a fork's default branch
+itself, for example to this file.
 This rule is about pull requests. It does not cover a merge of a lower branch into
 a higher branch; "Keeping the stack correct" below covers that merge.
 
@@ -582,8 +592,8 @@ fork, the default branch carries the upstream project plus the tooling this
 project needs to work on it, and it is never submitted. In `dsp56300` and
 `mc68k`, the default branch is an exact mirror of upstream and carries no
 tooling. The rehearsal pull request of a fork is a FIRST DRAFT of what this
-project may one day offer that project's maintainers. `## Rehearsal pull
-requests are never merged. Pull requests stack.` above gives its branches and
+project may one day offer that project's maintainers. `## Do not merge a pull
+request. Rehearsal pull requests stay open.` above gives its branches and
 its bases. A submission is eventually rebased onto the UPSTREAM default branch,
 so none of this project's tooling reaches it.
 
