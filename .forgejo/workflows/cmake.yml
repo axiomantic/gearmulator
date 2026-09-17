@@ -123,6 +123,16 @@ jobs:
         timeout-minutes: 90
         run: ./scripts/ci/build.sh
 
+      # A compiler launcher that is wired up but never hits is indistinguishable
+      # from one that is not wired up at all, and the difference is only visible
+      # in the hit count and in whether CCACHE_DIR points at storage that
+      # outlives the job. Both go in the log.
+      - name: Compiler cache statistics
+        if: always()
+        run: |
+          echo "CCACHE_DIR=${CCACHE_DIR:-<unset>}"
+          command -v ccache >/dev/null 2>&1 && ccache -s || echo "ccache not on PATH"
+
       - name: Pack
         timeout-minutes: 20
         run: ./scripts/ci/pack.sh
