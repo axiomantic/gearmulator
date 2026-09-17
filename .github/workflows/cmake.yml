@@ -11,6 +11,14 @@ name: CMake
 
 on: [push, pull_request]
 
+# GitHub runs every superseded push to completion unless told otherwise, so
+# unlike the Forgejo half this block changes behaviour rather than restating a
+# default. Keyed on the ref, so a branch's push run and the pull_request run
+# for the same commit land in different groups and neither cancels the other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   BUILD_TYPE: Release
 
