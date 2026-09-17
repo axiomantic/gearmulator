@@ -14,7 +14,8 @@ shell.
 | Script | What it does |
 |--|--|
 | `scripts/ci/lib.sh` | Sourced by the rest. Defines every `CI_*` variable and its default. |
-| `scripts/ci/install-linux-deps.sh` | Installs the OpenGL, X and ALSA headers, plus a compiler, CMake and Ninja where the host lacks them. Exits 0 on a non-Linux host. |
+| `scripts/ci/install-linux-deps.sh` | Installs the OpenGL, X and ALSA headers, plus a compiler, Clang, CMake and Ninja where the host lacks them. Exits 0 on a non-Linux host. |
+| `scripts/ci/install-nim.sh` | Installs the pinned Nim toolchain and prints the directory to put on PATH. Forgejo only: the GitHub legs use `setup-nim-action`. |
 | `scripts/ci/configure.sh` | CMake configure, either explicit or through a preset. |
 | `scripts/ci/build.sh` | Builds what `configure.sh` produced. |
 | `scripts/ci/test.sh` | `ctest`, excluding the labels `CI_TEST_EXCLUDE_LABELS` names. |
@@ -78,12 +79,26 @@ Windows or macOS runner on it and none is planned.
 
 ## The container image
 
-The Forgejo jobs run in `nimlang/nim:2.2.10`. The MCF5407 core compiles its Nim
-sources during CMake configure and stops on any version but the one its
-`.nim-version` names, so the image pins an exact Nim version — the same version
-`setup-nim-action` installs on the GitHub legs. Everything else the build needs
-comes from `install-linux-deps.sh` at job time. Advance the image tag together
-with `.nim-version` and with the `nim-version:` pins in `.github/workflows/`.
+The Forgejo jobs run in `ubuntu:24.04`, which is what `ubuntu-latest` resolves to
+on the GitHub legs. The match is load-bearing rather than cosmetic: this tree does
+not compile under the GCC 12 that Debian bookworm ships, because
+`source/nord/g2/g2Lib/flash.h` reaches for `size_t` through an include that only
+GCC 13 and newer provide. Pinning the same distribution as the GitHub Linux leg is
+what keeps the two legs comparable.
+
+Everything the build needs goes on at job time:
+
+- `install-linux-deps.sh` adds the OpenGL, X and ALSA headers, `build-essential`,
+  Ninja and Clang. Clang is there for the mcf5407 ABI gate, which reads a C syntax
+  tree that only Clang prints and refuses to configure without it. A hosted Ubuntu
+  runner already ships Clang, which is why only a bare container needs it named.
+- `install-nim.sh` adds Nim at the version it pins. The MCF5407 core compiles its
+  Nim sources during CMake configure and stops on any version but the one its
+  `.nim-version` names, so it is an exact version. Advance it together with the
+  `nim-version:` pins in `.github/workflows/`.
+- CMake comes from the distribution, at 3.28. The tree's own floor is 3.26, set by
+  the mcf5407 dependency; `require-cmake-version.sh` enforces a separate, lower
+  3.20 floor, which is what `ctest --no-tests=error` needs.
 
 ## Remotes
 
