@@ -15,13 +15,14 @@ jobs:
   build:
     name: ubuntu build with ${{ matrix.cmake_generator }} cmake generator
     runs-on: docker
-    # The MCF5407 core compiles its Nim sources during CMake configure and stops
-    # the configure on any version other than the one its own .nim-version
-    # names, so the image is pinned to an exact Nim version, matching what
-    # setup-nim-action installs on the GitHub legs. Advance it together with
-    # that file.
+    # ubuntu:24.04 is what `ubuntu-latest` resolves to on the GitHub legs, and
+    # the match is load-bearing rather than cosmetic: this tree does not compile
+    # under the GCC 12 that Debian bookworm ships, because g2Lib/flash.h reaches
+    # for `size_t` through an include that only GCC 13 and newer provide.
+    # Pinning the same distribution as the GitHub Linux leg is what keeps the
+    # two legs comparable. Nim goes on top, at the version scripts/ci pins.
     container:
-      image: nimlang/nim:2.2.10
+      image: ubuntu:24.04
     strategy:
       matrix:
         cmake_generator: [ default, Ninja ]
@@ -36,10 +37,19 @@ jobs:
       # .github/workflows/cmake.yml, which builds every synth; the G2-only
       # narrowing there applies to Windows alone, for a build-ceiling reason
       # that does not hold on this runner.
+      CI_CMAKE_GENERATOR: ${{ matrix.cmake_generator == 'Ninja' && 'Ninja' || '' }}
     steps:
+      # A bare distribution image has no git, and the checkout below is git.
+      - name: Bootstrap git
+        run: |
+          set -eux
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates
+
       - name: Check out the repository
         run: |
-          set -euo pipefail
+          set -eux
           git init -q .
           git remote add origin \
             "https://${{ github.actor }}:${{ github.token }}@git.axiomantic.dev/${{ github.repository }}.git"
@@ -50,10 +60,11 @@ jobs:
       - name: Install build dependencies
         run: ./scripts/ci/install-linux-deps.sh
 
+      - name: Install the pinned Nim toolchain
+        run: echo "$(./scripts/ci/install-nim.sh | tail -1)" >> "$GITHUB_PATH"
+
       - name: Configure CMake
         run: ./scripts/ci/configure.sh
-        env:
-          CI_CMAKE_GENERATOR: ${{ matrix.cmake_generator == 'Ninja' && 'Ninja' || '' }}
 
       - name: Build
         timeout-minutes: 90
