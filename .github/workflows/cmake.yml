@@ -9,7 +9,11 @@ name: CMake
 # Linux/Podman Forgejo runner, so there is no self-hosted host that could run
 # them. They stay here and have no Forgejo counterpart.
 
-on: [push, pull_request]
+# This fork runs the upstream build matrix on demand only: the full matrix is
+# expensive, and firing it on every push and every pull request costs more than
+# the signal is worth here. Upstream keeps its own push/pull_request triggers.
+on:
+  workflow_dispatch:
 
 # GitHub runs every superseded push to completion unless told otherwise, so
 # unlike the Forgejo half this block changes behaviour rather than restating a
