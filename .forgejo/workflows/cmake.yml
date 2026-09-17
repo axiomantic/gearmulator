@@ -27,12 +27,11 @@ jobs:
   build:
     name: ubuntu build with ${{ matrix.cmake_generator }} cmake generator
     runs-on: docker
-    # ubuntu:24.04 is what `ubuntu-latest` resolves to on the GitHub legs, and
-    # the match is load-bearing rather than cosmetic: this tree does not compile
-    # under the GCC 12 that Debian bookworm ships, because g2Lib/flash.h reaches
-    # for `size_t` through an include that only GCC 13 and newer provide.
-    # Pinning the same distribution as the GitHub Linux leg is what keeps the
-    # two legs comparable. Nim goes on top, at the version scripts/ci pins.
+    # ubuntu:24.04 is what `ubuntu-latest` resolves to on the GitHub legs.
+    # Naming the same distribution is what makes a failure here and a failure
+    # there the same failure; a different image turns every disagreement
+    # between the two legs into a toolchain question first. Nim goes on top, at
+    # the version scripts/ci pins.
     container:
       image: ubuntu:24.04
     strategy:
