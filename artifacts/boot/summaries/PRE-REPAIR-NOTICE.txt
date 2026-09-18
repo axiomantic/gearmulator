@@ -21,3 +21,59 @@ DO NOT COMPARE AGAINST THESE FILES. THE CURRENT BASELINE IS:
   /Users/eek/Development/nmg2-artifacts/baselines/int6-t1_boot-handshake-latched-2026-08-27.txt
   It names its own population -- tree, sha, build directory, binary, command, exit status -- and
   records `boot: handshakePorts=8 (latched) handshakeAtEnd=0 (level read, reported only)`.
+
+================================================================================================
+
+SECOND NOTICE, APPENDED 2026-09-18 — THE `Ex\x09` BANNER FAILURES ARE OBSOLETE EVIDENCE TOO.
+The notice above is dated 2026-08-27 and the banner repair landed 2026-09-01, in commit fffa32a5,
+which is an ancestor of `g2/band-a-plugin`. The repair did not exist when the notice above was
+written, so its author could not have covered it. Nothing in this directory is deleted or edited;
+each transcript remains an honest record of the run that produced it.
+
+WHAT IS OBSOLETE, AND WHY.
+  Nine transcripts here print a line beginning `FAIL display 0 line 1 equals "Version 1.62 Exp"`.
+  ONE UNIT IS ONE TRANSCRIPT FILE PRINTING THAT LINE; the count is 9, and the tenth file here,
+  t1_boot_post_sch35_jit203.txt, prints no banner line at all.
+
+  THOSE NINE ARE TWO DIFFERENT FAILURES AND ONLY ONE OF THEM IS RETRACTED HERE.
+
+  THREE read back `"Version 1.62 Ex\x09"` -- fifteen correct characters and a sixteenth that is
+  not ASCII:
+    t1_boot_bannerdump.txt          t1_boot_g2x.txt                t1_boot_settle.txt
+  These three are OBSOLETE. THE BANNER WAS NEVER CORRUPTED. `0x09` IS A CORRECTLY DISPLAYED `p`.
+
+  SIX read back sixteen spaces -- no banner reached the display at all:
+    t1_boot_brd32_preinit.txt       t1_boot_brd32_preinit_1u.txt   t1_boot_cfi_id_fix.txt
+    t1_boot_cs2trace.txt            t1_boot_head_4fd2fa79.txt      t1_boot_pre_sch35.txt
+  Those six record a DIFFERENT condition. Nothing in this second notice retracts them.
+
+WHAT THE `\x09` ACTUALLY WAS.
+  The G2 display does not hold ASCII. The display helper at 0x30056FEA is a table-translating
+  copy: it loads the per-display table at 0x302A0DE2, indexes it with the SOURCE character, and
+  stores the table VALUE into the cell -- never the character. The firmware initialises that table
+  to the identity and then deliberately remaps five entries at 0x30056BE8, through a pointer that
+  sits 0x2A below the table's character origin:
+
+    moveq #8,%d0   moveb %d0,%a0@(0x91)      0x91 - 0x2A = 0x67 'g' -> 0x08
+    moveq #9,%d1   moveb %d1,%a0@(0x9A)      0x9A - 0x2A = 0x70 'p' -> 0x09
+    moveq #10,%d2  moveb %d2,%a0@(0x9B)      0x9B - 0x2A = 0x71 'q' -> 0x0A
+    moveq #11,%d0  moveb %d0,%a0@(0xA3)      0xA3 - 0x2A = 0x79 'y' -> 0x0B
+    moveq #12,%d1  moveb %d1,%a0@(0x94)      0x94 - 0x2A = 0x6A 'j' -> 0x0C
+
+  Those are the five descenders, and 0x08..0x0C is the CGRAM alias range for custom characters
+  0..4. The instruction immediately after the fifth store loads 0x300EC4B8, from which the
+  firmware uploads the five 8-row glyph bitmaps into those slots. ALL FIVE OFFSETS AGREE ON THE
+  SAME 0x2A, so the offset is DERIVED from the five and not fitted to one.
+
+  THE DEFECT WAS IN THE READER, NOT IN THE MACHINE. The test compared raw display cells against
+  ASCII, so it mis-read g, j, p, q and y on every G2 display, on every line. `p` is the only
+  descender in all thirty-two banner characters, which is why line 0 looked clean and only the
+  sixteenth cell of line 1 looked wrong. THE POSITION WAS INCIDENTAL TO THE VALUE; a reader that
+  takes those three FAIL lines as a banner-rendering defect, or as a defect at character sixteen,
+  is chasing something that was never there.
+
+DO NOT COMPARE AGAINST THESE THREE FILES. There is no post-repair transcript in this directory to
+compare against: t1_boot_post_sch35_jit203.txt prints no banner line. What replaced the raw-cell
+comparison is in the tree and can be read directly -- `cgramToAscii` in
+source/nord/g2/g2Lib/test/t1_boot.cpp decodes the five glyphs back to the characters they render,
+and source/nord/g2/g2TestConsole/main.cpp carries the same decode for the console dump.
