@@ -123,6 +123,13 @@ jobs:
         timeout-minutes: 90
         run: ./scripts/ci/build.sh
 
+      # No environment of its own. scripts/ci/lib.sh holds the build directory
+      # and the excluded labels, and the configure and build steps above read
+      # the same file, so the tree this runs against cannot differ from the tree
+      # that was built.
+      - name: Run the test suite
+        run: ./scripts/ci/test.sh
+
       # A compiler launcher that is wired up but never hits is indistinguishable
       # from one that is not wired up at all, and the difference is only visible
       # in the hit count and in whether CCACHE_DIR points at storage that
