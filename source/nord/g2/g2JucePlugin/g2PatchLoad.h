@@ -59,6 +59,13 @@ namespace g2
 	/* Parses `_file` whole, then originates one protocol frame for each object
 	 * in it, in file order, through `_client`.
 	 *
+	 * The container's objects are all that leaves. A patch delivered this way
+	 * loads and cannot sound -- the firmware refuses a note until the addressed
+	 * slot's keyboard-enable byte is set, and no object of a `.pch2` carries
+	 * that byte. The asymmetry with pch2LoadFramed below is deliberate: this arm
+	 * originates the file and nothing else, so what reaches the wire is exactly
+	 * what the container holds. pch2LoadFramed is the arm a plugin calls.
+	 *
 	 * The frame is the object verbatim -- [type][length][payload], which is the
 	 * framing g2::ProtocolFrame already carries. Nothing is re-wrapped and no
 	 * checksum is recomputed for it: the file's CRC covers the file and the
