@@ -55,7 +55,7 @@ to turn its tests on.
 | File | Runs on | Covers |
 |--|--|--|
 | `.forgejo/workflows/cmake.yml` | Forgejo, `docker`, `ubuntu:24.04` | Linux build, default and Ninja generators, on every push and pull request. It does not pack; the file says why. |
-| `.forgejo/workflows/nightly.yml` | Forgejo, same image | The nightly Linux build and pack. |
+| `.forgejo/workflows/nightly.yml` | Forgejo, same image | The nightly Linux build. It does not pack; the file says why. |
 | `.github/workflows/cmake.yml` | GitHub | The same matrix across Linux, macOS and Windows. |
 | `.github/workflows/nightly.yml` | GitHub | The nightly build across Linux, macOS and Windows. |
 | `.github/workflows/ci.yml` | GitHub | Build and test, plus the sanitizer run. `main` only. |
