@@ -163,6 +163,11 @@ jobs:
   # entry in the queue of a runner that serves one job at a time.
   sanitizers:
     name: address and undefined sanitizers
+    # Push only. Every branch here has an open pull request, so the workflow
+    # fires twice for the same commit, and an instrumented build can hold the
+    # single runner for hours. The pull_request run would test the commit the
+    # push run already tested.
+    if: github.event_name == 'push'
     runs-on: docker
     container:
       image: ubuntu:24.04
