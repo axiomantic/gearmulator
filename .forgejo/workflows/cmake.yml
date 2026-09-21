@@ -154,3 +154,68 @@ jobs:
       # .rpm and still report success. Dropping ZIP and DEB coverage on this
       # runner is the accepted cost. The legs in .github/workflows/cmake.yml
       # still pack.
+
+  # A job of its own rather than a step in the matrix above. The matrix runs two
+  # generators, so a step there would instrument the same tree twice for one
+  # verdict, and it would extend two builds that already carry their own
+  # ceiling. A separate job pays for that with a duplicated bootstrap -- an
+  # Actions workflow has no way to share steps between jobs -- and with one more
+  # entry in the queue of a runner that serves one job at a time.
+  sanitizers:
+    name: address and undefined sanitizers
+    runs-on: docker
+    container:
+      image: ubuntu:24.04
+    timeout-minutes: 240
+    env:
+      # One compile at a time. The container is capped at a single CPU, so
+      # parallelism here buys no throughput at all; what it does buy is a
+      # multiple of the peak memory, and an instrumented compile of a JUCE
+      # translation unit wants roughly twice what an ordinary one does. The
+      # build job above can afford 3 because its compiles are not instrumented.
+      CI_PARALLEL: 1
+      # The same narrowing the build job applies. A sanitizer run over a
+      # different set of synths would report on a tree no other leg builds.
+      CI_CMAKE_ARGS: >-
+        -Dgearmulator_SYNTH_OSIRUS=OFF
+        -Dgearmulator_SYNTH_OSTIRUS=OFF
+        -Dgearmulator_SYNTH_VAVRA=OFF
+        -Dgearmulator_SYNTH_XENIA=OFF
+        -Dgearmulator_SYNTH_NODALRED2X=OFF
+        -Dgearmulator_SYNTH_JE8086=OFF
+        -Dgearmulator_SYNTH_G2=ON
+    steps:
+      - name: Bootstrap git
+        run: |
+          set -eux
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates
+
+      - name: Check out the repository
+        env:
+          SUBMODULE_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN }}
+        run: |
+          set -eux
+          git init -q .
+          git remote add origin \
+            "https://${{ github.actor }}:${{ github.token }}@git.axiomantic.dev/${{ github.repository }}.git"
+          git fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+          git config --global credential."https://git.axiomantic.dev".helper \
+            '!f() { test "$1" = get || return 0; printf "username=x-access-token\npassword=%s\n" "$SUBMODULE_READ_TOKEN"; }; f'
+          git remote set-url origin \
+            "https://git.axiomantic.dev/${{ github.repository }}.git"
+          git submodule update --init --recursive --depth 1
+
+      - name: Install build dependencies
+        run: ./scripts/ci/install-linux-deps.sh
+
+      # The MCF5307 core compiles its Nim sources during CMake configure, so
+      # this job stops at configure without the pinned toolchain and never
+      # reaches the sanitizers at all.
+      - name: Install the pinned Nim toolchain
+        run: echo "$(./scripts/ci/install-nim.sh | tail -1)" >> "$GITHUB_PATH"
+
+      - name: Build and test under the address and undefined sanitizers
+        run: ./scripts/ci/sanitizer-build-and-test.sh
