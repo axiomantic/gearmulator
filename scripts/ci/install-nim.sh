@@ -73,6 +73,20 @@ ci_nim_version() {
 	printf '%s\n' "${raw}"
 }
 
+# The version is captured whole and sliced in the shell rather than piped into a
+# reader that closes after the first line. `nim --version` writes several lines;
+# a reader that exits early leaves it with EPIPE, and lib.sh's `pipefail` turns
+# that into an abort of this script before it prints the PATH entry it exists to
+# produce. The caller takes the last line of stdout, so the abort feeds it the
+# version banner instead of a directory and the step still reports success.
+ci_nim_semver() {
+	local out first
+	out=$("$1" --version) || return 1
+	first=${out%%$'\n'*}
+	[[ ${first} =~ [0-9]+\.[0-9]+\.[0-9]+ ]] || return 1
+	printf '%s\n' "${BASH_REMATCH[0]}"
+}
+
 if [ -z "${CI_NIM_VERSION:-}" ]; then
 	CI_NIM_VERSION=$(ci_nim_version) || exit 1
 fi
@@ -81,7 +95,7 @@ fi
 CI_NIM_PREFIX=${CI_NIM_PREFIX:-/opt/nim-${CI_NIM_VERSION}}
 
 if command -v nim >/dev/null 2>&1 &&
-   [ "$(nim --version | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" = "${CI_NIM_VERSION}" ]; then
+   [ "$(ci_nim_semver nim || true)" = "${CI_NIM_VERSION}" ]; then
 	ci_log "Nim ${CI_NIM_VERSION} is already on PATH"
 	exit 0
 fi
@@ -101,8 +115,10 @@ ci_log "installing Nim ${CI_NIM_VERSION} into ${CI_NIM_PREFIX}"
 mkdir -p "${CI_NIM_PREFIX}"
 curl -fsSL "${url}" | tar -xJ -C "${CI_NIM_PREFIX}" --strip-components=1
 
-"${CI_NIM_PREFIX}/bin/nim" --version | head -1
-have=$("${CI_NIM_PREFIX}/bin/nim" --version | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+# stdout carries the PATH entry and nothing else, because the caller reads the
+# last line of it.
+have=$(ci_nim_semver "${CI_NIM_PREFIX}/bin/nim" || true)
+ci_log "installed Nim reports ${have:-no version}"
 if [ "${have}" != "${CI_NIM_VERSION}" ]; then
 	echo "FAILURE: asked for Nim ${CI_NIM_VERSION}, got ${have}." >&2
 	exit 1
