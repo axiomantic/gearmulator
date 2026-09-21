@@ -20,7 +20,7 @@ shell.
 | `scripts/ci/build.sh` | Builds what `configure.sh` produced. |
 | `scripts/ci/test.sh` | `ctest`, excluding the labels `CI_TEST_EXCLUDE_LABELS` names. |
 | `scripts/ci/pack.sh` | `scripts/pack.cmake`, or `cpack` in preset mode. |
-| `scripts/ci/sanitizer-build-and-test.sh` | A second build and test run under the address and undefined sanitizers. |
+| `scripts/ci/sanitizer-build-and-test.sh` | A second build and test run under the address and undefined sanitizers, in a build tree of its own. Reads `CI_CMAKE_ARGS`; sets the build type and the sanitizer flags itself. |
 | `scripts/ci/require-cmake-version.sh` | Fails below CMake 3.20, the floor for `ctest --no-tests=error`. |
 | `scripts/ci/changelog.sh` | Splits `doc/changelog.txt` for the release upload. |
 
@@ -54,7 +54,7 @@ to turn its tests on.
 
 | File | Runs on | Covers |
 |--|--|--|
-| `.forgejo/workflows/cmake.yml` | Forgejo, `docker`, `ubuntu:24.04` | Linux build, default and Ninja generators, on every push and pull request. It does not pack; the file says why. |
+| `.forgejo/workflows/cmake.yml` | Forgejo, `docker`, `ubuntu:24.04` | Linux build, default and Ninja generators, plus the sanitizer run in a job of its own, on every push and pull request. It does not pack; the file says why. |
 | `.forgejo/workflows/nightly.yml` | Forgejo, same image | The nightly Linux build. It does not pack; the file says why. |
 | `.github/workflows/cmake.yml` | GitHub | The same matrix across Linux, macOS and Windows. |
 | `.github/workflows/nightly.yml` | GitHub | The nightly build across Linux, macOS and Windows. |
