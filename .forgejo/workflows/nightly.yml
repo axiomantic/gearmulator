@@ -70,11 +70,11 @@ jobs:
         run: ./scripts/ci/install-linux-deps.sh
 
       - name: Install the pinned Nim toolchain
-        # The script's status is captured rather than piped into echo, which
-        # discards it, and pipefail is named rather than assumed of the runner:
-        # a failing install otherwise exports a garbage PATH from a green step.
+        # The runner's shell is sh, which has no pipefail, so a failing script
+        # inside the command substitution does not abort the assignment. The
+        # produced directory is checked rather than the status.
         run: |
-          set -euo pipefail
+          set -eu
           nimbin=$(./scripts/ci/install-nim.sh | tail -1)
           test -x "${nimbin}/nim" || { echo "install-nim.sh produced '${nimbin}', not a Nim bin directory" >&2; exit 1; }
           echo "${nimbin}" >> "$GITHUB_PATH"
