@@ -70,7 +70,14 @@ jobs:
         run: ./scripts/ci/install-linux-deps.sh
 
       - name: Install the pinned Nim toolchain
-        run: echo "$(./scripts/ci/install-nim.sh | tail -1)" >> "$GITHUB_PATH"
+        # The script's status is captured rather than piped into echo, which
+        # discards it, and pipefail is named rather than assumed of the runner:
+        # a failing install otherwise exports a garbage PATH from a green step.
+        run: |
+          set -euo pipefail
+          nimbin=$(./scripts/ci/install-nim.sh | tail -1)
+          test -x "${nimbin}/nim" || { echo "install-nim.sh produced '${nimbin}', not a Nim bin directory" >&2; exit 1; }
+          echo "${nimbin}" >> "$GITHUB_PATH"
 
       - name: Configure CMake
         run: ./scripts/ci/configure.sh
