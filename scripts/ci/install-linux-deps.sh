@@ -57,6 +57,12 @@ command -v clang >/dev/null 2>&1 || packages+=(clang)
 # Nothing compiles with file(1), but CPack's Debian generator shells out to it
 # for its shlibdeps pass and aborts the whole pack step when it is missing.
 command -v file  >/dev/null 2>&1 || packages+=(file)
+# A bare interpreter, because the oracle t0_extract_matches_python drives imports
+# nothing outside the standard library. It is listed beside the compiler rather
+# than beside ccache because it is not optional: that test is registered
+# unconditionally and fails, rather than skipping, when the build located no
+# Python.
+command -v python3 >/dev/null 2>&1 || packages+=(python3)
 # ccache is an optimisation, not a dependency: configure.sh points the compiler
 # launchers at it only when it finds it on PATH, so a host without it still
 # configures and builds.
