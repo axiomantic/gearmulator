@@ -11,9 +11,9 @@
 #include "dsp56kEmu/jitconfig.h"
 
 #include <cstring>
-#include <new>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace g2
@@ -35,22 +35,163 @@ namespace g2
 			dsp56k::MemArea_P, dsp56k::MemArea_X, dsp56k::MemArea_Y
 		};
 
-		/* The register block is copied as a struct, not memcpy'd. Every
-		 * register in it is a RegType, which declares its own copy
-		 * constructor, so the block is not trivially copyable and a memcpy of
-		 * it is undefined however plain the data underneath. */
 		using Regs = dsp56k::DSP::SRegs;
 
-		/* Placement-constructing Regs inside the caller's buffer needs that
-		 * buffer aligned for it. Every area contributes a whole number of
-		 * TWords and sizeof(Regs) is a multiple of its own alignment, so each
-		 * slot advances the cursor by a multiple of alignof(Regs) and only
-		 * the caller's pointer has to carry the alignment. */
-		static_assert(alignof(Regs) <= alignof(std::max_align_t),
-			"a snapshot buffer from operator new cannot be aligned for the register block");
-		static_assert(sizeof(dsp56k::TWord) % alignof(Regs) == 0
-			|| alignof(Regs) % sizeof(dsp56k::TWord) == 0,
-			"a memory area's byte count can leave the cursor misaligned for the next slot");
+		/* The register block travels as its FIELDS and not as a struct.
+		 *
+		 * A struct copy needs the cursor aligned for Regs, and this call
+		 * cannot have it: the caller advances the cursor past its own block
+		 * first, and that block ends on an odd byte. Aligning the cursor here
+		 * would satisfy the requirement; writing the fields REMOVES it, and
+		 * takes the cast through a Regs pointer on the load side with it.
+		 *
+		 * A field the library adds to the register block is not carried until
+		 * it is added to walkRegs below. */
+
+		void put32(uint8_t*& _cursor, const uint32_t _value) noexcept
+		{
+			std::memcpy(_cursor, &_value, sizeof(_value));
+			_cursor += sizeof(_value);
+		}
+
+		void put64(uint8_t*& _cursor, const uint64_t _value) noexcept
+		{
+			std::memcpy(_cursor, &_value, sizeof(_value));
+			_cursor += sizeof(_value);
+		}
+
+		uint32_t get32(const uint8_t*& _cursor) noexcept
+		{
+			uint32_t value = 0;
+			std::memcpy(&value, _cursor, sizeof(value));
+			_cursor += sizeof(value);
+			return value;
+		}
+
+		uint64_t get64(const uint8_t*& _cursor) noexcept
+		{
+			uint64_t value = 0;
+			std::memcpy(&value, _cursor, sizeof(value));
+			_cursor += sizeof(value);
+			return value;
+		}
+
+		/* THE ONE PLACE that says how wide a field's record is. The writer,
+		 * the reader and the size all read this alias, so no two of the three
+		 * can disagree about a field. A second spelling of the same rule is
+		 * how a writer and a size drift apart in silence. */
+		template<typename T>
+		using Record = std::conditional_t<(sizeof(T) > sizeof(uint32_t)), uint64_t, uint32_t>;
+
+		void putRecord(uint8_t*& _cursor, const uint32_t _value) noexcept { put32(_cursor, _value); }
+		void putRecord(uint8_t*& _cursor, const uint64_t _value) noexcept { put64(_cursor, _value); }
+
+		void getRecord(const uint8_t*& _cursor, uint32_t& _value) noexcept { _value = get32(_cursor); }
+		void getRecord(const uint8_t*& _cursor, uint64_t& _value) noexcept { _value = get64(_cursor); }
+
+		/* A signed register travels as its two's-complement bit pattern and
+		 * returns through the matching cast. What the image depends on is that
+		 * round trip and not the value's interpretation, which is the reason
+		 * scheduler.cpp's own signed field carries the same pair of casts. */
+		template<typename T, unsigned B>
+		void putLeaf(uint8_t*& _cursor, const dsp56k::RegType<T, B>& _reg) noexcept
+		{
+			putRecord(_cursor, static_cast<Record<T>>(_reg.var));
+		}
+
+		template<typename T, unsigned B>
+		void getLeaf(const uint8_t*& _cursor, dsp56k::RegType<T, B>& _reg) noexcept
+		{
+			Record<T> record = 0;
+			getRecord(_cursor, record);
+			_reg.var = static_cast<T>(record);
+		}
+
+		template<typename T, unsigned B>
+		constexpr size_t leafSize(const dsp56k::RegType<T, B>&) noexcept
+		{
+			return sizeof(Record<T>);
+		}
+
+		/* The modulo and mask arrays hold plain words rather than registers. */
+		void putLeaf(uint8_t*& _cursor, const dsp56k::TWord _word) noexcept
+		{
+			putRecord(_cursor, static_cast<Record<dsp56k::TWord>>(_word));
+		}
+
+		void getLeaf(const uint8_t*& _cursor, dsp56k::TWord& _word) noexcept
+		{
+			Record<dsp56k::TWord> record = 0;
+			getRecord(_cursor, record);
+			_word = static_cast<dsp56k::TWord>(record);
+		}
+
+		constexpr size_t leafSize(const dsp56k::TWord&) noexcept
+		{
+			return sizeof(Record<dsp56k::TWord>);
+		}
+
+		/* ONE walk, and the writer, the reader and the size are three visitors
+		 * over it. Two mirrored field lists could drift in membership or in
+		 * order, and a writer and a reader that drifted TOGETHER would round
+		 * trip cleanly while carrying the wrong register; a size that drifted
+		 * from either would leave the cursor outside the block the caller
+		 * sized. The visitor sees leaves only, so the array expansion is here
+		 * and not repeated in each of the three. */
+		template<typename R, typename Visit>
+		void walkRegs(R& _regs, Visit&& _visit)
+		{
+			const auto each = [&_visit](auto& _array)
+			{
+				for(auto& element : _array)
+					_visit(element);
+			};
+
+			_visit(_regs.x);
+			_visit(_regs.y);
+			_visit(_regs.a);
+			_visit(_regs.b);
+
+			each(_regs.r);
+			each(_regs.n);
+			each(_regs.m);
+			each(_regs.mMask);
+			each(_regs.mModulo);
+
+			_visit(_regs.sr);
+			_visit(_regs.omr);
+			_visit(_regs.pc);
+			_visit(_regs.la);
+			_visit(_regs.lc);
+			_visit(_regs.sp);
+			_visit(_regs.sc);
+
+			each(_regs.ss);
+
+			_visit(_regs.sz);
+			_visit(_regs.vba);
+			_visit(_regs.ep);
+		}
+
+		/* Derived from the walk that writes the block rather than counted by
+		 * hand, so a field added to the walk is added to the size by the same
+		 * edit. The probe is a register block whose values are never read; the
+		 * walk needs an object because the field list is not reachable any
+		 * other way. Computed once, because every state call asks for it. */
+		size_t regsBlockSize() noexcept
+		{
+			static const size_t size = []
+			{
+				const Regs probe{};
+				size_t total = 0;
+
+				walkRegs(probe, [&total](const auto& _leaf) { total += leafSize(_leaf); });
+
+				return total;
+			}();
+
+			return size;
+		}
 
 		size_t areaByteSize(const dsp56k::Memory& _memory, const dsp56k::EMemArea _area) noexcept
 		{
@@ -152,7 +293,7 @@ namespace g2
 		{
 			const dsp56k::Memory& memory = slot(i).memory;
 
-			total += sizeof(Regs);
+			total += regsBlockSize();
 
 			for(const auto area : g_areas)
 				total += areaByteSize(memory, area);
@@ -169,8 +310,8 @@ namespace g2
 		{
 			Slot& s = slot(i);
 
-			new (cursor) Regs(s.dsp.regs());
-			cursor += sizeof(Regs);
+			walkRegs(static_cast<const Regs&>(s.dsp.regs()),
+				[&cursor](const auto& _leaf) { putLeaf(cursor, _leaf); });
 
 			for(const auto area : g_areas)
 			{
@@ -207,8 +348,8 @@ namespace g2
 		{
 			Slot& s = slot(i);
 
-			s.dsp.regs() = *reinterpret_cast<const Regs*>(cursor);
-			cursor += sizeof(Regs);
+			walkRegs(s.dsp.regs(),
+				[&cursor](auto& _leaf) { getLeaf(cursor, _leaf); });
 
 			for(const auto area : g_areas)
 			{

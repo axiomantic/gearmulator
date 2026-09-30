@@ -857,14 +857,19 @@ namespace g2
 		/* The version of this class's own block. It is not the Board's and not
 		 * the chain's; each limb versions or guards itself.
 		 *
-		 * The word moved to 2 because the layout moved: version 1 carried a
-		 * regime word between the version word and the frame index, so a
-		 * version-1 image read by this build would take that regime word as the
-		 * low half of the frame index and every field after it would be
-		 * shifted. A layout change that left the word at 1 would be accepted
-		 * and misread -- silently -- which is the one outcome the word exists
-		 * to prevent. */
-		constexpr uint32_t g_schedulerStateVersion = 2u;
+		 * Each move of the word is a move of the layout it guards. A layout
+		 * change that left the word alone would be accepted and misread --
+		 * silently -- which is the one outcome the word exists to prevent.
+		 *
+		 * Version 1 carried a regime word between the version word and the
+		 * frame index, so a version-1 image read by a version-2 build would
+		 * take that regime word as the low half of the frame index and shift
+		 * every field after it.
+		 *
+		 * Version 2 wrote each DSP's register block as a struct copy. Version 3
+		 * writes it field by field, so the DSP limb of the image differs in
+		 * both its length and its contents. */
+		constexpr uint32_t g_schedulerStateVersion = 3u;
 
 		void put32(uint8_t*& _cursor, const uint32_t _value) noexcept
 		{
