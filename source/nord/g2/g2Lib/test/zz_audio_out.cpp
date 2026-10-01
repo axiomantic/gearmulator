@@ -1637,10 +1637,54 @@ int main()
 					p += 2;
 				}
 
+				/* What the '/' separator actually produced, before a byte
+				 * leaves. A caller who pasted ONE message with separators
+				 * inside it gets several malformed ones, each of which reports
+				 * its own sent=1, and the run then measures a device that was
+				 * handed something nobody meant to send. The count is stated
+				 * where the reader is looking for the message they wrote. */
+				{
+					std::cout << "MSGHEX-FRAMES: count=";
+					std::size_t count = 0;
+					for(const std::vector<uint8_t>& body : bodies)
+						count += body.empty() ? 0u : 1u;
+					std::cout << count << " bodyBytes=";
+					for(const std::vector<uint8_t>& body : bodies)
+					{
+						if(!body.empty())
+							std::cout << ' ' << body.size();
+					}
+					std::cout << std::endl;
+				}
+
 				for(const std::vector<uint8_t>& body : bodies)
 				{
 					if(body.empty())
 						continue;
+
+					/* The object message the firmware's parser reads: the 0x01
+					 * command byte, the 0x2C object command, a version byte,
+					 * the object type, and a 2-byte big-endian count of the
+					 * payload behind them.
+					 *
+					 * A frame whose declared count disagrees with what it
+					 * carries is REPORTED AND STILL SENT. Originating a
+					 * deliberately malformed message is a legitimate thing to
+					 * ask this switch for -- the firmware's refusal is the
+					 * measurement -- so a refusal here would replace a silent
+					 * wrong send with a silent absent one. */
+					constexpr std::size_t g_objectHeaderBytes = 6;
+					if(body.size() >= g_objectHeaderBytes && body[0] == 0x01u && body[1] == 0x2Cu)
+					{
+						const std::size_t declared = (std::size_t(body[4]) << 8) | std::size_t(body[5]);
+						const std::size_t carried  = body.size() - g_objectHeaderBytes;
+						if(declared != carried)
+							std::cout << "MSGHEX-SIZE-MISMATCH object=0x" << std::hex
+							          << unsigned(body[3]) << std::dec
+							          << " declared=" << declared
+							          << " carried=" << carried
+							          << " sending it anyway" << std::endl;
+					}
 
 					const std::size_t total = body.size() + 4;
 					std::vector<uint8_t> frame(total);
