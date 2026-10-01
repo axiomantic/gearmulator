@@ -68,12 +68,12 @@ counter is invisible, and the counters are how this project measures itself.
 ### The counts, and the methods this table does not cover
 
 **This table is 12 rows over 20 methods, measured by listing the public
-declarations of `class Scheduler` in `g2Lib/scheduler.h`.** Four further methods
+declarations of `class Scheduler` in `rg2Lib/scheduler.h`.** Four further methods
 belong to the class's surface elsewhere in the project and are not covered here:
 
 * `stateSize`, `stateSave`, `stateLoad` — the state trio. They land with the
   state work, not with the thread map.
-* `queueMidi` — declared nowhere in `g2Lib`.
+* `queueMidi` — declared nowhere in `rg2Lib`.
 
 Adding those four as two further rows — one for the state trio, one for
 `queueMidi` — would give 14 rows over 24 methods. **The table is written from
@@ -89,7 +89,7 @@ the state-trio row: `stateLoad` is the boot thread's, and `stateSize` and
 | 1 | the constructor, `attach`, `detach` | boot. The allocation is fixed at construction and this project forbids allocating after it, so the endpoint set is built before the audio thread exists |
 | 2 | `fromDevice`, `toDevice`, `drainToDevice` | audio, inside a quantum boundary. `toDevice` is called from an endpoint's own thread with a BORROWED buffer, which is why the hub copies |
 
-**`g2Lib/transportHub.h` declares six public members, and the table above covers
+**`rg2Lib/transportHub.h` declares six public members, and the table above covers
 all six** — the constructor, `attach` and `detach` in row 1; `fromDevice`,
 `toDevice` and `drainToDevice` in row 2.
 

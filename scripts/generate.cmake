@@ -28,15 +28,33 @@ endif()
 
 set(args ${args} -B ${gearmulator_BINARY_DIR})
 
+# Visual Studio platform, e.g. ARM64 - which an x64 machine builds too, as a cross build
+if(CMAKE_GENERATOR_PLATFORM)
+	set(args ${args} -A ${CMAKE_GENERATOR_PLATFORM})
+endif()
+
 set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN=${gearmulator_BUILD_JUCEPLUGIN})
 set(args ${args} -Dgearmulator_BUILD_FX_PLUGIN=${gearmulator_BUILD_FX_PLUGIN})
 set(args ${args} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 
-set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_VST2=ON)
-set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON)
-set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=ON)
-set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_LV2=ON)
-set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_AU=ON)
+# Build all plugin formats unless explicitly disabled.
+foreach(F VST2 VST3 CLAP LV2 AU)
+	if(NOT DEFINED gearmulator_BUILD_JUCEPLUGIN_${F})
+		set(gearmulator_BUILD_JUCEPLUGIN_${F} ON)
+	endif()
+	set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_${F}=${gearmulator_BUILD_JUCEPLUGIN_${F}})
+endforeach()
+
+# Forward the opt-in standalone build flag.
+if(NOT DEFINED gearmulator_BUILD_JUCEPLUGIN_Standalone)
+	set(gearmulator_BUILD_JUCEPLUGIN_Standalone off)
+endif()
+set(args ${args} -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=${gearmulator_BUILD_JUCEPLUGIN_Standalone})
+
+# An unspecified SDK path leaves automatic ASIO discovery enabled.
+if(DEFINED gearmulator_ASIO_SDK_PATH)
+	set(args ${args} -Dgearmulator_ASIO_SDK_PATH=${gearmulator_ASIO_SDK_PATH})
+endif()
 
 foreach(S IN LISTS products)
 	set(args ${args} -D${S}=${${S}})

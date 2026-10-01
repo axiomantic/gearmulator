@@ -4,14 +4,14 @@ Instructions for AI coding agents working on this repository.
 
 This is a **fork** of `dsp56300/gearmulator`. Upstream is a low-level IC
 emulator for classic virtual-analog synthesizers. This fork adds the Nord
-Modular G2 device under `source/nord/g2/`.
+Modular G2 device under `source/claudia/rg2/`.
 
 Repository: `axiomantic/gearmulator`. Upstream: `dsp56300/gearmulator`.
 Licence: GPL-3.0. Contributions must be GPL-3.0 compatible, with attribution.
 Code here cannot move into `mcf5307` or `nmg2-tools` unless this project wrote
 it.
 
-The G2 work is `source/nord/g2`: `g2Lib`, `g2JucePlugin`, `g2TestConsole`. It
+The G2 work is `source/claudia/rg2`: `rg2Lib`, `rg2JucePlugin`, `rg2TestConsole`. It
 is not on the default branch. It is on stacked branches.
 
 This repository is part of the Nord Modular G2 emulator project. The work and
@@ -51,7 +51,7 @@ Formatting follows `source/.clang-format`: tabs, tab size 4, 120 columns.
 
 ### Narrow — the G2 alone
 
-This is the invocation for "do the `g2Lib` tests still build and pass". It
+This is the invocation for "do the `rg2Lib` tests still build and pass". It
 configures the G2 and no other synth, and no plugin.
 
 **Use the preset. The flags cannot be forgotten because they are not typed.**
@@ -72,12 +72,12 @@ addition. The consequence is that the presets are LOCAL TO THIS MACHINE: a fresh
 clone has no `g2` preset and must use the raw form below, or recreate the file
 from it.
 
-**`ctest --preset g2` is not `ctest --test-dir <build>/source/nord/g2/g2Lib/test`.**
+**`ctest --preset g2` is not `ctest --test-dir <build>/source/claudia/rg2/rg2Lib/test`.**
 A test preset takes its build directory from its configure preset and CMake
 gives it no field for a subdirectory of one, so the preset selects by test name
 instead. The narrow tree still registers `dsp56300`'s and `dsp56kBase`'s tests,
 which the narrow build target does not build, so an unfiltered run there would
-report them `***Not Run` and count them failed. `^t0_` selects the `g2Lib` tests
+report them `***Not Run` and count them failed. `^t0_` selects the `rg2Lib` tests
 plus `mcf5307`'s `t0_abi_gate_on`, a `cmake -P` script test that `mcf5307`
 registers into a consumer tree on purpose and that needs no binary. The
 `--test-dir` form below stays authoritative: it is the one whose interaction
@@ -98,15 +98,16 @@ cmake -S . -B <build> \
 	-Dgearmulator_SYNTH_XENIA=OFF \
 	-Dgearmulator_SYNTH_NODALRED2X=OFF \
 	-Dgearmulator_SYNTH_JE8086=OFF \
-	-Dgearmulator_SYNTH_G2=ON
-cmake --build <build> --parallel --target g2_test_executables_all
-ctest --test-dir <build>/source/nord/g2/g2Lib/test --no-tests=error --output-on-failure
+	-Dgearmulator_SYNTH_88EMU=OFF \
+	-Dgearmulator_SYNTH_RG2=ON
+cmake --build <build> --parallel --target rg2_test_executables_all
+ctest --test-dir <build>/source/claudia/rg2/rg2Lib/test --no-tests=error --output-on-failure
 ```
 
-**`--target g2_test_executables_all` is the load-bearing half, not the option
+**`--target rg2_test_executables_all` is the load-bearing half, not the option
 list.** `source/3rdparty` is added unconditionally, so a bare `cmake --build
 <build>` builds freetype, Lua, LunaSVG and RmlUi even with every option above
-set. The target form builds `g2Lib`, its link libraries and the test
+set. The target form builds `rg2Lib`, its link libraries and the test
 executables, and stops there.
 
 The `-D` list is not a fixed set. `gearmulator_BUILD_JUCEPLUGIN` and
@@ -145,15 +146,15 @@ architecture instead, because `ctest` runs the host slice of a universal binary
 and the other slice is compiled and never executed by that run.
 
 **The narrow run cannot see a break it does not configure.** A change to
-`base.cmake`, `synthLib`, `baseLib`, `hardwareLib`, the `source/dsp56300` or
-`source/mc68k` submodule pins, or `source/juce.cmake` reaches consumers the
+`base.cmake`, `synthLib`, `baseLib`, `hardwareLib`, the `source/cpu/dsp56300` or
+`source/cpu/mc68k` submodule pins, or `source/juce.cmake` reaches consumers the
 narrow tree never builds — this project has already been bitten by a
 compiler-flag change that broke a consumer no narrow run touched. Run the full
 build for anything below the G2.
 
 ### The source-dir overrides, and why the default is the pin
 
-`G2_MCF5307_SOURCE_DIR` and `G2_NMG2_TOOLS_SOURCE_DIR` replace a fetch of a
+`G2_MCF5307_SOURCE_DIR` and `RG2_TOOLS_SOURCE_DIR` replace a fetch of a
 pinned commit with a sibling checkout. **Neither belongs in a build you will
 report, record, or act on.** Build against the pin: leave both unset, and the
 configure fetches exactly what the tree declares.
@@ -196,7 +197,7 @@ Where the guard is present, the configure enforces both rules rather than
 trusting this section. It is on the `g2/pin-override-guard` branch; check the
 branch you are on before you rely on it.
 
-- `G2_NMG2_TOOLS_SOURCE_DIR` at a tree with no `nmg2_tools/container.py` is a
+- `RG2_TOOLS_SOURCE_DIR` at a tree with no `nmg2_tools/container.py` is a
   FATAL configure error naming the likely cause.
 - `G2_MCF5307_SOURCE_DIR` at a tree whose HEAD is not `G2_MCF5307_GIT_TAG`, or
   whose working tree is dirty, is a FATAL configure error until you pass
@@ -210,14 +211,14 @@ Both fire only when the override is set. The default path reaches neither.
 - **Always pass `--no-tests=error` to ctest.** Without it, ctest exits 0 when the
   filter matches no test. A pass and an empty run then look the same. This
   project has a repository where that exact false green is live today.
-- **Without `G2_MCF5307_SOURCE_DIR` and `G2_NMG2_TOOLS_SOURCE_DIR` the configure
+- **Without `G2_MCF5307_SOURCE_DIR` and `RG2_TOOLS_SOURCE_DIR` the configure
   clones two repositories from GitHub** at the commits pinned in the root
-  `CMakeLists.txt` and in `source/nord/g2/g2Lib/test/tests_board.cmake`. **That
+  `CMakeLists.txt` and in `source/claudia/rg2/rg2Lib/test/tests_board.cmake`. **That
   is the default and it is what you want.** Leave both unset unless you have a
   reason named in **The source-dir overrides, and why the default is the pin**
   above.
 - **The G2 tests write into the SOURCE tree.** `t0_clock_guard` plants a scratch
-  header under `source/nord/g2/`, runs a nested configure and removes it again.
+  header under `source/claudia/rg2/`, runs a nested configure and removes it again.
   Two ctest runs over this repository at the same time collide **whatever build
   directories they use**, because the shared resource is the source tree and not
   the build tree. A collision shows itself as one run that fails for a reason
@@ -230,7 +231,7 @@ Both fire only when the override is set. The default path reaches neither.
   checkout. It is registered whether or not Python and the oracle were found,
   and it FAILS rather than skipping when either is missing.
 - `ctest` in this directory BUILDS: the compile-failure fixture
-  `g2_test_executables_build` runs `cmake --build` inside the run. Do not start a
+  `rg2_test_executables_build` runs `cmake --build` inside the run. Do not start a
   ctest run against a build tree another process is building.
 - **Xcode version detection falls over where `xcode-select` points at
   CommandLineTools**, which is this host's default state. `xcodebuild -version`
@@ -300,8 +301,8 @@ git log $(git merge-base HEAD upstream/main)..HEAD                 # our commits
 upstream is merged in. Use three-dot semantics so that commits merged in FROM
 upstream are excluded.
 
-Our work concentrates in `source/nord/g2/` (`g2Lib`, `g2JucePlugin`,
-`g2TestConsole`), the `.github/workflows/` jobs, and a small number of root
+Our work concentrates in `source/claudia/rg2/` (`rg2Lib`, `rg2JucePlugin`,
+`rg2TestConsole`), the `.github/workflows/` jobs, and a small number of root
 files. Compute the current set with the command above; do not rely on that list.
 
 ## Comments and docstrings
@@ -320,7 +321,7 @@ of the alternative.
   citation of this project's own specification is forbidden in the same way as a
   citation of a task ledger. **State the FACT; drop the citation.** This is where
   the noise concentrates in this fork: the spellings above are common in
-  `source/nord/g2/`, so expect to cut them in bulk.
+  `source/claudia/rg2/`, so expect to cut them in bulk.
 - **A roster or a status list.** "the stub bodies below are not finished —
   `getChannelCountIn` has landed". A roster rots by construction: every task
   that lands makes it wrong until someone edits it. A stub's own body says it
@@ -371,7 +372,7 @@ to a tracked item BEFORE the comment goes. A deleted gap is an unknown gap, whic
 is worse than the stale comment.
 
 **A cross-reference that helps a reader NAVIGATE still stands.** "The frame
-layout is also computed in `g2Lib/frame.cpp`" earns its place and stays, provided
+layout is also computed in `rg2Lib/frame.cpp`" earns its place and stays, provided
 it asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
 "does not name": those are the falsifiable forms, and that difference is the
 whole of the rule.
@@ -403,7 +404,7 @@ assert "comments only" by eye.
 discriminates nothing.
 
 This fork has already paid for the rule. A comment at
-`g2Lib/CMakeLists.txt` read "the option defaults to OFF" while a nearby line in
+`rg2Lib/CMakeLists.txt` read "the option defaults to OFF" while a nearby line in
 the same file set the option `ON`. A separate block carried a hand-maintained
 count of the executables a directory "currently declares" — inside a block whose
 whole selling point was that a new target needs no edit there, so the number went
@@ -541,8 +542,8 @@ Give `--repo` explicitly; in a fork, `gh` defaults to the upstream project.
 ## Isolated working copies
 
 **Use a separate clone, not a `git worktree`, for this repository.** A worktree
-shares the superproject's `.git/modules/`, so `source/dsp56300/.git` inside a
-worktree resolves to `../../.git/modules/source/dsp56300` — the same gitdir the
+shares the superproject's `.git/modules/`, so `source/cpu/dsp56300/.git` inside a
+worktree resolves to `../../.git/modules/source/cpu/dsp56300` — the same gitdir the
 main checkout uses. A `git submodule update --init` in the worktree therefore
 moves the main checkout's submodule HEADs out from under whoever is using it. An
 agent working "safely in a worktree" corrupts the main working tree's state
@@ -637,7 +638,7 @@ known-positive discipline below, which applies to GDB runs exactly as it does
 to every other instrument here.
 
 **When a subagent is dispatched on firmware-tracing work, its dispatch prompt
-must say this explicitly**: "Use `g2TestConsole --gdb` for runtime questions;
+must say this explicitly**: "Use `rg2TestConsole --gdb` for runtime questions;
 breakpoints and watchpoints first, scaffolds only for what the stub cannot
 reach. For static structure questions (what does this routine do, who calls
 it), use the Ghidra headless decompiler documented in
@@ -645,14 +646,14 @@ it), use the Ghidra headless decompiler documented in
 to confirm. Neither alone is evidence." An agent that inherits only this file's
 later paragraphs tends to default to disassembly and print-probes.
 
-`g2TestConsole --gdb <port>` places the same machine `--boot` places — the OS
+`rg2TestConsole --gdb <port>` places the same machine `--boot` places — the OS
 image at `0x30000400`, the vector table, the reset — and then serves a GDB
 remote session on `127.0.0.1:<port>`, blocking until a debugger attaches. A port
 of `0` asks for a free one and the program prints the port it bound. Nothing
 advances the machine until the debugger says so.
 
 ```bash
-NMG2_ARTIFACTS=<artifacts> g2TestConsole --gdb 3333
+NMG2_ARTIFACTS=<artifacts> rg2TestConsole --gdb 3333
 m68k-elf-gdb -ex 'target remote 127.0.0.1:3333'
 ```
 
@@ -726,12 +727,12 @@ attached.
 
 **The scripted client: `gdbScript.py`.** `lldb`'s `gdb-remote` client cannot
 drive this stub — a measured finding, not an assumption — so the repo ships a
-minimal RSP client at `source/nord/g2/g2TestConsole/gdbScript.py` (stdlib only,
+minimal RSP client at `source/claudia/rg2/rg2TestConsole/gdbScript.py` (stdlib only,
 class-based, importable). An operator session looks like:
 
 ```bash
-NMG2_ARTIFACTS=<artifacts> g2TestConsole --gdb 0 &          # prints the bound port
-python3 source/nord/g2/g2TestConsole/gdbScript.py --port <bound> --script myscript
+NMG2_ARTIFACTS=<artifacts> rg2TestConsole --gdb 0 &          # prints the bound port
+python3 source/claudia/rg2/rg2TestConsole/gdbScript.py --port <bound> --script myscript
 ```
 
 The script file is one `break 0xADDR` or `watch 0xADDR` per line (a `watch` is
@@ -776,6 +777,6 @@ unauthenticated channel with full read and write access to the emulated machine.
 
 This fork is one repository of the Nord Modular G2 emulator project. The
 cross-repository rules, the roadmap and the private-submodule prohibition live
-in the `nmg2-artifacts` repository. `source/dsp56300` and `source/mc68k` are
+in the `nmg2-artifacts` repository. `source/cpu/dsp56300` and `source/cpu/mc68k` are
 submodules pointing at their own repositories; a change to either belongs in
 that repository's fork, not here.

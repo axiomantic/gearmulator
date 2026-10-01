@@ -31,7 +31,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-14, windows-2022 ]
+        os: [ ubuntu-latest, macos-14, windows-2022, windows-11-arm ]
         cmake_generator: [ default, Ninja ]
         include:
           # Windows configures the G2 alone. These branches change the G2, and a
@@ -75,8 +75,10 @@ jobs:
       uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: Set up MSVC compiler
-      if: matrix.os == 'windows-2022'
+      if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
 
     - name: Install Nim
       uses: jiro4989/setup-nim-action@v2
@@ -102,6 +104,17 @@ jobs:
     - name: Configure CMake (Windows)
       if: matrix.os == 'windows-2022'
       run: cmake ${{ matrix.cmake_generator != 'default' && format('-G {0}', matrix.cmake_generator) || '' }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=ON ${{ matrix.synth_flags }}
+
+    # Turns compiler output into annotations, so a failed build reports the actual error
+    # on the run and through the API instead of just a non-zero exit code.
+    - name: Register compiler problem matcher
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "::add-matcher::.github/problem-matchers/msvc.json"
+        else
+          echo "::add-matcher::.github/problem-matchers/gcc.json"
+        fi
 
     - name: Build (Windows)
       if: matrix.os == 'windows-2022'

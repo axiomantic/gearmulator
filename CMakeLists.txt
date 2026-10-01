@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 # build a fat binary that runs on both intel and the new Apple M1 chip
 if(APPLE)
-	include(xcodeversion.cmake)
+	include(source/cmake/xcodeversion.cmake)
 
 	set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "OS X Architectures")
 
@@ -27,13 +27,19 @@ if(NOT CMAKE_GENERATOR_TOOLSET AND CMAKE_GENERATOR MATCHES "Visual Studio 18")
 	set(CMAKE_GENERATOR_TOOLSET "v143")
 endif()
 
-project(gearmulator VERSION 2.2.14)
+project(gearmulator VERSION 2.2.26)
 
-include(base.cmake)
+include(source/cmake/base.cmake)
 include(CTest)
 
 option(${PROJECT_NAME}_BUILD_JUCEPLUGIN "Build Juce plugin" on)
 option(${PROJECT_NAME}_BUILD_JUCEPLUGIN_CLAP "Build CLAP version of Juce plugin" on)
+
+# Steinberg's ASIO SDK cannot be redistributed, so ASIO support is opt-in:
+# point this at an extracted asiosdk directory (the one containing "common")
+# and the standalones gain ASIO in their audio device list. Windows only;
+# ignored everywhere else.
+set(${PROJECT_NAME}_ASIO_SDK_PATH "" CACHE PATH "Path to an extracted Steinberg ASIO SDK. Enables ASIO in the standalone audio settings on Windows.")
 
 # ----------------- CPack basic parameters
 
@@ -48,7 +54,9 @@ endif()
 
 if(NOT DEFINED CPACK_SYSTEM_NAME)
 	if(WIN32)
-		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "ARM64")
+			set(CPACK_SYSTEM_NAME "winArm64")
+		elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
 			set(CPACK_SYSTEM_NAME "win64")
 		else()
 			set(CPACK_SYSTEM_NAME "win32")
@@ -77,11 +85,11 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # ----------------- the MCF5407 core, for the G2
 #
 # The core lives in its own repository, axiomantic/mcf5407. It is DECLARED here
-# and POPULATED nowhere unless source/nord/g2/g2Lib/CMakeLists.txt turns
-# G2_LINK_MCF5407 on. A declaration that is never populated costs nothing.
+# and POPULATED nowhere unless source/claudia/rg2/rg2Lib/CMakeLists.txt turns
+# RG2_LINK_MCF5407 on. A declaration that is never populated costs nothing.
 #
-# Set G2_MCF5407_SOURCE_DIR to a sibling checkout to build against that instead
-# of a fetched tree. G2_MCF5407_GIT_TAG carries the pin.
+# Set RG2_MCF5407_SOURCE_DIR to a sibling checkout to build against that instead
+# of a fetched tree. RG2_MCF5407_GIT_TAG carries the pin.
 #
 # THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
 # clean configure, so a check against the core would measure a different core
@@ -98,13 +106,13 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # ABI, neither of which this tree names any more. An older pin therefore fails
 # at the link step and not at the fetch, because the fetch still succeeds.
 
-set(G2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
-set(G2_MCF5407_GIT_TAG "e868b6f580de6114c1810996a5bb2f898e8bb032" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
+set(RG2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
+set(RG2_MCF5407_GIT_TAG "e868b6f580de6114c1810996a5bb2f898e8bb032" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5407
 	GIT_REPOSITORY https://github.com/axiomantic/mcf5407.git
-	GIT_TAG ${G2_MCF5407_GIT_TAG}
+	GIT_TAG ${RG2_MCF5407_GIT_TAG}
 )
 
 # ----------------- source
@@ -149,6 +157,7 @@ foreach(target IN LISTS CPACK_TUS_TARGETS)
 endforeach()
 
 set(CPACK_TUS_SOURCE_DIR ${CMAKE_SOURCE_DIR})
+set(CPACK_TUS_BIN_DIR ${TUS_BIN_DIR})
 
 set(CPACK_COMPONENTS_GROUPING IGNORE)
 

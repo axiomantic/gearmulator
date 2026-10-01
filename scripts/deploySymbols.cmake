@@ -29,7 +29,12 @@ set(scanRoots "${gearmulator_BINARY_DIR}")
 set(relBase "${gearmulator_BINARY_DIR}")
 if(gearmulator_SOURCE_DIR)
 	get_filename_component(gearmulator_SOURCE_DIR "${gearmulator_SOURCE_DIR}" ABSOLUTE)
-	list(APPEND scanRoots "${gearmulator_SOURCE_DIR}/bin")
+	# Only this build's own plugins: bin/plugins, or bin/arm64/plugins for Windows ARM64 (see base.cmake). All of bin
+	# would mix both architectures. Build dirs configured before CPACK_TUS_BIN_DIR existed lack it.
+	if(NOT CPACK_TUS_BIN_DIR)
+		set(CPACK_TUS_BIN_DIR "${gearmulator_SOURCE_DIR}/bin")
+	endif()
+	list(APPEND scanRoots "${CPACK_TUS_BIN_DIR}/plugins")
 	set(relBase "${gearmulator_SOURCE_DIR}")
 endif()
 
@@ -109,3 +114,9 @@ string(REPLACE "/" "_" branch "${branch}")
 string(REPLACE "\\" "_" branch "${branch}")
 
 copyArtefacts("dsp56300:deploy" "symbols/${branch}/${CPACK_PACKAGE_VERSION}" "symbols")
+
+# The NAS is the only place these need to live. A macOS archive is 5-7 GB and the build dir is kept per branch
+# as a warm cache, so leaving the zip behind filled the mac's disk over a few releases. copyArtefacts aborts
+# with FATAL_ERROR when rclone fails, so getting here means the upload went through.
+file(REMOVE "${zipPath}")
+message(STATUS "Uploaded and removed local ${zipName}")

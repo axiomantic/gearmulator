@@ -82,7 +82,7 @@ Windows or macOS runner on it and none is planned.
 The Forgejo jobs run in `ubuntu:24.04`, which is what `ubuntu-latest` resolves to
 on the GitHub legs. The match is load-bearing rather than cosmetic: this tree does
 not compile under the GCC 12 that Debian bookworm ships, because
-`source/nord/g2/g2Lib/flash.h` reaches for `size_t` through an include that only
+`source/claudia/rg2/rg2Lib/flash.h` reaches for `size_t` through an include that only
 GCC 13 and newer provide. Pinning the same distribution as the GitHub Linux leg is
 what keeps the two legs comparable.
 
