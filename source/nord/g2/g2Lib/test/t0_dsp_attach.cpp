@@ -244,22 +244,39 @@ namespace
 		(void)kStateSave;
 		(void)kStateLoad;
 
-		/* The snapshot covers the register block and the three memory areas
-		 * of every slot, at the sizes the memory itself reports. An
-		 * implementation that copied only the internally allocated part of X
-		 * and Y reports a smaller number here. */
-		size_t expected = 0;
+		/* The snapshot covers the three memory areas of every slot AT THE
+		 * SIZES THE MEMORY ITSELF REPORTS. An implementation that copied only
+		 * the internally allocated part of X and Y reports a smaller number
+		 * here.
+		 *
+		 * The register block's serialised byte count is deliberately not
+		 * spelled out in this file. dspSet.cpp derives it from the field walk
+		 * that writes it, and a second copy of that walk here would compare the
+		 * implementation against a restatement of itself. What this check holds
+		 * instead is that the memory is covered exactly and that a register
+		 * block of the same non-zero cost sits on top of it for every slot. The
+		 * CONTENTS of that block are held by the round trip below, which plants
+		 * a value in every field. */
+		size_t memoryBytes = 0;
 		for(unsigned i = 0; i < _set.dspCount(); ++i)
 		{
 			const dsp56k::Memory& mem = _set.dsp(i).memory();
-			expected += sizeof(dsp56k::DSP::SRegs);
-			expected += static_cast<size_t>(mem.size(dsp56k::MemArea_P)) * sizeof(TWord);
-			expected += static_cast<size_t>(mem.size(dsp56k::MemArea_X)) * sizeof(TWord);
-			expected += static_cast<size_t>(mem.size(dsp56k::MemArea_Y)) * sizeof(TWord);
+			memoryBytes += static_cast<size_t>(mem.size(dsp56k::MemArea_P)) * sizeof(TWord);
+			memoryBytes += static_cast<size_t>(mem.size(dsp56k::MemArea_X)) * sizeof(TWord);
+			memoryBytes += static_cast<size_t>(mem.size(dsp56k::MemArea_Y)) * sizeof(TWord);
 		}
 
-		checkEqual(_set.stateSize(), expected,
-			"stateSize covers the register block and P, X and Y of every slot");
+		const size_t total = _set.stateSize();
+
+		check(total > memoryBytes,
+			"stateSize covers P, X and Y of every slot AND a register block on top");
+
+		if(total > memoryBytes)
+		{
+			checkEqual((total - memoryBytes) % _set.dspCount(), size_t(0),
+				"the bytes beyond the memory divide evenly across the slots, so every "
+				"slot's register block costs the same");
+		}
 	}
 
 	/* ---------------- group 8: the round trip
@@ -272,9 +289,121 @@ namespace
 	constexpr TWord g_highPWord = 0x07FFFF;
 	constexpr TWord g_highXyWord = 0x1FFFFF;
 
+	/* EVERY field of the register block carries a planted value, because
+	 * dspSet.cpp writes that block field by field and a field left out of its
+	 * walk is a field the snapshot drops in silence. A perturbation over four
+	 * registers would pass against a walk that carried only those four.
+	 *
+	 * The narrowest register in the block holds a single byte, so the value's
+	 * LOW BYTE is what has to discriminate, and the packing below puts the
+	 * field ordinal and the generation there. That is what each half of the
+	 * round trip needs: the generation bit makes the pre-load state differ from
+	 * the restored state for every field, so a dropped field keeps the second
+	 * generation and is caught; the ordinal makes two fields differ, so a walk
+	 * that wrote two of them in the wrong order is caught as well. The slot
+	 * sits above the byte, where the wider registers still separate slots.
+	 *
+	 * The two generations this file drives differ in their low bit. */
+	int32_t plantedWord(const unsigned _slot, const TWord _generation, const unsigned _ordinal)
+	{
+		const TWord low  = (static_cast<TWord>(_ordinal) * 2u + (_generation & 1u)) & 0xFFu;
+		const TWord word = ((static_cast<TWord>(_slot) + 1u) << 8) | low;
+
+		return static_cast<int32_t>(word & 0xFFFFFFu);
+	}
+
+	/* The register block's storage differs per field: most fields are a
+	 * dsp56k::RegType over a signed or unsigned integer, the modulo and mask
+	 * arrays are plain words. Each pair below reaches the stored integer of one
+	 * of those two shapes, and nothing here constructs a RegType from a number
+	 * -- RegType's converting constructor masks and sign-extends, which would
+	 * make the fixture rather than the code under test decide what came back. */
+	template<typename T, unsigned B>
+	void plantInto(dsp56k::RegType<T, B>& _reg, const int32_t _word)
+	{
+		_reg.var = static_cast<T>(_word);
+	}
+
+	void plantInto(TWord& _word, const int32_t _value)
+	{
+		_word = static_cast<TWord>(_value);
+	}
+
+	/* The stored value and the value a plant of the same word WOULD store, both
+	 * read out as one signed type so a single comparison covers every field.
+	 *
+	 * The expectation goes through the same narrowing cast the plant does, and
+	 * that cast is the fixture's own -- a register narrower than the planted
+	 * word keeps its low part. It is not a model of the code under test: what
+	 * the comparison holds is that the bits the register HELD before the save
+	 * are the bits it holds after the load. */
+	template<typename T, unsigned B>
+	int64_t storedValue(const dsp56k::RegType<T, B>& _reg)
+	{
+		return static_cast<int64_t>(_reg.var);
+	}
+
+	int64_t storedValue(const TWord& _word)
+	{
+		return static_cast<int64_t>(_word);
+	}
+
+	template<typename T, unsigned B>
+	int64_t plantedValue(const dsp56k::RegType<T, B>&, const int32_t _word)
+	{
+		return static_cast<int64_t>(static_cast<T>(_word));
+	}
+
+	int64_t plantedValue(const TWord&, const int32_t _word)
+	{
+		return static_cast<int64_t>(static_cast<TWord>(_word));
+	}
+
+	/* THE ONE field list. The plant and the check are two visitors over it, so
+	 * neither can reach a field the other misses and a field's ordinal is the
+	 * same on both passes. It is a separate list from dspSet.cpp's own walk on
+	 * purpose: a check that borrowed the walk under test would agree with it
+	 * however wrong both were. */
+	template<typename R, typename Visit>
+	void walkEveryRegister(R& _regs, Visit&& _visit)
+	{
+		unsigned ordinal = 0;
+
+		const auto one  = [&](auto& _field) { _visit(_field, ordinal++); };
+		const auto each = [&](auto& _array)
+		{
+			for(auto& element : _array)
+				_visit(element, ordinal++);
+		};
+
+		one(_regs.x);
+		one(_regs.y);
+		one(_regs.a);
+		one(_regs.b);
+
+		each(_regs.r);
+		each(_regs.n);
+		each(_regs.m);
+		each(_regs.mMask);
+		each(_regs.mModulo);
+
+		one(_regs.sr);
+		one(_regs.omr);
+		one(_regs.pc);
+		one(_regs.la);
+		one(_regs.lc);
+		one(_regs.sp);
+		one(_regs.sc);
+
+		each(_regs.ss);
+
+		one(_regs.sz);
+		one(_regs.vba);
+		one(_regs.ep);
+	}
+
 	struct Perturbation
 	{
-		int32_t r0, n0, pc, sr;		// TReg24 carries a signed 32-bit word
 		TWord pLow, pHigh, xLow, xHigh, yLow, yHigh;
 	};
 
@@ -284,10 +413,6 @@ namespace
 		const TWord base = 0x010000u * _generation + 0x000100u * s;
 
 		Perturbation p{};
-		p.r0    = static_cast<int32_t>(base + 0x01u);
-		p.n0    = static_cast<int32_t>(base + 0x02u);
-		p.pc    = static_cast<int32_t>(base + 0x03u);
-		p.sr    = static_cast<int32_t>(base + 0x04u);
 		p.pLow  = base + 0x11u;
 		p.pHigh = base + 0x12u;
 		p.xLow  = base + 0x13u;
@@ -303,11 +428,11 @@ namespace
 		{
 			const Perturbation p = perturbationForSlot(i, _generation);
 
-			dsp56k::DSP::SRegs& regs = _set.dsp(i).regs();
-			regs.r[0].var = p.r0;
-			regs.n[0].var = p.n0;
-			regs.pc.var   = p.pc;
-			regs.sr.var   = p.sr;
+			walkEveryRegister(_set.dsp(i).regs(),
+				[&](auto& _field, const unsigned _ordinal)
+				{
+					plantInto(_field, plantedWord(i, _generation, _ordinal));
+				});
 
 			dsp56k::Memory& mem = _set.dsp(i).memory();
 			mem.getMemAreaPtr(dsp56k::MemArea_P)[g_lowWord]   = p.pLow;
@@ -326,11 +451,14 @@ namespace
 			const Perturbation p = perturbationForSlot(i, _generation);
 			const std::string where = _what + slotName(i);
 
-			const dsp56k::DSP::SRegs& regs = _set.dsp(i).regs();
-			checkEqual(regs.r[0].var, p.r0, "r0 " + where);
-			checkEqual(regs.n[0].var, p.n0, "n0 " + where);
-			checkEqual(regs.pc.var, p.pc, "pc " + where);
-			checkEqual(regs.sr.var, p.sr, "sr " + where);
+			walkEveryRegister(static_cast<const dsp56k::DSP::SRegs&>(_set.dsp(i).regs()),
+				[&](const auto& _field, const unsigned _ordinal)
+				{
+					const int32_t word = plantedWord(i, _generation, _ordinal);
+
+					checkEqual(storedValue(_field), plantedValue(_field, word),
+						"register field " + std::to_string(_ordinal) + " " + where);
+				});
 
 			dsp56k::Memory& mem = _set.dsp(i).memory();
 			checkEqual(mem.getMemAreaPtr(dsp56k::MemArea_P)[g_lowWord], p.pLow, "P low " + where);

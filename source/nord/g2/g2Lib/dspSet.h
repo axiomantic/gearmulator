@@ -44,8 +44,8 @@ namespace g2
 		 * landed" and needs no agreement between the two sides. */
 		const bool* programLanded(unsigned index) const noexcept;
 
-		/* The snapshot covers the register block of every slot as a struct
-		 * copy, plus that slot's P, X and Y memory. It does not cover the
+		/* The snapshot covers the register block of every slot field by
+		 * field, plus that slot's P, X and Y memory. It does not cover the
 		 * peripherals, because the DSP library carries no save or load member
 		 * for a peripheral set, its ESAIs, its Dma, its Timers or its host
 		 * port. Restoring those needs new API in the dsp56300 fork.

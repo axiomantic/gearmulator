@@ -34,6 +34,14 @@ jobs:
     # the version scripts/ci pins.
     container:
       image: ubuntu:24.04
+      # The DSP memory of a slot is backed by a POSIX shared-memory object, so
+      # on Linux it lives in /dev/shm. A reset and a state snapshot each sweep
+      # the whole program and data area of every slot, which touches far more
+      # tmpfs than the container runtime gives by default. A tmpfs page that
+      # cannot be allocated raises SIGBUS, so the shortage shows itself as a bus
+      # error inside the test and not as an allocation failure. The value has
+      # margin over what the sweep needs; it is not a fitted figure.
+      options: --shm-size=1g
     strategy:
       matrix:
         cmake_generator: [ default, Ninja ]
@@ -178,6 +186,9 @@ jobs:
     runs-on: docker
     container:
       image: ubuntu:24.04
+      # The same /dev/shm the build job needs, for the same reason. An
+      # instrumented run of those tests reaches the same sweep.
+      options: --shm-size=1g
     timeout-minutes: 240
     env:
       # One compile at a time. The container is capped at a single CPU, so
