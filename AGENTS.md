@@ -4,14 +4,14 @@ Instructions for AI coding agents working on this repository.
 
 This is a **fork** of `dsp56300/gearmulator`. Upstream is a low-level IC
 emulator for classic virtual-analog synthesizers. This fork adds the Nord
-Modular G2 device under `source/nord/g2/`.
+Modular G2 device under `source/claudia/g2/`.
 
 Repository: `axiomantic/gearmulator`. Upstream: `dsp56300/gearmulator`.
 Licence: GPL-3.0. Contributions must be GPL-3.0 compatible, with attribution.
 Code here cannot move into `mcf5307` or `nmg2-tools` unless this project wrote
 it.
 
-The G2 work is `source/nord/g2`: `g2Lib`, `g2JucePlugin`, `g2TestConsole`. It
+The G2 work is `source/claudia/g2`: `g2Lib`, `g2JucePlugin`, `g2TestConsole`. It
 is not on the default branch. It is on stacked branches.
 
 This repository is part of the Nord Modular G2 emulator project. The work and
@@ -72,7 +72,7 @@ addition. The consequence is that the presets are LOCAL TO THIS MACHINE: a fresh
 clone has no `g2` preset and must use the raw form below, or recreate the file
 from it.
 
-**`ctest --preset g2` is not `ctest --test-dir <build>/source/nord/g2/g2Lib/test`.**
+**`ctest --preset g2` is not `ctest --test-dir <build>/source/claudia/g2/g2Lib/test`.**
 A test preset takes its build directory from its configure preset and CMake
 gives it no field for a subdirectory of one, so the preset selects by test name
 instead. The narrow tree still registers `dsp56300`'s and `dsp56kBase`'s tests,
@@ -98,9 +98,10 @@ cmake -S . -B <build> \
 	-Dgearmulator_SYNTH_XENIA=OFF \
 	-Dgearmulator_SYNTH_NODALRED2X=OFF \
 	-Dgearmulator_SYNTH_JE8086=OFF \
+	-Dgearmulator_SYNTH_88EMU=OFF \
 	-Dgearmulator_SYNTH_G2=ON
 cmake --build <build> --parallel --target g2_test_executables_all
-ctest --test-dir <build>/source/nord/g2/g2Lib/test --no-tests=error --output-on-failure
+ctest --test-dir <build>/source/claudia/g2/g2Lib/test --no-tests=error --output-on-failure
 ```
 
 **`--target g2_test_executables_all` is the load-bearing half, not the option
@@ -145,8 +146,8 @@ architecture instead, because `ctest` runs the host slice of a universal binary
 and the other slice is compiled and never executed by that run.
 
 **The narrow run cannot see a break it does not configure.** A change to
-`base.cmake`, `synthLib`, `baseLib`, `hardwareLib`, the `source/dsp56300` or
-`source/mc68k` submodule pins, or `source/juce.cmake` reaches consumers the
+`base.cmake`, `synthLib`, `baseLib`, `hardwareLib`, the `source/cpu/dsp56300` or
+`source/cpu/mc68k` submodule pins, or `source/juce.cmake` reaches consumers the
 narrow tree never builds — this project has already been bitten by a
 compiler-flag change that broke a consumer no narrow run touched. Run the full
 build for anything below the G2.
@@ -212,12 +213,12 @@ Both fire only when the override is set. The default path reaches neither.
   project has a repository where that exact false green is live today.
 - **Without `G2_MCF5307_SOURCE_DIR` and `G2_NMG2_TOOLS_SOURCE_DIR` the configure
   clones two repositories from GitHub** at the commits pinned in the root
-  `CMakeLists.txt` and in `source/nord/g2/g2Lib/test/tests_board.cmake`. **That
+  `CMakeLists.txt` and in `source/claudia/g2/g2Lib/test/tests_board.cmake`. **That
   is the default and it is what you want.** Leave both unset unless you have a
   reason named in **The source-dir overrides, and why the default is the pin**
   above.
 - **The G2 tests write into the SOURCE tree.** `t0_clock_guard` plants a scratch
-  header under `source/nord/g2/`, runs a nested configure and removes it again.
+  header under `source/claudia/g2/`, runs a nested configure and removes it again.
   Two ctest runs over this repository at the same time collide **whatever build
   directories they use**, because the shared resource is the source tree and not
   the build tree. A collision shows itself as one run that fails for a reason
@@ -300,7 +301,7 @@ git log $(git merge-base HEAD upstream/main)..HEAD                 # our commits
 upstream is merged in. Use three-dot semantics so that commits merged in FROM
 upstream are excluded.
 
-Our work concentrates in `source/nord/g2/` (`g2Lib`, `g2JucePlugin`,
+Our work concentrates in `source/claudia/g2/` (`g2Lib`, `g2JucePlugin`,
 `g2TestConsole`), the `.github/workflows/` jobs, and a small number of root
 files. Compute the current set with the command above; do not rely on that list.
 
@@ -320,7 +321,7 @@ of the alternative.
   citation of this project's own specification is forbidden in the same way as a
   citation of a task ledger. **State the FACT; drop the citation.** This is where
   the noise concentrates in this fork: the spellings above are common in
-  `source/nord/g2/`, so expect to cut them in bulk.
+  `source/claudia/g2/`, so expect to cut them in bulk.
 - **A roster or a status list.** "the stub bodies below are not finished —
   `getChannelCountIn` has landed". A roster rots by construction: every task
   that lands makes it wrong until someone edits it. A stub's own body says it
@@ -541,8 +542,8 @@ Give `--repo` explicitly; in a fork, `gh` defaults to the upstream project.
 ## Isolated working copies
 
 **Use a separate clone, not a `git worktree`, for this repository.** A worktree
-shares the superproject's `.git/modules/`, so `source/dsp56300/.git` inside a
-worktree resolves to `../../.git/modules/source/dsp56300` — the same gitdir the
+shares the superproject's `.git/modules/`, so `source/cpu/dsp56300/.git` inside a
+worktree resolves to `../../.git/modules/source/cpu/dsp56300` — the same gitdir the
 main checkout uses. A `git submodule update --init` in the worktree therefore
 moves the main checkout's submodule HEADs out from under whoever is using it. An
 agent working "safely in a worktree" corrupts the main working tree's state
@@ -726,12 +727,12 @@ attached.
 
 **The scripted client: `gdbScript.py`.** `lldb`'s `gdb-remote` client cannot
 drive this stub — a measured finding, not an assumption — so the repo ships a
-minimal RSP client at `source/nord/g2/g2TestConsole/gdbScript.py` (stdlib only,
+minimal RSP client at `source/claudia/g2/g2TestConsole/gdbScript.py` (stdlib only,
 class-based, importable). An operator session looks like:
 
 ```bash
 NMG2_ARTIFACTS=<artifacts> g2TestConsole --gdb 0 &          # prints the bound port
-python3 source/nord/g2/g2TestConsole/gdbScript.py --port <bound> --script myscript
+python3 source/claudia/g2/g2TestConsole/gdbScript.py --port <bound> --script myscript
 ```
 
 The script file is one `break 0xADDR` or `watch 0xADDR` per line (a `watch` is
@@ -776,6 +777,6 @@ unauthenticated channel with full read and write access to the emulated machine.
 
 This fork is one repository of the Nord Modular G2 emulator project. The
 cross-repository rules, the roadmap and the private-submodule prohibition live
-in the `nmg2-artifacts` repository. `source/dsp56300` and `source/mc68k` are
+in the `nmg2-artifacts` repository. `source/cpu/dsp56300` and `source/cpu/mc68k` are
 submodules pointing at their own repositories; a change to either belongs in
 that repository's fork, not here.

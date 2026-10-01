@@ -9,6 +9,7 @@ When a Gearmulator plugin is loaded in a DAW, it starts an MCP server on a local
 - Read and write synthesizer parameters
 - Send MIDI messages (notes, program changes, SysEx)
 - Save and load device state
+- Record the audio output and play audio files into the audio inputs
 - Browse, search, load, save, and rename presets via the patch manager
 - Inspect and interact with the plugin UI (DOM tree, clicks, key presses)
 - Take screenshots of the plugin editor
@@ -56,20 +57,22 @@ This file contains an array of running instances:
 [
   {
     "pluginName": "Osirus",
-    "plugin4CC": "Osir",
+    "plugin4CC": "TusV",
     "port": 13710,
-    "pid": 12345
+    "pid": 12345,
+    "sessionId": ""
   },
   {
     "pluginName": "Vavra",
-    "plugin4CC": "Vavr",
+    "plugin4CC": "Tmqs",
     "port": 13711,
-    "pid": 12345
+    "pid": 12345,
+    "sessionId": ""
   }
 ]
 ```
 
-Use this file to find which port to connect to.
+Use this file to find which port to connect to. `pid` is the host process id. `sessionId` is the value of the environment variable `CLAUDE_CODE_SESSION_ID` of the host process, or empty; it lets a Claude Code session pick the instance it launched itself.
 
 ### Transport
 
@@ -78,8 +81,8 @@ The server uses HTTP with Server-Sent Events (SSE):
 | Endpoint | Method | Description |
 |---|---|---|
 | `/sse` | GET | SSE stream for receiving server events |
-| `/message` | POST | Send JSON-RPC 2.0 requests |
-| `/` | GET | Health check (returns server info) |
+| `/message`, `/mcp`, `/sse` | POST | Send JSON-RPC 2.0 requests |
+| `/`, `/health` | GET | Health check (returns server info) |
 
 ### Protocol
 
@@ -134,7 +137,7 @@ List all parameters with their current values, ranges, and metadata for a given 
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `part` | integer | no | Part number (default: 0) |
+| `part` | integer | no | Part number (default: the current part) |
 
 Returns an array of parameter objects with `name`, `displayName`, `value`, `min`, `max`, `text`, `part`, `page`, `index`, `isDiscrete`, `isBool`, `isBipolar`.
 
@@ -145,7 +148,7 @@ Get a specific parameter's value and metadata by name.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Parameter name |
-| `part` | integer | no | Part number (default: 0) |
+| `part` | integer | no | Part number (default: the current part) |
 
 Returns `name`, `displayName`, `value`, `min`, `max`, `text`, `part`, `isLocked`. If the parameter has a discrete value list, it is included as `valueList`.
 
@@ -157,7 +160,7 @@ Set a parameter value by name.
 |---|---|---|---|
 | `name` | string | yes | Parameter name |
 | `value` | number | yes | New parameter value |
-| `part` | integer | no | Part number (default: 0) |
+| `part` | integer | no | Part number (default: the current part) |
 
 #### `set_parameters_batch`
 
@@ -166,7 +169,9 @@ Set multiple parameters at once.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `parameters` | array | yes | Array of `{name, value}` objects |
-| `part` | integer | no | Part number (default: 0) |
+| `part` | integer | no | Part number (default: the current part) |
+
+> **Note:** the parameter tools default to the current part, the patch manager tools below default to part 0.
 
 #### `dump_all_parameters`
 
@@ -298,6 +303,48 @@ No parameters required.
 
 ---
 
+### Audio
+
+#### `record_start`
+
+Start capturing the plugin's main stereo output. The capture stops on its own after `duration_ms`, or after an internal cap of about 30 seconds, even if `record_stop` is never called.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `duration_ms` | integer | no | Maximum capture length in ms (1-30000). Omit to capture until `record_stop` or the cap |
+| `arm_on_note` | boolean | no | Start capturing on the next note-on instead of immediately (default: false) |
+
+Returns `success`, `armed`, `maxDurationMs`.
+
+#### `record_stop`
+
+Stop the capture and write it to a `.wav` file.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | no | Output file (default: `gearmulator_capture.wav` in the temp directory) |
+
+Returns `success`, `path`, `started`, `frames`, `channels`, `sampleRate`, `durationMs`, `peak`, `rms` and `silent`, which is true when the peak stays below 0.0001, i.e. the device produced no sound.
+
+#### `input_play`
+
+Feed an audio file into the plugin's audio inputs instead of what the host sends, for example to test an effect or the audio input of a synth. WAV and AIFF files work. The file is resampled to the host sample rate; for sample-exact comparisons, give it the host rate. A mono file feeds every input.
+
+The file plays once, after that the inputs stay silent until `input_stop` gives them back to the host. With `loop` it repeats until `input_stop`. To capture what the plugin makes of it, call `record_start` first, then `input_play`, then `record_stop`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes | The WAV or AIFF file |
+| `loop` | boolean | no | Repeat the file until `input_stop` (default: false) |
+
+Returns `success`, `frames` and `durationMs` at the host rate, the file's `channels` and `fileSampleRate`, the host's `sampleRate` and `inputChannels`, the number of audio inputs the plugin has at the moment. With no inputs, `warning` says that nothing is heard.
+
+#### `input_stop`
+
+Stop the file started with `input_play` and give the audio inputs back to the host. Returns `success` and `wasActive`, which is false if no file was set.
+
+---
+
 ### DOM Inspection
 
 These tools inspect the RmlUI document tree that makes up the plugin's user interface. They require the plugin editor window to be open.
@@ -355,7 +402,7 @@ These tools inject input events through the RmlUI context, identical to real use
 
 #### `click_element`
 
-Simulate a mouse click on an element by ID or CSS selector. Moves the cursor to the element's center, then injects mouse button down and up. Use `clickCount=2` for double-click.
+Simulate a mouse click on an element by ID or CSS selector. Moves the cursor to the element's center, then injects mouse button down, holds it for `holdMs`, and injects button up. Use `clickCount=2` for double-click.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -363,9 +410,19 @@ Simulate a mouse click on an element by ID or CSS selector. Moves the cursor to 
 | `selector` | string | no* | CSS selector (uses first match, e.g. `.menuitem`) |
 | `button` | string | no | `"left"` (default), `"right"`, or `"middle"` |
 | `clickCount` | integer | no | Number of clicks (default: 1, use 2 for double-click) |
+| `holdMs` | integer | no | How long the button stays down between press and release, in ms (default: 80, max 5000). `0` presses and releases back to back |
 | `modifiers` | object | no | `{ctrl, shift, alt, meta}` as booleans |
 
 \* Either `id` or `selector` must be provided.
+
+**Why the button is held.** A synth's front-panel buttons are read by the emulated
+firmware polling a key matrix, and it only ever sees a button that is still down
+when it next scans. Press and release are therefore issued as two separate events
+with a real pause in between; doing both at once sets and clears the state before
+the emulation looks at it, so the click does nothing while still reporting
+`success: true`. The default hold covers this — only set `holdMs` explicitly if you
+want a long press (say a button whose hold triggers a different action), or `0` for
+a pure UI element where the extra latency is unwelcome.
 
 #### `mouse_move`
 
@@ -467,6 +524,24 @@ Hit-test: find the topmost element at a given point in document space. Returns t
 Capture a screenshot of the plugin editor UI. Saves as PNG to a temp file and returns the file path. Use the Read tool to view the image.
 
 No parameters required.
+
+#### `get_gui_scale`
+
+Get the editor GUI scale as a percentage (100 = the skin's native size) and the current editor size in pixels.
+
+No parameters required.
+
+Returns `scale`, plus `width` and `height` while the editor is open.
+
+#### `set_gui_scale`
+
+Set the editor GUI scale. Resizes the open editor immediately and stores the value in the plugin config.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `scale` | integer | yes | Scale in percent (25-400) |
+
+Returns `success`, `scale`, plus `width` and `height` while the editor is open.
 
 ---
 
