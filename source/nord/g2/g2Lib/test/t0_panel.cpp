@@ -8,6 +8,7 @@
 
 #include "latches.h"
 #include "memoryMap.h"
+#include "model.h"
 #include "panel.h"
 
 #include <mcf5407.h>
@@ -61,9 +62,10 @@ namespace
 	class Board
 	{
 	public:
-		explicit Board(const uint32_t _displayBase = g_displayBase)
+		explicit Board(const uint32_t _displayBase = g_displayBase,
+			const g2::Model _model = g2::Model::G2X)
 			: m_panel(g_displaySize)
-			, m_latches(g_latchWindowSize)
+			, m_latches(g_latchWindowSize, _model)
 		{
 			g2::MemoryMapConfig config;
 			config.cs4 = {_displayBase, g_displaySize};
@@ -145,6 +147,39 @@ int main()
 		board.write(0x15000000u, 8, 0xffu, status);
 		checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, uint32_t(0x3u),
 			"the identifier still reads 0b11 after a write of all ones");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 2a. A selected model reaches the strap.
+	//
+	// The Engine is selected by UIPCR bit 0 and detect_model() tests that bit
+	// before it calls panel_id(), so the strap an Engine presents is the plain
+	// G2's and this fixture cannot tell the two apart. The SIM's own test holds
+	// the bit that separates them.
+	{
+		struct Expectation
+		{
+			g2::Model model;
+			uint32_t  bits;
+			const char* what;
+		};
+
+		const Expectation expectations[] =
+		{
+			{g2::Model::G2,     0x0u, "a plain G2 straps 0b00"},
+			{g2::Model::G2X,    0x3u, "a G2X straps 0b11"},
+			{g2::Model::Rack,   0x2u, "a Rack straps 0b10"},
+			{g2::Model::Engine, 0x0u, "an Engine straps 0b00, because UIPCR decides before panel_id() runs"},
+		};
+
+		for(const Expectation& expectation : expectations)
+		{
+			Board board(g_displayBase, expectation.model);
+			mcf5407_bus_status status = MCF5407_BUS_OK;
+
+			checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, expectation.bits,
+				expectation.what);
+		}
 	}
 
 	// -----------------------------------------------------------------------

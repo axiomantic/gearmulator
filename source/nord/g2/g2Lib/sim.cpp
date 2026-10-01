@@ -186,7 +186,7 @@ namespace g2
 		}
 	}
 
-	Sim::Sim()
+	Sim::Sim(const Model _model)
 	{
 		// Every byte starts write-protected: a write to a reserved address has
 		// no effect.
@@ -207,6 +207,12 @@ namespace g2
 				m_writeProtect[index] = protectByte(spec.access, spec.strapBits, spec.widthBytes, byte);
 			}
 		}
+
+		// The table's UIPCR row carries the strap of the machine this project
+		// targets. An Engine drives bit 0 high instead, and detect_model()
+		// tests that bit before it reads the panel strap at all.
+		if(isEngineStrapSet(_model))
+			m_space[g_simUipcrOffset] |= 0x01u;
 	}
 
 	Timer* Sim::timerForByte(const uint32_t _index, uint32_t& _blockOffset)

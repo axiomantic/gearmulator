@@ -12,6 +12,7 @@ list(APPEND G2LIB_SOURCES hdi08Decode.cpp)
 
 # Header-only. Listed here for the IDE source group, like flash.h below.
 list(APPEND G2LIB_SOURCES anomalyLog.h)
+list(APPEND G2LIB_SOURCES model.h)
 
 list(APPEND G2LIB_SOURCES firmwareExtract.cpp)
 

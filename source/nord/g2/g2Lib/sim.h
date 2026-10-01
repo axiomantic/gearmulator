@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "memoryMap.h"
+#include "model.h"
 #include "timer.h"
 
 namespace g2
@@ -23,10 +24,14 @@ namespace g2
 	// MBAR+$3D4, so one kilobyte covers all of it.
 	constexpr uint32_t g_simSpaceSize = 0x400u;
 
+	// UIPCR1, the one UART offset this model answers, because the firmware
+	// reads its bit 0 as the Engine strap.
+	constexpr uint32_t g_simUipcrOffset = 0x1D0u;
+
 	class Sim final : public BusTarget
 	{
 	public:
-		Sim();
+		explicit Sim(Model _model = Model::G2X);
 
 		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
 		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;

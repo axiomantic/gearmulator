@@ -287,7 +287,7 @@ int main()
 	// ==================================================================
 	{
 		checkByte(board, g2::g_cs5Base + g2::g_panelIdentifierOffset,
-		          g2::g_panelIdentifierG2X,
+		          g2::panelIdentifierByte(g2::Model::G2X),
 		          "CS5 byte 0 reaches the latches and reads the panel identifier");
 
 		checkUnmapped(board, g2::g_cs5Base - 1u,
@@ -335,7 +335,7 @@ int main()
 		// byte 0 now holds 0xA4 while the latches' byte 0 holds the strap,
 		// so a router that pointed both windows at one unit fails here.
 		checkByte(board, g2::g_cs5Base + g2::g_panelIdentifierOffset,
-		          g2::g_panelIdentifierG2X,
+		          g2::panelIdentifierByte(g2::Model::G2X),
 		          "writing the panel leaves the CS5 latch identifier untouched");
 	}
 
