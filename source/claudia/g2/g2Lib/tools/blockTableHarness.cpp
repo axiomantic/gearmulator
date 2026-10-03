@@ -12,6 +12,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 
 namespace g2
 {
@@ -41,9 +42,10 @@ namespace g2
 		{
 			dsp56k::JitBlockInfo info;
 			info.reset();
+			std::vector<dsp56k::TWord> opCycles;
 
 			dsp56k::JitBlock::getInfo(info, dsp, pc, config, emptyCache,
-				noVolatileP, noLoopStarts, noLoopEnds);
+				noVolatileP, noLoopStarts, noLoopEnds, &opCycles);
 
 			/* A block of no words would not advance the walk. It means the
 			 * analysis could make no block at this address, so the walk stops
@@ -54,14 +56,18 @@ namespace g2
 			++report.blockCount;
 			report.wordsWalked += info.memSize;
 
-			if(info.cycleCount > report.largestCycleCount)
+			uint32_t cycleCount = 0;
+			for(const auto cycles : opCycles)
+				cycleCount += cycles;
+
+			if(cycleCount > report.largestCycleCount)
 			{
-				report.largestCycleCount   = info.cycleCount;
+				report.largestCycleCount   = cycleCount;
 				report.largestCycleCountPc = pc;
 			}
 
-			if(first || info.cycleCount < report.smallestCycleCount)
-				report.smallestCycleCount = info.cycleCount;
+			if(first || cycleCount < report.smallestCycleCount)
+				report.smallestCycleCount = cycleCount;
 
 			if(info.instructionCount > report.largestInstructionCount)
 			{

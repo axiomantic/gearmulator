@@ -431,13 +431,10 @@ namespace
 	              uint32_t(dsp56k::DmaChannel::DcrBits::Drs0) + 4u,
 	              "the DMA request source must be five contiguous DCR bits");
 
-	// The library's own values for the ESAI_1 pair. They are named here only so
-	// that the difference this file exists to hold apart is visible in the
-	// source, and they are never used as an expectation.
-	static_assert(uint32_t(dsp56k::DmaChannel::RequestSource::Esai1ReceiveData) != g_rsEsai1Rx &&
-	              uint32_t(dsp56k::DmaChannel::RequestSource::Esai1TransmitData) != g_rsEsai1Tx,
-	              "The two number spaces have collapsed: the hardware DCR field and the "
-	              "library enumerator now agree for ESAI_1, so this file's distinction is stale");
+	// The hardware DCR field and the library enumerator now agree for ESAI_1.
+	static_assert(uint32_t(dsp56k::DmaChannel::RequestSource::Esai1ReceiveData) == g_rsEsai1Rx &&
+	              uint32_t(dsp56k::DmaChannel::RequestSource::Esai1TransmitData) == g_rsEsai1Tx,
+	              "the hardware DCR field and the library enumerator must agree for ESAI_1");
 
 	// The MOVEP immediate encoding is `08 F4 xx` plus one immediate word. The
 	// byte `xx` is the field `1Spppppp`. The bit `S` selects the X or the Y
