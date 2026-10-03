@@ -147,14 +147,17 @@ namespace
 			return true;
 		}
 
-		bool loadSpin(const bool _receiveSide)
+		bool loadProgram(const bool _spin = false, const bool _receiveSide = true)
 		{
 			dsp56k::TWord pc = kProgramStart;
-			const char* spin = _receiveSide
-				? "brclr #6,x:<<$FFFFB3,$0"   /* M_RFS */
-				: "brclr #13,x:<<$FFFFB3,$0"; /* M_TFS */
-			if(!writeInst(spin, pc))
-				return false;
+			if(_spin)
+			{
+				const char* spin = _receiveSide
+					? "brclr #6,x:<<$FFFFB3,$0"   /* M_RFS */
+					: "brclr #13,x:<<$FFFFB3,$0"; /* M_TFS */
+				if(!writeInst(spin, pc))
+					return false;
+			}
 			if(!writeInst("move #>$AAAAAA,x0", pc))
 				return false;
 			if(!writeInst("move x0,x:>$000100", pc))
@@ -253,7 +256,7 @@ int main()
 		checkEqual(f.secondEsai.hasEnabledReceivers(), 0u,
 			"CASE 1 pre-state: second port has no enabled receivers");
 
-		if(!f.loadSpin(false))
+		if(!f.loadProgram(false))
 		{
 			std::printf("t0_esai_idle_core: %d failure(s)\n", g_failures);
 			return 1;
@@ -333,7 +336,7 @@ int main()
 		check(f.audioEsai.hasEnabledReceivers() != 0,
 			"CASE 2 pre-state: audio port receiver enabled");
 
-		if(!f.loadSpin(true))
+		if(!f.loadProgram(true, true))
 		{
 			std::printf("t0_esai_idle_core: %d failure(s)\n", g_failures);
 			return 1;
