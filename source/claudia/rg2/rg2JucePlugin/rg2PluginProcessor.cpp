@@ -3,6 +3,7 @@
 #include "firmwareState.h"
 #include "rg2Controller.h"
 #include "rg2Device.h"
+#include "rg2Plugin.h"
 #include "rg2PluginEditorState.h"
 
 #include "BinaryData.h"
@@ -45,10 +46,23 @@ namespace rg2JucePlugin
 
     synthLib::Device* AudioPluginAudioProcessor::createDevice()
     {
-        auto* d = new rg2::Device({});
+        synthLib::DeviceCreateParams params;
+        getRemoteDeviceParams(params);
+        auto* d = new rg2::Device(params);
         if (d->firmwareStatus().state != rg2::FirmwareState::Present)
             throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
                                             "A firmware image is required, but was not found.");
+
+        rg2::Device::BootRequest request;
+        request.config.lookaheadFrames = rg2::kLookaheadFrames;
+        request.config.maxHostBlockFrames = 4096;
+        const auto result = d->boot(request);
+        if (!result.booted || result.faulted)
+        {
+            delete d;
+            throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
+                                            "Nord Modular G2 boot failed: " + result.why);
+        }
         return d;
     }
 
