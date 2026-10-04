@@ -277,6 +277,27 @@ set_property(TARGET zz_audio_out PROPERTY FOLDER "RG2/test")
 target_compile_definitions(zz_audio_out PRIVATE
 	G2_PATCH_RELATIVE_PATH="corpus/pch2/BackTo72 demo.pch2")
 
+# ----------------- lean audio output integration test
+#
+# Tier T1, gated: boots G2 engine, loads a patch (ChOrgan demo), injects MIDI note-on,
+# and asserts that non-zero audio samples are produced on the scheduler audio outputs.
+
+add_executable(t1_audio_output_lean
+	${CMAKE_CURRENT_SOURCE_DIR}/t1_audio_output_lean.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../rg2JucePlugin/rg2PatchLoad.cpp)
+target_link_libraries(t1_audio_output_lean PRIVATE rg2Lib)
+set_property(TARGET t1_audio_output_lean PROPERTY FOLDER "RG2/test")
+target_compile_definitions(t1_audio_output_lean PRIVATE
+	G2_PATCH_RELATIVE_PATH="corpus/pch2/ChOrgan demo.pch2")
+
+add_test(NAME t1_audio_output_lean COMMAND t1_audio_output_lean)
+set_tests_properties(t1_audio_output_lean PROPERTIES
+	LABELS "IntegrationTest" TIMEOUT 900 SKIP_RETURN_CODE ${g2_protoGatedSkipExitCode})
+
+if(IS_DIRECTORY "${NMG2_ARTIFACTS}")
+	set_property(TEST t1_audio_output_lean APPEND PROPERTY ENVIRONMENT "NMG2_ARTIFACTS=${NMG2_ARTIFACTS}")
+endif()
+
 # ----------------- The Wine editor proxy and transport socket server
 #
 # Tests the socket bridge to TransportHub and the user-mode proxy session logic
