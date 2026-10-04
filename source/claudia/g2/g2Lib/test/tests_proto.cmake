@@ -276,3 +276,16 @@ target_link_libraries(zz_audio_out PRIVATE g2Lib)
 set_property(TARGET zz_audio_out PROPERTY FOLDER "G2/test")
 target_compile_definitions(zz_audio_out PRIVATE
 	G2_PATCH_RELATIVE_PATH="corpus/pch2/BackTo72 demo.pch2")
+
+# ----------------- The Wine editor proxy and transport socket server
+#
+# Tests the socket bridge to TransportHub and the user-mode proxy session logic
+# covering enumeration, event registration, private IOCTLs, and bulk I/O streaming.
+
+add_executable(t0_wine_proxy
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_wine_proxy.cpp)
+target_link_libraries(t0_wine_proxy PRIVATE g2Lib g2WineProxy_core)
+set_property(TARGET t0_wine_proxy PROPERTY FOLDER "G2/test")
+
+add_test(NAME t0_wine_proxy COMMAND t0_wine_proxy)
+set_tests_properties(t0_wine_proxy PROPERTIES LABELS "UnitTest")

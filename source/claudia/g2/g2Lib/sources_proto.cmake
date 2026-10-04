@@ -20,3 +20,7 @@ list(APPEND G2LIB_SOURCES
 list(APPEND G2LIB_SOURCES
 	internalClient.h
 	internalClient.cpp)
+
+list(APPEND G2LIB_SOURCES
+	transportSocket.h
+	transportSocket.cpp)
