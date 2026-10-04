@@ -31,4 +31,23 @@ if(WIN32 OR MINGW)
 		setupapi)
 
 	set_property(TARGET g2usb PROPERTY FOLDER "RG2")
+
+	add_library(setupapi_wine SHARED
+		rg2usb.h
+		rg2usb.cpp
+		setupapi_wine.cpp
+		setupapi.def)
+
+	target_include_directories(setupapi_wine PUBLIC
+		${CMAKE_CURRENT_SOURCE_DIR}
+		${CMAKE_CURRENT_SOURCE_DIR}/../rg2Lib)
+
+	target_link_libraries(setupapi_wine PRIVATE
+		ws2_32
+		setupapi)
+
+	set_target_properties(setupapi_wine PROPERTIES
+		OUTPUT_NAME "setupapi"
+		PREFIX ""
+		FOLDER "RG2")
 endif()
