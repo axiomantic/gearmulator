@@ -107,6 +107,53 @@ namespace
 
 		return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 	}
+
+	class DeviceArtifactResolver final : public g2::ArtifactResolver
+	{
+	public:
+		explicit DeviceArtifactResolver(std::string _homePath) : m_homePath(std::move(_homePath)) {}
+
+		std::string resolve(std::string& _why, const char* _name = nullptr) override
+		{
+			g2::EnvArtifactResolver env;
+			std::string dir = env.resolve(_why, _name);
+			if(!dir.empty())
+				return dir;
+
+			std::vector<std::string> candidates;
+			if(!m_homePath.empty())
+			{
+				std::string p = m_homePath;
+				if(p.back() == '/' || p.back() == '\\')
+					p.pop_back();
+				candidates.push_back(p + "/roms");
+				candidates.push_back(p);
+			}
+
+			const char* home = std::getenv("HOME");
+			if(home && home[0] != '\0')
+			{
+				candidates.push_back(std::string(home) + "/Documents/The Usual Suspects/NordModularG2/roms");
+				candidates.push_back(std::string(home) + "/Documents/The Usual Suspects/NordModularG2");
+			}
+
+			for(const auto& cand : candidates)
+			{
+				const std::string testFile = cand + "/" + (_name ? _name : g_codeImageName);
+				std::ifstream in(testFile, std::ios::binary);
+				if(in.good())
+				{
+					_why.clear();
+					return cand;
+				}
+			}
+
+			return {};
+		}
+
+	private:
+		std::string m_homePath;
+	};
 }
 
 namespace g2
@@ -202,7 +249,7 @@ namespace g2
 	{
 		// Ask the resolver once, at construction, and never again. The
 		// no-exceptions rule holds inside resolveFirmwareState itself.
-		EnvArtifactResolver resolver;
+		DeviceArtifactResolver resolver(_params.homePath);
 		m_firmwareStatus = resolveFirmwareState(resolver);
 		m_firmwareVersionWord = m_firmwareStatus.state == FirmwareState::Present
 			? g_expectedFirmwareVersion
@@ -262,7 +309,7 @@ namespace g2
 		// directory that actually holds the image, exactly as every gated
 		// consumer asks, and a machine with no artifacts is a boot that
 		// says why and changes nothing.
-		EnvArtifactResolver resolver;
+		DeviceArtifactResolver resolver(getDeviceCreateParams().homePath);
 		std::string         why;
 
 		const std::string directory = resolver.resolve(why, g_codeImageName);
