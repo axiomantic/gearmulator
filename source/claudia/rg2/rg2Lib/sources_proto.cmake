@@ -20,3 +20,7 @@ list(APPEND RG2LIB_SOURCES
 list(APPEND RG2LIB_SOURCES
 	internalClient.h
 	internalClient.cpp)
+
+list(APPEND RG2LIB_SOURCES
+	transportSocket.h
+	transportSocket.cpp)

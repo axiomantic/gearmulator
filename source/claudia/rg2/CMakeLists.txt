@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 add_subdirectory(rg2Lib)
+add_subdirectory(rg2WineProxy)
 add_subdirectory(rg2TestConsole)
 
 # This band carries rg2JucePlugin/CMakeLists.txt, so the plugin is wired here and
