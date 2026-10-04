@@ -1,0 +1,6 @@
+LIBRARY setupapi.dll
+EXPORTS
+    SetupDiGetClassDevsA
+    SetupDiEnumDeviceInterfaces
+    SetupDiGetDeviceInterfaceDetailA
+    SetupDiDestroyDeviceInfoList
