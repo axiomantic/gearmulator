@@ -584,6 +584,10 @@ namespace g2
 		if(m_usb == nullptr)
 			return;
 
+		isp1181_in_token(m_usb, 0);
+		isp1181_in_token(m_usb, 1);
+		isp1181_in_token(m_usb, 2);
+
 		if(drained != 0)
 		{
 			/* The bytes are copied and nothing here reads one: the firmware
