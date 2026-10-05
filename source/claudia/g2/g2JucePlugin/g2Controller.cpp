@@ -36,7 +36,7 @@ namespace g2JucePlugin
         if (!dev)
             return;
 
-        const auto idx = _parameter.getIndex();
+        const auto idx = _parameter.getDescription().index;
         const float norm = std::clamp(static_cast<float>(_value) / 127.0f, 0.0f, 1.0f);
         switch (idx)
         {
