@@ -1,0 +1,11 @@
+<rml>
+	<head>
+		<link type="text/template" href="tus_colorpicker.rml"/>
+		<link type="text/template" href="tus_patchmanager.rml"/>
+		<link type="text/rcss" href="tus_default.rcss"/>
+		<link type="text/rcss" href="tus_juceskin.rcss"/>
+		<link type="text/rcss" href="g2Default.rcss"/>
+	</head>
+	<body id="Root" rootScale="1.000000" style="left: 0dp; top: 0dp; width: 800dp; height: 600dp;">
+	</body>
+</rml>
