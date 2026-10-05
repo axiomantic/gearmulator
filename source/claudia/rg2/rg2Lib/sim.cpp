@@ -54,6 +54,7 @@
 // answers that one offset because the firmware reads it as a model strap.
 
 #include "sim.h"
+#include "panel.h"
 
 namespace rg2
 {
@@ -294,6 +295,14 @@ namespace rg2
 			uint32_t blockOffset = 0;
 			if(Timer* const timer = timerForByte(index, blockOffset))
 				value |= timer->readByte(blockOffset);
+			else if(m_panel != nullptr && (index == 0x248 || index == 0x249))
+			{
+				const uint16_t rows = m_panel->getRowBits() & ~0x0200u;
+				const uint8_t byteVal = (index == 0x248)
+					? uint8_t((rows >> 8) & 0xffu)
+					: uint8_t(rows & 0xffu);
+				value |= byteVal;
+			}
 			else if(index < g_simSpaceSize)
 				value |= m_space[index];
 		}

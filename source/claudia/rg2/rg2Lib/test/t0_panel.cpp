@@ -67,6 +67,9 @@ namespace
 			: m_panel(g_displaySize)
 			, m_latches(g_latchWindowSize, _model)
 		{
+			m_panel.attachLatches(&m_latches);
+			m_latches.attachPanel(&m_panel);
+
 			rg2::MemoryMapConfig config;
 			config.cs4 = {_displayBase, g_displaySize};
 			config.cs5 = {rg2::g_cs5Base, g_latchWindowSize};
@@ -91,6 +94,8 @@ namespace
 		}
 
 		rg2::MemoryMap& map() { return *m_map; }
+		rg2::Panel& panel() { return m_panel; }
+		rg2::Latches& latches() { return m_latches; }
 
 	private:
 		rg2::Panel m_panel;
@@ -306,6 +311,128 @@ int main()
 
 		check(everyLatchPollCompleted,
 			"every offset of the CS5 window answers a poll, so no latch poll spins for ever");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 7. Latches 1..7 drive LED rings (schematic ModularG2_Panel Sheet 5).
+	//
+	// Latch writes to CS5 offsets 1..7 update the corresponding 15-LED ring states.
+	{
+		Board board;
+		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+
+		// Writing 8-bit pattern to Latch 1 (CS5 offset 1) updates LED ring 0
+		board.write(rg2::g_cs5Base + 1u, 8, 0x5Au, status);
+		checkEqual(status, MCF5407_BUS_OK, "latch 1 write completes");
+		checkEqual(uint32_t(board.panel().getLedRingState(0)), uint32_t(0x5Au),
+			"latch 1 write updates LED ring 0 state query");
+		checkEqual(uint32_t(board.latches().getLedRingState(0)), uint32_t(0x5Au),
+			"latches getLedRingState(0) reflects latch 1 write");
+
+		// Writing 16-bit pattern across latches 1 and 2 updates LED ring 0 with full 15-bit value
+		board.write(rg2::g_cs5Base + 1u, 16, 0x7FFFu, status);
+		checkEqual(status, MCF5407_BUS_OK, "16-bit latch write completes");
+		checkEqual(uint32_t(board.panel().getLedRingState(0)), uint32_t(0x7FFFu),
+			"16-bit latch write updates LED ring 0 with 15-LED pattern");
+
+		// Writing to Latch 7 (CS5 offset 7) updates LED ring 6
+		board.write(rg2::g_cs5Base + 7u, 8, 0xA5u, status);
+		checkEqual(status, MCF5407_BUS_OK, "latch 7 write completes");
+		checkEqual(uint32_t(board.panel().getLedRingState(6)), uint32_t(0xA5u),
+			"latch 7 write updates LED ring 6 state query");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 8. Encoder deltas and latch reading (schematic ModularG2_Panel Sheet 5).
+	//
+	// Setting encoder deltas on the panel exposes the delta on CS5 latch reads.
+	{
+		Board board;
+		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+
+		// Set encoder 0 delta to +5
+		board.panel().setEncoderDelta(0, 5);
+		checkEqual(int(board.panel().getEncoderDelta(0)), 5,
+			"panel reports configured encoder 0 delta");
+
+		// Reading Latch 1 (CS5 offset 1) returns the encoder delta
+		uint32_t readVal = board.read(rg2::g_cs5Base + 1u, 8, status);
+		checkEqual(status, MCF5407_BUS_OK, "reading latch 1 completes");
+		checkEqual(readVal, uint32_t(5u),
+			"reading latch 1 returns encoder 0 delta");
+
+		// Set encoder 3 delta to -4 (0xFC in two's complement)
+		board.panel().setEncoderDelta(3, -4);
+		readVal = board.read(rg2::g_cs5Base + 4u, 8, status);
+		checkEqual(status, MCF5407_BUS_OK, "reading latch 4 completes");
+		checkEqual(uint32_t(uint8_t(readVal)), uint32_t(uint8_t(-4)),
+			"reading latch 4 returns negative encoder 3 delta in two's complement");
+
+		// Resetting encoder delta to 0 returns the latch to quiescent 0
+		board.panel().setEncoderDelta(0, 0);
+		readVal = board.read(rg2::g_cs5Base + 1u, 8, status);
+		checkEqual(readVal, uint32_t(0u),
+			"resetting encoder delta restores latch to quiescent state");
+	}
+
+	// -----------------------------------------------------------------------
+	// Case group 9. CS4 matrix scan and button return row sensing.
+	//
+	// Writing walking zeros to CS4 (schematic ModularG2_MainBoard Sheet 3) scans
+	// columns; pressed buttons pull corresponding return rows low for PADAT reads.
+	{
+		Board board;
+		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+
+		// Initially, with no buttons pressed, all rows are idle (high in PADAT / active-low)
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u),
+			"initially no button return rows are active");
+		checkEqual(board.panel().getRowBits(), uint16_t(0xFFFFu),
+			"PADAT return rows idle high with pull-ups");
+
+		// Press button at row 2, column 0
+		board.panel().setButtonPressed(2, 0, true);
+		check(board.panel().isButtonPressed(2, 0), "button at (2,0) is pressed");
+
+		// Scan column 0: 16-bit walking zero 0x7FFF (bit 15 is 0) written to CS4 base
+		board.write(g_displayBase, 16, 0x7FFFu, status);
+		checkEqual(status, MCF5407_BUS_OK, "CS4 column 0 scan write completes");
+
+		// Row 2 must now be sensed active
+		check(board.panel().isRowActive(2), "row 2 is sensed active during column 0 scan");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(1u << 2),
+			"active row mask has bit 2 set");
+		checkEqual(board.panel().getRowBits(), uint16_t(~(1u << 2)),
+			"PADAT row bits has bit 2 driven low by pressed button");
+
+		// Scan column 1: walking zero 0xBFFF (bit 14 is 0) written to CS4 base
+		board.write(g_displayBase, 16, 0xBFFFu, status);
+		checkEqual(status, MCF5407_BUS_OK, "CS4 column 1 scan write completes");
+
+		// Button at (2,0) is NOT on column 1, so row 2 is no longer active
+		check(!board.panel().isRowActive(2), "row 2 is inactive during column 1 scan");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u),
+			"active row mask is zero during column 1 scan");
+		checkEqual(board.panel().getRowBits(), uint16_t(0xFFFFu),
+			"PADAT rows return to idle high during column 1 scan");
+
+		// Press button at row 5, column 1 as well
+		board.panel().setButtonPressed(5, 1, true);
+		// Column 1 is still selected: row 5 should be sensed active
+		board.write(g_displayBase, 16, 0xBFFFu, status);
+		check(board.panel().isRowActive(5), "row 5 is sensed active during column 1 scan");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(1u << 5),
+			"active row mask has bit 5 set");
+
+		// 32-bit walking zero write: 0xFFFF7FFF scans column 0 and senses row 2 again
+		board.write(g_displayBase, 32, 0xFFFF7FFFu, status);
+		checkEqual(status, MCF5407_BUS_OK, "32-bit CS4 scan write completes");
+		check(board.panel().isRowActive(2), "row 2 sensed active under 32-bit 0xFFFF7FFF scan");
+
+		// Release button at (2,0)
+		board.panel().setButtonPressed(2, 0, false);
+		board.write(g_displayBase, 32, 0xFFFF7FFFu, status);
+		check(!board.panel().isRowActive(2), "row 2 is inactive after button release");
 	}
 
 	if(g_failures)

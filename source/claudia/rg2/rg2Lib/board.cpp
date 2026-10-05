@@ -478,6 +478,9 @@ namespace rg2
 		 * half of the same wire, and Sim::setInterruptController forwards it to
 		 * both modules. */
 		m_sim.setInterruptController(&m_interrupts);
+		m_sim.setPanel(&m_panel);
+		m_panel.attachLatches(&m_latches);
+		m_latches.attachPanel(&m_panel);
 
 		/* The DSP side of the host ports, attached from the constructor body
 		 * rather than from the initialiser list: the call takes both members by

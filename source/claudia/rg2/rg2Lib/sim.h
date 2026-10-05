@@ -20,6 +20,8 @@
 
 namespace rg2
 {
+	class Panel;
+
 	// The MBAR window this model answers. The programming model runs to
 	// MBAR+$3D4, so one kilobyte covers all of it.
 	constexpr uint32_t g_simSpaceSize = 0x400u;
@@ -54,6 +56,9 @@ namespace rg2
 		// Point both modules at the interrupt controller they assert on.
 		void setInterruptController(InterruptController* _interrupts);
 
+		// Connect the front panel for matrix scan sensing on Port A (PADAT).
+		void setPanel(Panel* _panel) noexcept { m_panel = _panel; }
+
 	private:
 		void logLine(const char* _reason, bool _isWrite, int _size, uint32_t _offset);
 
@@ -76,6 +81,8 @@ namespace rg2
 
 		Timer m_timer1{Timer::gTimer1InterruptIndex};
 		Timer m_timer2{Timer::gTimer2InterruptIndex};
+
+		Panel* m_panel = nullptr;
 
 		std::vector<std::string> m_log;
 	};

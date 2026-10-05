@@ -1,13 +1,21 @@
 // The CS5 latches.
 //
-// The CS5 latch sits at 0x15000000, and panel_id() at 0x3005BFFE drives it and
-// takes bits 5:4. The base itself lives in memoryMap.h as g_cs5Base, so this
-// file carries no address.
+// The CS5 latch window sits at 0x15000000, decoded on the panel board
+// (schematic ModularG2_Panel Sheet 5) by U6 (74AC138) driven by CS5 and
+// address lines A0..A2. The 3-to-8 decoder provides eight strobes driving
+// 74HC374 octal latches:
+// - Latch 0 (offset 0): holds the panel model identifier strap in bits 5:4.
+//   Writes cannot alter the strap bits (R79/R80 resistors).
+// - Latches 1..7 (offsets 1..7): output latches driving 15-LED encoder rings
+//   and encoder delta multiplexing.
 //
-// No authority records how wide the CS5 window is, so a caller supplies it.
+// Mainboard connector P7 connects to panel connector P1 via a 26-pin ribbon
+// cable carrying CS5 on pin 13, A0..A2 on pins 14..16, and D24..D31 on pins
+// 18..25 (schematic ModularG2_MainBoard Sheet 3).
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -27,20 +35,31 @@ namespace rg2
 		return uint8_t(panelStrapCode(_model) << g_panelIdentifierShift);
 	}
 
+	class Panel;
+
 	class Latches final : public BusTarget
 	{
 	public:
-		explicit Latches(uint32_t _windowSize, Model _model = Model::G2X);
+		static constexpr size_t kMaxEncoders = 8;
+		static constexpr size_t kMaxLedRings = 8;
+
+		explicit Latches(uint32_t _windowSize, Model _model = Model::G2X, Panel* _panel = nullptr);
 
 		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
 		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
 
+		void attachPanel(Panel* _panel) noexcept;
+
+		void setEncoderDelta(uint8_t _encoderIndex, int8_t _delta) noexcept;
+		int8_t getEncoderDelta(uint8_t _encoderIndex) const noexcept;
+
+		uint16_t getLedRingState(uint8_t _ringIndex) const noexcept;
+		void setLedRingState(uint8_t _ringIndex, uint16_t _state) noexcept;
+
 	private:
-		// One byte for every latch in the window. The first byte holds the
-		// panel identifier and a write cannot change it, because on the panel
-		// board it is two 0-ohm resistors and not a register. Every other byte
-		// is an output latch that keeps what was written. No authority records
-		// what any of them drives, so this model carries no meaning for them.
 		std::vector<uint8_t> m_latch;
+		Panel* m_panel = nullptr;
+		int8_t m_encoderDeltas[kMaxEncoders] = {};
+		uint16_t m_ledRings[kMaxLedRings] = {};
 	};
 }
