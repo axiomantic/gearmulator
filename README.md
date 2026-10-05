@@ -53,7 +53,6 @@ workflow file covers what.
 | gearmulator_BUILD_JUCEPLUGIN_CLAP | Build CLAP plugins | on |
 | gearmulator_BUILD_JUCEPLUGIN_LV2 | Build LV2 plugins | on |
 | gearmulator_BUILD_FX_PLUGIN | Additionally build FX versions of all plugins | off |
-| gearmulator_COMPONENT_DSPBRIDGE | Build the DSPBridge server and the device plugins it loads | on |
 
 Additional options to select which devices to build:
 
@@ -66,6 +65,7 @@ Additional options to select which devices to build:
 | gearmulator_SYNTH_NODALRED2X | Build Nodal Red 2x | on |
 | gearmulator_SYNTH_JE8086 | Build JE-8086 | on |
 | gearmulator_SYNTH_88EMU | Build 88emu | on |
+| gearmulator_COMPONENT_DSPBRIDGE | Build the DSPBridge server and the device plugins it loads | on |
 
 ### Join us on Discord
 
