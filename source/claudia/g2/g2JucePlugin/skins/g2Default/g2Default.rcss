@@ -1,4 +1,265 @@
 body
 {
-	background-color: #2a2a2a;
+	background-color: #1a1a1c;
+	font-family: Roboto;
+	color: #e0e0e0;
+	margin: 0;
+	padding: 0;
+	width: 800dp;
+	height: 600dp;
+	overflow: hidden;
+}
+
+.g2_container
+{
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	background-color: #202024;
+	border-top: 4dp #c41e24;
+	box-sizing: border-box;
+}
+
+.g2_header
+{
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16dp 24dp;
+	background-color: #161618;
+	border-bottom: 1dp #333338;
+}
+
+.g2_title_block
+{
+	display: flex;
+	flex-direction: column;
+}
+
+.g2_brand
+{
+	font-size: 20dp;
+	font-weight: 700;
+	color: #ffffff;
+	letter-spacing: 2dp;
+}
+
+.g2_subtitle
+{
+	font-size: 11dp;
+	color: #888890;
+	letter-spacing: 1dp;
+	margin-top: 2dp;
+}
+
+.socket_status
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 6dp 12dp;
+	border-radius: 4dp;
+	background-color: #26262c;
+	border: 1dp #3a3a42;
+	font-size: 12dp;
+}
+
+.socket_indicator
+{
+	display: inline-block;
+	width: 10dp;
+	height: 10dp;
+	border-radius: 5dp;
+	margin-right: 8dp;
+	background-color: #666670;
+}
+
+.socket_text
+{
+	color: #d0d0d8;
+}
+
+.socket_status.socket_listening .socket_indicator
+{
+	background-color: #f59e0b;
+}
+
+.socket_status.socket_connected
+{
+	background-color: #162c20;
+	border-color: #22c55e;
+}
+
+.socket_status.socket_connected .socket_indicator
+{
+	background-color: #22c55e;
+}
+
+.socket_status.socket_connected .socket_text
+{
+	color: #4ade80;
+}
+
+.socket_status.socket_offline .socket_indicator
+{
+	background-color: #ef4444;
+}
+
+.g2_panel
+{
+	display: flex;
+	flex-direction: column;
+	padding: 24dp;
+	gap: 20dp;
+}
+
+.slots_section
+{
+	display: flex;
+	flex-direction: column;
+	background-color: #18181c;
+	border: 1dp #2c2c34;
+	border-radius: 6dp;
+	padding: 16dp;
+	gap: 12dp;
+}
+
+.section_title
+{
+	font-size: 12dp;
+	font-weight: 700;
+	color: #9999a4;
+	letter-spacing: 1.5dp;
+}
+
+.slots_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 12dp;
+}
+
+.slotButton
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	width: 130dp;
+	height: 48dp;
+	background-color: #282830;
+	border: 1dp #3e3e4a;
+	border-radius: 4dp;
+	cursor: pointer;
+	padding: 0 10dp;
+	gap: 8dp;
+	color: #e0e0e8;
+}
+
+.slotButton:hover
+{
+	background-color: #32323c;
+	border-color: #555566;
+}
+
+.slotButton:active
+{
+	background-color: #202026;
+}
+
+.slotButton:checked
+{
+	background-color: #b82025;
+	border-color: #e03036;
+	color: #ffffff;
+}
+
+.slot_badge
+{
+	font-size: 16dp;
+	font-weight: 700;
+	color: #ffffff;
+}
+
+.slot_label
+{
+	font-size: 13dp;
+	font-weight: 500;
+	color: #e0e0e8;
+}
+
+.slotButton:checked .slot_label
+{
+	color: #ffffff;
+	font-weight: 700;
+}
+
+.slot_status_row
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8dp;
+	margin-top: 4dp;
+}
+
+.active_slot_caption
+{
+	font-size: 12dp;
+	color: #888892;
+	font-weight: 600;
+}
+
+.active_slot_display
+{
+	font-size: 13dp;
+	color: #ffffff;
+	font-weight: 700;
+	background-color: #26262e;
+	padding: 2dp 8dp;
+	border-radius: 3dp;
+	border: 1dp #3a3a44;
+}
+
+.g2_info_box
+{
+	display: flex;
+	flex-direction: column;
+	background-color: #18181c;
+	border: 1dp #2c2c34;
+	border-radius: 6dp;
+	padding: 16dp;
+	gap: 8dp;
+}
+
+.info_title
+{
+	font-size: 12dp;
+	font-weight: 700;
+	color: #9999a4;
+	letter-spacing: 1.5dp;
+	margin-bottom: 4dp;
+}
+
+.info_row
+{
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	font-size: 12dp;
+	border-bottom: 1dp #24242a;
+	padding-bottom: 4dp;
+}
+
+.info_key
+{
+	color: #888894;
+}
+
+.info_val
+{
+	color: #d0d0d8;
+	font-weight: 500;
 }

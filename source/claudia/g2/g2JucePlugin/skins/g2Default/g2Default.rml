@@ -7,5 +7,61 @@
 		<link type="text/rcss" href="g2Default.rcss"/>
 	</head>
 	<body id="Root" rootScale="1.000000" style="left: 0dp; top: 0dp; width: 800dp; height: 600dp;">
+		<div class="g2_container">
+			<div class="g2_header">
+				<div class="g2_title_block">
+					<div class="g2_brand">CLAVIA NORD MODULAR G2</div>
+					<div class="g2_subtitle">DSP56300 VIRTUAL ANALOG EMULATOR</div>
+				</div>
+				<div id="socket_status" class="socket_status socket_listening">
+					<span class="socket_indicator"></span>
+					<span id="socket_text" class="socket_text">Socket: 127.0.0.1:7777 (Listening)</span>
+				</div>
+			</div>
+
+			<div class="g2_panel">
+				<div class="slots_section">
+					<div class="section_title">PERFORMANCE SLOTS</div>
+					<div class="slots_row">
+						<button id="slot_a" class="slotButton" isToggle="1">
+							<span class="slot_badge">A</span>
+							<span class="slot_label">SLOT A</span>
+						</button>
+						<button id="slot_b" class="slotButton" isToggle="1">
+							<span class="slot_badge">B</span>
+							<span class="slot_label">SLOT B</span>
+						</button>
+						<button id="slot_c" class="slotButton" isToggle="1">
+							<span class="slot_badge">C</span>
+							<span class="slot_label">SLOT C</span>
+						</button>
+						<button id="slot_d" class="slotButton" isToggle="1">
+							<span class="slot_badge">D</span>
+							<span class="slot_label">SLOT D</span>
+						</button>
+					</div>
+					<div class="slot_status_row">
+						<span class="active_slot_caption">ACTIVE:</span>
+						<span id="active_slot_display" class="active_slot_display">Slot A</span>
+					</div>
+				</div>
+
+				<div class="g2_info_box">
+					<div class="info_title">SYSTEM ARCHITECTURE</div>
+					<div class="info_row">
+						<span class="info_key">DSP ENGINE:</span>
+						<span class="info_val">4x Motorola DSP56362 @ 100 MHz</span>
+					</div>
+					<div class="info_row">
+						<span class="info_key">HOST PROCESSOR:</span>
+						<span class="info_val">ColdFire MCF5307 @ 90 MHz</span>
+					</div>
+					<div class="info_row">
+						<span class="info_key">EDITOR BRIDGE:</span>
+						<span class="info_val">Loopback Transport Socket (Port 7777 TCP)</span>
+					</div>
+				</div>
+			</div>
+		</div>
 	</body>
 </rml>

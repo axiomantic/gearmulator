@@ -37,36 +37,46 @@ namespace g2JucePlugin
         Processor::setLatencyBlocks(latencyBlocks);
     }
 
-    AudioPluginAudioProcessor::~AudioPluginAudioProcessor() { destroyEditorState(); }
+	AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
+	{
+		m_g2Device = nullptr;
+		destroyEditorState();
+	}
 
-    jucePluginEditorLib::PluginEditorState* AudioPluginAudioProcessor::createEditorState()
-    {
-        return new PluginEditorState(*this);
-    }
+	jucePluginEditorLib::PluginEditorState* AudioPluginAudioProcessor::createEditorState()
+	{
+		return new PluginEditorState(*this);
+	}
 
-    synthLib::Device* AudioPluginAudioProcessor::createDevice()
-    {
-        synthLib::DeviceCreateParams params;
-        getRemoteDeviceParams(params);
-        params.homePath = getDataFolder();
-        auto* d = new g2::Device(params);
-        if (d->firmwareStatus().state != g2::FirmwareState::Present)
-            throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
-                                            "A firmware image is required, but was not found.");
+	synthLib::Device* AudioPluginAudioProcessor::createDevice()
+	{
+		synthLib::DeviceCreateParams params;
+		getRemoteDeviceParams(params);
+		params.homePath = getDataFolder();
+		auto* d = new g2::Device(params);
+		if (d->firmwareStatus().state != g2::FirmwareState::Present)
+		{
+			delete d;
+			m_g2Device = nullptr;
+			throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
+											"A firmware image is required, but was not found.");
+		}
 
-        g2::Device::BootRequest request;
-        request.config.lookaheadFrames = g2::kLookaheadFrames;
-        request.config.maxHostBlockFrames = 4096;
-        const auto result = d->boot(request);
-        if (!result.booted || result.faulted)
-        {
-            delete d;
-            throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
-                                            "Nord Modular G2 boot failed: " + result.why);
-        }
+		g2::Device::BootRequest request;
+		request.config.lookaheadFrames = g2::kLookaheadFrames;
+		request.config.maxHostBlockFrames = 4096;
+		const auto result = d->boot(request);
+		if (!result.booted || result.faulted)
+		{
+			delete d;
+			m_g2Device = nullptr;
+			throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
+											"Nord Modular G2 boot failed: " + result.why);
+		}
 
-        return d;
-    }
+		m_g2Device = d;
+		return d;
+	}
 
     void AudioPluginAudioProcessor::getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const
     {

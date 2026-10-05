@@ -131,6 +131,9 @@ namespace g2
 		 * requires the boot this constructor deliberately does not perform. */
 		uint16_t firmwareVersionWord() const noexcept { return m_firmwareVersionWord; }
 
+		const TransportSocketServer* socketServer() const noexcept { return m_socketServer.get(); }
+		TransportSocketServer* socketServer() noexcept { return m_socketServer.get(); }
+
 		/* ---------------------------------------------------------------
 		 * The boot-on-restore sequence. Every step below runs on the calling
 		 * thread, which is the boot thread, and the last of them publishes
