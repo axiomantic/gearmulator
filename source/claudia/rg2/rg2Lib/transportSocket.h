@@ -2,6 +2,7 @@
 
 #include "transportHub.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -58,9 +59,9 @@ namespace rg2
 		// Reads from client socket, reassembles frames, forwards to hub.toDevice().
 		size_t pumpSocket(int timeoutMs = 100) noexcept;
 
-		uint64_t framesIn() const noexcept { return m_framesIn; }
-		uint64_t framesOut() const noexcept { return m_framesOut; }
-		uint64_t droppedFrames() const noexcept { return m_dropped; }
+		uint64_t framesIn() const noexcept { return m_framesIn.load(std::memory_order_relaxed); }
+		uint64_t framesOut() const noexcept { return m_framesOut.load(std::memory_order_relaxed); }
+		uint64_t droppedFrames() const noexcept { return m_dropped.load(std::memory_order_relaxed); }
 
 	private:
 		TransportHub& m_hub;
@@ -68,11 +69,12 @@ namespace rg2
 		uint16_t m_port = 0;
 		std::intptr_t m_listenFd = -1;
 		std::intptr_t m_clientFd = -1;
+		std::atomic<bool> m_hasClient{false};
 
 		std::vector<uint8_t> m_rxBuffer;
 
-		uint64_t m_framesIn = 0;
-		uint64_t m_framesOut = 0;
-		uint64_t m_dropped = 0;
+		std::atomic<uint64_t> m_framesIn{0};
+		std::atomic<uint64_t> m_framesOut{0};
+		std::atomic<uint64_t> m_dropped{0};
 	};
 } // namespace rg2

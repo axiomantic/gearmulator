@@ -260,13 +260,15 @@ namespace rg2
 		socketSetOption(m_clientFd, IPPROTO_TCP, TCP_NODELAY, 1);
 		setNonBlocking(m_clientFd);
 		m_rxBuffer.clear();
+		m_hasClient.store(true, std::memory_order_release);
 		return true;
 	}
 
-	bool TransportSocketServer::hasClient() const noexcept { return m_clientFd != -1; }
+	bool TransportSocketServer::hasClient() const noexcept { return m_hasClient.load(std::memory_order_acquire); }
 
 	void TransportSocketServer::disconnectClient() noexcept
 	{
+		m_hasClient.store(false, std::memory_order_release);
 		socketClose(m_clientFd);
 		m_rxBuffer.clear();
 	}
