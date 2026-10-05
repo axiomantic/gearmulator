@@ -814,10 +814,10 @@ Framework:
         strokeRect, beginPath, moveTo, lineTo, rect, arc, ellipse, fill,
         stroke). Skin scripts can draw custom graphics on a canvas.
 
-Red Gecko 2 (RG2):
+RedGecko2:
 
 - [New] The build carries the Red Gecko 2 (RG2) as a new product. The
-        option gearmulator_SYNTH_RG2 turns it on and it is on by default.
+        option gearmulator_SYNTH_REDGECKO2 turns it on and it is on by default.
         The product is a skeleton at this point: it declares the targets
         rg2Lib, rg2TestConsole and rg2JucePlugin and it emulates nothing.
 

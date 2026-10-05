@@ -7,11 +7,7 @@ option(${CMAKE_PROJECT_NAME}_SYNTH_XENIA "Build Xenia" on)
 option(${CMAKE_PROJECT_NAME}_SYNTH_NODALRED2X "Build NodalRed2x" on)
 option(${CMAKE_PROJECT_NAME}_SYNTH_JE8086 "Build JE-8086" on)
 option(${CMAKE_PROJECT_NAME}_SYNTH_88EMU "Build 88Emu" on)
-option(${CMAKE_PROJECT_NAME}_SYNTH_RG2 "Build Red Gecko 2" on)
-option(${CMAKE_PROJECT_NAME}_SYNTH_REDGECKO2 "Build Red Gecko 2 (alias for RG2)" on)
-if(NOT ${CMAKE_PROJECT_NAME}_SYNTH_REDGECKO2)
-	set(${CMAKE_PROJECT_NAME}_SYNTH_RG2 OFF CACHE BOOL "" FORCE)
-endif()
+option(${CMAKE_PROJECT_NAME}_SYNTH_REDGECKO2 "Build Red Gecko 2" on)
 
 # ----------------- Add our cmake scripts to IDE
 
