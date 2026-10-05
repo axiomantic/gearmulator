@@ -37,46 +37,44 @@ namespace rg2JucePlugin
         Processor::setLatencyBlocks(latencyBlocks);
     }
 
-	AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
-	{
-		m_g2Device = nullptr;
-		destroyEditorState();
-	}
+    AudioPluginAudioProcessor::~AudioPluginAudioProcessor() { destroyEditorState(); }
 
-	jucePluginEditorLib::PluginEditorState* AudioPluginAudioProcessor::createEditorState()
-	{
-		return new PluginEditorState(*this);
-	}
+    rg2::Device* AudioPluginAudioProcessor::getG2Device() const noexcept
+    {
+        return dynamic_cast<rg2::Device*>(m_device.get());
+    }
 
-	synthLib::Device* AudioPluginAudioProcessor::createDevice()
-	{
-		synthLib::DeviceCreateParams params;
-		getRemoteDeviceParams(params);
-		params.homePath = getDataFolder();
-		auto* d = new rg2::Device(params);
-		if (d->firmwareStatus().state != rg2::FirmwareState::Present)
-		{
-			delete d;
-			m_g2Device = nullptr;
-			throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
-											"A firmware image is required, but was not found.");
-		}
+    jucePluginEditorLib::PluginEditorState* AudioPluginAudioProcessor::createEditorState()
+    {
+        return new PluginEditorState(*this);
+    }
 
-		rg2::Device::BootRequest request;
-		request.config.lookaheadFrames = rg2::kLookaheadFrames;
-		request.config.maxHostBlockFrames = 4096;
-		const auto result = d->boot(request);
-		if (!result.booted || result.faulted)
-		{
-			delete d;
-			m_g2Device = nullptr;
-			throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
-											"Nord Modular G2 boot failed: " + result.why);
-		}
+    synthLib::Device* AudioPluginAudioProcessor::createDevice()
+    {
+        synthLib::DeviceCreateParams params;
+        getRemoteDeviceParams(params);
+        params.homePath = getDataFolder();
+        auto* d = new rg2::Device(params);
+        if (d->firmwareStatus().state != rg2::FirmwareState::Present)
+        {
+            delete d;
+            throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
+                                            "A firmware image is required, but was not found.");
+        }
 
-		m_g2Device = d;
-		return d;
-	}
+        rg2::Device::BootRequest request;
+        request.config.lookaheadFrames = rg2::kLookaheadFrames;
+        request.config.maxHostBlockFrames = 4096;
+        const auto result = d->boot(request);
+        if (!result.booted || result.faulted)
+        {
+            delete d;
+            throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
+                                            "Nord Modular G2 boot failed: " + result.why);
+        }
+
+        return d;
+    }
 
     void AudioPluginAudioProcessor::getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const
     {
