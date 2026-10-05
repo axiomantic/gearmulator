@@ -107,7 +107,7 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # at the link step and not at the fetch, because the fetch still succeeds.
 
 set(G2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
-set(G2_MCF5407_GIT_TAG "3f439072a49739787b4ddedb16fc098451c9cba3" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
+set(G2_MCF5407_GIT_TAG "1594840e32f9a60b2521e534c02f20e1c6812b8c" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5407

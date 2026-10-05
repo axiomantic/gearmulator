@@ -82,6 +82,8 @@ endforeach()
 if(_g2_test_executables)
 	add_custom_target(g2_test_executables_all)
 	add_dependencies(g2_test_executables_all ${_g2_test_executables})
+	add_custom_target(rg2_test_executables_all)
+	add_dependencies(rg2_test_executables_all ${_g2_test_executables})
 endif()
 
 unset(_g2_target)	# CMP0124 is unset (so it behaves as OLD) and foreach() leaks the loop variable into directory scope

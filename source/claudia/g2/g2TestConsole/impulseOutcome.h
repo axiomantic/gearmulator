@@ -5,7 +5,7 @@
  * `--impulse` injects a known, non-silent sample at the codec source and
  * observes whether and where it propagates. It is a transport probe and not an
  * audio claim: it answers "does the path carry data", never "does the machine
- * make music". The default state of a Nord Modular is to not play sound, and
+ * make music". The default state of a Red Gecko 2 is to not play sound, and
  * sound comes from loading patches, so a chain that carries nothing on an
  * unpatched machine is the emulator agreeing with the hardware and is not a
  * defect in the transport.

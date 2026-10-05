@@ -15,10 +15,10 @@ namespace
     juce::PropertiesFile::Options getOptions()
     {
         juce::PropertiesFile::Options opts;
-        opts.applicationName = "DSP56300EmulatorNordG2";
+        opts.applicationName = "DSP56300EmulatorRedGecko2";
         opts.filenameSuffix = ".settings";
-        opts.folderName = "DSP56300EmulatorNordG2";
-        opts.osxLibrarySubFolder = "Application Support/DSP56300EmulatorNordG2";
+        opts.folderName = "DSP56300EmulatorRedGecko2";
+        opts.osxLibrarySubFolder = "Application Support/DSP56300EmulatorRedGecko2";
         return opts;
     }
 } // namespace
@@ -70,7 +70,7 @@ namespace g2JucePlugin
         {
             delete d;
             throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
-                                            "Nord Modular G2 boot failed: " + result.why);
+                                            "Red Gecko 2 boot failed: " + result.why);
         }
 
         return d;
