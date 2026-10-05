@@ -48,6 +48,7 @@ namespace rg2JucePlugin
     {
         synthLib::DeviceCreateParams params;
         getRemoteDeviceParams(params);
+        params.homePath = getDataFolder();
         auto* d = new rg2::Device(params);
         if (d->firmwareStatus().state != rg2::FirmwareState::Present)
             throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
@@ -63,12 +64,14 @@ namespace rg2JucePlugin
             throw synthLib::DeviceException(synthLib::DeviceError::Unknown,
                                             "Nord Modular G2 boot failed: " + result.why);
         }
+
         return d;
     }
 
     void AudioPluginAudioProcessor::getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const
     {
         Processor::getRemoteDeviceParams(_params);
+        _params.homePath = getDataFolder();
     }
 
     pluginLib::Controller* AudioPluginAudioProcessor::createController() { return new rg2JucePlugin::Controller(*this); }

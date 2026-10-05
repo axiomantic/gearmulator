@@ -28,3 +28,4 @@ buildSkinHeader()
 juce_add_binary_data(rg2JucePlugin_BinaryData SOURCES ${ASSETS} ${ASSETS_SKINS})
 
 createJucePlugin(rg2JucePlugin "RedGecko2" TRUE "Trg2" rg2JucePlugin_BinaryData rg2Lib)
+target_sources(RedGecko2ServerPlugin PRIVATE rg2Device.cpp rg2Parameters.cpp rg2PatchLoad.cpp rg2State.cpp)

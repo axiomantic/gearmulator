@@ -12,6 +12,7 @@
 #include "rg2Device.h"
 
 #include "rg2State.h"
+#include "transportSocket.h"
 
 #include "rg2/timebase.h"
 
@@ -128,13 +129,6 @@ namespace
 					p.pop_back();
 				candidates.push_back(p + "/roms");
 				candidates.push_back(p);
-			}
-
-			const char* home = std::getenv("HOME");
-			if(home && home[0] != '\0')
-			{
-				candidates.push_back(std::string(home) + "/Documents/The Usual Suspects/NordModularG2/roms");
-				candidates.push_back(std::string(home) + "/Documents/The Usual Suspects/NordModularG2");
 			}
 
 			for(const auto& cand : candidates)
@@ -271,10 +265,14 @@ namespace rg2
 		m_pendingMidi.reserve(kMaxPendingMidi);
 	}
 
-	/* The unique_ptrs tear down in the one order that is safe, which is why
-	 * they are declared in the order they are; this destructor exists
-	 * because Sdram is incomplete in the header and for no other reason. */
-	Device::~Device() = default;
+	Device::~Device()
+	{
+		if(m_socketServer)
+		{
+			m_socketServer->close();
+			m_socketServer.reset();
+		}
+	}
 
 	/* ------------------------------------------------------------------
 	 * The boot-on-restore sequence.
@@ -352,6 +350,12 @@ namespace rg2
 		 * by step 6 and by nothing else, so a boot that returns early on a
 		 * missing firmware leaves the Device invalid -- which is what it is. */
 		beginStateChange();
+
+		if(m_socketServer)
+		{
+			m_socketServer->close();
+			m_socketServer.reset();
+		}
 
 		installScheduler(nullptr);
 		m_ownedScheduler.reset();
@@ -581,6 +585,12 @@ namespace rg2
 		// audio thread. isValid()'s seq_cst load is the other half.
 		installScheduler(&scheduler);
 		m_ready.store(true, std::memory_order_release);
+
+		if(m_board)
+		{
+			m_socketServer = std::make_unique<TransportSocketServer>(m_board->transport(), 7777);
+			m_socketServer->listen();
+		}
 
 		notifyBootStep(BootStep::Publish, &scheduler);
 
@@ -849,6 +859,14 @@ namespace rg2
 	 * state. */
 	if(m_board)
 	{
+		if(m_socketServer)
+		{
+			if(!m_socketServer->hasClient())
+				m_socketServer->acceptClient(false);
+			if(m_socketServer->hasClient())
+				m_socketServer->pumpSocket(0);
+		}
+
 		/* Before the MIDI, because a control the host moved in this block is
 		 * part of the state the block's notes are played into. */
 		applyPanelControls();
