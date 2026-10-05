@@ -1,97 +1,125 @@
 body
 {
-	background-color: #161619;
+	background-color: #111114;
 	font-family: Roboto;
 	color: #e2e2e8;
 	margin: 0;
 	padding: 0;
-	width: 800dp;
-	height: 600dp;
+	width: 1024dp;
+	height: 560dp;
 	overflow: hidden;
 }
 
-.g2_container
+/* ==========================================================================
+   CHASSIS & MAIN CONTAINER
+   ========================================================================== */
+
+.g2_chassis
 {
 	display: flex;
 	flex-direction: column;
-	width: 100%;
-	height: 100%;
-	background-color: #1a1a1e;
-	border-top: 5dp #c41e24;
+	width: 1024dp;
+	height: 560dp;
+	background-color: #92151b;
+	border: 3dp #731014;
 	box-sizing: border-box;
 }
 
-.g2_header
+/* Chassis Top Lip with jack labels and brand bar */
+.chassis_top_lip
+{
+	display: flex;
+	flex-direction: column;
+	background-color: #7b1216;
+	border-bottom: 2dp #5e0d11;
+	padding: 4dp 14dp 6dp 14dp;
+	box-sizing: border-box;
+}
+
+.jack_labels_row
 {
 	display: flex;
 	flex-direction: row;
 	justify-content: space-between;
 	align-items: center;
-	padding: 12dp 24dp;
-	background-color: #121215;
-	border-bottom: 2dp #24242c;
+	padding: 2dp 4dp 3dp 4dp;
+	border-bottom: 1dp #540c0f;
 }
 
-.g2_brand_area
+.jack_lbl
+{
+	font-size: 8dp;
+	font-weight: 700;
+	color: #e8b0b2;
+	letter-spacing: 0.8dp;
+}
+
+.top_brand_bar
+{
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 4dp;
+}
+
+.brand_title_group
 {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 12dp;
+	gap: 10dp;
 }
 
-.rg2_badge
+.clavia_logo
 {
-	background-color: #c41e24;
-	color: #ffffff;
-	font-size: 14dp;
+	font-size: 15dp;
 	font-weight: 900;
+	color: #ffffff;
 	letter-spacing: 2dp;
-	padding: 4dp 8dp;
-	border-radius: 3dp;
-	border: 1dp #e83038;
+	font-style: italic;
+	text-shadow: 1dp 1dp 2dp #000000;
 }
 
-.g2_title_block
+.brand_title
 {
-	display: flex;
-	flex-direction: column;
-}
-
-.g2_brand
-{
-	font-size: 18dp;
-	font-weight: 700;
+	font-size: 14dp;
+	font-weight: 800;
 	color: #ffffff;
 	letter-spacing: 2dp;
 }
 
-.g2_subtitle
+.brand_sub
 {
 	font-size: 10dp;
-	color: #888894;
+	font-weight: 700;
+	color: #ff9da1;
+	background-color: #560a0e;
+	padding: 2dp 6dp;
+	border-radius: 3dp;
+	border: 1dp #8c161c;
 	letter-spacing: 1dp;
-	margin-top: 2dp;
 }
 
+/* Socket Status */
 .socket_status
 {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	padding: 6dp 12dp;
-	border-radius: 5dp;
-	background-color: #202028;
-	border: 1dp #343440;
-	gap: 10dp;
+	padding: 3dp 8dp;
+	border-radius: 4dp;
+	background-color: #1a1a20;
+	border: 1dp #30303c;
+	gap: 8dp;
 }
 
 .socket_indicator
 {
 	display: inline-block;
-	width: 10dp;
-	height: 10dp;
-	border-radius: 5dp;
+	width: 8dp;
+	height: 8dp;
+	border-radius: 4dp;
 	background-color: #666672;
 }
 
@@ -99,7 +127,7 @@ body
 {
 	display: flex;
 	flex-direction: column;
-	gap: 2dp;
+	gap: 1dp;
 }
 
 .socket_meta_row
@@ -107,30 +135,29 @@ body
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 8dp;
+	gap: 6dp;
 }
 
 .socket_label
 {
-	font-size: 10dp;
+	font-size: 8dp;
 	font-weight: 700;
 	color: #888898;
-	letter-spacing: 1dp;
+	letter-spacing: 0.8dp;
 }
 
 .socket_badge
 {
-	font-size: 9dp;
+	font-size: 8dp;
 	font-weight: 700;
-	padding: 1dp 5dp;
-	border-radius: 3dp;
-	letter-spacing: 0.5dp;
+	padding: 1dp 4dp;
+	border-radius: 2dp;
 }
 
 .socket_status.socket_listening .socket_indicator
 {
 	background-color: #f59e0b;
-	box-shadow: 0 0 6dp #f59e0b;
+	box-shadow: 0 0 5dp #f59e0b;
 }
 
 .socket_status.socket_listening .socket_badge
@@ -142,14 +169,14 @@ body
 
 .socket_status.socket_connected
 {
-	background-color: #122418;
+	background-color: #102416;
 	border-color: #22c55e;
 }
 
 .socket_status.socket_connected .socket_indicator
 {
 	background-color: #22c55e;
-	box-shadow: 0 0 6dp #22c55e;
+	box-shadow: 0 0 5dp #22c55e;
 }
 
 .socket_status.socket_connected .socket_badge
@@ -157,11 +184,6 @@ body
 	background-color: #143220;
 	color: #4ade80;
 	border: 1dp #1c7538;
-}
-
-.socket_status.socket_connected .socket_text
-{
-	color: #4ade80;
 }
 
 .socket_status.socket_offline .socket_indicator
@@ -178,416 +200,1202 @@ body
 
 .socket_text
 {
-	font-size: 11dp;
-	color: #c0c0cc;
+	font-size: 9dp;
+	color: #b0b0bc;
 }
 
-.g2_panel
-{
-	display: flex;
-	flex-direction: column;
-	padding: 18dp 24dp;
-	gap: 16dp;
-}
+/* ==========================================================================
+   RECESSED MAIN FACEPLATE
+   ========================================================================== */
 
-.upper_deck
+.panel_faceplate
 {
 	display: flex;
 	flex-direction: row;
-	gap: 16dp;
-	width: 100%;
-}
-
-.slots_section
-{
-	width: 502dp;
-	display: flex;
-	flex-direction: column;
-	background-color: #151518;
-	border: 1dp #282830;
-	border-radius: 6dp;
-	padding: 14dp;
-	gap: 12dp;
+	background-color: #484c4e;
+	border-top: 2dp #323537;
+	border-bottom: 2dp #323537;
+	padding: 8dp 10dp;
+	gap: 8dp;
+	height: 480dp;
 	box-sizing: border-box;
 }
 
-.section_header
+.panel_console_divider
+{
+	width: 2dp;
+	height: 100%;
+	background-color: #2e3032;
+	border-right: 1dp #5c6264;
+}
+
+/* ==========================================================================
+   LEFT CONSOLE: Performance & Utility
+   ========================================================================== */
+
+.left_console
+{
+	display: flex;
+	flex-direction: column;
+	width: 326dp;
+	gap: 6dp;
+	box-sizing: border-box;
+}
+
+.left_top_row
 {
 	display: flex;
 	flex-direction: row;
 	justify-content: space-between;
-	align-items: center;
-	border-bottom: 1dp #262630;
-	padding-bottom: 6dp;
+	align-items: flex-start;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 6dp 8dp;
+	box-sizing: border-box;
 }
 
-.section_title
-{
-	font-size: 12dp;
-	font-weight: 700;
-	color: #c41e24;
-	letter-spacing: 1.5dp;
-}
-
-.section_meta
-{
-	font-size: 10dp;
-	font-weight: 500;
-	color: #70707c;
-	letter-spacing: 0.8dp;
-}
-
-.slots_row
-{
-	display: flex;
-	flex-direction: row;
-	gap: 10dp;
-}
-
-.slot_item
+.knob_block
 {
 	display: flex;
 	flex-direction: column;
-	width: 110dp;
-	gap: 6dp;
 	align-items: center;
+	gap: 2dp;
 }
 
-.slot_indicator_row
+.ctrl_label
 {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	justify-content: center;
-	gap: 6dp;
-	padding: 2dp 0;
-}
-
-.slot_led
-{
-	display: inline-block;
-	width: 9dp;
-	height: 9dp;
-	border-radius: 5dp;
-}
-
-.slot_led.slot_led_lit
-{
-	background-color: #ff2a30;
-	border: 1dp #ff8085;
-	box-shadow: 0 0 6dp #ff2028;
-}
-
-.slot_led.slot_led_unlit
-{
-	background-color: #380d10;
-	border: 1dp #22080a;
-}
-
-.slot_led_tag
-{
-	font-size: 10dp;
+	font-size: 8dp;
 	font-weight: 700;
-	color: #90909c;
+	color: #ffffff;
 	letter-spacing: 0.5dp;
+	text-align: center;
 }
 
-.slotButton
+.sub_text_tiny
 {
+	font-size: 7dp;
+	font-weight: 600;
+	color: #d0d2d4;
+	letter-spacing: 0.3dp;
+	text-align: center;
+}
+
+.rotary_knob_frame
+{
+	width: 36dp;
+	height: 36dp;
 	display: flex;
-	flex-direction: row;
 	align-items: center;
 	justify-content: center;
-	width: 110dp;
-	height: 46dp;
-	background-color: #24242c;
-	border: 1dp #3a3a46;
-	border-radius: 4dp;
-	cursor: pointer;
-	color: #e0e0e8;
-	gap: 8dp;
-	box-sizing: border-box;
 }
 
-.slotButton:hover
+input.range.knob_slider
 {
-	background-color: #2e2e38;
-	border-color: #555566;
-	color: #ffffff;
+	width: 34dp;
+	height: 20dp;
 }
 
-.slotButton:active
+input.range.knob_slider slidertrack
 {
-	background-color: #1a1a22;
-}
-
-.slotButton:checked
-{
-	background-color: #b82025;
-	border: 1dp #ff3840;
-	color: #ffffff;
-	box-shadow: 0 0 8dp #60080c;
-}
-
-.slot_badge
-{
-	font-size: 16dp;
-	font-weight: 800;
-	color: #ffffff;
-}
-
-.slot_btn_label
-{
-	font-size: 11dp;
-	font-weight: 600;
-	color: #b8b8c4;
-}
-
-.slotButton:checked .slot_btn_label
-{
-	color: #ffffff;
-	font-weight: 700;
-}
-
-.slot_status_row
-{
-	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
-	align-items: center;
-	margin-top: 4dp;
-}
-
-.slot_status_left
-{
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	gap: 8dp;
-}
-
-.active_slot_caption
-{
-	font-size: 11dp;
-	color: #80808c;
-	font-weight: 600;
-}
-
-.active_slot_display
-{
-	font-size: 12dp;
-	color: #ffffff;
-	font-weight: 700;
-	background-color: #262630;
-	padding: 2dp 8dp;
+	background-color: #1c1d1e;
+	border: 1dp #303335;
 	border-radius: 3dp;
-	border: 1dp #3a3a48;
+	height: 6dp;
 }
 
-.slot_poly_badge
+input.range.knob_slider sliderbar
 {
-	font-size: 10dp;
-	font-weight: 600;
-	color: #888898;
-	background-color: #1c1c22;
-	padding: 2dp 8dp;
-	border-radius: 3dp;
-	border: 1dp #2c2c36;
+	width: 14dp;
+	height: 16dp;
+	background-color: #242528;
+	border: 1dp #ffffff;
+	border-radius: 2dp;
 }
 
-.master_section
-{
-	width: 234dp;
-	display: flex;
-	flex-direction: column;
-	background-color: #151518;
-	border: 1dp #282830;
-	border-radius: 6dp;
-	padding: 14dp;
-	gap: 12dp;
-	box-sizing: border-box;
-}
-
-.volume_panel
-{
-	display: flex;
-	flex-direction: column;
-	background-color: #101014;
-	border: 1dp #24242c;
-	border-radius: 5dp;
-	padding: 10dp;
-	gap: 8dp;
-}
-
-.volume_slider_container
-{
-	width: 100%;
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-}
-
-input.range.volume_slider
-{
-	width: 100%;
-	height: 26dp;
-}
-
-input.range.volume_slider slidertrack
-{
-	background-color: #0c0c10;
-	border: 1dp #282834;
-	border-radius: 4dp;
-	height: 8dp;
-}
-
-input.range.volume_slider sliderbar
-{
-	width: 20dp;
-	height: 24dp;
-	background-color: #c41e24;
-	border: 1dp #ff5058;
-	border-radius: 3dp;
-	box-shadow: 0 0 4dp #60080c;
-}
-
-input.range.volume_slider sliderbar:hover
-{
-	background-color: #d8252c;
-	border-color: #ff7076;
-}
-
-input.range.volume_slider sliderbar:active
-{
-	background-color: #e52830;
-	border-color: #ffffff;
-}
-
-input.range.volume_slider sliderarrowdec,
-input.range.volume_slider sliderarrowinc
+input.range.knob_slider sliderarrowdec,
+input.range.knob_slider sliderarrowinc
 {
 	display: none;
 	width: 0;
 	height: 0;
 }
 
-.volume_scale
+.knob_cap_static
 {
-	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
-	font-size: 9dp;
-	color: #70707c;
-	font-weight: 600;
-	padding: 0 2dp;
+	width: 26dp;
+	height: 26dp;
+	border-radius: 13dp;
+	background-color: #222325;
+	border: 1dp #505355;
+	box-shadow: inset 0 0 4dp #000000;
 }
 
-.volume_readout
+.level_readout_tiny
 {
 	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
+	flex-direction: column;
 	align-items: center;
-	background-color: #181820;
-	border: 1dp #262630;
-	border-radius: 3dp;
-	padding: 4dp 8dp;
-}
-
-.volume_label
-{
-	font-size: 10dp;
-	color: #888896;
-	font-weight: 700;
-}
-
-.volume_display
-{
-	font-size: 12dp;
+	font-size: 7dp;
 	color: #ffffff;
 	font-weight: 700;
 }
 
-.volume_db_display
+.mic_meter_row
 {
-	font-size: 11dp;
-	color: #c41e24;
-	font-weight: 700;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 2dp;
+	margin-top: 1dp;
 }
 
-.g2_info_box
+.meter_dot
+{
+	width: 3dp;
+	height: 3dp;
+	border-radius: 2dp;
+	background-color: #2a2c2e;
+}
+
+.meter_tag
+{
+	font-size: 6dp;
+	color: #c0c4c6;
+}
+
+.sys_store_cluster
+{
+	display: flex;
+	flex-direction: row;
+	gap: 5dp;
+	align-items: flex-end;
+}
+
+.sys_btn_col
 {
 	display: flex;
 	flex-direction: column;
-	background-color: #151518;
-	border: 1dp #282830;
-	border-radius: 6dp;
-	padding: 14dp;
-	gap: 10dp;
+	align-items: center;
+	gap: 2dp;
+}
+
+.btn_with_led
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+.disp_mode_cluster
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+.rocker_switch_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+.rocker_switch
+{
+	width: 50dp;
+	height: 20dp;
+	background-color: #1e2022;
+	border: 1dp #3c4042;
+	border-radius: 2dp;
+	color: #d8dadc;
+	font-size: 7dp;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+/* ==========================================================================
+   MAIN PATCH LCD
+   ========================================================================== */
+
+.main_lcd_container
+{
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	padding: 2dp 0;
+}
+
+.lcd_bezel
+{
+	background-color: #1a1b1d;
+	border: 2dp #282a2c;
+	border-radius: 4dp;
+	padding: 4dp;
+	width: 300dp;
 	box-sizing: border-box;
 }
 
-.info_title
+.lcd_screen
 {
-	font-size: 12dp;
-	font-weight: 700;
-	color: #c41e24;
-	letter-spacing: 1.5dp;
+	background-color: #487f22;
+	border: 1dp #2e5414;
+	border-radius: 2dp;
+	padding: 5dp 10dp;
+	box-sizing: border-box;
 }
 
-.info_grid
+.main_lcd_screen
+{
+	height: 48dp;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 2dp;
+}
+
+.lcd_row
+{
+	font-family: monospace;
+	font-size: 13dp;
+	font-weight: 900;
+	color: #0b1a04;
+	letter-spacing: 1.5dp;
+	text-shadow: 0 0 1dp #305814;
+}
+
+/* ==========================================================================
+   LEFT MID ROW: Navigator, Data Wheel, Keyboard Assign
+   ========================================================================== */
+
+.left_mid_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 8dp;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 6dp 8dp;
+	box-sizing: border-box;
+}
+
+.wheel_nav_col
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6dp;
+	width: 130dp;
+}
+
+.data_wheel_unit
+{
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.big_data_wheel
+{
+	width: 50dp;
+	height: 50dp;
+	border-radius: 25dp;
+	background-color: #1e1f21;
+	border: 2dp #383a3c;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 0 6dp #101012;
+}
+
+.big_data_wheel:hover
+{
+	border-color: #55585b;
+}
+
+.wheel_dent
+{
+	width: 10dp;
+	height: 10dp;
+	border-radius: 5dp;
+	background-color: #121314;
+	border: 1dp #28292b;
+	margin-left: -20dp;
+}
+
+.nav_cross_unit
 {
 	display: flex;
 	flex-direction: column;
+	align-items: center;
+	gap: 1dp;
+}
+
+.nav_mid_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 2dp;
+}
+
+.nav_btn
+{
+	width: 18dp;
+	height: 14dp;
+	background-color: #242628;
+	border: 1dp #3c3f42;
+	border-radius: 2dp;
+	color: #ffffff;
+	font-size: 7dp;
+	font-weight: 700;
+	cursor: pointer;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.nav_btn:hover
+{
+	background-color: #34373a;
+}
+
+.patch_load_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+/* Keyboard Assign & Slots Box */
+.kb_assign_box
+{
+	display: flex;
+	flex-direction: column;
+	width: 172dp;
+	gap: 4dp;
+}
+
+.kb_assign_header
+{
+	border-bottom: 1dp #303335;
+	padding-bottom: 2dp;
+}
+
+.section_caption
+{
+	font-size: 8dp;
+	font-weight: 700;
+	color: #ffffff;
+	letter-spacing: 0.5dp;
+}
+
+.slots_flex_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 4dp;
+	align-items: flex-end;
+}
+
+.slot_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+.slot_btn_g2
+{
+	width: 25dp;
+	height: 25dp;
+	background-color: #242628;
+	border: 1dp #3c4044;
+	border-radius: 3dp;
+	color: #ffffff;
+	font-size: 11dp;
+	font-weight: 800;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.slot_btn_g2:hover
+{
+	background-color: #34373c;
+}
+
+.slot_btn_g2:checked
+{
+	background-color: #b21a20;
+	border-color: #ff3c44;
+	box-shadow: 0 0 6dp #60080c;
+}
+
+.split_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+	margin-left: 2dp;
+}
+
+.kb_assign_footer
+{
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 2dp;
+}
+
+.active_slot_badge
+{
+	font-size: 8dp;
+	font-weight: 700;
+	color: #ffffff;
+	background-color: #282a2c;
+	padding: 1dp 5dp;
+	border-radius: 2dp;
+	border: 1dp #3c4042;
+}
+
+/* ==========================================================================
+   LEFT BOTTOM ROW: Octave, Panic, Shift, Pitch/Mod Wheel
+   ========================================================================== */
+
+.left_bottom_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 6dp;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 6dp 8dp;
+	box-sizing: border-box;
+	align-items: flex-start;
+}
+
+.octave_group
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+	width: 62dp;
+}
+
+.octave_leds_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 4dp;
+}
+
+.octave_btns_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 3dp;
+}
+
+.btn_octave
+{
+	width: 26dp;
+	height: 18dp;
+	font-size: 7dp;
+	font-weight: 700;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.util_btn_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+.shift_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+}
+
+.btn_shift
+{
+	width: 32dp;
+	height: 28dp;
+	background-color: #d6d4ce;
+	border: 1dp #f0eee8;
+	color: #121314;
+	font-weight: 900;
+	border-radius: 3dp;
+	cursor: pointer;
+}
+
+.btn_shift:hover
+{
+	background-color: #ffffff;
+}
+
+.btn_shift:checked
+{
+	background-color: #ffde59;
+	border-color: #ffffff;
+}
+
+.perf_controllers_box
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 5dp;
+	margin-left: 4dp;
+}
+
+.stick_wheel_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1dp;
+}
+
+.perf_label
+{
+	font-size: 6dp;
+	font-weight: 800;
+	color: #ffffff;
+}
+
+input.range.perf_slider
+{
+	width: 32dp;
+	height: 16dp;
+}
+
+input.range.perf_slider slidertrack
+{
+	background-color: #1a1a1c;
+	border: 1dp #2c2d30;
+	border-radius: 2dp;
+	height: 4dp;
+}
+
+input.range.perf_slider sliderbar
+{
+	width: 10dp;
+	height: 12dp;
+	background-color: #c41e24;
+	border: 1dp #ff555c;
+	border-radius: 2dp;
+}
+
+input.range.perf_slider sliderarrowdec,
+input.range.perf_slider sliderarrowinc
+{
+	display: none;
+	width: 0;
+	height: 0;
+}
+
+.comm_leds_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1dp;
+}
+
+.comm_led
+{
+	width: 4dp;
+	height: 4dp;
+	border-radius: 2dp;
+}
+
+.comm_led.lit
+{
+	background-color: #22c55e;
+	box-shadow: 0 0 4dp #22c55e;
+}
+
+.comm_led.unlit
+{
+	background-color: #102616;
+}
+
+.comm_lbl
+{
+	font-size: 5dp;
+	font-weight: 700;
+	color: #c0c4c6;
+}
+
+/* ==========================================================================
+   RIGHT CONSOLE: Parameter LCDs, 8 Encoders, Variations, Pages
+   ========================================================================== */
+
+.right_console
+{
+	display: flex;
+	flex-direction: column;
+	width: 662dp;
+	gap: 4dp;
+	box-sizing: border-box;
+}
+
+.param_header_row
+{
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	padding: 0 4dp;
+	width: 600dp;
+}
+
+.param_col_hdr
+{
+	width: 140dp;
+	text-align: center;
+}
+
+.col_hdr_text
+{
+	font-size: 8dp;
+	font-weight: 700;
+	color: #ffffff;
+	letter-spacing: 0.5dp;
+}
+
+/* Parameter LCDs Row */
+.param_lcds_row
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6dp;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 4dp 6dp;
+	box-sizing: border-box;
+}
+
+.param_lcd_frame
+{
+	background-color: #18191b;
+	border: 2dp #282a2c;
+	border-radius: 3dp;
+	padding: 3dp;
+	width: 138dp;
+	box-sizing: border-box;
+}
+
+.param_lcd_screen
+{
+	background-color: #487f22;
+	border: 1dp #2e5414;
+	border-radius: 2dp;
+	height: 38dp;
+	display: flex;
+	flex-direction: row;
+	padding: 2dp 4dp;
+	box-sizing: border-box;
+}
+
+.param_lcd_subcol
+{
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	width: 62dp;
+}
+
+.param_lcd_vert_split
+{
+	width: 1dp;
+	height: 100%;
+	background-color: #366018;
+	margin: 0 2dp;
+}
+
+.param_name
+{
+	font-family: monospace;
+	font-size: 8dp;
+	font-weight: 700;
+	color: #0b1a04;
+}
+
+.param_data
+{
+	font-family: monospace;
+	font-size: 10dp;
+	font-weight: 900;
+	color: #0b1a04;
+	margin-top: 1dp;
+}
+
+.patch_settings_box
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+	margin-left: 2dp;
+}
+
+/* ==========================================================================
+   8 ROTARY ENCODERS WITH 15-LED CIRCULAR RINGS
+   ========================================================================== */
+
+.encoders_cluster
+{
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-start;
+	gap: 6dp;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 8dp 6dp;
+	box-sizing: border-box;
+	width: 602dp;
+}
+
+.encoder_pair_group
+{
+	display: flex;
+	flex-direction: row;
+	gap: 8dp;
+	width: 140dp;
+	justify-content: center;
+}
+
+.encoder_col
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4dp;
+}
+
+/* 15-LED Circular Ring Container (64dp x 64dp) */
+.led_ring_container
+{
+	position: relative;
+	width: 64dp;
+	height: 64dp;
+}
+
+.ring_led
+{
+	position: absolute;
+	width: 4dp;
+	height: 4dp;
+	border-radius: 2dp;
+	box-sizing: border-box;
+}
+
+.ring_led.unlit
+{
+	background-color: #30080a;
+	border: 1dp #1c0406;
+}
+
+.ring_led.lit
+{
+	background-color: #ff252c;
+	border: 1dp #ffa0a4;
+	box-shadow: 0 0 5dp #ff2026;
+}
+
+/* Trigonometric positioning of the 15 LEDs in a 270-degree arc around (30,30) */
+.ring_led_0  { left: 10dp; top: 46dp; }
+.ring_led_1  { left: 5dp;  top: 39dp; }
+.ring_led_2  { left: 2dp;  top: 31dp; }
+.ring_led_3  { left: 3dp;  top: 22dp; }
+.ring_led_4  { left: 6dp;  top: 14dp; }
+.ring_led_5  { left: 12dp; top: 8dp;  }
+.ring_led_6  { left: 19dp; top: 4dp;  }
+.ring_led_7  { left: 28dp; top: 2dp;  }
+.ring_led_8  { left: 37dp; top: 4dp;  }
+.ring_led_9  { left: 44dp; top: 8dp;  }
+.ring_led_10 { left: 50dp; top: 14dp; }
+.ring_led_11 { left: 53dp; top: 22dp; }
+.ring_led_12 { left: 54dp; top: 31dp; }
+.ring_led_13 { left: 51dp; top: 39dp; }
+.ring_led_14 { left: 46dp; top: 46dp; }
+
+/* Central Encoder Rotor Knob */
+.encoder_rotor
+{
+	position: absolute;
+	left: 12dp;
+	top: 12dp;
+	width: 40dp;
+	height: 40dp;
+	border-radius: 20dp;
+	background-color: #18191b;
+	border: 2dp #323538;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 0 4dp #0a0a0c;
+}
+
+.encoder_rotor:hover
+{
+	border-color: #55595d;
+}
+
+.knob_dial
+{
+	width: 32dp;
+	height: 32dp;
+	border-radius: 16dp;
+	background-color: #222427;
+	border: 1dp #404448;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+}
+
+.dial_dot
+{
+	width: 3dp;
+	height: 6dp;
+	background-color: #ffffff;
+	border-radius: 1dp;
+	margin-top: 2dp;
+}
+
+.btn_col_select
+{
+	width: 28dp;
+	height: 16dp;
+	font-size: 8dp;
+	font-weight: 800;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* ==========================================================================
+   RIGHT BOTTOM ROW: Variations + Parameter Pages
+   ========================================================================== */
+
+.right_bottom_row
+{
+	display: flex;
+	flex-direction: row;
+	gap: 8dp;
+	box-sizing: border-box;
+}
+
+.variations_box
+{
+	display: flex;
+	flex-direction: column;
+	width: 530dp;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 5dp 8dp;
+	box-sizing: border-box;
+	gap: 4dp;
+}
+
+.variations_header
+{
+	border-bottom: 1dp #303335;
+	padding-bottom: 2dp;
+}
+
+.variations_title
+{
+	font-size: 8dp;
+	font-weight: 800;
+	color: #ffffff;
+	letter-spacing: 1.5dp;
+}
+
+.var_buttons_row
+{
+	display: flex;
+	flex-direction: row;
+	align-items: flex-end;
+	gap: 4dp;
+}
+
+.var_btn_item
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+	width: 36dp;
+}
+
+.morph_btn_item
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+	width: 44dp;
+	margin-left: 4dp;
+}
+
+.morph_group_item
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2dp;
+	width: 20dp;
+}
+
+.btn_var
+{
+	width: 32dp;
+	height: 20dp;
+	font-size: 8dp;
+	font-weight: 700;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.btn_small
+{
+	width: 18dp;
+	height: 18dp;
+	font-size: 7dp;
+	font-weight: 700;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.var_sub_tag
+{
+	font-size: 6dp;
+	font-weight: 600;
+	color: #c4c8ca;
+	text-align: center;
+	letter-spacing: 0.2dp;
+}
+
+/* Parameter Pages Column */
+.param_pages_column
+{
+	display: flex;
+	flex-direction: column;
+	width: 120dp;
+	background-color: #3e4244;
+	border: 1dp #2e3032;
+	border-radius: 4dp;
+	padding: 5dp 8dp;
+	box-sizing: border-box;
+	gap: 4dp;
+}
+
+.pages_hdr_title
+{
+	font-size: 8dp;
+	font-weight: 800;
+	color: #ffffff;
+	letter-spacing: 1dp;
+	border-bottom: 1dp #303335;
+	padding-bottom: 2dp;
+}
+
+.pages_list
+{
+	display: flex;
+	flex-direction: column;
+	gap: 3dp;
+}
+
+.page_btn_item
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
 	gap: 6dp;
 }
 
-.info_row
+.page_btn
+{
+	width: 22dp;
+	height: 18dp;
+	background-color: #242628;
+	border: 1dp #3c4044;
+	border-radius: 2dp;
+	color: #ffffff;
+	font-size: 8dp;
+	font-weight: 800;
+	cursor: pointer;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.page_btn:hover
+{
+	background-color: #34373c;
+}
+
+.page_btn:checked
+{
+	background-color: #b21a20;
+	border-color: #ff3c44;
+}
+
+.page_name_lbl
+{
+	font-size: 8dp;
+	font-weight: 700;
+	color: #ffffff;
+}
+
+/* ==========================================================================
+   BUTTON & LED COMMON STYLES
+   ========================================================================== */
+
+.g2_btn
+{
+	background-color: #242628;
+	border: 1dp #3c4044;
+	border-radius: 3dp;
+	color: #e0e2e5;
+	font-size: 8dp;
+	font-weight: 700;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+
+.g2_btn:hover
+{
+	background-color: #323538;
+	border-color: #55595d;
+	color: #ffffff;
+}
+
+.g2_btn:active
+{
+	background-color: #1a1b1c;
+}
+
+.btn_dark
+{
+	width: 44dp;
+	height: 20dp;
+}
+
+.btn_red
+{
+	width: 44dp;
+	height: 20dp;
+	background-color: #b21a20;
+	border-color: #e82c34;
+	color: #ffffff;
+}
+
+.btn_red:hover
+{
+	background-color: #cb222a;
+	border-color: #ff4850;
+}
+
+.btn_rect
+{
+	width: 36dp;
+	height: 20dp;
+}
+
+.btn_rect_narrow
+{
+	width: 32dp;
+	height: 18dp;
+}
+
+/* Red Panel LEDs */
+.panel_led
+{
+	display: inline-block;
+	width: 6dp;
+	height: 6dp;
+	border-radius: 3dp;
+	box-sizing: border-box;
+}
+
+.panel_led.led_unlit,
+.panel_led.slot_led_unlit
+{
+	background-color: #30080a;
+	border: 1dp #1c0406;
+}
+
+.panel_led.led_lit,
+.panel_led.slot_led_lit
+{
+	background-color: #ff252c;
+	border: 1dp #ffa0a4;
+	box-shadow: 0 0 6dp #ff2026;
+}
+
+/* ==========================================================================
+   CHASSIS BOTTOM RIM
+   ========================================================================== */
+
+.chassis_bottom_lip
 {
 	display: flex;
 	flex-direction: row;
 	justify-content: space-between;
 	align-items: center;
-	font-size: 11dp;
-	border-bottom: 1dp #202028;
-	padding-bottom: 4dp;
+	background-color: #7b1216;
+	padding: 5dp 14dp;
+	border-top: 2dp #5e0d11;
+	box-sizing: border-box;
 }
 
-.info_key
+.bottom_lip_left
 {
-	color: #80808c;
-	font-weight: 600;
+	font-size: 8dp;
+	font-weight: 700;
+	color: #d09094;
+	letter-spacing: 0.8dp;
 }
 
-.info_val
+.bottom_lip_right
 {
-	color: #d0d0dc;
-	font-weight: 500;
-}
-
-.g2_footer
-{
-	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
-	align-items: center;
-	padding: 8dp 4dp;
-	border-top: 1dp #24242c;
-	margin-top: 4dp;
-}
-
-.footer_text
-{
-	font-size: 10dp;
-	color: #60606c;
+	font-size: 8dp;
+	font-weight: 800;
+	color: #ffffff;
 	letter-spacing: 1dp;
-	font-weight: 500;
-}
-
-.footer_dsp
-{
-	font-size: 10dp;
-	color: #80808c;
-	font-weight: 600;
-	letter-spacing: 0.5dp;
 }
