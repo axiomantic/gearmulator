@@ -933,7 +933,7 @@ namespace
 		std::cout << "impulse: OUTCOME=" << rg2console::name(_outcome) << std::endl;
 		std::cout << "impulse: " << _detail << std::endl;
 		std::cout << "impulse: this is a TRANSPORT probe. It reports whether the path carried the"
-		             " injected sample, and it makes NO claim about audio: an unpatched Nord Modular"
+		             " injected sample, and it makes NO claim about audio: an unpatched Red Gecko 2"
 		             " is silent by design, so a chain that carried nothing is a transport answer"
 		             " and not a broken instrument" << std::endl;
 	}
@@ -2201,8 +2201,8 @@ namespace
 		             " the seven chain-health counters. It prints one OUTCOME word -- PROPAGATED"
 		             " (exit 0), PROPAGATED-OFF-SPEC or STOPPED (exit 1), DID-NOT-RUN (exit 2),"
 		             " INSTRUMENT-BLIND (exit 3) -- so a chain that carried nothing, a machine that"
-		             " never ran and an observer that saw nothing are told apart. An unpatched Nord"
-		             " Modular is silent by design, so STOPPED is the expected answer with no patch"
+		             " never ran and an observer that saw nothing are told apart. An unpatched Red"
+		             " Gecko 2 is silent by design, so STOPPED is the expected answer with no patch"
 		             " loaded and is not a defect in the transport. It also runs the ARRIVAL"
 		             " instrument's own known positive: a sentinel placed at the tail position's"
 		             " transmit source and read back out of the codec sink, so an `arrival=-1` is a"

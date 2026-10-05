@@ -103,7 +103,7 @@ if(RG2_TOOLS_SOURCE_DIR)
 else()
 	include(FetchContent)
 	FetchContent_Declare(nmg2tools
-		GIT_REPOSITORY https://github.com/axiomantic/nmg2-tools.git
+		GIT_REPOSITORY https://github.com/axiomantic/rg2-tools.git
 		GIT_TAG ${RG2_TOOLS_GIT_TAG})
 	# The repository holds no CMakeLists.txt, so this populates it and adds no
 	# subdirectory. The Python package is then at ${nmg2tools_SOURCE_DIR}.

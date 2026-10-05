@@ -1,4 +1,4 @@
-// zz_audio_out.cpp -- audio render test for the Nord Modular G2 emulator.
+// zz_audio_out.cpp -- audio render test for the Red Gecko 2 emulator.
 #include "gatedFixture.h"
 #include "../board.h"
 #include "../internalClient.h"

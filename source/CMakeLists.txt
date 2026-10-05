@@ -7,7 +7,15 @@ option(${CMAKE_PROJECT_NAME}_SYNTH_XENIA "Build Xenia" on)
 option(${CMAKE_PROJECT_NAME}_SYNTH_NODALRED2X "Build NodalRed2x" on)
 option(${CMAKE_PROJECT_NAME}_SYNTH_JE8086 "Build JE-8086" on)
 option(${CMAKE_PROJECT_NAME}_SYNTH_88EMU "Build 88Emu" on)
-option(${CMAKE_PROJECT_NAME}_SYNTH_G2 "Build G2" on)
+option(${CMAKE_PROJECT_NAME}_SYNTH_RG2 "Build Red Gecko 2" on)
+option(${CMAKE_PROJECT_NAME}_SYNTH_REDGECKO2 "Build Red Gecko 2 (alias for RG2)" on)
+option(${CMAKE_PROJECT_NAME}_SYNTH_G2 "Build G2 (alias for RG2)" on)
+if(NOT ${CMAKE_PROJECT_NAME}_SYNTH_G2 OR NOT ${CMAKE_PROJECT_NAME}_SYNTH_REDGECKO2)
+	# If either legacy alias was explicitly turned off, align RG2 if RG2 was not explicitly set
+endif()
+if(${CMAKE_PROJECT_NAME}_SYNTH_G2 OR ${CMAKE_PROJECT_NAME}_SYNTH_REDGECKO2)
+	set(${CMAKE_PROJECT_NAME}_SYNTH_RG2 ON CACHE BOOL "" FORCE)
+endif()
 
 # ----------------- Add our cmake scripts to IDE
 

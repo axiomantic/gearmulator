@@ -3,18 +3,18 @@
 Instructions for AI coding agents working on this repository.
 
 This is a **fork** of `dsp56300/gearmulator`. Upstream is a low-level IC
-emulator for classic virtual-analog synthesizers. This fork adds the Nord
-Modular G2 device under `source/claudia/rg2/`.
+emulator for classic virtual-analog synthesizers. This fork adds the Red
+Gecko 2 (RG2) device under `source/claudia/rg2/`.
 
 Repository: `axiomantic/gearmulator`. Upstream: `dsp56300/gearmulator`.
 Licence: GPL-3.0. Contributions must be GPL-3.0 compatible, with attribution.
-Code here cannot move into `mcf5307` or `nmg2-tools` unless this project wrote
+Code here cannot move into `mcf5407` or `nmg2-tools` unless this project wrote
 it.
 
-The G2 work is `source/claudia/rg2`: `rg2Lib`, `rg2JucePlugin`, `rg2TestConsole`. It
+The RG2 work is `source/claudia/rg2`: `rg2Lib`, `rg2JucePlugin`, `rg2TestConsole`. It
 is not on the default branch. It is on stacked branches.
 
-This repository is part of the Nord Modular G2 emulator project. The work and
+This repository is part of the Red Gecko 2 (RG2) emulator project. The work and
 the execution ceremony live in the project roadmap, in the `nmg2-artifacts`
 repository. Read it before you start a task. This file states the rules that
 apply while you write code here.
@@ -49,30 +49,30 @@ the operator decide. Do not write it.
 
 Formatting follows `source/.clang-format`: tabs, tab size 4, 120 columns.
 
-### Narrow — the G2 alone
+### Narrow — Red Gecko 2 (RG2) alone
 
 This is the invocation for "do the `rg2Lib` tests still build and pass". It
-configures the G2 and no other synth, and no plugin.
+configures Red Gecko 2 (RG2) and no other synth, and no plugin.
 
 **Use the preset. The flags cannot be forgotten because they are not typed.**
 
 ```bash
-cmake --preset g2
-cmake --build --preset g2
-ctest --preset g2
+cmake --preset rg2
+cmake --build --preset rg2
+ctest --preset rg2
 ```
 
 `cmake --list-presets`, `--list-presets=build` and `--list-presets=test` name
-the rest. The wide build is `full` in all three.
+the rest (`g2` is retained as a backwards-compatible alias). The wide build is `full` in all three.
 
 **The presets live in `CMakeUserPresets.json`, which `.gitignore` excludes.**
 Upstream owns `CMakePresets.json`; a fork that overwrote it would conflict on
 every merge, and `CMakeUserPresets.json` is the file CMake reserves for a local
 addition. The consequence is that the presets are LOCAL TO THIS MACHINE: a fresh
-clone has no `g2` preset and must use the raw form below, or recreate the file
+clone has no `rg2` preset and must use the raw form below, or recreate the file
 from it.
 
-**`ctest --preset g2` is not `ctest --test-dir <build>/source/claudia/rg2/rg2Lib/test`.**
+**`ctest --preset rg2` is not `ctest --test-dir <build>/source/claudia/rg2/rg2Lib/test`.**
 A test preset takes its build directory from its configure preset and CMake
 gives it no field for a subdirectory of one, so the preset selects by test name
 instead. The narrow tree still registers `dsp56300`'s and `dsp56kBase`'s tests,
@@ -114,7 +114,7 @@ The `-D` list is not a fixed set. `gearmulator_BUILD_JUCEPLUGIN` and
 `_BUILD_JUCEPLUGIN_CLAP` are declared in the root `CMakeLists.txt` and the
 `gearmulator_SYNTH_*` options in `source/CMakeLists.txt`. Read the current set
 out of those two files rather than trusting the list above. **A synth added
-upstream is ON by default and the `g2` preset will not turn it off** — the
+upstream is ON by default and the `rg2` preset will not turn it off** — the
 preset names the options that exist today; it cannot name one that does not.
 Re-read both files after any upstream merge and add what appeared.
 
@@ -141,7 +141,7 @@ ctest --test-dir <build> --no-tests=error --output-on-failure
 ```
 
 The `full` preset keeps the universal `CMAKE_OSX_ARCHITECTURES` default and sets
-no `CMAKE_BUILD_TYPE`, which is what the raw form does. The `g2` preset names one
+no `CMAKE_BUILD_TYPE`, which is what the raw form does. The `rg2` preset names one
 architecture instead, because `ctest` runs the host slice of a universal binary
 and the other slice is compiled and never executed by that run.
 
@@ -775,7 +775,7 @@ unauthenticated channel with full read and write access to the emulated machine.
 
 ## Related
 
-This fork is one repository of the Nord Modular G2 emulator project. The
+This fork is one repository of the Red Gecko 2 (RG2) emulator project. The
 cross-repository rules, the roadmap and the private-submodule prohibition live
 in the `nmg2-artifacts` repository. `source/cpu/dsp56300` and `source/cpu/mc68k` are
 submodules pointing at their own repositories; a change to either belongs in
