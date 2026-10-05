@@ -45,9 +45,16 @@ namespace g2JucePlugin
 	private:
 		void timerCallback() override;
 		void updateSocketStatus();
+		void bindVolumeControl();
+		void updateVolumeDisplay(float _volume);
 
 		Controller& m_controller;
 		std::array<std::unique_ptr<SlotButton>, 4> m_slotButtons{};
+		std::array<Rml::Element*, 4> m_slotLeds{};
+		Rml::Element* m_volumeSlider = nullptr;
+		Rml::Element* m_volumeDisplay = nullptr;
+		Rml::Element* m_volumeDbDisplay = nullptr;
+		float m_lastVolume = -1.0f;
 		std::string m_lastSocketStatusText;
 		int m_lastSocketState = -1;
 	};
