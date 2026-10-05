@@ -13,7 +13,13 @@
 		"page": 0,
 		"step": 0
 	},
-	"parameterdescriptions": [],
+	"parameterdescriptions": [
+		{"index": 0, "name": "MasterVolume", "displayName": "MASTER VOLUME", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 127, "isPublic": true},
+		{"index": 1, "name": "ModWheel", "displayName": "MOD WHEEL", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true},
+		{"index": 2, "name": "PitchStick", "displayName": "PITCH STICK", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isBipolar": true, "isPublic": true},
+		{"index": 3, "name": "Aftertouch", "displayName": "AFTERTOUCH", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true},
+		{"index": 4, "name": "ControlPedal", "displayName": "CONTROL PEDAL", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true}
+	],
 	"valuelists":
 	{
 		"unsignedZero":
