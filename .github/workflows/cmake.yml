@@ -47,7 +47,7 @@ jobs:
               -Dgearmulator_SYNTH_XENIA=OFF
               -Dgearmulator_SYNTH_NODALRED2X=OFF
               -Dgearmulator_SYNTH_JE8086=OFF
-              -Dgearmulator_SYNTH_G2=ON
+              -Dgearmulator_SYNTH_RG2=ON
       fail-fast: false
     name:  ${{ matrix.os }} build with ${{ matrix.cmake_generator }} cmake generator
     # A backstop for every step that has no ceiling of its own. The slowest

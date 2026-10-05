@@ -11,10 +11,10 @@ namespace rg2
 	{
 		// HF2 and HF3 sit at bits 3 and 4 of the DSP's HCR and of the host ISR
 		// alike, so the mirror is a masked copy and not a translation.
-		constexpr uint8_t g_hostFlagMask = mc68k::Hdi08::Hf2 | mc68k::Hdi08::Hf3;
+		constexpr uint8_t g_hostFlagMask = Hdi08Port::Hf2 | Hdi08Port::Hf3;
 	}
 
-	Hdi08Bridge::Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp)
+	Hdi08Bridge::Hdi08Bridge(Hdi08Port& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp)
 		: m_host(_host)
 		, m_dsp(_dsp)
 		, m_core(_core)

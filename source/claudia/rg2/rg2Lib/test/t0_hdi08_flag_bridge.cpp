@@ -9,7 +9,7 @@
 #include "hdi08Bridge.h"
 #include "hdi08Decode.h"
 
-#include "mc68k/hdi08.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/hdi08.h"
@@ -77,11 +77,11 @@ namespace
 	// HF0 sits at bit 3 of the host ICR and at bit 3 (HSR_HF0) of the DSP HSR.
 	constexpr TWord g_dspHf0 = TWord(1u << dsp56k::HDI08::HSR_HF0);
 
-	void hostWriteWord(mc68k::Hdi08& _port, const uint32_t _word)
+	void hostWriteWord(rg2::Hdi08Port& _port, const uint32_t _word)
 	{
-		_port.write8(mc68k::PeriphAddress::HdiTXH, uint8_t(_word >> 16));
-		_port.write8(mc68k::PeriphAddress::HdiTXM, uint8_t(_word >> 8));
-		_port.write8(mc68k::PeriphAddress::HdiTXL, uint8_t(_word));
+		_port.write8(rg2::Hdi08Port::HdiTXH, uint8_t(_word >> 16));
+		_port.write8(rg2::Hdi08Port::HdiTXM, uint8_t(_word >> 8));
+		_port.write8(rg2::Hdi08Port::HdiTXL, uint8_t(_word));
 	}
 
 	// The shortest program the protocol admits, so the runtime TX path is
@@ -91,7 +91,7 @@ namespace
 	constexpr TWord g_bootAddress = 0x000300u;
 	constexpr TWord g_bootBodyWord = 0x0b0071u;
 
-	void driveBootstrap(mc68k::Hdi08& _port)
+	void driveBootstrap(rg2::Hdi08Port& _port)
 	{
 		hostWriteWord(_port, 1u);
 		hostWriteWord(_port, g_bootAddress);
@@ -108,7 +108,7 @@ namespace
 		driveBootstrap(adapter.port(g_bridgedPort));
 
 		// Write 0x08 (HF0 alone) to the host ICR.
-		adapter.port(g_bridgedPort).write8(mc68k::PeriphAddress::HdiICR, mc68k::Hdi08::Hf0);
+		adapter.port(g_bridgedPort).write8(rg2::Hdi08Port::HdiICR, rg2::Hdi08Port::Hf0);
 
 		// The DSP's status register should reflect HF0. readStatusRegister
 		// applies any pending flags written by setPendingHostFlags01.
@@ -128,11 +128,11 @@ namespace
 		driveBootstrap(adapter.port(g_bridgedPort));
 
 		// First set HF0 and drain it so the latch is clear.
-		adapter.port(g_bridgedPort).write8(mc68k::PeriphAddress::HdiICR, mc68k::Hdi08::Hf0);
+		adapter.port(g_bridgedPort).write8(rg2::Hdi08Port::HdiICR, rg2::Hdi08Port::Hf0);
 		slot.hdi08().readStatusRegister();
 
 		// Now write 0x00 -- no flag bits set.
-		adapter.port(g_bridgedPort).write8(mc68k::PeriphAddress::HdiICR, 0);
+		adapter.port(g_bridgedPort).write8(rg2::Hdi08Port::HdiICR, 0);
 
 		const TWord hsr = slot.hdi08().readStatusRegister();
 
@@ -148,7 +148,7 @@ namespace
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
 		// No bridge -- the port's ICR-write callback stays the default no-op.
 
-		adapter.port(g_unbridgedPort).write8(mc68k::PeriphAddress::HdiICR, mc68k::Hdi08::Hf0);
+		adapter.port(g_unbridgedPort).write8(rg2::Hdi08Port::HdiICR, rg2::Hdi08Port::Hf0);
 
 		const TWord hsr = slot.hdi08().readStatusRegister();
 
@@ -157,7 +157,7 @@ namespace
 
 		// The write IS stored in the port's own ICR register -- the callback
 		// default is no-op, not a write-through blocker.
-		checkEqualHex(adapter.port(g_unbridgedPort).icr() & mc68k::Hdi08::Hf0, mc68k::Hdi08::Hf0,
+		checkEqualHex(adapter.port(g_unbridgedPort).icr() & rg2::Hdi08Port::Hf0, rg2::Hdi08Port::Hf0,
 			"an unbridged port still stores the ICR byte; the callback alone is absent");
 	}
 
@@ -183,7 +183,7 @@ namespace
 		for(unsigned i = 0; i < set.dspCount(); ++i)
 		{
 			adapter.port(static_cast<int>(i)).write8(
-				mc68k::PeriphAddress::HdiICR, mc68k::Hdi08::Hf0);
+				rg2::Hdi08Port::HdiICR, rg2::Hdi08Port::Hf0);
 		}
 
 		for(unsigned i = 0; i < set.dspCount(); ++i)

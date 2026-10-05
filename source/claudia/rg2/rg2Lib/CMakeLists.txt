@@ -6,7 +6,6 @@ project(rg2Lib)
 # nothing else.
 
 add_library(rg2Lib STATIC)
-add_library(g2Lib ALIAS rg2Lib)
 
 # ----------------- the per-track source lists
 #

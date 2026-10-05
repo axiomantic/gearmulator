@@ -19,7 +19,7 @@
 
 #include "rg2/timebase.h"
 
-#include "mc68k/hdi08.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/hdi08.h"
@@ -123,18 +123,18 @@ namespace
 
 	// HF2 and HF3 sit at bits 3 and 4 of the DSP's control register and of the
 	// host ISR alike, which is what makes the bridge's mirror a masked copy.
-	constexpr uint8_t g_hostFlagMask = mc68k::Hdi08::Hf2 | mc68k::Hdi08::Hf3;
+	constexpr uint8_t g_hostFlagMask = rg2::Hdi08Port::Hf2 | rg2::Hdi08Port::Hf3;
 
 	TWord programWordCount()
 	{
 		return static_cast<TWord>(g_program.size());
 	}
 
-	void hostWriteWord(mc68k::Hdi08& _port, const uint32_t _word)
+	void hostWriteWord(rg2::Hdi08Port& _port, const uint32_t _word)
 	{
-		_port.write8(mc68k::PeriphAddress::HdiTXH, uint8_t(_word >> 16));
-		_port.write8(mc68k::PeriphAddress::HdiTXM, uint8_t(_word >> 8));
-		_port.write8(mc68k::PeriphAddress::HdiTXL, uint8_t(_word));
+		_port.write8(rg2::Hdi08Port::HdiTXH, uint8_t(_word >> 16));
+		_port.write8(rg2::Hdi08Port::HdiTXM, uint8_t(_word >> 8));
+		_port.write8(rg2::Hdi08Port::HdiTXL, uint8_t(_word));
 	}
 
 	uint32_t programMemory(dsp56k::DSP& _dsp, const TWord _address)
@@ -143,13 +143,13 @@ namespace
 	}
 
 	// The header pair the mask ROM consumes before any body word.
-	void driveBootHeaders(mc68k::Hdi08& _port, const TWord _count)
+	void driveBootHeaders(rg2::Hdi08Port& _port, const TWord _count)
 	{
 		hostWriteWord(_port, _count);
 		hostWriteWord(_port, g_bootAddress);
 	}
 
-	void driveProgramWords(mc68k::Hdi08& _port, const size_t _count)
+	void driveProgramWords(rg2::Hdi08Port& _port, const size_t _count)
 	{
 		for(size_t i = 0; i < _count; ++i)
 			hostWriteWord(_port, g_program[i]);
@@ -318,7 +318,7 @@ namespace
 	{
 		Slot slot;
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
-		mc68k::Hdi08& port = adapter.port(g_bridgedPort);
+		rg2::Hdi08Port& port = adapter.port(g_bridgedPort);
 
 		std::deque<uint32_t> transmitted;
 
@@ -360,12 +360,12 @@ namespace
 		check((port.isr() & g_hostFlagMask) == 0,
 			"the DSP's host flags stop reaching the port's status once the bridge is destroyed");
 
-		check((port.isr() & mc68k::Hdi08::Rxdf) == 0,
+		check((port.isr() & rg2::Hdi08Port::Rxdf) == 0,
 			"the host receive register is empty before the DSP transmits");
 
 		slot.hdi08().writeTX(g_wordAfterProgram);
 
-		check((port.isr() & mc68k::Hdi08::Rxdf) == 0,
+		check((port.isr() & rg2::Hdi08Port::Rxdf) == 0,
 			"a DSP transmit after the bridge is destroyed reaches no host receive register");
 		check(slot.hdi08().hasTX(),
 			"the word the DSP transmitted after the bridge is destroyed is still on the DSP side");
@@ -375,7 +375,7 @@ namespace
 		 * question needs its own case. `HdiTXH` is the read side of the shared
 		 * byte register and is the first byte of a read sequence, which is the
 		 * one byte of the three that asks. */
-		checkEqualHex(port.read8(mc68k::PeriphAddress::HdiTXH), 0u,
+		checkEqualHex(port.read8(rg2::Hdi08Port::HdiTXH), 0u,
 			"an empty receive read after the bridge is destroyed answers zero");
 		check(slot.hdi08().hasTX(),
 			"an empty receive read after the bridge is destroyed pulls no word off the DSP");
@@ -437,7 +437,7 @@ namespace
 
 			for(unsigned i = 0; i < set.dspCount(); ++i)
 			{
-				mc68k::Hdi08& port = adapter.port(static_cast<int>(i));
+				rg2::Hdi08Port& port = adapter.port(static_cast<int>(i));
 
 				driveBootHeaders(port, programWordCount());
 				driveProgramWords(port, g_program.size());
@@ -462,7 +462,7 @@ namespace
 
 		for(int i = 0; i < rg2::g_hdi08PortCount; ++i)
 		{
-			mc68k::Hdi08& port = adapter.port(i);
+			rg2::Hdi08Port& port = adapter.port(i);
 			const unsigned slot = static_cast<unsigned>(i);
 
 			std::deque<uint32_t> transmitted;

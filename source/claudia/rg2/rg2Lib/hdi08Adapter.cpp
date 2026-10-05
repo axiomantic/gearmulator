@@ -35,12 +35,12 @@ namespace rg2
 		 *
 		 * The callback holds a reference into m_ports, which is why this class
 		 * deletes its copy and move. See hdi08Adapter.h. */
-		for(mc68k::Hdi08& port : m_ports)
+		for(Hdi08Port& port : m_ports)
 		{
 			port.setInitHdi08Callback([&port]
 			{
-				port.icr(uint8_t(port.icr() & ~uint8_t(mc68k::Hdi08::Init)));
-				port.isr(uint8_t(port.isr() | mc68k::Hdi08::Txde | mc68k::Hdi08::Trdy));
+				port.icr(uint8_t(port.icr() & ~uint8_t(Hdi08Port::Init)));
+				port.isr(uint8_t(port.isr() | Hdi08Port::Txde | Hdi08Port::Trdy));
 			});
 		}
 	}
@@ -62,12 +62,12 @@ namespace rg2
 		return _size == 8 || _size == 16 || _size == 32;
 	}
 
-	mc68k::Hdi08& Hdi08Adapter::port(const int _index)
+	Hdi08Port& Hdi08Adapter::port(const int _index)
 	{
 		return m_ports[_index];
 	}
 
-	const mc68k::Hdi08& Hdi08Adapter::port(const int _index) const
+	const Hdi08Port& Hdi08Adapter::port(const int _index) const
 	{
 		return m_ports[_index];
 	}
@@ -101,7 +101,7 @@ namespace rg2
 			++m_counts.reads[portIndex][(selection.portOffset + uint32_t(i)) & 7u];
 
 			const uint8_t byte = m_ports[portIndex].read8(
-				static_cast<mc68k::PeriphAddress>(selection.portOffset + i));
+				static_cast<Hdi08Port::PeriphAddress>(selection.portOffset + i));
 
 			// Big-endian: the byte at the lowest address is the most
 			// significant.
@@ -148,14 +148,14 @@ namespace rg2
 
 				// The word the port will assemble, tracked here so the capture
 				// can report it rather than three unrelated bytes.
-				if(reg == uint32_t(mc68k::PeriphAddress::HdiTXH))
+				if(reg == uint32_t(Hdi08Port::HdiTXH))
 					m_txAssembly[portIndex] = (m_txAssembly[portIndex] & 0x00ffffu) | (uint32_t(byte) << 16);
-				else if(reg == uint32_t(mc68k::PeriphAddress::HdiTXM))
+				else if(reg == uint32_t(Hdi08Port::HdiTXM))
 					m_txAssembly[portIndex] = (m_txAssembly[portIndex] & 0xff00ffu) | (uint32_t(byte) << 8);
 
-				// TXL completes the 24-bit word in mc68k::Hdi08, so a TXL cycle
+				// TXL completes the 24-bit word in Hdi08Port, so a TXL cycle
 				// is one word handed to the DSP side.
-				if(reg == uint32_t(mc68k::PeriphAddress::HdiTXL))
+				if(reg == uint32_t(Hdi08Port::HdiTXL))
 				{
 					++m_counts.words[portIndex];
 					m_txAssembly[portIndex] = (m_txAssembly[portIndex] & 0xffff00u) | uint32_t(byte);
@@ -166,11 +166,11 @@ namespace rg2
 
 				// A CVR write carrying HC is the host command that vectors the
 				// DSP core. The vector is the value the port itself computes.
-				if(reg == uint32_t(mc68k::PeriphAddress::HdiCVR) && (byte & mc68k::Hdi08::Hc))
+				if(reg == uint32_t(Hdi08Port::HdiCVR) && (byte & Hdi08Port::Hc))
 				{
 					++m_counts.hostCommands[portIndex];
 
-					const uint32_t vector = uint32_t(byte & mc68k::Hdi08::Hv) << 1;
+					const uint32_t vector = uint32_t(byte & Hdi08Port::Hv) << 1;
 					++m_counts.vectorCounts[portIndex][(vector >> 1) & 127u];
 
 					if(m_captureLimit && m_captured[portIndex].size() < m_captureLimit)
@@ -178,7 +178,7 @@ namespace rg2
 				}
 
 				m_ports[portIndex].write8(
-					static_cast<mc68k::PeriphAddress>(selection.portOffset + i), byte);
+					static_cast<Hdi08Port::PeriphAddress>(selection.portOffset + i), byte);
 			}
 		}
 	}

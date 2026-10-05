@@ -304,13 +304,13 @@ int main()
 		rg2::Hdi08Adapter initAdapter(initDecode);
 
 		// The byte the OS writes: INIT alone, with HREQ and TREQ clear.
-		const uint32_t icrInitOnly = mc68k::Hdi08::Init;
+		const uint32_t icrInitOnly = rg2::Hdi08Port::Init;
 
 		// The ISR a port reads before and after initialisation. Txde stands in
 		// both because `Hdi08::isr()` raises it on every read; Trdy is the bit
 		// the initialisation adds, so the two bytes differ by exactly it.
-		const uint32_t isrBeforeInit = mc68k::Hdi08::Txde;
-		const uint32_t isrAfterInit  = mc68k::Hdi08::Txde | mc68k::Hdi08::Trdy;
+		const uint32_t isrBeforeInit = rg2::Hdi08Port::Txde;
+		const uint32_t isrAfterInit  = rg2::Hdi08Port::Txde | rg2::Hdi08Port::Trdy;
 
 		// Case 5a -- one selected port. 0x110007b8 selects port 3, which is the
 		// port the firmware's own initialisation loop reaches first.
@@ -344,8 +344,8 @@ int main()
 			const uint32_t portBase = 0x110007f0u; // port 0.
 			const int portIndex = 0;
 
-			const uint32_t written = mc68k::Hdi08::Init | mc68k::Hdi08::Hf0 | mc68k::Hdi08::Treq;
-			const uint32_t expected = mc68k::Hdi08::Hf0 | mc68k::Hdi08::Treq;
+			const uint32_t written = rg2::Hdi08Port::Init | rg2::Hdi08Port::Hf0 | rg2::Hdi08Port::Treq;
+			const uint32_t expected = rg2::Hdi08Port::Hf0 | rg2::Hdi08Port::Treq;
 
 			mcf5407_bus_status status = MCF5407_BUS_OK;
 			initAdapter.write(portBase - rg2::g_cs1Base, 8, written, status);
@@ -361,7 +361,7 @@ int main()
 			const uint32_t portBase = 0x110005f8u; // port 6.
 			const int portIndex = 6;
 
-			const uint32_t written = mc68k::Hdi08::Hf1;
+			const uint32_t written = rg2::Hdi08Port::Hf1;
 
 			mcf5407_bus_status status = MCF5407_BUS_OK;
 			initAdapter.write(portBase - rg2::g_cs1Base, 8, written, status);
@@ -409,11 +409,11 @@ int main()
 	{
 		// ICR is zero on a fresh port, so HLEND is clear and TXH is the first
 		// byte of a read sequence -- the one byte that reaches the callback.
-		const auto firstRxByte = mc68k::PeriphAddress::HdiTXH;
+		const auto firstRxByte = rg2::Hdi08Port::HdiTXH;
 
 		// Case 6a -- nothing was ever installed.
 		{
-			mc68k::Hdi08 hdi08;
+			rg2::Hdi08Port hdi08;
 
 			checkEqual(hdi08.read8(firstRxByte), uint32_t(0),
 				"a default-constructed port reads an empty RX register as zero");
@@ -421,7 +421,7 @@ int main()
 
 		// Case 6b -- the callback cleared with an empty function.
 		{
-			mc68k::Hdi08 hdi08;
+			rg2::Hdi08Port hdi08;
 			hdi08.setRxEmptyCallback({});
 
 			checkEqual(hdi08.read8(firstRxByte), uint32_t(0),
@@ -430,7 +430,7 @@ int main()
 
 		// Case 6c -- an installed callback is still the one that runs.
 		{
-			mc68k::Hdi08 hdi08;
+			rg2::Hdi08Port hdi08;
 
 			int calls = 0;
 			int needMoreDataCalls = 0;

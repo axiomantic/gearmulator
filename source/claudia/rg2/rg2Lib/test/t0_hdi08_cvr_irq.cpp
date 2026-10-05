@@ -26,8 +26,7 @@
 
 #include "rg2/timebase.h"
 
-#include "mc68k/hdi08.h"
-#include "mc68k/peripheralTypes.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/assembler.h"
 #include "dsp56kEmu/dsp.h"
@@ -122,11 +121,11 @@ namespace
 	 * satisfies the set below, and the partition does not separate the ones it
 	 * admits -- the same residue the file header prices. */
 	constexpr uint8_t g_hostVector = 0x07;
-	constexpr uint8_t g_expectedVector = uint8_t((g_hostVector & mc68k::Hdi08::Hv) << 1);
+	constexpr uint8_t g_expectedVector = uint8_t((g_hostVector & rg2::Hdi08Port::Hv) << 1);
 
 	static_assert(g_expectedVector < dsp56k::Vba_IRQA,
 		"the host vector under test must fall below Vba_IRQA or the pump can never drain");
-	static_assert((g_hostVector & mc68k::Hdi08::Hc) == 0,
+	static_assert((g_hostVector & rg2::Hdi08Port::Hc) == 0,
 		"the constant is the vector field alone -- writeHostCommand supplies the Hc bit");
 	static_assert(uint8_t(g_expectedVector << 1) >= dsp56k::Vba_IRQA,
 		"a second shift of the computed vector must land at or above Vba_IRQA or that "
@@ -140,11 +139,11 @@ namespace
 	 * timeout instead of a value. */
 	constexpr int g_pumpLimit = 64;
 
-	void hostWriteWord(mc68k::Hdi08& _port, const uint32_t _word)
+	void hostWriteWord(rg2::Hdi08Port& _port, const uint32_t _word)
 	{
-		_port.write8(mc68k::PeriphAddress::HdiTXH, uint8_t(_word >> 16));
-		_port.write8(mc68k::PeriphAddress::HdiTXM, uint8_t(_word >> 8));
-		_port.write8(mc68k::PeriphAddress::HdiTXL, uint8_t(_word));
+		_port.write8(rg2::Hdi08Port::HdiTXH, uint8_t(_word >> 16));
+		_port.write8(rg2::Hdi08Port::HdiTXM, uint8_t(_word >> 8));
+		_port.write8(rg2::Hdi08Port::HdiTXL, uint8_t(_word));
 	}
 
 	// Assembled rather than spelled as a literal opcode, so that the loop is the
@@ -171,7 +170,7 @@ namespace
 		return program;
 	}
 
-	void landProgram(mc68k::Hdi08& _port)
+	void landProgram(rg2::Hdi08Port& _port)
 	{
 		const std::vector<TWord>& program = selfJumpProgram();
 
@@ -183,9 +182,9 @@ namespace
 			hostWriteWord(_port, word);
 	}
 
-	void writeHostCommand(mc68k::Hdi08& _port, const uint8_t _vector)
+	void writeHostCommand(rg2::Hdi08Port& _port, const uint8_t _vector)
 	{
-		_port.write8(mc68k::PeriphAddress::HdiCVR, uint8_t(_vector | mc68k::Hdi08::Hc));
+		_port.write8(rg2::Hdi08Port::HdiCVR, uint8_t(_vector | rg2::Hdi08Port::Hc));
 	}
 
 	// Returns the number of exec() steps the core needed to come back to rest,
@@ -203,7 +202,7 @@ namespace
 
 	/* ---------------- group 1: the vector leaves the host port
 	 *
-	 * The unbridged half is the control and it exercises `mc68k` rather than
+	 * The unbridged half is the control and it exercises `Hdi08Port` rather than
 	 * the code under test. It earns its place by fixing the expected byte by measurement
 	 * instead of by hand, and by naming where the vector goes when no bridge
 	 * takes it rather than only where it does not go. */
@@ -211,7 +210,7 @@ namespace
 	{
 		Slot slot;
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
-		mc68k::Hdi08& port = adapter.port(g_unbridgedPort);
+		rg2::Hdi08Port& port = adapter.port(g_unbridgedPort);
 
 		check(slot.dsp.getProcessingMode() == dsp56k::DSP::Default,
 			"the core of an unbridged pair is in default processing before the host command");
@@ -240,7 +239,7 @@ namespace
 		Slot slot;
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
 		rg2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.dsp, slot.hdi08());
-		mc68k::Hdi08& port = adapter.port(g_bridgedPort);
+		rg2::Hdi08Port& port = adapter.port(g_bridgedPort);
 
 		landProgram(port);
 		check(*bridge.programLanded(),
@@ -264,7 +263,7 @@ namespace
 		Slot slot;
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
 		rg2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.dsp, slot.hdi08());
-		mc68k::Hdi08& port = adapter.port(g_bridgedPort);
+		rg2::Hdi08Port& port = adapter.port(g_bridgedPort);
 
 		landProgram(port);
 
@@ -287,7 +286,7 @@ namespace
 		Slot slot;
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
 		rg2::Hdi08Bridge bridge(adapter.port(g_bridgedPort), slot.dsp, slot.hdi08());
-		mc68k::Hdi08& port = adapter.port(g_bridgedPort);
+		rg2::Hdi08Port& port = adapter.port(g_bridgedPort);
 
 		landProgram(port);
 
@@ -323,7 +322,7 @@ namespace
 	{
 		Slot slot;
 		rg2::Hdi08Adapter adapter{rg2::Hdi08Decode(rg2::g_hdi08ExpandedPorts)};
-		mc68k::Hdi08& port = adapter.port(g_bridgedPort);
+		rg2::Hdi08Port& port = adapter.port(g_bridgedPort);
 
 		{
 			rg2::Hdi08Bridge bridge(port, slot.dsp, slot.hdi08());

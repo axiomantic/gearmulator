@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "mc68k/hdi08.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/dspBootCode.h"
 #include "dsp56kEmu/types.h"
@@ -34,7 +34,7 @@ namespace rg2
 	class Hdi08Bridge final
 	{
 	public:
-		Hdi08Bridge(mc68k::Hdi08& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp);
+		Hdi08Bridge(Hdi08Port& _host, dsp56k::DSP& _core, dsp56k::HDI08& _dsp);
 
 		/* The bridge planted the callbacks, so the bridge removes them. Both
 		 * ports outlive it -- the adapter's by the ownership rule below, the
@@ -63,7 +63,7 @@ namespace rg2
 		void drainDspToHost();
 		uint8_t mirrorDspHostFlags(uint8_t _isr) const;
 
-		mc68k::Hdi08&  m_host;
+		Hdi08Port&     m_host;
 		dsp56k::HDI08& m_dsp;
 
 		/* The core is held and not only forwarded. A host command arrives as a

@@ -77,7 +77,7 @@ jobs:
         -Dgearmulator_SYNTH_XENIA=OFF
         -Dgearmulator_SYNTH_NODALRED2X=OFF
         -Dgearmulator_SYNTH_JE8086=OFF
-        -Dgearmulator_SYNTH_G2=ON
+        -Dgearmulator_SYNTH_RG2=ON
     steps:
       # A bare distribution image has no git, and the checkout below is git.
       - name: Bootstrap git
@@ -206,7 +206,7 @@ jobs:
         -Dgearmulator_SYNTH_XENIA=OFF
         -Dgearmulator_SYNTH_NODALRED2X=OFF
         -Dgearmulator_SYNTH_JE8086=OFF
-        -Dgearmulator_SYNTH_G2=ON
+        -Dgearmulator_SYNTH_RG2=ON
     steps:
       - name: Bootstrap git
         run: |

@@ -35,6 +35,7 @@ list(APPEND RG2LIB_SOURCES
 
 # ----------------- the HDI08 host-port adapter
 list(APPEND RG2LIB_SOURCES
+	hdi08Port.h
 	hdi08Adapter.h
 	hdi08Adapter.cpp
 )

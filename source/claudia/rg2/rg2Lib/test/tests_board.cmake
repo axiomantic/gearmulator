@@ -207,7 +207,7 @@ set_tests_properties(t0_hdi08_adapter PROPERTIES LABELS "UnitTest")
 # bridges them; HF0 is 0x08 in the ICR.
 #
 # It links rg2Lib and nothing else: it constructs an Hdi08Adapter and an
-# Hdi08Bridge with the real mc68k and dsp56kEmu behind them, and rg2Lib carries
+# Hdi08Bridge with the real dsp56kEmu behind them, and rg2Lib carries
 # that link itself.
 
 add_executable(t0_hdi08_flag_bridge t0_hdi08_flag_bridge.cpp)
@@ -338,9 +338,7 @@ set_tests_properties(t0_board_routing PROPERTIES LABELS "UnitTest")
 # ----------------- t0_sof_tick's include path
 #
 # board.h holds the composed units by value, so it includes hdi08Adapter.h,
-# which includes "mc68k/hdi08.h". Every consumer of board.h therefore needs the
-# directory that resolves it. A target that links rg2Lib gets it for free, since
-# rg2Lib's PUBLIC hardwareLib link exports it. t0_sof_tick does not link rg2Lib:
+# which includes "hdi08Port.h". t0_sof_tick does not link rg2Lib:
 # it compiles ../board.cpp directly and defines the mcf5407 entry points itself,
 # to keep libmcf5407.a off its link line.
 #
@@ -365,11 +363,7 @@ endif()
 # It does not weaken what t0_sof_tick's own block protects. That block keeps
 # libmcf5407.a off the link line, because the test defines the mcf5407 entry
 # points itself and the archive would collide with them. No source added by any
-# of these blocks is an mcf5407 source, 68kEmu included.
-#
-# 68kEmu is linked because hdi08Adapter.cpp holds mc68k::Hdi08 instances by
-# value and needs their definitions. It is guarded on the same principle as the
-# include directory above.
+# of these blocks is an mcf5407 source.
 
 target_sources(t0_sof_tick PRIVATE
 	../flash.cpp
@@ -383,12 +377,7 @@ target_sources(t0_sof_tick PRIVATE
 	../uart0.cpp
 	../interruptController.cpp)
 
-# 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
-# class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
-# onto the link line. None of the three is the mcf5407 archive, so the property
-# t0_sof_tick's own block protects is untouched.
-
-foreach(lib 68kEmu dsp56kEmu baseLib)
+foreach(lib dsp56kEmu baseLib)
 	if(TARGET ${lib})
 		target_link_libraries(t0_sof_tick PRIVATE ${lib})
 	endif()
@@ -646,12 +635,7 @@ if(TARGET hardwareLib)
 		$<TARGET_PROPERTY:hardwareLib,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
-# 68kEmu supplies mc68k::Hdi08, which hdi08Adapter.cpp holds by value. That
-# class in turn calls dsp56k::HDI08 and baseLib's logging, so both follow it
-# onto the link line. None of the three is the mcf5407 archive, so the property
-# this block protects is untouched.
-
-foreach(lib 68kEmu dsp56kEmu baseLib)
+foreach(lib dsp56kEmu baseLib)
 	if(TARGET ${lib})
 		target_link_libraries(t0_board_interrupts PRIVATE ${lib})
 	endif()

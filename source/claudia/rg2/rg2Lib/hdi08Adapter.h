@@ -25,9 +25,8 @@
 #include <vector>
 
 #include "hdi08Decode.h"
+#include "hdi08Port.h"
 #include "memoryMap.h"
-
-#include "mc68k/hdi08.h"
 
 #include "dsp56kEmu/types.h"
 
@@ -72,8 +71,8 @@ namespace rg2
 		// The per-port `mc68k::Hdi08`, so a caller can install the callbacks
 		// the DSP side needs. Bounds are not asserted: the caller passes
 		// g_hdi08PortCount and the operator of this class is the board.
-		mc68k::Hdi08& port(int _index);
-		const mc68k::Hdi08& port(int _index) const;
+		Hdi08Port& port(int _index);
+		const Hdi08Port& port(int _index) const;
 
 		const Hdi08Decode& decode() const { return m_decode; }
 
@@ -132,7 +131,7 @@ namespace rg2
 		bool isLegalWidth(int _size) const;
 
 		Hdi08Decode m_decode;
-		std::array<mc68k::Hdi08, g_hdi08PortCount> m_ports;
+		std::array<Hdi08Port, g_hdi08PortCount> m_ports;
 		AccessCounts m_counts;
 
 		std::size_t m_captureLimit = 0;

@@ -24,7 +24,7 @@
 #include "board.h"
 #include "dspSet.h"
 
-#include "mc68k/hdi08.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/hdi08.h"
 #include "dsp56kEmu/peripherals56311.h"
@@ -98,14 +98,14 @@ namespace
 		return TWord(0x0f6606u + (uint32_t(_slot) << 8) + 1u);
 	}
 
-	void hostWriteWord(mc68k::Hdi08& _port, const uint32_t _word)
+	void hostWriteWord(rg2::Hdi08Port& _port, const uint32_t _word)
 	{
-		_port.write8(mc68k::PeriphAddress::HdiTXH, uint8_t(_word >> 16));
-		_port.write8(mc68k::PeriphAddress::HdiTXM, uint8_t(_word >> 8));
-		_port.write8(mc68k::PeriphAddress::HdiTXL, uint8_t(_word));
+		_port.write8(rg2::Hdi08Port::HdiTXH, uint8_t(_word >> 16));
+		_port.write8(rg2::Hdi08Port::HdiTXM, uint8_t(_word >> 8));
+		_port.write8(rg2::Hdi08Port::HdiTXL, uint8_t(_word));
 	}
 
-	void driveBootstrap(mc68k::Hdi08& _port, const unsigned _slot)
+	void driveBootstrap(rg2::Hdi08Port& _port, const unsigned _slot)
 	{
 		hostWriteWord(_port, TWord(g_programWordCount));
 		hostWriteWord(_port, g_bootAddress);

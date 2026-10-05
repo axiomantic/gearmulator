@@ -19,7 +19,7 @@
 
 #include "rg2/timebase.h"
 
-#include "mc68k/hdi08.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/hdi08.h"
@@ -105,22 +105,22 @@ namespace
 
 	// HF2 and HF3 occupy bits 3 and 4 of the DSP's HCR and of the host ISR
 	// alike, which is what makes the mirror a mask and not a translation.
-	constexpr uint8_t g_hostFlagMask = mc68k::Hdi08::Hf2 | mc68k::Hdi08::Hf3;
+	constexpr uint8_t g_hostFlagMask = rg2::Hdi08Port::Hf2 | rg2::Hdi08Port::Hf3;
 	constexpr TWord g_dspHostFlags =
 		TWord(1u << dsp56k::HDI08::HCR_HF2) | TWord(1u << dsp56k::HDI08::HCR_HF3);
 
-	void hostWriteWord(mc68k::Hdi08& _port, const uint32_t _word)
+	void hostWriteWord(rg2::Hdi08Port& _port, const uint32_t _word)
 	{
-		_port.write8(mc68k::PeriphAddress::HdiTXH, uint8_t(_word >> 16));
-		_port.write8(mc68k::PeriphAddress::HdiTXM, uint8_t(_word >> 8));
-		_port.write8(mc68k::PeriphAddress::HdiTXL, uint8_t(_word));
+		_port.write8(rg2::Hdi08Port::HdiTXH, uint8_t(_word >> 16));
+		_port.write8(rg2::Hdi08Port::HdiTXM, uint8_t(_word >> 8));
+		_port.write8(rg2::Hdi08Port::HdiTXL, uint8_t(_word));
 	}
 
-	uint32_t hostReadWord(mc68k::Hdi08& _port)
+	uint32_t hostReadWord(rg2::Hdi08Port& _port)
 	{
-		const uint32_t h = _port.read8(mc68k::PeriphAddress::HdiTXH);
-		const uint32_t m = _port.read8(mc68k::PeriphAddress::HdiTXM);
-		const uint32_t l = _port.read8(mc68k::PeriphAddress::HdiTXL);
+		const uint32_t h = _port.read8(rg2::Hdi08Port::HdiTXH);
+		const uint32_t m = _port.read8(rg2::Hdi08Port::HdiTXM);
+		const uint32_t l = _port.read8(rg2::Hdi08Port::HdiTXL);
 		return (h << 16) | (m << 8) | l;
 	}
 
@@ -135,7 +135,7 @@ namespace
 	constexpr TWord g_bootAddress = 0x000300u;
 	constexpr TWord g_bootBodyWord = 0x0b0071u;
 
-	void driveBootstrap(mc68k::Hdi08& _port)
+	void driveBootstrap(rg2::Hdi08Port& _port)
 	{
 		hostWriteWord(_port, 1u);
 		hostWriteWord(_port, g_bootAddress);
@@ -172,7 +172,7 @@ namespace
 		}
 
 		slot.hdi08().writeTX(0x135791u);
-		checkEqualHex(adapter.port(g_bridgedPort).isr() & mc68k::Hdi08::Rxdf, mc68k::Hdi08::Rxdf,
+		checkEqualHex(adapter.port(g_bridgedPort).isr() & rg2::Hdi08Port::Rxdf, rg2::Hdi08Port::Rxdf,
 			"the host port's ISR reports Rxdf after the DSP writes its host-transmit path");
 		checkEqualHex(hostReadWord(adapter.port(g_bridgedPort)), 0x135791u,
 			"the host read returns the DSP's word unchanged");
@@ -199,11 +199,11 @@ namespace
 		// `setInitHdi08Callback` holds one std::function and REPLACES it, so a
 		// bridge that installed there would silently remove the adapter's own
 		// ICR clear. This assertion is on a BRIDGED port for that reason.
-		adapter.port(g_bridgedPort).write8(mc68k::PeriphAddress::HdiICR, mc68k::Hdi08::Init);
-		checkEqualHex(adapter.port(g_bridgedPort).icr() & mc68k::Hdi08::Init, 0u,
+		adapter.port(g_bridgedPort).write8(rg2::Hdi08Port::HdiICR, rg2::Hdi08Port::Init);
+		checkEqualHex(adapter.port(g_bridgedPort).icr() & rg2::Hdi08Port::Init, 0u,
 			"a bridged port still clears the ICR INIT bit");
-		checkEqualHex(adapter.port(g_bridgedPort).isr() & (mc68k::Hdi08::Txde | mc68k::Hdi08::Trdy),
-			mc68k::Hdi08::Txde | mc68k::Hdi08::Trdy,
+		checkEqualHex(adapter.port(g_bridgedPort).isr() & (rg2::Hdi08Port::Txde | rg2::Hdi08Port::Trdy),
+			rg2::Hdi08Port::Txde | rg2::Hdi08Port::Trdy,
 			"a bridged port still raises Txde and Trdy on the init request");
 	}
 
@@ -221,7 +221,7 @@ namespace
 			"an unbridged DSP's receive ring stays empty after the host assembles a word");
 
 		slot.hdi08().writeTX(0x0beef2u);
-		checkEqualHex(adapter.port(g_bridgedPort).isr() & mc68k::Hdi08::Rxdf, 0u,
+		checkEqualHex(adapter.port(g_bridgedPort).isr() & rg2::Hdi08Port::Rxdf, 0u,
 			"an unbridged host port reports no Rxdf after the DSP writes its host-transmit path");
 		checkEqualHex(hostReadWord(adapter.port(g_bridgedPort)), 0u,
 			"an unbridged host read does not return the DSP's word");

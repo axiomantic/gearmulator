@@ -614,7 +614,7 @@ namespace
 		const uint8_t icr = hdi08.icr();
 		const uint8_t isr = hdi08.isr();
 
-		return (icr & mc68k::Hdi08::Hf0) != 0 && (isr & mc68k::Hdi08::Hf2) != 0;
+		return (icr & rg2::Hdi08Port::Hf0) != 0 && (isr & rg2::Hdi08Port::Hf2) != 0;
 	}
 
 	// The number of ports raised at the instant of the call. This is a level read

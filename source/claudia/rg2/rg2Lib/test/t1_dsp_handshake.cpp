@@ -47,7 +47,7 @@
 
 #include "../artifactResolver.h"
 
-#include "mc68k/hdi08.h"
+#include "hdi08Port.h"
 
 #include "dsp56kEmu/hdi08.h"
 #include "dsp56kEmu/peripherals56311.h"
@@ -122,7 +122,7 @@ namespace
 			const uint8_t icr = hdi08.icr();
 			const uint8_t isr = hdi08.isr();
 
-			if((icr & mc68k::Hdi08::Hf0) && (isr & mc68k::Hdi08::Hf2))
+			if((icr & rg2::Hdi08Port::Hf0) && (isr & rg2::Hdi08Port::Hf2))
 				++completed;
 		}
 
@@ -143,8 +143,8 @@ namespace
 		auto& port = _board.hdi08().port(static_cast<int>(_slot));
 		auto& dsp  = _board.dspSet().peripherals(_slot).getHDI08();
 
-		port.write8(mc68k::PeriphAddress::HdiICR,
-			uint8_t(port.icr() | mc68k::Hdi08::Hf0));
+		port.write8(rg2::Hdi08Port::HdiICR,
+			uint8_t(port.icr() | rg2::Hdi08Port::Hf0));
 
 		DriveResult result;
 
@@ -159,7 +159,7 @@ namespace
 			if(dsp.readStatusRegister() & g_dspHf0)
 				dsp.writeControlRegister(dsp.readControlRegister() | g_dspHf2);
 
-			if(port.isr() & mc68k::Hdi08::Hf2)
+			if(port.isr() & rg2::Hdi08Port::Hf2)
 			{
 				result.completed = true;
 				return result;
@@ -212,7 +212,7 @@ namespace
 			{
 				const uint8_t isr = board.hdi08().port(static_cast<int>(j)).isr();
 
-				check((isr & mc68k::Hdi08::Hf2) == 0,
+				check((isr & rg2::Hdi08Port::Hf2) == 0,
 					"a port that has not been driven reports HF2 clear" + onPort(j)
 						+ ", after driving" + onPort(i));
 			}
