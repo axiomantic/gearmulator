@@ -65,6 +65,7 @@
 namespace g2
 {
 	class Uart0;
+	class TransportSocketServer;
 }
 
 namespace g2
@@ -409,8 +410,9 @@ namespace g2
 		std::unique_ptr<Sdram>          m_sdram;
 		std::unique_ptr<PanelSram>      m_panelSram;
 		std::unique_ptr<Board>          m_board;
-		std::unique_ptr<SerialExecutor> m_executor;
-		std::unique_ptr<Scheduler>      m_ownedScheduler;
+		std::unique_ptr<SerialExecutor>        m_executor;
+		std::unique_ptr<Scheduler>             m_ownedScheduler;
+		std::unique_ptr<TransportSocketServer> m_socketServer;
 
 		/* The flat block Scheduler::stateSave writes. Refreshed by getState,
 		 * consumed by boot()'s step 3. */
