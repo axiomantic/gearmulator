@@ -374,6 +374,11 @@ extern "C"
 	{
 		return 1;
 	}
+
+	int isp1181_in_token(isp1181_ctx*, int)
+	{
+		return 0;
+	}
 }
 
 int main()
