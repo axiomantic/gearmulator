@@ -9,57 +9,138 @@
 	<body id="Root" rootScale="1.000000" style="left: 0dp; top: 0dp; width: 800dp; height: 600dp;">
 		<div class="g2_container">
 			<div class="g2_header">
-				<div class="g2_title_block">
-					<div class="g2_brand">CLAVIA NORD MODULAR G2</div>
-					<div class="g2_subtitle">DSP56300 VIRTUAL ANALOG EMULATOR</div>
+				<div class="g2_brand_area">
+					<div class="rg2_badge">RG2</div>
+					<div class="g2_title_block">
+						<div class="g2_brand">MODULAR G2</div>
+						<div class="g2_subtitle">DSP56362 VIRTUAL ANALOG MODULAR EMULATOR</div>
+					</div>
 				</div>
 				<div id="socket_status" class="socket_status socket_listening">
 					<span class="socket_indicator"></span>
-					<span id="socket_text" class="socket_text">Socket: 127.0.0.1:7777 (Listening)</span>
+					<div class="socket_details">
+						<div class="socket_meta_row">
+							<span class="socket_label">TRANSPORT BRIDGE</span>
+							<span id="socket_badge" class="socket_badge">LISTENING</span>
+						</div>
+						<span id="socket_text" class="socket_text">127.0.0.1:7777 (Listening)</span>
+					</div>
 				</div>
 			</div>
 
 			<div class="g2_panel">
-				<div class="slots_section">
-					<div class="section_title">PERFORMANCE SLOTS</div>
-					<div class="slots_row">
-						<button id="slot_a" class="slotButton" isToggle="1">
-							<span class="slot_badge">A</span>
-							<span class="slot_label">SLOT A</span>
-						</button>
-						<button id="slot_b" class="slotButton" isToggle="1">
-							<span class="slot_badge">B</span>
-							<span class="slot_label">SLOT B</span>
-						</button>
-						<button id="slot_c" class="slotButton" isToggle="1">
-							<span class="slot_badge">C</span>
-							<span class="slot_label">SLOT C</span>
-						</button>
-						<button id="slot_d" class="slotButton" isToggle="1">
-							<span class="slot_badge">D</span>
-							<span class="slot_label">SLOT D</span>
-						</button>
+				<div class="upper_deck">
+					<div class="slots_section">
+						<div class="section_header">
+							<span class="section_title">PERFORMANCE SLOTS</span>
+							<span class="section_meta">ACTIVE SYNTH BUFFER</span>
+						</div>
+						<div class="slots_row">
+							<div class="slot_item">
+								<div class="slot_indicator_row">
+									<span id="slot_led_a" class="slot_led slot_led_lit"></span>
+									<span class="slot_led_tag">SLOT A</span>
+								</div>
+								<button id="slot_a" class="slotButton" isToggle="1">
+									<span class="slot_badge">A</span>
+									<span class="slot_btn_label">PART A</span>
+								</button>
+							</div>
+							<div class="slot_item">
+								<div class="slot_indicator_row">
+									<span id="slot_led_b" class="slot_led slot_led_unlit"></span>
+									<span class="slot_led_tag">SLOT B</span>
+								</div>
+								<button id="slot_b" class="slotButton" isToggle="1">
+									<span class="slot_badge">B</span>
+									<span class="slot_btn_label">PART B</span>
+								</button>
+							</div>
+							<div class="slot_item">
+								<div class="slot_indicator_row">
+									<span id="slot_led_c" class="slot_led slot_led_unlit"></span>
+									<span class="slot_led_tag">SLOT C</span>
+								</div>
+								<button id="slot_c" class="slotButton" isToggle="1">
+									<span class="slot_badge">C</span>
+									<span class="slot_btn_label">PART C</span>
+								</button>
+							</div>
+							<div class="slot_item">
+								<div class="slot_indicator_row">
+									<span id="slot_led_d" class="slot_led slot_led_unlit"></span>
+									<span class="slot_led_tag">SLOT D</span>
+								</div>
+								<button id="slot_d" class="slotButton" isToggle="1">
+									<span class="slot_badge">D</span>
+									<span class="slot_btn_label">PART D</span>
+								</button>
+							</div>
+						</div>
+						<div class="slot_status_row">
+							<div class="slot_status_left">
+								<span class="active_slot_caption">ACTIVE:</span>
+								<span id="active_slot_display" class="active_slot_display">Slot A</span>
+							</div>
+							<div class="slot_status_right">
+								<span class="slot_poly_badge">4x DSP56362 ASSIGNED</span>
+							</div>
+						</div>
 					</div>
-					<div class="slot_status_row">
-						<span class="active_slot_caption">ACTIVE:</span>
-						<span id="active_slot_display" class="active_slot_display">Slot A</span>
+
+					<div class="master_section">
+						<div class="section_header">
+							<span class="section_title">MASTER LEVEL</span>
+							<span class="section_meta">MAIN OUT</span>
+						</div>
+						<div class="volume_panel">
+							<div class="volume_slider_container">
+								<input type="range" id="master_volume" class="volume_slider" min="0" max="1" step="0.005" value="1.0"/>
+							</div>
+							<div class="volume_scale">
+								<span>0%</span>
+								<span>25%</span>
+								<span>50%</span>
+								<span>75%</span>
+								<span>100%</span>
+							</div>
+							<div class="volume_readout">
+								<span class="volume_label">LEVEL:</span>
+								<span id="volume_display" class="volume_display">100%</span>
+								<span id="volume_db_display" class="volume_db_display">0.0 dB</span>
+							</div>
+						</div>
 					</div>
 				</div>
 
 				<div class="g2_info_box">
-					<div class="info_title">SYSTEM ARCHITECTURE</div>
-					<div class="info_row">
-						<span class="info_key">DSP ENGINE:</span>
-						<span class="info_val">4x Motorola DSP56362 @ 100 MHz</span>
+					<div class="section_header">
+						<span class="info_title">HARDWARE ARCHITECTURE</span>
+						<span class="section_meta">LOW-LEVEL EMULATION SUBSYSTEMS</span>
 					</div>
-					<div class="info_row">
-						<span class="info_key">HOST PROCESSOR:</span>
-						<span class="info_val">ColdFire MCF5307 @ 90 MHz</span>
+					<div class="info_grid">
+						<div class="info_row">
+							<span class="info_key">DSP ENGINE CLUSTER:</span>
+							<span class="info_val">4x Motorola DSP56362 @ 100 MHz (24-bit 56k Architecture)</span>
+						</div>
+						<div class="info_row">
+							<span class="info_key">HOST PROCESSOR:</span>
+							<span class="info_val">Motorola ColdFire MCF5307 @ 90 MHz (Red Gecko 2 v1.40)</span>
+						</div>
+						<div class="info_row">
+							<span class="info_key">EDITOR TRANSPORT BRIDGE:</span>
+							<span class="info_val">TCP Loopback Socket (Port 7777 / Bulk &amp; Notification Endpoints)</span>
+						</div>
+						<div class="info_row">
+							<span class="info_key">AUDIO I/O PATH:</span>
+							<span class="info_val">4 Analog Line Inputs / 4 Analog Line Outputs + 24-bit S/PDIF</span>
+						</div>
 					</div>
-					<div class="info_row">
-						<span class="info_key">EDITOR BRIDGE:</span>
-						<span class="info_val">Loopback Transport Socket (Port 7777 TCP)</span>
-					</div>
+				</div>
+
+				<div class="g2_footer">
+					<span class="footer_text">CLAVIA DMI AB • NORD MODULAR G2 VIRTUAL ANALOG HARDWARE EMULATOR</span>
+					<span class="footer_dsp">GEARMULATOR DSP56300 FORK</span>
 				</div>
 			</div>
 		</div>
