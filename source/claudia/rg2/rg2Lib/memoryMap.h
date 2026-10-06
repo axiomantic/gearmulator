@@ -19,7 +19,7 @@
 
 #include <coldfire.h>
 
-#include "cpu/coldfire/busTarget.h"
+#include "busTarget.h"
 
 namespace rg2
 {
@@ -71,7 +71,7 @@ namespace rg2
 	// What a device model presents to the decode. The offset is relative to
 	// the base of the window the device sits in, so a device carries no
 	// knowledge of where the firmware put it.
-	using BusTarget = coldfire::BusTarget;
+	using BusTarget = rg2::BusTarget;
 
 	class MemoryMap
 	{

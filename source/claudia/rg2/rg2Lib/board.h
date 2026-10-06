@@ -46,8 +46,6 @@
 
 #include "hardwareLib/isp1181.h"
 
-#include "cpu/coldfire/coldfireSoc.h"
-
 namespace rg2
 {
     /* The panel board's analogue controls, in the order the converter scans
@@ -468,6 +466,7 @@ namespace rg2
          * window. Naming a level here would freeze at construction a value the
          * firmware is still free to move. */
         static void onUsbIrq(void* user, int asserted);
+        static uint16_t onPortARead(void* user);
 
         /* The units, so a caller can load the flash images, install the HDI08
          * callbacks the DSP side needs, feed UART0 and read each unit's own
@@ -524,17 +523,31 @@ namespace rg2
 
         /* The MBAR window is shared and the decode attaches one target per
          * region. This router is that one target, and it forwards the
-         * MBAR-relative offset the decode produced without altering it, because
-         * every unit behind it already expects an MBAR-relative offset.
-         *
-         * The SIM answers MBAR+$1D0 because the firmware reads it as a model
-         * strap; UART0 owns every other UART offset. sim.cpp's DIVERGENCE note
-         * is the authority for that split.
-         *
-         * The M-Bus arm's range is disjoint from both UART blocks, so the order
-         * the branches are written in is a reading convenience rather than a
-         * rule. */
-        using MbarRouter = coldfire::ColdfireSoc;
+         * MBAR-relative offset the decode produced without altering it.
+         * M-Bus accesses (0x280..0x293) are routed to m_mbus, and all other
+         * offsets delegate to cf_mbar_read / cf_mbar_write. */
+        class MbarWindow final : public BusTarget
+        {
+        public:
+            MbarWindow(cf_ctx*& _mcu, MBus& _mbus, InterruptController& _interrupts, Sim& _sim, Uart0& _uart0) :
+                m_mcu(_mcu), m_mbus(_mbus), m_interrupts(_interrupts), m_sim(_sim), m_uart0(_uart0)
+            {
+            }
+
+            uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+            void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
+
+            static bool isUartOwned(uint32_t _offset);
+            static bool isMbusOwned(uint32_t _offset);
+            static bool isInterruptOwned(uint32_t _offset);
+
+        private:
+            cf_ctx*& m_mcu;
+            MBus& m_mbus;
+            InterruptController& m_interrupts;
+            Sim& m_sim;
+            Uart0& m_uart0;
+        };
 
         /* The ISP1181 answers CS3. The decode subtracts the window base and
          * hands the offset down, and the device expects exactly such a
@@ -613,7 +626,7 @@ namespace rg2
 
         FlashWindow m_flashCs0;
         FlashWindow m_flashCs2;
-        MbarRouter m_mbar;
+        MbarWindow m_mbar;
 
         /* The ISP1181 USB device this Board owns; tickSofIfDue is what advances
          * it. The Board creates it in the constructor and destroys it in the

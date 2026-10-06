@@ -55,7 +55,10 @@
 #include <vector>
 
 #include <coldfire.h>
-#include <isp1181.h>
+#include "hardwareLib/isp1181.h"
+
+using isp1181_irq_fn = void (*)(void* user, int asserted);
+using isp1181_tx_fn = void (*)(void* user, int endpoint, const uint8_t* data, size_t len);
 
 namespace
 {
@@ -287,6 +290,27 @@ size_t cf_state_size(void) { return 0; }
 void cf_state_save(const cf_ctx*, void*) {}
 
 void cf_state_load(cf_ctx*, const void*) {}
+void cf_sim_set_engine_strap(cf_ctx*, int) {}
+void cf_sim_set_port_a_hook(cf_ctx*, cf_port_a_read_fn, void*) {}
+void cf_set_irq_pin(cf_ctx*, int, int) {}
+void cf_timer_tick(cf_ctx*, uint32_t) {}
+uint32_t cf_mbar_read(cf_ctx*, uint32_t, int, cf_bus_status* status)
+{
+    if (status)
+        *status = CF_BUS_OK;
+    return 0;
+}
+void cf_mbar_write(cf_ctx*, uint32_t, int, uint32_t, cf_bus_status* status)
+{
+    if (status)
+        *status = CF_BUS_OK;
+}
+int cf_intc_get_presented_level(const cf_ctx*) { return 0; }
+uint8_t cf_intc_get_presented_vector(const cf_ctx*) { return 0; }
+int cf_intc_get_presented_autovector(const cf_ctx*) { return 0; }
+int cf_uart_rx_byte(cf_ctx*, int, uint8_t) { return 0; }
+int cf_uart_set_tx_handler(cf_ctx*, int, cf_uart_tx_fn, void*) { return 0; }
+uint8_t cf_uart_get_usr(const cf_ctx*, int) { return 0; }
 
 /* A distinct, non-null handle on every call, and never a repeat. This is
  * the whole reason the assertions below can say "correct" rather than only

@@ -57,32 +57,3 @@ if(NOT TARGET coldfire::coldfire)
 		FetchContent_MakeAvailable(coldfire)
 	endif()
 endif()
-
-set(COLDFIRE_SOURCES
-	busTarget.h
-	interruptController.h
-	interruptController.cpp
-	coldfireSoc.h
-	coldfireSoc.cpp
-	sim.h
-	sim.cpp
-	timer.h
-	timer.cpp
-	uart0.h
-	uart0.cpp
-)
-
-add_library(coldfireSoc STATIC ${COLDFIRE_SOURCES})
-source_group("source" FILES ${COLDFIRE_SOURCES})
-set_property(TARGET coldfireSoc PROPERTY FOLDER "cpu")
-
-target_compile_features(coldfireSoc PUBLIC cxx_std_20)
-target_include_directories(coldfireSoc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(coldfireSoc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_include_directories(coldfireSoc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
-
-if(TARGET coldfire::coldfire)
-	target_include_directories(coldfireSoc PUBLIC
-		$<TARGET_PROPERTY:coldfire::coldfire,INTERFACE_INCLUDE_DIRECTORIES>
-	)
-endif()

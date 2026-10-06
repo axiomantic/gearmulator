@@ -380,9 +380,13 @@ target_sources(t0_sof_tick PRIVATE
 	../latches.cpp
 	../hdi08Decode.cpp
 	../hdi08Adapter.cpp
-	../memoryMap.cpp)
+	../memoryMap.cpp
+	../sim.cpp
+	../uart0.cpp
+	../timer.cpp
+	../interruptController.cpp)
 
-target_link_libraries(t0_sof_tick PRIVATE coldfireSoc hardwareLib)
+target_link_libraries(t0_sof_tick PRIVATE hardwareLib)
 
 foreach(lib dsp56kEmu baseLib)
 	if(TARGET ${lib})
@@ -610,23 +614,9 @@ set_tests_properties(t0_timer PROPERTIES LABELS "UnitTest")
 # references are guarded.
 
 add_executable(t0_board_interrupts
-	t0_board_interrupts.cpp
-	../board.cpp
-	../flash.cpp
-	../panel.cpp
-	../latches.cpp
-	../hdi08Decode.cpp
-	../hdi08Adapter.cpp
-	../memoryMap.cpp
-	../mbus.cpp
-	../max1039.cpp
-	../dspSet.cpp
-	../hdi08Bridge.cpp
-	../chainAdapter.cpp
-	../mailbox.cpp
-	../frame.cpp)
+	t0_board_interrupts.cpp)
 
-target_link_libraries(t0_board_interrupts PRIVATE coldfireSoc hardwareLib)
+target_link_libraries(t0_board_interrupts PRIVATE rg2Lib)
 
 target_include_directories(t0_board_interrupts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
@@ -861,7 +851,6 @@ set_tests_properties(t0_gdb_script PROPERTIES LABELS "UnitTest")
 # untouched.
 
 target_sources(t0_sof_tick PRIVATE ../transportHub.cpp)
-target_sources(t0_board_interrupts PRIVATE ../transportHub.cpp)
 
 # ----------------- CallbackTimer
 #

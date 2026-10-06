@@ -48,7 +48,7 @@ source_group("source" FILES ${RG2LIB_SOURCES})
 # wLib is the Waldorf layer and this target does NOT link it. See
 # docs/divergence.md for the reason and the condition that would re-open it.
 
-target_link_libraries(rg2Lib PUBLIC coldfireSoc hardwareLib dsp56kEmu synthLib)
+target_link_libraries(rg2Lib PUBLIC hardwareLib dsp56kEmu synthLib)
 
 if(DSP56300_DEBUGGER)
 	target_link_libraries(rg2Lib PUBLIC dsp56kDebugger)

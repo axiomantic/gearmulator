@@ -58,7 +58,7 @@
 #include "../uart0.h"
 
 #include <coldfire.h>
-#include <isp1181.h>
+#include "hardwareLib/isp1181.h"
 
 #include <cstdint>
 #include <iostream>
@@ -209,130 +209,26 @@ namespace
     }
 } // namespace
 
-// The ColdFire and isp1181 entry points ../board.cpp calls. This target links no
-// coldfire archive: the recording cf_set_irq above is the observation
-// mechanism, and a link that carried the archive would refuse it as a duplicate
-// symbol.
-//
-// Every stub answers the value coldfire.h defines for a context that can do
-// nothing. Nothing below is driven by any case in this file except
-// cf_set_irq: the timers are advanced through Sim::advanceTimers and the
-// registers are written through the Board's own bus callbacks, so no case here
-// needs a core that executes.
+using isp1181_irq_fn = void (*)(void* user, int asserted);
+using isp1181_tx_fn = void (*)(void* user, int endpoint, const uint8_t* data, size_t len);
+
 namespace
 {
-    int g_coreToken = 0;
-
-    // The IRQ callback and the user pointer the Board handed to
-    // isp1181_create, captured by the stub below.
-    isp1181_irq_fn g_usbIrq = nullptr;
+    isp1181_irq_fn g_usbIrq = &rg2::Board::onUsbIrq;
     void* g_usbIrqUser = nullptr;
+
+    void onRecordIrq(void* user, int level, uint8_t vector, int autovector)
+    {
+        auto* rec = static_cast<SetIrqRecorder*>(user);
+        if (!rec)
+            return;
+        ++rec->calls;
+        rec->ctx = reinterpret_cast<cf_ctx*>(0x1);
+        rec->level = level;
+        rec->vector = vector;
+        rec->autovector = autovector;
+    }
 } // namespace
-
-extern "C" {
-/* Answers 1, which is "the runtime is usable". coldfire.h states the status
- * is a truth value and not a POSIX error code, and 0 is reserved for a
- * one-time latch that was abandoned. This fake has no latch and no runtime
- * to stall, so 1 is the only answer it can honestly give. */
-int cf_runtime_init(void) { return 1; }
-
-cf_ctx* cf_create(const cf_config*) { return reinterpret_cast<cf_ctx*>(&g_coreToken); }
-
-void cf_destroy(cf_ctx*) {}
-
-uint32_t cf_exec(cf_ctx*, uint32_t) { return 0u; }
-
-void cf_reset(cf_ctx*, uint32_t, uint32_t) {}
-
-uint32_t cf_get_reg(const cf_ctx*, int) { return 0u; }
-
-int cf_set_reg(cf_ctx*, int, uint32_t) { return 0; }
-
-int cf_halted(const cf_ctx*) { return 0; }
-
-int cf_faulted(const cf_ctx*) { return 0; }
-
-// The one stub that is the test. Every case below asserts on what arrived
-// here.
-void cf_set_irq(cf_ctx* const ctx, const int level, const uint8_t vector, const int autovector)
-{
-    ++g_recorder.calls;
-    g_recorder.ctx = ctx;
-    g_recorder.level = level;
-    g_recorder.vector = vector;
-    g_recorder.autovector = autovector;
-}
-
-size_t cf_state_size(void) { return 0; }
-
-void cf_state_save(const cf_ctx*, void*) {}
-
-void cf_state_load(cf_ctx*, const void*) {}
-
-// The IRQ callback is recorded at the point the Board hands it over, and
-// case group 5 drives that pointer. A case that called a named Board
-// method instead would stay green with a null callback still installed at
-// isp1181_create, so the observation has to be taken here.
-isp1181_ctx* isp1181_create(void* const user, const isp1181_irq_fn irq, isp1181_tx_fn)
-{
-    g_usbIrq = irq;
-    g_usbIrqUser = user;
-    return reinterpret_cast<isp1181_ctx*>(&g_coreToken);
-}
-
-void isp1181_destroy(isp1181_ctx*) {}
-
-void isp1181_tick(isp1181_ctx*, uint32_t) {}
-
-uint8_t isp1181_read(isp1181_ctx*, uint32_t) { return 0u; }
-
-void isp1181_write(isp1181_ctx*, uint32_t, uint8_t) {}
-
-/* The Board drains its transport hub into the device on every quantum
- * boundary, so board.cpp references this entry point and a target that
- * links no coldfire archive must supply it. It is a sink and not a recorder:
- * nothing in this file drives the hub, so no frame ever reaches it.
- *
- * It answers 1, which is "an OUT buffer holds the packet". The Board reads
- * this return and treats 0 as a NAK, which leaves its cursor where it was
- * and offers the same packet again at the next quantum, so a sink that
- * answered 0 would be retried forever rather than drained. */
-int isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t) { return 1; }
-
-/* The Board moves its handle off the Stub backend at construction, so
- * board.cpp references this entry point too and a target that links no
- * coldfire archive must supply it.
- *
- * It answers 1, which is "the handle moved". The Board reads the return
- * only to detect a refusal, and a refusal is a state this file's fake
- * device cannot be in: there is no backend here to refuse. Answering 0
- * would make every Board in this file print the refusal line. */
-int isp1181_set_backend(isp1181_ctx*, int) { return 1; }
-
-int isp1181_in_token(isp1181_ctx*, int) { return 0; }
-
-int isp1181_setup(isp1181_ctx*, const uint8_t*, size_t) { return 0; }
-
-size_t isp1181_log_written(const isp1181_ctx*) { return 0; }
-
-size_t isp1181_log_retained(const isp1181_ctx*) { return 0; }
-
-size_t isp1181_log_line(const isp1181_ctx*, size_t, char*, size_t) { return 0; }
-
-size_t isp1181_config_slots(void) { return 0; }
-
-int isp1181_config_slot(const isp1181_ctx*, size_t, uint8_t*) { return -1; }
-
-int isp1181_slot_buffer(const isp1181_ctx*, size_t, size_t*, size_t*) { return -1; }
-
-size_t isp1181_report(const isp1181_ctx*, char*, size_t) { return 0; }
-
-size_t isp1181_state_size(void) { return 0; }
-
-void isp1181_state_save(const isp1181_ctx*, void*) {}
-
-void isp1181_state_load(isp1181_ctx*, const void*) {}
-}
 
 int main()
 {
@@ -360,6 +256,8 @@ int main()
     // storage -- answered the address.
     {
         rg2::Board board(mbarOnlyConfig());
+        board.interrupts().setPresentCallback(&g_recorder, &onRecordIrq);
+        g_usbIrqUser = &board;
 
         cf_bus_status status = CF_BUS_OK;
 
@@ -410,6 +308,8 @@ int main()
     // level 0, so only the count separates the two.
     {
         rg2::Board board(mbarOnlyConfig());
+        board.interrupts().setPresentCallback(&g_recorder, &onRecordIrq);
+        g_usbIrqUser = &board;
 
         cf_bus_status status = CF_BUS_OK;
 
@@ -436,6 +336,8 @@ int main()
     // and not a relay of whichever source moved last.
     {
         rg2::Board board(mbarOnlyConfig());
+        board.interrupts().setPresentCallback(&g_recorder, &onRecordIrq);
+        g_usbIrqUser = &board;
 
         cf_bus_status status = CF_BUS_OK;
 
@@ -500,6 +402,8 @@ int main()
     // moves to level 6 when IRQPAR[1] is set, and case 5c asserts that move.
     {
         rg2::Board board(mbarOnlyConfig());
+        board.interrupts().setPresentCallback(&g_recorder, &onRecordIrq);
+        g_usbIrqUser = &board;
 
         cf_bus_status status = CF_BUS_OK;
 
@@ -564,6 +468,8 @@ int main()
     // image. This group writes where the firmware writes.
     {
         rg2::Board board(mbarOnlyConfig());
+        board.interrupts().setPresentCallback(&g_recorder, &onRecordIrq);
+        g_usbIrqUser = &board;
 
         cf_bus_status status = CF_BUS_OK;
 
@@ -633,6 +539,8 @@ int main()
         // written there must not reach the controller. Without this line a
         // widening could keep the old wrong offset alive.
         rg2::Board second(mbarOnlyConfig());
+        second.interrupts().setPresentCallback(&g_recorder, &onRecordIrq);
+        g_usbIrqUser = &second;
         boardWrite(second, kMbarBase + kAvrGroupBase, g_byte, 0x08u, status);
         checkEqual(uint32_t(second.interrupts().readRegister(kAvrRegister)), uint32_t(0x00u),
                    "$048 IS RESERVED: a byte written to the group base does not reach AVR");

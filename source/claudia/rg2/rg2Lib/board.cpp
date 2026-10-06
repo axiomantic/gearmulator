@@ -221,6 +221,88 @@ namespace rg2
         _status = CF_BUS_SIZE_ILLEGAL;
     }
 
+    bool Board::MbarWindow::isUartOwned(const uint32_t _offset)
+    {
+        if (_offset == g_simUipcrOffset)
+            return false;
+
+        if (_offset >= Uart0::gUart0Base && _offset < Uart0::gUart0Base + Uart0::gUartModuleSize)
+            return true;
+
+        return _offset >= Uart0::gUart1Base && _offset < Uart0::gUart1Base + Uart0::gUartModuleSize;
+    }
+
+    bool Board::MbarWindow::isMbusOwned(const uint32_t _offset)
+    {
+        return _offset >= MBus::g_base && _offset < MBus::g_base + MBus::g_size;
+    }
+
+    bool Board::MbarWindow::isInterruptOwned(const uint32_t _offset)
+    {
+        if (_offset == InterruptController::gIrqparOffset)
+            return true;
+        if (_offset == InterruptController::gAvrOffset)
+            return true;
+        return _offset >= InterruptController::gIcrBase &&
+            _offset < InterruptController::gIcrBase + InterruptController::gIcrCount;
+    }
+
+    uint32_t Board::MbarWindow::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
+    {
+        if (isInterruptOwned(_offset))
+        {
+            if (_size != 8)
+            {
+                _status = CF_BUS_SIZE_ILLEGAL;
+                return 0u;
+            }
+            _status = CF_BUS_OK;
+            return m_interrupts.readRegister(_offset);
+        }
+
+        if (isMbusOwned(_offset))
+        {
+            return m_mbus.read(_offset, _size, _status);
+        }
+
+        if (isUartOwned(_offset))
+        {
+            return m_uart0.read(_offset, _size, _status);
+        }
+
+        return m_sim.read(_offset, _size, _status);
+    }
+
+    void Board::MbarWindow::write(const uint32_t _offset, const int _size, const uint32_t _value,
+                                  cf_bus_status& _status)
+    {
+        if (isInterruptOwned(_offset))
+        {
+            if (_size != 8)
+            {
+                _status = CF_BUS_SIZE_ILLEGAL;
+                return;
+            }
+            _status = CF_BUS_OK;
+            m_interrupts.writeRegister(_offset, uint8_t(_value & 0xffu));
+            return;
+        }
+
+        if (isMbusOwned(_offset))
+        {
+            m_mbus.write(_offset, _size, _value, _status);
+            return;
+        }
+
+        if (isUartOwned(_offset))
+        {
+            m_uart0.write(_offset, _size, _value, _status);
+            return;
+        }
+
+        m_sim.write(_offset, _size, _value, _status);
+    }
+
     uint32_t Board::busRead(const uint32_t _address, const int _size, cf_bus_status& _status)
     {
         return m_memory.read(_address, _size, _status);
@@ -381,12 +463,12 @@ namespace rg2
     } // namespace
 
     Board::Board(const BoardConfig& _config) :
-        m_mcu(nullptr), m_interrupts(this, &Board::onInterruptPresent), m_memory(_config.memory),
+        m_mcu(nullptr), m_interrupts(m_mcu, this, &Board::onInterruptPresent), m_memory(_config.memory),
         m_flash(_config.memory.cs0.base, _config.memory.cs0.size, _config.memory.cs2.base, _config.memory.cs2.size),
         m_panel(_config.memory.cs4.size), m_latches(_config.memory.cs5.size, _config.model), m_hdi08(_config.hdi08),
-        m_sim(_config.model), m_uart0(&m_interrupts), m_adc(_config.adc), m_mbus(&m_adc),
-        m_flashCs0(m_flash, m_memory, Region::Cs0), m_flashCs2(m_flash, m_memory, Region::Cs2),
-        m_mbar(m_sim, m_uart0, m_mbus, m_interrupts), m_usb(this, &Board::onUsbIrq, &Board::onUsbTx), m_usbCs3(m_usb),
+        m_sim(m_mcu), m_uart0(m_mcu), m_adc(_config.adc), m_mbus(&m_adc), m_flashCs0(m_flash, m_memory, Region::Cs0),
+        m_flashCs2(m_flash, m_memory, Region::Cs2), m_mbar(m_mcu, m_mbus, m_interrupts, m_sim, m_uart0),
+        m_usb(this, &Board::onUsbIrq, &Board::onUsbTx), m_usbCs3(m_usb),
         m_usbProtocolEndpoint(_config.usbProtocolEndpoint), m_usbMaxPacketBytes(_config.usbMaxPacketBytes),
         m_usbZeroLengthTerminator(_config.usbTerminateWithZeroLengthPacket),
         m_transport(g_transportMaxFrameBytes, g_transportQueueDepth),
@@ -396,12 +478,6 @@ namespace rg2
         // reach a half-built decode.
         attachUnits();
 
-        /* Both timer modules assert on the board's one controller. Uart0 is
-         * handed it by the initialiser list above; this call is the timers'
-         * half of the same wire, and Sim::setInterruptController forwards it to
-         * both modules. */
-        m_sim.setInterruptController(&m_interrupts);
-        m_sim.setPanel(&m_panel);
         m_panel.attachLatches(&m_latches);
         m_latches.attachPanel(&m_panel);
 
@@ -415,6 +491,12 @@ namespace rg2
         (void)cf_runtime_init();
         const cf_config cfg{CF_ISA_A, 0xFFFFFFFFu, this, &Board::onRead, &Board::onWrite, &Board::onInterruptAck};
         m_mcu = cf_create(&cfg);
+
+        m_sim.setInterruptController(&m_interrupts);
+        m_uart0.setInterruptController(&m_interrupts);
+
+        cf_sim_set_engine_strap(m_mcu, isEngineStrapSet(_config.model) ? 1 : 0);
+        cf_sim_set_port_a_hook(m_mcu, &Board::onPortARead, this);
 
         /* The handle is moved off the Stub deliberately and here. The Stub is
          * the create-time default: present in the CS3 window and inert -- every
@@ -762,7 +844,15 @@ namespace rg2
          * which the firmware programs through the MBAR window at run time. A
          * level written down here would stay 3 after a firmware that moved
          * IRQPAR[1] had made it 6. */
+        if (board->m_mcu)
+            cf_set_irq_pin(board->m_mcu, CF_IRQ_PIN_3, asserted != 0 ? 1 : 0);
         board->m_interrupts.setExternalPending(ExternalPin::Irq3, asserted != 0);
+    }
+
+    uint16_t Board::onPortARead(void* const user)
+    {
+        Board* const board = static_cast<Board*>(user);
+        return board != nullptr ? board->m_panel.getRowBits() : 0xFFFFu;
     }
 
     Board::~Board()
@@ -788,7 +878,9 @@ namespace rg2
          * from the budget it was asked for. That is what makes a timer tick a
          * function of executed cycles and keeps it deterministic under the
          * scheduler's quantum. */
+        cf_timer_tick(m_mcu, cycles);
         m_sim.advanceTimers(cycles);
+        m_interrupts.notifyPresent();
 
         return cycles;
     }
