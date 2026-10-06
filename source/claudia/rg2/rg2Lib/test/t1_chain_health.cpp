@@ -2,60 +2,12 @@
 // NMG2_ARTIFACTS does not resolve.
 //
 // Zero is the weakest assertion there is, and this file refuses to make it
-// alone: a machine that never ran satisfies every one of the seven counter
-// equalities. Every zero asserted here is paired with a known positive, a
-// companion case that drives that counter, through that accessor, above zero.
-// The known positives run first and their failure is this file's failure.
-//
-// Where each known positive comes from, and why it is the one it is:
-//
-//   underrunFrames(p)            A firmware-free Scheduler. Every run gate is
-//   secondBusUnderrunFrames(p)   shut, so no transmit callback ever fires and
-//                                the priming run of beginPlayPhase is L real
-//                                underruns at every position. Read back through
-//                                the same Scheduler accessors the golden run
-//                                asserts zero on.
-//
-//   phaseErrorFrames(p)          One known positive drives a ChainAdapter
-//                                directly, with a real emulated
-//                                Esai so the written-flag condition is real:
-//                                one position's audio transmit wrapper fired
-//                                TWICE inside one quantum.
-//
-//                                Another drives the same condition on a
-//                                Scheduler and reads it back through
-//                                Scheduler::phaseErrorFrames. That accessor is
-//                                the adapter reading MINUS a baseline taken at
-//                                beginPlayPhase, and the adapter-driven known
-//                                positive says nothing about the subtraction.
-//
-//                                The Scheduler cannot be made to ask for a
-//                                second transmit -- that is the whole point of
-//                                the counter -- so the second delivery is
-//                                injected the way a harness with no firmware
-//                                drives any ESAI: Config::chainOrder names the
-//                                position-to-port order, which wires the chain
-//                                at construction, and transmitDspFrame runs two
-//                                whole transmit frames on one position's ESAI
-//                                inside one quantum.
-//
-//   underflowFrames              A pull for more than the CodecSink holds.
-//   overflowFrames               A push for more than the CodecSource can take.
-//   starvedFrames                A quantum run against an empty CodecSource.
-//   droppedFrames                Play quanta run past the CodecSink's capacity
-//                                with nothing draining it.
-//                                All four are driven on the booted machine, in
-//                                the hand-off run, after every assertion that
-//                                run makes.
-//
-// There is no queue-depth accessor: push() returns what the source accepted and
-// pull() returns what the sink supplied, so a request of capacity + 1 on each
-// measures the free space and the depth exactly.
-//
-// Two boots, because the probes mutate. The hand-off depth probes empty the sink
-// and fill the source, so they cannot precede the golden run and the golden run
-// cannot precede them -- beginPlayPhase may not be called twice. Each run
-// therefore boots its own machine.
+// alone: a machine that never ran satisfies every one of the counter
+// equalities the golden run asserts. Every zero asserted here is paired with a
+// known positive -- a companion case that drives that counter, through that
+// accessor, above zero. The known positives run first, in part A, and their
+// failure is this file's failure; each one documents at its definition where it
+// gets its drive and what it covers that the others do not.
 //
 // Every verdict is an observable and not an assert(): a release build deletes
 // assert().
@@ -306,9 +258,9 @@ namespace
 		return config;
 	}
 
-	// ----------------------------------------------------- the seven, as a record
+	// --------------------------------------------- the counter set, as a record
 	//
-	// One reading of all seven at one instant. The three per-position counters are
+	// One reading of every counter at one instant. The per-position counters are
 	// reduced to their maximum over the positions and the position that carried it
 	// is kept, so a report names which position moved rather than that one did.
 	struct Seven
@@ -553,11 +505,11 @@ namespace
 
 		// ------------------------------------------- the boot predicate's floor
 		//
-		// The machine ran the event loop, and it had NOT run it at the instant the
-		// banner predicate this file used to boot on became true. The second half
-		// is the one that matters: it is this run's own early-stopped machine,
-		// measured with the same counter that later reads a positive, so a zero
-		// there is the loop not yet reached and not a counter that cannot see it.
+		// The machine ran the event loop, and the banner predicate on its own does
+		// not establish that: the banner fires at a quantum where the loop has not
+		// run yet. The zero below is measured on this run's own early-stopped
+		// machine with the same counter that later reads a positive, so it is the
+		// loop not yet reached and not a counter that cannot see it.
 		check(_m.booted,
 			"machine: the machine ran the event loop within the boot bound");
 		check(_m.bannerQuanta != 0,
@@ -649,7 +601,7 @@ namespace
 	// m_phaseErrorBase, captured at beginPlayPhase.
 	//
 	// The order of the steps below is load-bearing. The baseline is taken by
-	// beginPlayPhase, so the two transmits are driven AFTER it -- a delivery
+	// beginPlayPhase, so the two transmits are driven after it -- a delivery
 	// before it would be absorbed into the baseline and read back as zero.
 	void knownPositiveSchedulerPhaseError()
 	{
@@ -841,8 +793,8 @@ int main()
 
 		// ---------------------------------------------------------------------
 		// Part A. The known positives that need no firmware. They run first, so
-		// that a run whose seven zeros are reported by counters nothing can move
-		// fails here and not on the zeros.
+		// that a run whose zeros are reported by counters nothing can move fails
+		// here and not on the zeros.
 		std::cout << "--- part A: known positives" << std::endl;
 
 		knownPositivePhaseError();
@@ -874,6 +826,11 @@ int main()
 
 			// Capacity is L + B and both numbers come off the Config this run
 			// handed the factory, so neither is typed here.
+			//
+			// There is no queue-depth accessor, and none is needed: push()
+			// returns what the source accepted and pull() returns what the sink
+			// supplied, so asking for capacity + 1 measures the free space and
+			// the depth exactly.
 			const size_t capacity = size_t(m.config.lookaheadFrames) + size_t(m.config.maxHostBlockFrames);
 
 			{
@@ -934,10 +891,13 @@ int main()
 		}
 
 		// ---------------------------------------------------------------------
-		// Part C. The golden run. One frame in and one frame out for each
-		// quantum, and all seven counters zero across the whole of it -- checked
-		// after every quantum, so the report names the first quantum at which
-		// any of them moved rather than only the end state.
+		// Part C. The golden run, on its own machine. Part B's depth probes empty
+		// the sink and fill the source, so neither run can precede the other on
+		// one machine and beginPlayPhase may not be called twice -- so each run
+		// boots its own. One frame in and one frame out for each quantum, and
+		// every counter zero across the whole of it, checked after every quantum
+		// so the report names the first quantum at which any of them moved
+		// rather than only the end state.
 		std::cout << "--- part C: the golden run" << std::endl;
 
 		{
