@@ -144,8 +144,8 @@ namespace
 	//
 	// The event loop is the condition worth keying on because it is what every
 	// consumer in this file depends on -- the dispatcher, the message worker and
-	// the patch store all run from it. The address is the one the findings corpus
-	// names, and the instrument is the histogram this file already keeps: a
+	// the patch store all run from it. The instrument is the histogram this file
+	// already keeps: a
 	// counter at that word is a 16-bit read at it, which is the width the core
 	// fetches an instruction at.
 	//

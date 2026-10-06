@@ -142,8 +142,8 @@ namespace
 	// behind it reads not-yet as never.
 	//
 	// The event loop is the condition worth keying on because it is what every
-	// consumer here depends on. The address is the one the findings corpus names,
-	// and the reading is this file's own probe counter, which counts 16-bit reads
+	// consumer here depends on. The reading is this file's own probe counter,
+	// which counts 16-bit reads
 	// -- the width the core fetches an instruction word at. Both quanta are
 	// recorded, so a run says how far apart they are rather than only which one
 	// it used.
@@ -162,8 +162,8 @@ namespace
 
 	constexpr int g_byteWidth = 1;
 
-	// The opcodes this file names. Every one of them is already numbered by
-	// `src/isp1181/commands.nim`; nothing here invents an opcode.
+	// The opcodes this file names. Every one is already numbered by the device
+	// model's own command table; nothing here invents an opcode.
 	constexpr uint8_t g_endpointConfigBase = 0x20u;
 	constexpr uint8_t g_peekCommand        = 0xD2u;
 
@@ -184,10 +184,10 @@ namespace
 	constexpr uint8_t g_statusFirst = 0x50u;
 	constexpr uint8_t g_statusLast  = 0x54u;
 
-	// The two further opcodes the measured stream contains, numbered by
-	// `src/isp1181/commands.nim` and named here so the expected sequence below
+	// The two further opcodes the measured stream contains, numbered by the
+	// device model's command table and named here so the expected sequence below
 	// reads as words rather than as bytes. The endpoint forms are the family
-	// base plus (endpoint - 1), which is that file's own arithmetic: the status
+	// base plus (endpoint - 1), which is that table's own arithmetic: the status
 	// family's endpoint base is 0x52 for endpoint 1, so endpoint 3 is 0x54; the
 	// buffer-read family's is 0x12, so endpoint 3 is 0x14; the buffer-clear
 	// family's is 0x72, so endpoint 3 is 0x74.

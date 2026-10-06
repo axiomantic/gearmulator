@@ -128,8 +128,8 @@ namespace
 	// behind it reads not-yet as never.
 	//
 	// The event loop is the condition worth keying on because it is what every
-	// consumer here depends on. The address is the one the findings corpus names,
-	// and the reading is a 16-bit read at it, which is the width the core fetches
+	// consumer here depends on. The reading is a 16-bit read at it, which is the
+	// width the core fetches
 	// an instruction word at. Both quanta are recorded, so a run says how far
 	// apart they are rather than only which one it used.
 	constexpr uint32_t g_eventLoopEntry = 0x30004674u;

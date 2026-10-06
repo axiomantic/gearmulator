@@ -128,15 +128,14 @@ namespace
 	// open. The value below is not a measurement and may not be copied into a
 	// shipped header.
 	//
-	// CS4 is no longer open here: rg2::g_panelSramCs4Window is the window that
+	// CS4 is not opened here. rg2::g_panelSramCs4Window is the window that
 	// reaches the panel board's static RAM, which the firmware reads once its
 	// boot calibration has accepted the converter.
 	constexpr uint32_t g_cs0Base = 0x00000000u;
 	constexpr uint32_t g_cs0Size = 0x00020000u;
 
-	// Measured from the workspace logbook: CS3 is a 64 KiB window,
-	// derived from CSMR3 at 0x100000A8. The OS touches only 0x13000000 and
-	// 0x13000010 inside it.
+	// CS3 is a 64 KiB window, derived from CSMR3 at 0x100000A8. The OS touches
+	// only 0x13000000 and 0x13000010 inside it.
 	constexpr uint32_t g_cs3Size = 0x00010000u;
 
 	constexpr uint32_t g_cs1Size   = 0x00010000u;
@@ -1619,57 +1618,37 @@ namespace
 
 		/* ----------------------------- the arrival instrument's known positive
 		 *
-		 * What the self-test below does not prove. It drives the detector's two
-		 * predicates over `impulseFrame` and `silence`, two frames this program
-		 * built on its own stack. Not one byte of the arrival path is on its
-		 * evidence: it reads 1 with the tail's transmit callback deleted, with
+		 * The self-test below proves nothing about the arrival path: it drives
+		 * the detector's two predicates over frames this program built on its
+		 * own stack, and reads 1 with the tail's transmit callback deleted, with
 		 * `fromEsaiFrame` returning zeros, with the mailbox swap frozen, with
 		 * `extractCodecSink` reading the wrong mailbox and with `Scheduler::pull`
 		 * copying nothing. So `arrival=-1` beside `observerSelfTest=1` has two
 		 * readings -- a chain that carried nothing, and an arrival path that
 		 * could not have reported anything -- and tells them apart nowhere.
 		 *
-		 * The control places a sentinel at the tail position's transmit source
-		 * -- its ESAI transmit register file and the DSP-memory window the
-		 * transmit DMA refills that register from -- and then reads that
-		 * sentinel back out of the sink, through the same `pull` and the
-		 * same comparator the walk above used. The sentinel goes in at the
-		 * earliest point that still traverses the whole arrival path rather
-		 * than at the reporting line: everything downstream of the transmit
-		 * buffer is the machine's own code and none of it is bypassed.
+		 * This control places a sentinel at the tail position's transmit source,
+		 * its ESAI transmit register file and the DSP-memory window the transmit
+		 * DMA refills it from, and reads that sentinel back out of the sink
+		 * through the same `pull` and comparator the walk above used. That is
+		 * the earliest point which still traverses the whole arrival path --
+		 * transmit DMA, frame assembly, the chain's Tx conversion, the tail
+		 * mailbox, the swap, the egress read and `pull` -- so everything
+		 * downstream of the transmit buffer is the machine's own code and none
+		 * of it is bypassed.
 		 *
-		 * The links it traverses, and they are the links the walk's `arrival`
-		 * depends on:
-		 *
-		 *   the tail DSP's X memory -> the transmit DMA -> m_tx, and
-		 *   Esai::writeTX -> m_tx           the transmit register file
-		 *   Esai::execTX  -> writeSlotToFrame -> m_txFrame    frame assembly
-		 *   Esai::writeTXimpl -> the installed WriteTxCallback, which the DSP
-		 *                        set bound to ChainAdapter::audioTxCallback(N-1)
-		 *   fromEsaiFrame(in, kAudioReg)    the chain's Tx conversion point
-		 *   m_audio[N].write()              the tail mailbox
-		 *   ChainAdapter::advanceAll        the swap
-		 *   ChainAdapter::extractCodecSink  the egress read
-		 *   CodecSink::push / Scheduler::pull
-		 *   the walk's own two predicates
-		 *
-		 * The links it does not traverse, stated so no reader credits it with
-		 * them: no DSP core executes any part of it -- the sentinel is placed
-		 * in the transmit buffer rather than computed into it -- and positions
+		 * What it does not traverse, stated so no reader credits it with them:
+		 * no DSP core executes any part of it, since the sentinel is placed in
+		 * the transmit buffer rather than computed into it, and positions
 		 * 0..N-2, every receive callback, the mailbox hop chain and
-		 * `injectCodecSource` are all upstream of the tail and are not on its
-		 * path. It is a control for the arrival instrument and not for the
-		 * chain: it says the sink can report a frame the tail transmitted, and
-		 * says nothing about whether anything reaches the tail.
+		 * `injectCodecSource` are upstream of the tail and off its path. It is a
+		 * control for the arrival instrument and not for the chain: it says the
+		 * sink can report a frame the tail transmitted, and says nothing about
+		 * whether anything reaches the tail.
 		 *
 		 * It runs after the walk, on the same machine, so it cannot move the
-		 * measurement it qualifies: `arrival` and `framesPulled` are already
-		 * latched above.
-		 *
-		 * Every enabled transmitter is written, not just register 0. Esai's
-		 * underrun latch fires when the written mask does not cover the enabled
-		 * mask, and a control that latched an underrun would be measuring the
-		 * underrun path rather than the arrival path. */
+		 * measurement it qualifies -- `arrival` and `framesPulled` are latched
+		 * above. */
 		int  sinkControlArrival = -1;
 		bool sinkControlExact   = false;
 		int32_t sinkControlL    = 0;
@@ -1706,6 +1685,11 @@ namespace
 			{
 				++sinkControlQuanta;
 
+				// Every enabled transmitter is written, not just register 0:
+				// Esai's underrun latch fires when the written mask does not
+				// cover the enabled mask, and a control that latched an underrun
+				// would be measuring the underrun path rather than the arrival
+				// path.
 				const dsp56k::TWord enabled = tailEsai.hasEnabledTransmitters();
 
 				for(uint32_t reg = 0; reg < g_esaiTransmitters; ++reg)

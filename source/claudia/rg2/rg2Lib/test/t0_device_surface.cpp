@@ -87,7 +87,7 @@ namespace
 int main()
 {
 	static_assert(std::is_base_of<synthLib::Device, G2Device>::value,
-		"rg2::Device subclasses synthLib::Device and not wLib::Device -- the wLib link is rejected (docs/divergence.md)");
+		"rg2::Device subclasses synthLib::Device and not wLib::Device");
 
 	/* getSamplerate() returns 96000.0f, unconditionally, from a constructed
 	 * device. The no-firmware path constructs and answers. */
