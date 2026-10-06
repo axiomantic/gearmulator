@@ -33,12 +33,12 @@ ctest -C Release
 
 macOS uses the Xcode generator: `cmake -G Xcode -S . -B temp/cmake`.
 
-Per-synth CMake flags: `-Dgearmulator_SYNTH_OSIRUS=ON`, `_OSTIRUS`, `_VAVRA`, `_XENIA`, `_NODALRED2X`, `_JE8086`. Plugin format flags: `gearmulator_BUILD_JUCEPLUGIN`, `_VST2`, `_VST3`, `_CLAP`, `_LV2`, `_AU`, `_Standalone`, plus `gearmulator_BUILD_FX_PLUGIN`.
+Per-synth CMake flags: `-Dgearmulator_SYNTH_OSIRUS=ON`, `_OSTIRUS`, `_VAVRA`, `_XENIA`, `_NODALRED2X`, `_JE8086`, `_REDGECKO2`. Plugin format flags: `gearmulator_BUILD_JUCEPLUGIN`, `_VST2`, `_VST3`, `_CLAP`, `_LV2`, `_AU`, `_Standalone`, plus `gearmulator_BUILD_FX_PLUGIN`.
 
 Convenience scripts: `build_win64.bat`, `build_linux.sh`, `build_mac.sh`.
 
 **Test consoles** — the fastest way to iterate on DSP/device code without building a plugin:
-`virusTestConsole`, `virusIntegrationTest`, `mqTestConsole`, `xtTestConsole`, `n2xTestConsole`, `JE8086TestConsole`.
+`virusTestConsole`, `virusIntegrationTest`, `mqTestConsole`, `xtTestConsole`, `n2xTestConsole`, `JE8086TestConsole`, `rg2TestConsole`.
 
 ### Platform-specific build settings
 
@@ -94,6 +94,7 @@ includes like `../../foo/bar.h` — they break the next time anything moves.
 | Xenia | Waldorf MW II/XT | `waldi/xt/xtLib/` | `waldi/xt/xtJucePlugin/` |
 | Nodal Red 2x | Nord Lead/Rack 2x | `claudia/n2x/n2xLib/` | `claudia/n2x/n2xJucePlugin/` |
 | JE-8086 | Roland JP-8000 | `ronaldo/je8086/jeLib/` | `ronaldo/je8086/jeJucePlugin/` |
+| Red Gecko 2 | Clavia Nord Modular G2 | `claudia/rg2/rg2Lib/` | `claudia/rg2/rg2JucePlugin/` |
 | DSPBridge | Network bridge | `framework/tools/bridge/` | — |
 
 Shared per-manufacturer code: `waldi/common/wLib/` (microQ + XT), `ronaldo/common/` and `ronaldo/custom_chips/` (Roland).
