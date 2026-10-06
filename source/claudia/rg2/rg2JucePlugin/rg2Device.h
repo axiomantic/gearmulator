@@ -134,6 +134,8 @@ namespace rg2
 		const TransportSocketServer* socketServer() const noexcept { return m_socketServer.get(); }
 		TransportSocketServer* socketServer() noexcept { return m_socketServer.get(); }
 
+		Board* board() const noexcept { return m_board.get(); }
+
 		/* ---------------------------------------------------------------
 		 * The boot-on-restore sequence. Every step below runs on the calling
 		 * thread, which is the boot thread, and the last of them publishes
@@ -338,12 +340,6 @@ namespace rg2
 		 * and the production value is m_owningDriver. */
 		void installDriver(ISchedulerDriver* _driver) noexcept { m_driver = _driver; }
 		ISchedulerDriver* driver() const noexcept { return m_driver; }
-
-		/* The booted machine, for evidence and for nothing else. Protected,
-		 * so the evidence path is a subclass and not the whole plugin:
-		 * nothing outside this hierarchy may reach the Board. Null until
-		 * boot() has built one. */
-		Board* board() const noexcept { return m_board.get(); }
 
 		uint32_t m_numSamplesProcessed = 0;
 
