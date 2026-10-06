@@ -1,78 +1,26 @@
 // A GDB remote-serial-protocol server that answers a debugger over a loopback
-// socket and drives the machine through the surface the `Board` already
-// publishes.
+// socket and drives the machine through the surface Board already publishes.
 //
-// `mcf5407.h` documents the register file as 0..7 = d0..d7, 8..15 = a0..a7,
-// 16 = SR, 17 = PC, which is exactly GDB's m68k order -- so `g` and `G` are a
-// direct eighteen-register big-endian serialisation with no remapping. They
-// reach the machine through `Board::mcuReg` and `Board::setMcuReg`.
+// It owns no emulator state: the stub holds a reference to a Board it did not
+// create, and keeps its breakpoints and watchpoints in its own containers. The
+// one intrusion is the borrowed McuRunner* in Scheduler, null when no stub is
+// attached, costing one null test per quantum.
 //
-// It owns no emulator state: the stub holds a reference to a `Board` it did not
-// create, and it holds its breakpoints and its watchpoints in its own
-// containers. The one intrusion is the borrowed `McuRunner*` in `Scheduler`,
-// null when no stub is attached, costing one null test for each quantum.
+// Opt-in and absent by default -- `rg2TestConsole --gdb <port>` starts it. A
+// debugger that changed timing when nobody was debugging would invalidate the
+// suite it exists to serve.
 //
-// `Board::runMcu(1)` forwards to `mcf5407_exec(ctx, 1)`, whose loop runs while
-// `spent < maxCycles` -- so a budget of one runs exactly one instruction,
-// whatever that instruction costs. A budget of zero runs nothing.
+// The session drives the whole machine and not the MCU alone; attachScheduler()
+// is that switch. `c` advances quantum by quantum until a stop, `s` retires one
+// MCU instruction and turns one whole quantum -- see resume(), step() and
+// driveQuanta() for what each costs.
 //
-// `Z0`/`z0` add and remove an address the step loop compares `mcuReg(17)`
-// against, with `==` and not with `>=`: a stop is an equality and an address
-// the machine steps over is not a stop. `Z2`/`z2`/`Z3`/`z3` add and remove an
-// address range that a wrapper placed in front of the memory map's own targets
-// tests on every access. The wrapper is how the stub sees a write without the
-// `Board` gaining a member: `MemoryMap::target` hands out what is attached and
-// `MemoryMap::attach` puts something else there, so the stub interposes itself
-// and forwards. The originals are restored when the stub is destroyed.
-//
-// The stub is opt-in and absent by default: `rg2TestConsole --gdb <port>` starts
-// it. A debugger that changed timing when nobody was debugging would
-// invalidate the suite it exists to serve.
-//
-// Loopback only. The listening socket binds INADDR_LOOPBACK and never
-// INADDR_ANY. This is an unauthenticated command channel with full read and
-// write access to the emulated machine; it must not be reachable from another
-// host, and the bind is where that is decided.
-//
-// There is no DSP56300 stub: that core has no stock GDB target and would need
-// its own register map and target description. There is no symbol loading and
-// no source-level anything: the firmware is a stripped binary.
-//
-// The session drives the whole machine, not the MCU alone. On every ordinary
-// boot the MCU issues a host command and busy-waits for a DSP to answer, at
-// `0x300505D4`, spinning on an inverted HDI08 ISR byte after `CVR=0xD6`: a
-// session that stepped `Board::runMcu` alone would never end that wait, and a
-// breakpoint past the handshake would report a clean, plausible miss.
-//
-// The full-advance path is the Scheduler's and this file does not write a second
-// one. `Scheduler::runFrames` holds the quantum order -- swap, ingress, panel,
-// SOF, MCU, the DSPs, egress. What the stub adds is the one thing a quantum
-// does not offer: a decision point between two MCU instructions,
-// where a breakpoint compare has to happen. `Scheduler::McuRunner` is that point.
-// The stub installs itself as the runner; the runner steps `Board::runMcu(1)` up
-// to the quantum's own want, checking breakpoints and watchpoints after each
-// instruction, and answers with the cycles it spent.
-//
-// A `c` advances the whole machine, quantum by quantum, until a breakpoint, a
-// watchpoint, the machine's own halt or the bound. A breakpoint is an equality
-// on the MCU program counter, tested after every single instruction, so the DSP
-// advance cannot swallow or delay a hit. The quantum in which the stop happens
-// runs its remaining phases to completion, so the DSP set can be up to one
-// quantum ahead of the MCU at the stop; stopping mid-quantum would leave the
-// machine in a state the scheduler's own order never produces.
-//
-// One `s` retires exactly one MCU instruction and turns one whole quantum, so
-// the DSP set, the chain and the panel each advance by one block. That is not
-// timing-faithful: a quantum's MCU budget is thousands of cycles and a step
-// spends one instruction's worth, and the cycle debt rule banks no credit for
-// the shortfall. The alternative, freezing everything but the MCU, distorts the
-// rate without limit, because no amount of stepping ever advances the DSPs, so a
-// stepped session can never cross the handshake. A question about timing is
-// therefore a question for `c` and a breakpoint, and not for a stepping session.
-//
-// Breakpoints are MCU-side only. The DSPs run; they are not instrumented. There
-// is no way to break on a DSP56300 program counter, to read a DSP register
-// through this session, or to watch a DSP memory address.
+// TODO(dsp): the DSP56300 side is not instrumented at all. The DSPs run, but
+// nothing here can break on a DSP program counter, read a DSP register or watch
+// a DSP memory address; that core has no stock GDB target and would need its own
+// register map and target description.
+// TODO(symbols): no symbol loading and no source-level anything -- the firmware
+// is a stripped binary.
 
 #pragma once
 
@@ -106,7 +54,10 @@ namespace rg2
 
 		/* Gives the session the whole machine. Without this the stub drives
 		 * `Board::runMcu` and nothing else, and a breakpoint past an HDI08
-		 * handshake reports a clean, plausible miss rather than being reached.
+		 * handshake reports a clean, plausible miss rather than being reached:
+		 * on every ordinary boot the MCU issues a host command and busy-waits
+		 * for a DSP to answer, at 0x300505D4, spinning on an inverted HDI08 ISR
+		 * byte after CVR=0xD6, and stepping the MCU alone never ends that wait.
 		 *
 		 * May be called once, and the stub does not own the Scheduler. The stub
 		 * installs itself as that Scheduler's `McuRunner` and removes itself in
@@ -117,7 +68,12 @@ namespace rg2
 		/* Bind and listen on 127.0.0.1. A port of zero asks the operating
 		 * system for a free one, so that two runs cannot collide. Returns the
 		 * port actually bound, and zero on failure -- the caller has no
-		 * listening socket in that case and nothing else here will answer. */
+		 * listening socket in that case and nothing else here will answer.
+		 *
+		 * The bind is INADDR_LOOPBACK and never INADDR_ANY, and this is where
+		 * that is decided: the protocol is an unauthenticated command channel
+		 * with full read and write access to the emulated machine, so it must
+		 * not be reachable from another host. */
 		uint16_t listenOn(uint16_t _port);
 
 		uint16_t port() const { return m_port; }
@@ -147,7 +103,12 @@ namespace rg2
 		 * carries the window base to report an absolute address -- taken from the
 		 * map rather than copied, for the reason board.h's FlashWindow gives:
 		 * two copies of one base agree with each other through any mutation of
-		 * either. */
+		 * either.
+		 *
+		 * Interposition is how the stub sees an access without Board gaining a
+		 * member: MemoryMap::target hands out what is attached and
+		 * MemoryMap::attach puts something else there, so the stub inserts
+		 * itself and forwards. The originals are restored on destruction. */
 		class Watcher final : public BusTarget
 		{
 		public:
@@ -211,24 +172,59 @@ namespace rg2
 		std::string handlePacket(const std::string& _payload);
 
 		// The commands.
+
+		/* `g` and `G`. mcf5407.h documents the register file as 0..7 = d0..d7,
+		 * 8..15 = a0..a7, 16 = SR, 17 = PC, which is exactly GDB's m68k order,
+		 * so these are a direct eighteen-register big-endian serialisation with
+		 * no remapping, through Board::mcuReg and Board::setMcuReg. */
 		std::string readRegisters() const;
 		std::string writeRegisters(const std::string& _hex);
 		std::string readMemory(const std::string& _arguments);
 		std::string writeMemory(const std::string& _arguments);
+		/* One `s`: exactly one MCU instruction, and one whole quantum, so the
+		 * DSP set, the chain and the panel each advance by one block. That is
+		 * not timing-faithful -- a quantum's MCU budget is thousands of cycles,
+		 * a step spends one instruction's worth, and the cycle debt rule banks
+		 * no credit for the shortfall. Freezing everything but the MCU instead
+		 * would distort the rate without limit and could never cross the
+		 * handshake, since no amount of stepping advances the DSPs. A question
+		 * about timing is a question for `c` and a breakpoint. */
 		std::string step();
+
+		/* One `c`: whole quanta until a breakpoint, a watchpoint, the machine's
+		 * halt or the bound. The quantum the stop happens in runs its remaining
+		 * phases to completion, so the DSP set can be up to one quantum ahead of
+		 * the MCU at the stop; stopping mid-quantum would leave the machine in a
+		 * state the scheduler's own order never produces. */
 		std::string resume();
 
 		/* The MCU half of one quantum, instruction by instruction. Steps
 		 * `Board::runMcu(1)` until it has spent `_want` cycles, until the
 		 * instruction allowance runs out, or until a stop condition fires, and
-		 * answers the cycles it actually spent. */
+		 * answers the cycles it actually spent.
+		 *
+		 * Board::runMcu(1) forwards to mcf5407_exec(ctx, 1), whose loop runs
+		 * while spent < maxCycles, so a budget of one retires exactly one
+		 * instruction whatever that instruction costs, and a budget of zero runs
+		 * nothing. Stepping by one is what gives a breakpoint compare a decision
+		 * point between two instructions, which a whole quantum does not offer. */
 		uint32_t runMcuBudget(uint32_t _want) noexcept;
 
+		/* Compares mcuReg(17) against each `Z0` address with `==` and not with
+		 * `>=`: a stop is an equality, and an address the machine steps over is
+		 * not a stop. Tested after every single instruction, so the DSP advance
+		 * cannot swallow or delay a hit. MCU-side only. */
 		bool atBreakpoint() const;
 
 		/* Drive whole quanta until `m_stop`, the machine's halt or `_bound`.
-		 * The one site that turns the Scheduler. */
+		 * The one site that turns the Scheduler, whose runFrames() owns the
+		 * quantum order -- swap, ingress, panel, SOF, MCU, the DSPs, egress.
+		 * This file does not write a second advance path. */
 		void driveQuanta(uint64_t _bound);
+
+		/* `Z0`/`z0` add and remove a breakpoint address; `Z2`/`z2`/`Z3`/`z3` add
+		 * and remove a watched address range that the Watcher tests on every
+		 * access. */
 		std::string setPoint(const std::string& _arguments, bool _insert);
 
 		std::string stopReply() const;
