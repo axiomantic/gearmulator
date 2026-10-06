@@ -107,11 +107,11 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # at the link step and not at the fetch, because the fetch still succeeds.
 
 set(RG2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
-set(RG2_MCF5407_GIT_TAG "babb7dea5d8e8d29dac91f29067c1384640de557" CACHE STRING "The commit or tag of axiomantic/mcf5407 to fetch")
+set(RG2_MCF5407_GIT_TAG "c7e68903c734b22c7ebad63b65ef3dfc82faeec9" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5407
-	GIT_REPOSITORY https://github.com/axiomantic/mcf5407.git
+	GIT_REPOSITORY https://github.com/axiomantic/coldfire.git
 	GIT_TAG ${RG2_MCF5407_GIT_TAG}
 )
 
