@@ -26,10 +26,6 @@ set_property(TARGET hardwareLib PROPERTY FOLDER "Gearmulator")
 
 target_include_directories(hardwareLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-if(TARGET coldfire::coldfire)
-	target_include_directories(hardwareLib PUBLIC
-		$<TARGET_PROPERTY:coldfire::coldfire,INTERFACE_INCLUDE_DIRECTORIES>)
-endif()
 
 if(BUILD_TESTING)
 	add_executable(hd44780_test hd44780_test.cpp)
@@ -52,13 +48,11 @@ if(BUILD_TESTING)
 	set_property(TARGET am29f_test PROPERTY FOLDER "Tests")
 	add_test(NAME am29f COMMAND am29f_test)
 
-	if(TARGET coldfire::coldfire)
-		add_executable(isp1181_test isp1181_test.cpp)
-		target_link_libraries(isp1181_test PRIVATE hardwareLib coldfire::coldfire)
-		set_property(TARGET isp1181_test PROPERTY EXCLUDE_FROM_ALL FALSE)
-		set_property(TARGET isp1181_test PROPERTY FOLDER "Tests")
-		add_test(NAME isp1181 COMMAND isp1181_test)
-	endif()
+	add_executable(isp1181_test isp1181_test.cpp)
+	target_link_libraries(isp1181_test PRIVATE hardwareLib)
+	set_property(TARGET isp1181_test PROPERTY EXCLUDE_FROM_ALL FALSE)
+	set_property(TARGET isp1181_test PROPERTY FOLDER "Tests")
+	add_test(NAME isp1181 COMMAND isp1181_test)
 endif()
 
 #target_compile_options(hardwareLib PRIVATE -fsanitize=thread)
