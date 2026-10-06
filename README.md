@@ -33,6 +33,7 @@ At the moment, the following devices are supported:
 * Nodal Red 2x: Clavia Nord Lead/Rack 2x
 * JE-8086: Roland JP-8000
 * 88emu: Roland MT-32 (both boards), CM-32L, CM-32P, CM-64 and Sound Canvas family (SC-55, SC-88, SC-88pro, SC-8820, SC-8850 and variants)
+* Red Gecko 2: Clavia Nord Modular G2
 
 ### Compiling
 
@@ -60,6 +61,7 @@ Additional options to select which devices to build:
 | gearmulator_SYNTH_NODALRED2X | Build Nodal Red 2x | on |
 | gearmulator_SYNTH_JE8086 | Build JE-8086 | on |
 | gearmulator_SYNTH_88EMU | Build 88emu | on |
+| gearmulator_SYNTH_REDGECKO2 | Build Red Gecko 2 | on |
 | gearmulator_COMPONENT_DSPBRIDGE | Build the DSPBridge server and the device plugins it loads | on |
 
 ### Join us on Discord
