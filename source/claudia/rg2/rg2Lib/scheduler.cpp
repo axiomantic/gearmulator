@@ -6,21 +6,17 @@
  * these comparisons and no later object can be built from a Config that failed
  * one.
  *
- * A Config can fail more than one row, and then the reported status is
- * whichever comparison runs first. The alternative considered was to test the
- * lookahead bound early, on the ground that it is the most expensive mistake to
- * ship; it was rejected because the bound reads a value the DSP-count row has
- * not yet vetted. `D_chain` is `(N - 1) * hopFrames` over the unsigned members
- * ChainAdapter holds, so a count of 0 makes the subtraction wrap, the chain
- * delay enormous and the bound exceeded -- and a factory that tested the bound
- * first would answer BadLookahead for a Config whose actual defect is the
- * count. Running the table in order means every value the later rows read has
- * already been vetted by an earlier one.
+ * A Config can fail more than one row, and the reported status is whichever
+ * comparison runs first. The table's order is load-bearing: every value a later
+ * row reads has already been vetted by an earlier one. Testing the lookahead
+ * bound early would break that, because the bound reads a value the DSP-count
+ * row vets -- `D_chain` is `(N - 1) * hopFrames` over the unsigned members
+ * ChainAdapter holds, so a count of 0 wraps the subtraction, makes the chain
+ * delay enormous and exceeds the bound, and the answer would be BadLookahead
+ * for a Config whose actual defect is the count.
  *
- * What that does not establish: it fixes the reported status for a Config that
- * fails several rows, and says nothing about which single row a caller's Config
- * was meant to fail. A caller reading one status back learns the first defect
- * and not the only one.
+ * So a caller reading one status back learns the first defect and not the only
+ * one.
  *
  * Nothing in this file throws, and `create` uses no assertion: a release build
  * removes an assertion, so every rejection has to survive NDEBUG. The return
@@ -781,76 +777,12 @@ namespace rg2
 		m_owner = std::thread::id{};
 	}
 
-	/* The block is flat and it is a composition, in this fixed order:
-	 *
-	 *   1. This object's own state -- the version word first, then the virtual
-	 *      frame index, the MCU context's rational accumulator, cycle debt and
-	 *      long-dispatch counter, the same three for every DSP context, the
-	 *      sticky fault latch and its disjunction, and the adapter-owned counter
-	 *      baselines.
-	 *   2. Board::stateSave
-	 *   3. ChainAdapter::stateSave
-	 *   4. DspSet::stateSave
-	 *
-	 * stateLoad reads them back in the same order and returns the first non-Ok
-	 * status any of the limbs produces.
-	 *
-	 * The version word is the first field and it is compared before the first
-	 * write. A version word that nothing compares is decoration; one compared
-	 * after a partial apply leaves a machine no run produced. Nothing throws and
-	 * a release build removes an assertion, so the returned Status is the whole
-	 * channel a refusal has -- which is why stateLoad returns rg2::Status and not
-	 * void.
-	 *
-	 * What a refusal from one of the limbs leaves behind: each limb guards
-	 * before its own first write, so a limb that refuses changes nothing of its
-	 * own; the limbs before it in the order above have already been applied.
-	 * Only the version-word refusal is total, because it happens before anything
-	 * is applied at all. A total rollback would need a self-snapshot, and taking
-	 * one inside a noexcept method means an allocation whose failure terminates
-	 * the process.
-	 *
-	 * The DSP limb is bracketed by the detach and its inverse. DspSet::stateLoad
-	 * refuses a set holding bridges -- and the Board's constructor attaches them
-	 * unconditionally, so every set reachable from a Scheduler holds them. The
-	 * pair moves the same bridge objects aside and back, which is what keeps the
-	 * programLanded pointers this class borrowed at construction valid across
-	 * the load; dspSet.h carries the full reason.
-	 *
-	 * The re-attach runs on every path out of the bracket, refusal included. A
-	 * Scheduler left holding a detached set would have every run gate shut for
-	 * the life of the object with no diagnostic anywhere.
-	 *
-	 * What the block does not cover, and why.
-	 *
-	 * The codec regime, and it is listed first because it is the one exclusion
-	 * that is a repair and not an original limit. A snapshot is necessarily
-	 * taken in the play regime, and the boot sequence runs its boot quanta in
-	 * the boot regime so that neither codec queue is touched and the boot cannot
-	 * stall on a full sink. A regime that travelled through the block put those
-	 * boot quanta in the play regime whenever a snapshot had been restored --
-	 * the exact merge the boot sequence forbids -- and the sink then filled
-	 * part-way through the boot. The repair is exclusion at stateSave and not a
-	 * refusal at stateLoad: a field that is never written cannot be restored by
-	 * a future caller who has not read this comment, whereas a refusal is a rule
-	 * a later edit can quietly drop. The regime is therefore the loading
-	 * machine's own and survives a load unchanged, which is what makes a restore
-	 * legal inside a boot.
-	 *
-	 * CallbackTimer, because it carries no emulated state and a state file
-	 * recorded on a fast machine must load identically on a slow one. The
-	 * recorded owning thread, for the same reason: it is a property of the
-	 * process that took the snapshot and not of the machine. And both codec
-	 * queues, which is the one omission a reader could mistake for an oversight:
-	 * the queues expose no way to read a ring without consuming it and no way to
-	 * restore a counter, so covering them needs new surface on codecQueues.h.
-	 * The consequence: a snapshot taken in the play regime restores a machine
-	 * whose queues hold whatever the load left in them. The boot regime is
-	 * unaffected, because a boot quantum touches neither queue.
-	 *
-	 * Every field moves through memcpy. The destination is a caller-supplied
-	 * void* with no alignment guarantee, so a typed store into it would be
-	 * undefined for every field wider than a byte.
+	/* The state block is flat, and a composition in this fixed order: this
+	 * object's own state, then Board, ChainAdapter and DspSet. Its own state is
+	 * the version word first, then the virtual frame index, the MCU context's
+	 * rational accumulator, cycle debt and long-dispatch counter, the same three
+	 * for every DSP context, the sticky fault latch and its disjunction, and the
+	 * adapter-owned counter baselines. stateLoad reads them back in that order.
 	 */
 	namespace
 	{
@@ -871,6 +803,9 @@ namespace rg2
 		 * both its length and its contents. */
 		constexpr uint32_t g_schedulerStateVersion = 3u;
 
+		/* Every field moves through memcpy. The block is a caller-supplied void*
+		 * with no alignment guarantee, so a typed store into it would be
+		 * undefined for every field wider than a byte. */
 		void put32(uint8_t*& _cursor, const uint32_t _value) noexcept
 		{
 			std::memcpy(_cursor, &_value, sizeof(_value));
@@ -944,8 +879,28 @@ namespace rg2
 
 		auto* cursor = static_cast<uint8_t*>(_dst);
 
-		/* The codec regime is not written; the block comment above carries the
-		 * reason. */
+		/* The codec regime is deliberately not written. A snapshot is taken in
+		 * the play regime, while the boot sequence runs its boot quanta in the
+		 * boot regime so that neither codec queue is touched and the boot cannot
+		 * stall on a full sink. A regime carried through the block would put
+		 * those boot quanta in the play regime after any restore -- the merge
+		 * the boot sequence forbids -- and fill the sink part-way through the
+		 * boot. Excluding it here rather than refusing it in stateLoad is the
+		 * stronger form: a field that is never written cannot be restored by a
+		 * later caller, whereas a refusal is a rule a later edit can drop. So
+		 * the regime stays the loading machine's own, which is what makes a
+		 * restore legal inside a boot.
+		 *
+		 * Also excluded: CallbackTimer, which carries no emulated state, because
+		 * a state file recorded on a fast machine must load identically on a
+		 * slow one; the owning thread, for the same reason, being a property of
+		 * the process rather than the machine; and both codec queues, which is
+		 * the one omission a reader could mistake for an oversight -- the queues
+		 * expose no way to read a ring without consuming it and no way to
+		 * restore a counter, so covering them needs new surface on
+		 * codecQueues.h. A snapshot taken in the play regime therefore restores
+		 * a machine whose queues hold whatever the load left in them; the boot
+		 * regime is unaffected, because a boot quantum touches neither queue. */
 		put32(cursor, g_schedulerStateVersion);
 		put64(cursor, m_frameIndex);
 
@@ -988,7 +943,21 @@ namespace rg2
 
 		const auto* cursor = static_cast<const uint8_t*>(_src);
 
-		/* Before the first write. */
+		/* Compared before the first write, which is the whole point of putting
+		 * the version word first. A version word nothing compares is
+		 * decoration, and one compared after a partial apply leaves a machine no
+		 * run produced.
+		 *
+		 * This refusal is the only total one: every limb below guards before its
+		 * own first write, so a limb that refuses changes nothing of its own,
+		 * but the limbs ahead of it in the order have already been applied. A
+		 * total rollback would need a self-snapshot, and taking one inside a
+		 * noexcept method means an allocation whose failure terminates the
+		 * process.
+		 *
+		 * Nothing here throws and a release build removes an assertion, so the
+		 * returned Status is the whole channel a refusal has -- which is why
+		 * this returns rg2::Status and not void. */
 		if(get32(cursor) != g_schedulerStateVersion)
 			return Status::BadStateImage;
 
@@ -1039,8 +1008,16 @@ namespace rg2
 		if(chainStatus != Status::Ok)
 			return chainStatus;
 
-		/* The re-attach runs on the refusal path as well as on the success path,
-		 * so no exit from here leaves the set detached. */
+		/* DspSet::stateLoad refuses a set that holds bridges, and the Board's
+		 * constructor attaches them unconditionally, so every set reachable from
+		 * a Scheduler holds them. The bracket moves the same bridge objects
+		 * aside and back, which is what keeps the programLanded pointers this
+		 * class borrowed at construction valid across the load; dspSet.h carries
+		 * the full reason.
+		 *
+		 * The re-attach runs on the refusal path as well as on the success path:
+		 * a Scheduler left holding a detached set would have every run gate shut
+		 * for the life of the object, with no diagnostic anywhere. */
 		DspSet& set = m_board.dspSet();
 
 		set.detachHdi08Bridges();
