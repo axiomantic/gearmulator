@@ -50,6 +50,15 @@ set_property(TARGET t0_panel PROPERTY FOLDER "RG2/test")
 add_test(NAME t0_panel COMMAND t0_panel)
 set_tests_properties(t0_panel PROPERTIES LABELS "UnitTest")
 
+# ----------------- the front panel interaction
+
+add_executable(t0_front_panel_interaction t0_front_panel_interaction.cpp)
+target_link_libraries(t0_front_panel_interaction PRIVATE rg2Lib)
+set_property(TARGET t0_front_panel_interaction PROPERTY FOLDER "RG2/test")
+
+add_test(NAME t0_front_panel_interaction COMMAND t0_front_panel_interaction)
+set_tests_properties(t0_front_panel_interaction PROPERTIES LABELS "UnitTest")
+
 # ----------------- the CS1 decode
 
 add_executable(t0_cs1_decode t0_cs1_decode.cpp)
