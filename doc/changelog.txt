@@ -226,6 +226,13 @@ JE8086:
         so and explains how to allow it, instead of reporting every ROM as
         missing.
 
+RedGecko2:
+
+- [New] The build carries the Red Gecko 2 (RG2) as a new product. The
+        option gearmulator_SYNTH_REDGECKO2 turns it on and it is on by default.
+        The product is a skeleton at this point: it declares the targets
+        rg2Lib, rg2TestConsole and rg2JucePlugin and it emulates nothing.
+
 2.2.25:
 
 88emuPlayer:
