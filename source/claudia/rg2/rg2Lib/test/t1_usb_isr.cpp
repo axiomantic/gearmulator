@@ -2,63 +2,15 @@
 // interrupt service routine, and does that routine issue the command that takes
 // the interrupt bit back?
 //
-// Tier T1: it boots the Clavia firmware and reads one file out of the artifact
-// corpus, so it skips with a reason when NMG2_ARTIFACTS names no directory.
+// It boots the Clavia firmware and reads one file out of the artifact corpus,
+// so it skips with a reason when NMG2_ARTIFACTS names no directory.
 //
-// Two things are observed: the interrupt line, and the command port.
-//
-//   1. The command stream. Every byte the firmware writes to the CS3 command
-//      port, in order. The port split is the device model's own: the chip's A0
-//      is wired to CPU A4, so bit 4 of the CS3-relative offset is the
-//      command/data select and a write with that bit set is a command byte.
-//      The recorder is a BusTarget that wraps the Board's own CS3 target and
-//      forwards every cycle to it unchanged, so it is on the firmware's own
-//      path and is not a second door.
-//
-//   2. The interrupt line. `Board::onUsbIrq` calls
-//      `InterruptController::setExternalPending(ExternalPin::Irq3, ...)`, and
-//      the controller derives the level and the autovector bit from IRQPAR and
-//      AVR, which the firmware programs through the MBAR window. So the level
-//      and the autovector bit are read back off the controller and are not
-//      written here.
-//
-//   3. The service routine. A counter on 16-bit SDRAM reads at 0x30053C38,
-//      which is the address the CODE image installs with
-//      install_autovector(3, ...). The MCF5407 core fetches every instruction
-//      word through the bus read callback as a 16-bit access at the
-//      instruction's own address, so a counter on 16-bit reads at one SDRAM
-//      offset is an instruction-fetch counter for that address.
-//
-// The instrument's controls, both from the same population, because a zero from
-// a counter that never fires is not a measurement.
-//
-//   known positive   the address the machine itself is sitting at when the
-//                    window opens, read off Board::mcuReg(17) at that instant.
-//                    It is not chosen by this file.
-//   known negative   an address inside the vector table. Vectors are read as
-//                    32-bit longwords and never fetched as instruction words,
-//                    so the same counter must read 0 there.
-//
-// The two runs deliver to different endpoints, and the endpoint is a Board
-// configuration value rather than anything this file reaches past the Board to
-// set. Run A uses the shipped default, endpoint 3, and hands over a real
-// `.pch2`. Run B moves `BoardConfig::usbProtocolEndpoint` to 0 and hands over
-// the small in-process container, because the model gives endpoint 0 a single
-// 64-byte OUT buffer and the corpus's largest framed object is 2492 bytes: a
-// real patch frame would be refused at that endpoint and would raise no bit at
-// all, so a zero from it would measure the buffer and not the wire.
-//
-// The discriminator between endpoint 3 and endpoint 2 is this file's own
-// command recorder. The buffer table -- endpoint 2 is the lowest non-control
-// endpoint the model gives a 64-byte double buffer -- is a firmware
-// configuration and not a property of the part, so it discriminates nothing.
-// What does discriminate is what the firmware does with a packet: on endpoint 3
-// the boot-time stream is followed by read-interrupt-register, endpoint-3
-// status, read endpoint 3's buffer, clear endpoint 3's buffer -- the
-// authority's OUT sequence, a drain. On endpoint 2 the firmware issues nothing
-// at all. Row 6 below reads back the DcEndpointConfiguration bytes the firmware
-// itself wrote and reports EPDIR per slot, which is the same answer from the
-// configuration side.
+// Three things are observed, and each is documented where it is set up below:
+// the CS3 command stream (Cs3Recorder), the interrupt line (read back off the
+// InterruptController rather than programmed here) and the service routine
+// itself (a 16-bit SDRAM fetch counter at g_probeIsr). Both of the instrument's
+// controls are drawn from the same population as the measurement, because a
+// zero from a counter that never fires is not a measurement.
 //
 // Every verdict is an observable and not an assert(). A release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
@@ -1286,6 +1238,11 @@ int main()
 		report(real);
 
 		// ------------------------------- run B: a packet the control endpoint fits
+		//
+		// Endpoint 0 gets a single 64-byte OUT buffer, and the largest framed
+		// object in the corpus read above is 2492 bytes, so a real patch frame
+		// would be refused at this endpoint and raise no bit at all: a zero from
+		// it would measure the buffer rather than the wire.
 		const std::vector<uint8_t> probeFile = buildProbeContainer();
 
 		RunResult control0;
@@ -1534,9 +1491,9 @@ int main()
 		//    the endpoint choice a measurement rather than a reading of a
 		//    buffer table.
 		//
-		//    `fifoShape` in `src/isp1181/isp1181.nim` labels endpoint 2's buffer
-		//    64 bytes double-buffered and endpoint 3's 64 bytes single, and both
-		//    numbers are firmware configuration -- ISP1362 Rev. 06 pp.51-53 put
+		//    The buffer table labels endpoint 2's buffer 64 bytes double-buffered
+		//    and endpoint 3's 64 bytes single, and both numbers are firmware
+		//    configuration -- ISP1362 Rev. 06 pp.51-53 put
 		//    the size in FFOSZ[3:0] and the scheme in DBLBUF, both inside
 		//    DcEndpointConfiguration. Nothing reads the firmware's writes back
 		//    into that table, so the table cannot discriminate an endpoint.
