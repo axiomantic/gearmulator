@@ -1,82 +1,12 @@
-/* A stepped sine sweep from 20 Hz to 20 kHz driven through
- * synthLib::ResamplerInOut alone -- no firmware, no artifact, no emulated
- * machine, no rg2::Device and no rg2::Plugin -- in Resampler::Mode::MameHq, at
- * each host rate in the table. It reports the peak-to-peak deviation from 0 dB
- * across the swept band and compares it against a committed target.
+/* Passband ripple of synthLib::ResamplerInOut, measured on its own: a stepped
+ * sine sweep from 20 Hz to 20 kHz in Resampler::Mode::MameHq, at each host
+ * rate in g_hostRates, with no firmware, no emulated machine and no
+ * rg2::Device anywhere. It reports the peak-to-peak deviation from 0 dB over
+ * the swept band and compares it against g_committedTargetDb.
  *
- * The target is a committed constant and nothing in this program writes it.
- * g_committedTargetDb below is where the number lives, it is a constexpr in
- * committed source, and only a deliberate edit changes it. This file opens no
- * file, reads no environment variable and writes nothing anywhere: a test that
- * rewrote its own target would pass for every possible measurement, and a
- * measurement with no predicate is a recording, not a check. When a
- * measurement exceeds the target the run fails and prints both figures.
- *
- * The hard ceiling is checked against the target itself, not only against the
- * measurement: no committed target may sit above 0.10 dB, so an edit that
- * raises the target past the ceiling fails here rather than passing quietly.
- *
- * The method, stated so it is reproducible.
- *
- *  1. One ResamplerInOut per host rate, constructed with zero input channels
- *     and two output channels. The device rate is 96 kHz, which is what
- *     rg2::Device::getSamplerate() answers unconditionally. Zero input
- *     channels is deliberate and it removes nothing that is measured: the
- *     sweep is generated inside the process callback, at the device rate, so
- *     the host-to-device input resampler would only ever filter silence.
- *     Every AudioBuffer loop over an empty channel set iterates zero times
- *     and feedInput is guarded by if(m_channelCountIn), so the input half is
- *     inert rather than skipped by a special case. What is measured is the
- *     device-to-host output path -- the path every emulated sample takes.
- *
- *  2. The tones are stepped through one resampler in sequence, low to high,
- *     which is what makes this a sweep rather than a set of unrelated runs:
- *     the filter state carries across the step and the settle interval below
- *     is what flushes it.
- *
- *  3. Every tone is coherent with its own capture window, so the analysis is
- *     a leak-free rectangular-window DFT bin and needs no window function and
- *     no leakage budget. For a target frequency the code picks a whole number
- *     of cycles C and a capture length N with f = C * hostRate / N exactly,
- *     then nudges N until f lies inside [20 Hz, 20 kHz]. The reported
- *     amplitude is 2*|X_C|/N, which is exact for a sine of frequency
- *     C*hostRate/N sampled N times. A windowed estimate would have been an
- *     approximation with an error budget to argue about; this has neither.
- *
- *  4. A settle interval of g_settleSamples host samples is discarded before
- *     every capture. The output filter is 400 taps per lane at the 96 kHz
- *     device rate, so its group delay is about 200 device samples -- under
- *     100 host samples at 44.1 kHz. 2048 is more than an order of magnitude
- *     above that and also covers the step discontinuity at the tone change.
- *
- *  5. The figure compared against the target is max(dB) - min(dB) over the
- *     swept band, the standard definition of passband ripple. The maximum
- *     absolute deviation is printed beside it as a diagnostic; it is not the
- *     asserted figure, and it is labelled as a diagnostic where it is printed
- *     so it cannot be read as one.
- *
- * Determinism. There is no random source anywhere: the tone grid is a fixed
- * logarithmic ladder, the phases start at zero, no clock is read and no
- * thread is created. Case 3 re-runs one whole sweep and requires the second
- * run's dB figures to be bit-identical to the first.
- *
- * The instrument is calibrated before it is trusted (case 1). The analyzer is
- * held against two synthesized tones whose amplitude is known exactly -- a
- * known positive at 1.0 (0 dB) and a known negative at 0.5 (-6.0206 dB) -- so
- * a stub analyzer that answered "0 dB" to everything would fail here. Without
- * this, a flat sweep would be indistinguishable from an analyzer that cannot
- * see anything at all.
- *
- * The permanent control (case 5). The same sweep at 44.1 kHz through
- * Mode::Legacy -- the framework default -- must produce a ripple figure that
- * exceeds the committed target by a wide margin. That control is what proves
- * this measurement can produce a failing figure, so a green MameHq result is a
- * property of the adopted filter and not of an instrument that reports flat no
- * matter what it is fed. Legacy puts the 44.1 kHz passband edge at 19,845 Hz,
- * below the 20 kHz this sweep requires to be flat.
- *
- * No assertion in this file is a language assert() and nothing depends on
- * NDEBUG, so this file reports identically in every build type.
+ * Nothing here writes the target, opens a file, reads an environment variable
+ * or creates a thread, and no assertion is a language assert(), so the file
+ * reports identically in every build type.
  */
 
 #include "synthLib/resamplerInOut.h"
@@ -104,46 +34,46 @@ namespace
 		++g_failures;
 	}
 
-	/* ------------------------------------------------------------------
-	 * The committed target for passband ripple to 20 kHz. Editing this line
-	 * is the only way the target moves, and the evidence for a move belongs
-	 * in the same commit. No code path writes it. */
+	// The target for passband ripple to 20 kHz. No code path writes it, so
+	// only a deliberate edit moves it, and the evidence belongs in that commit.
 	constexpr double g_committedTargetDb = 0.01;
 
-	/* The hard ceiling. No committed target may sit above it; a
-	 * measurement that needs one is a defect in the resampler adoption and
-	 * not a target to raise. MameHq is adopted, so the project does not own
-	 * the filter and cannot tune it. */
+	// No target may sit above this ceiling: MameHq is adopted rather than
+	// written here, so a measurement needing a looser target is a defect in
+	// the adoption and not a number to raise.
 	constexpr double g_hardCeilingDb = 0.10;
 
 	constexpr double g_pi = 3.14159265358979323846;
 
-	/* The device rate is fixed by the machine: rg2::Device::getSamplerate()
-	 * answers 96 kHz unconditionally. It is written as a literal rather than
-	 * read from rg2::Device because this sweep constructs no device at all. */
+	// rg2::Device::getSamplerate() answers 96 kHz unconditionally; a literal,
+	// because this sweep constructs no device at all.
 	constexpr float g_deviceRate = 96000.0f;
 
-	/* The host rates, in the order the table lists them. */
 	constexpr float g_hostRates[] = { 44100.0f, 48000.0f, 88200.0f, 96000.0f, 176400.0f, 192000.0f };
 	constexpr uint32_t g_hostRateCount = static_cast<uint32_t>(sizeof(g_hostRates) / sizeof(g_hostRates[0]));
 
-	/* The swept band, and the logarithmic ladder across it -- roughly 13.6
-	 * points per decade. */
+	// The swept band and the logarithmic ladder across it.
 	constexpr double g_bandLowHz = 20.0;
 	constexpr double g_bandHighHz = 20000.0;
 	constexpr uint32_t g_toneCount = 41;
 
-	/* The shortest capture the coherence search aims at, and the fewest
-	 * whole cycles it will accept in one. The lowest tones get a longer
-	 * capture because eight cycles of 20 Hz cannot fit in fewer samples. */
+	// The shortest capture the coherence search aims at, and the fewest whole
+	// cycles it will accept in one. The lowest tones get a longer capture
+	// because eight cycles of 20 Hz cannot fit in fewer samples.
 	constexpr uint32_t g_minCaptureSamples = 2048;
 	constexpr uint32_t g_minCycles = 8;
 
+	// Discarded before every capture. The output filter is 400 taps per lane
+	// at the 96 kHz device rate, so its group delay is about 200 device
+	// samples -- under 100 host samples at 44.1 kHz. This also covers the step
+	// discontinuity at the tone change.
 	constexpr uint32_t g_settleSamples = 2048;
 	constexpr uint32_t g_blockSize = 128;
 
-	/* A tone the analysis can see exactly: f == cycles * hostRate / samples,
-	 * so the capture holds a whole number of periods. */
+	// A tone the analysis can see exactly: f == cycles * hostRate / samples, so
+	// the capture holds a whole number of periods. That coherence is what makes
+	// the analysis a leak-free rectangular-window DFT bin, needing no window
+	// function and no leakage budget.
 	struct Tone
 	{
 		double frequency = 0.0;
@@ -175,8 +105,9 @@ namespace
 		return t;
 	}
 
-	/* The rectangular-window DFT bin the coherence above makes exact. The
-	 * returned figure is the amplitude of a sine, not its RMS. */
+	// The rectangular-window DFT bin the coherence above makes exact: 2*|X_C|/N
+	// is exact for a sine of frequency C*hostRate/N sampled N times. The
+	// returned figure is the amplitude of a sine, not its RMS.
 	double coherentAmplitude(const std::vector<float>& _samples, const uint32_t _cycles, const uint32_t _count)
 	{
 		double re = 0.0;
@@ -197,7 +128,7 @@ namespace
 
 	struct Sweep
 	{
-		double rippleDb = 0.0;			// max - min: the figure the target bounds
+		double rippleDb = 0.0;			// max - min, the standard definition of passband ripple; the figure the target bounds
 		double maxAbsDeviationDb = 0.0;	// diagnostic only, never the assertion
 		double lowestToneHz = 0.0;
 		double highestToneHz = 0.0;
@@ -205,9 +136,17 @@ namespace
 		std::vector<double> perToneDb;
 	};
 
-	/* The sweep. One resampler, the tones stepped through it in order. */
+	// One resampler, the tones stepped through it low to high: the filter state
+	// carries across each step and g_settleSamples is what flushes it, which is
+	// what makes this a sweep rather than a set of unrelated runs.
 	Sweep runSweep(const float _hostRate, const synthLib::Resampler::Mode _mode)
 	{
+		// Zero input channels removes nothing that is measured. The sweep is
+		// generated inside the process callback at the device rate, so the
+		// host-to-device resampler would only ever filter silence; feedInput is
+		// guarded by if(m_channelCountIn), so the input half goes inert rather
+		// than being skipped by a special case. What is measured is the
+		// device-to-host output path, which every emulated sample takes.
 		synthLib::ResamplerInOut resampler(0, 2);
 		resampler.setResamplerMode(_mode);
 		resampler.setSamplerates(_hostRate, g_deviceRate);
@@ -312,12 +251,10 @@ namespace
 
 int main()
 {
-	/* ---------------------------------------------------------------
-	 * Case 1. The instrument is calibrated before it is trusted. A known
-	 * positive and a known negative on synthesized tones of exactly known
-	 * amplitude. An analyzer that answered 0 dB unconditionally -- the way a
-	 * flat sweep and a blind instrument look identical -- fails the second
-	 * of these. */
+	// Case 1. Calibrate the analyzer before trusting it, on two synthesized
+	// tones of exactly known amplitude: 1.0 (0 dB) and 0.5 (-6.0206 dB). An
+	// analyzer answering 0 dB unconditionally fails the second, which is what
+	// separates a flat sweep from a blind instrument.
 	{
 		constexpr uint32_t count = 4096;
 		constexpr uint32_t cycles = 137;
@@ -343,10 +280,8 @@ int main()
 			"THE KNOWN NEGATIVE: the analyzer reads a half-amplitude coherent tone as -6.0206 dB, so it is not answering 0 dB blindly");
 	}
 
-	/* ---------------------------------------------------------------
-	 * Case 2. The sweep, at each host rate. The measured ripple
-	 * is held against the committed target, and a failure names both
-	 * figures. */
+	// Case 2. The sweep at each host rate, held against the target; a failure
+	// names both figures.
 	std::vector<Sweep> sweeps;
 	sweeps.reserve(g_hostRateCount);
 
@@ -379,31 +314,27 @@ int main()
 		sweeps.push_back(sweep);
 	}
 
-	/* ---------------------------------------------------------------
-	 * Case 3. The measurement is deterministic, and it is checked. A second
-	 * run of the 44.1 kHz sweep -- the rate with the most awkward ratio to
-	 * 96 kHz -- must reproduce the first bit for bit. */
+	// Case 3. Determinism, checked rather than assumed: a second run of the
+	// 44.1 kHz sweep -- the most awkward ratio to 96 kHz -- must reproduce the
+	// first bit for bit. The tone grid is fixed, phases start at zero, no clock
+	// is read and no thread is created.
 	{
 		const Sweep again = runSweep(g_hostRates[0], synthLib::Resampler::Mode::MameHq);
 		check(again.perToneDb == sweeps[0].perToneDb,
 			"a second run of the same sweep reproduces every per-tone figure bit for bit: no random source, no clock");
 	}
 
-	/* ---------------------------------------------------------------
-	 * Case 4. The hard ceiling bounds the target itself. No committed target
-	 * may sit above 0.10 dB, so an edit that raised the constant
-	 * past the ceiling must be caught here and not pass quietly. */
+	// Case 4. The ceiling bounds the target itself, not only the measurement,
+	// so an edit raising the target past it fails here rather than passing
+	// quietly.
 	check(g_committedTargetDb > 0.0 && g_committedTargetDb <= g_hardCeilingDb,
 		"the committed target is positive and at or below the hard ceiling of 0.10 dB");
 
-	/* ---------------------------------------------------------------
-	 * Case 5. The permanent control: the same sweep through the framework
-	 * default must fail the target. Legacy at 44.1 kHz puts the passband
-	 * edge at 19,845 Hz, below the 20 kHz this sweep requires to be flat, so
-	 * its ripple figure is far above the target. This is what proves the
-	 * measurement can produce a failing figure at all -- without it, a green
-	 * MameHq result would be indistinguishable from an instrument that
-	 * reports flat whatever it is fed. */
+	// Case 5. The control, which proves this measurement can fail at all:
+	// Mode::Legacy at 44.1 kHz puts the passband edge at 19,845 Hz, below the
+	// 20 kHz the sweep requires to be flat, so its ripple must exceed the
+	// target by a wide margin. Without it a green MameHq result would be
+	// indistinguishable from an instrument that reports flat whatever it is fed.
 	{
 		const Sweep control = runSweep(g_hostRates[0], synthLib::Resampler::Mode::Legacy);
 
