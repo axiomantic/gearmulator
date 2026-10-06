@@ -101,12 +101,6 @@ namespace rg2
             logLine("SIZE_ILLEGAL", false, _size, _offset);
         }
 
-        if (local == 0x14u)
-        {
-            if (val & 0x04u)
-                val |= 0x02u;
-        }
-
         if (m_interrupts)
         {
             m_interrupts->notifyPresent();
@@ -139,12 +133,7 @@ namespace rg2
 
         const uint32_t local = _offset - gUart0Base;
         uint32_t val = _value;
-        if (local == 0x14u)
-        {
-            if (val & 0x02u)
-                val |= 0x04u;
-        }
-        else if (local == 0x0Cu)
+        if (local == 0x0Cu)
         {
             m_txHoldingValid = true;
         }
