@@ -108,125 +108,83 @@ namespace rg2
 		/* The ISP1181 endpoint the G2 protocol runs over. It is configuration
 		 * and not a constant this file invents; a caller may name another one.
 		 *
-		 * The default is a measurement of the emulated firmware. Booting the
+		 * The default is a measurement of the emulated firmware: booting the
 		 * Clavia image, handing a real `.pch2` to one endpoint and recording
-		 * every byte the firmware writes to the CS3 command port: on endpoint 3
-		 * the firmware answers with read-interrupt-register `0xC0`, endpoint-3
-		 * status `0x54`, READ endpoint 3's buffer `0x14`, CLEAR endpoint 3's
-		 * buffer `0x74` -- the authority's OUT sequence, which is a drain. The
-		 * DcEndpointConfiguration bytes the firmware itself writes have EPDIR
-		 * clear on endpoint 3's slot, so the firmware declared that buffer
-		 * host-to-device. Its control is endpoint 0 in the same run, which
-		 * answers `0xC0 0x50` and no more.
+		 * every byte the firmware writes to the CS3 command port. On endpoint 3
+		 * it answers read-interrupt-register `0xC0`, endpoint-3 status `0x54`,
+		 * read endpoint 3's buffer `0x14`, clear endpoint 3's buffer `0x74` --
+		 * the authority's OUT sequence, a drain -- and the
+		 * DcEndpointConfiguration bytes it writes have EPDIR clear on that
+		 * endpoint's slot, so the firmware declared the buffer host-to-device.
+		 * Endpoint 0 in the same run answers `0xC0 0x50` and no more.
 		 *
-		 * `fifoShape` in `src/isp1181/isp1181.nim` cannot discriminate an
-		 * endpoint: it is a firmware configuration and not a property of the
-		 * part -- ISP1362 Rev. 06 pp.51-53 put the size in FFOSZ[3:0] and the
-		 * buffering in DBLBUF, both fields of a register the firmware writes.
-		 * A capture of the real device's descriptors would be a better
-		 * authority; none has been taken. */
+		 * The buffer table cannot discriminate an endpoint, being firmware
+		 * configuration rather than a property of the part: ISP1362 Rev. 06
+		 * pp.51-53 put the size in FFOSZ[3:0] and the buffering in DBLBUF, both
+		 * fields of a register the firmware writes.
+		 *
+		 * TODO(usb-descriptors): a capture of the real device's descriptors
+		 * would be a better authority than this measurement; none has been
+		 * taken. */
 		int usbProtocolEndpoint = 3;
 
 		/* The maximum packet size of that endpoint, in bytes -- the largest
 		 * single packet the Board may hand to `isp1181_rx`.
 		 *
-		 * It is a wire constraint and the Board is the side of the wire that
-		 * must honour it. On a real G2 the PC's host controller splits a bulk
-		 * transfer into max-packet-size packets and the firmware reassembles
-		 * them; the peripheral never sees a packet larger than the buffer it
-		 * configured. This Board stands where that host controller stands, so
-		 * the split belongs here -- above the device, below the protocol.
+		 * A wire constraint, and the Board is the side that must honour it: on a
+		 * real G2 the host controller splits a bulk transfer into
+		 * max-packet-size packets and the firmware reassembles them, so the
+		 * peripheral never sees a packet larger than the buffer it configured.
+		 * This Board stands where that host controller stands.
 		 *
-		 * Why it is configuration and not a constant this file invents: the
-		 * size is a field of a register the firmware writes. ISP1362 Rev. 06
-		 * Table 110 (p.107) puts `FFOSZ[3:0]` in bits 3 to 0 of the byte
-		 * `0x20+n` writes, and Table 111 on the same page says it "Selects the
-		 * buffer memory size according to Table 16". Table 15 (p.51) then says
-		 * which endpoints that reaches: endpoint 0 is "64 (fixed)" in both
-		 * directions and endpoints 1 to 14 are "programmable", with no
-		 * per-endpoint limit of their own. The same page states the
-		 * consequence outright -- "The size of the buffer memory determines
-		 * the maximum packet size that the hardware can support for a given
-		 * endpoint." So a differently configured image has a different figure,
-		 * and `usbProtocolEndpoint` above may name a slot with a different one
-		 * again. A literal compiled into pumpTransport would be wrong the
-		 * moment either changed.
+		 * Configuration rather than a constant, because the size is a field the
+		 * firmware writes -- FFOSZ[3:0] of the `0x20+n` byte (ISP1362 Rev. 06
+		 * Table 110, p.107), with endpoint 0 fixed at 64 and endpoints 1 to 14
+		 * programmable (Table 15, p.51), which states the consequence: "The size
+		 * of the buffer memory determines the maximum packet size that the
+		 * hardware can support for a given endpoint."
 		 *
-		 * 64 is also the ceiling, which is why the default cannot be raised.
-		 * Table 16 (p.52) gives the non-isochronous column these legal
-		 * settings -- `0000` 8 bytes, `0001` 16, `0010` 32, `0011` 64 -- and
-		 * marks `0100` through `1111` reserved. Table 109 (p.105) says the
-		 * same thing from the data-flow side: "isochronous: N <= 1023 bytes /
-		 * interrupt/bulk: N <= 64 bytes". A bulk endpoint on this part cannot
-		 * be given a buffer larger than 64 bytes, so no configuration makes
-		 * the 862-byte object of a real `.pch2` deliverable whole, and the
-		 * split below is not a workaround for one image.
+		 * 64 is also the ceiling, so the default cannot be raised: Table 16
+		 * (p.52) allows 8, 16, 32 and 64 and reserves the rest, and Table 109
+		 * (p.105) agrees with "interrupt/bulk: N <= 64 bytes". Section 15.2.1
+		 * (p.113) contradicts both with "N <= 32"; 64 is used because the two
+		 * tables agree. No configuration makes the 862-byte object of a real
+		 * `.pch2` deliverable whole, so the split is not a workaround for one
+		 * image.
 		 *
-		 * The document contradicts itself once, and it is recorded rather than
-		 * resolved. Section 15.2.1 (p.113) writes the same bound as
-		 * "bulk/interrupt endpoint: N <= 32". That is half of what Table 16
-		 * and Table 109 give, it was read on the rendered page and is not an
-		 * extraction artefact, and nothing here decides which is right. It
-		 * matters only if this default is ever raised on the strength of one
-		 * citation: 64 is used because two tables agree on it, and a reader
-		 * who finds 32 elsewhere has found the contradiction, not an error
-		 * here.
+		 * The device model configures the same 64 and exposes no query for it, so
+		 * the figure is duplicated and kept in step by hand; pumpTransport
+		 * documents how a drift in either direction shows up.
 		 *
-		 * Where the default comes from, and the duplication it is. 64 is also
-		 * what the device model configures for endpoint 3: `fifoShape` in
-		 * `src/isp1181/isp1181.nim` gives that endpoint `(64, 1)`, and that
-		 * row is itself recorded there as a measurement of the emulated
-		 * firmware rather than a property of the part. The model exposes no
-		 * query for it -- `mcf5407.h` declares no `isp1181_max_packet` -- so
-		 * this figure is duplicated from a table this repository cannot read.
-		 * The durable repair is a query on that ABI; until it exists, the two
-		 * numbers are kept in step by hand and the drift fails loudly rather
-		 * than quietly, which is the only reason the duplication is tolerable:
-		 *
-		 *   Too large  every packet past the buffer's size is refused for
-		 *              size, forever. `Fifo.accept` answers false on
-		 *              `data.len > capacityBytes` whatever the occupancy, so
-		 *              no amount of draining clears it, the frame is held, and
-		 *              pumpTransport's stall line fires every 255 ms of
-		 *              emulated time. That is exactly the defect this split
-		 *              repairs, so its return is unmistakable.
-		 *   Too small  every packet is short. It is not the harmless direction:
-		 *              a firmware that ends a transfer on the first short
-		 *              packet would take the first fragment as a whole
-		 *              message. Nothing here can detect that, which is why the
-		 *              figure is stated rather than derived downwards. */
+		 * TODO(usb-abi): give the device model a max-packet query, so this
+		 * figure is read rather than duplicated. */
 		std::size_t usbMaxPacketBytes = 64;
 
 		/* Whether a frame whose length is an exact multiple of
 		 * `usbMaxPacketBytes` is followed by a zero-length packet.
 		 *
-		 * The answer is unknown and the default is the one that invents
+		 * The answer is unknown, and the default is the one that invents
 		 * nothing. Terminating such a transfer with a zero-length packet is a
-		 * USB bulk convention and it is stated here as a convention: neither
-		 * ISP1362 Rev. 06 nor AN10008-01 contains it. The string "zero-length"
-		 * does not appear in the data sheet at all, and nothing in either
-		 * document describes an exact-multiple bulk transfer. AN10008-01 p.74
-		 * and p.88 do describe sending an empty packet, but only on the
-		 * control IN endpoint and only to end a control read -- a different
-		 * endpoint, a different direction and a different transfer type, so it
-		 * is not evidence about this one.
+		 * USB bulk convention, and only a convention here: neither ISP1362
+		 * Rev. 06 nor AN10008-01 contains it, "zero-length" does not appear in
+		 * the data sheet at all, and neither document describes an
+		 * exact-multiple bulk transfer. AN10008-01 pp.74 and 88 do send an
+		 * empty packet, but on the control IN endpoint to end a control read --
+		 * a different endpoint, direction and transfer type.
 		 *
-		 * What the data sheet does say is about DMA and not about framing.
-		 * Section 12.4.3.1 (p.56) and Table 20 (p.57) make a short packet an
+		 * What the data sheet does say is about DMA and not framing: section
+		 * 12.4.3.1 (p.56) and Table 20 (p.57) make a short packet an
 		 * end-of-transfer condition for a DMA-driven OUT endpoint, gated by
-		 * SHORTP in DcDMAConfiguration (p.111). That is a mechanism the
-		 * firmware may or may not have enabled, and this Board cannot see
-		 * which. If the firmware ends a message on the first short packet,
-		 * then an exact-multiple frame delivered without a trailing empty
-		 * packet never ends; if instead it counts bytes from the object's own
-		 * 2-byte length header, the trailing empty packet is a spurious
-		 * packet. The two readings want opposite defaults, which is exactly
-		 * why this is a flag and not a decision taken in silence.
+		 * SHORTP in DcDMAConfiguration (p.111) -- which the firmware may or may
+		 * not have enabled, and this Board cannot see which. If it ends a
+		 * message on the first short packet, an exact-multiple frame with no
+		 * trailing empty packet never ends; if it counts bytes from the object's
+		 * own 2-byte length header, that packet is spurious. The two readings
+		 * want opposite defaults, which is why this is a flag.
 		 *
-		 * `false` sends no extra packet. It is the default because the whole
-		 * corpus is reachable without one, and because a packet the firmware
-		 * did not ask for is traffic this project invented. The flag exists so
-		 * the question can be measured rather than argued. */
+		 * `false` sends no extra packet: the whole corpus is reachable without
+		 * one, and a packet the firmware did not ask for is traffic this project
+		 * invented. */
 		bool usbTerminateWithZeroLengthPacket = false;
 	};
 
@@ -392,55 +350,59 @@ namespace rg2
 		 * has to live on this side of the call, and it does: the refused
 		 * bytes are copied into Board-owned storage and offered again at the
 		 * next quantum, ahead of anything still queued. usbTransport() is how
-		 * a caller reads what that cost. */
+		 * a caller reads what that cost.
+		 *
+		 * A `usbMaxPacketBytes` larger than the device's own buffer shows up
+		 * here: every oversized packet is refused forever, because `Fifo.accept`
+		 * rejects on length whatever the occupancy, so draining never clears it
+		 * and the stall line below fires every 255 ms of emulated time. One too
+		 * small makes every packet short instead, which a firmware ending a
+		 * transfer on the first short packet reads as a whole message -- not
+		 * detectable from here, which is why that figure is stated rather than
+		 * derived downwards. */
 		void pumpTransport() noexcept;
 
 		/* What the device did with the bytes this Board handed it, per Board.
+		 * Members and not a file-scope tally: a file-scope counter pools two
+		 * Boards in one process into one figure, leaving a reader to subtract
+		 * one arm from the other by hand before the number means anything.
 		 *
-		 * These are members and not a file-scope tally: a file-scope counter
-		 * pools two Boards in one process into one figure, and a reader has to
-		 * subtract one arm from the other by hand before the number means
-		 * anything.
-		 *
-		 * The unit of `offered`, `accepted` and `refused` is one packet and not
-		 * one frame. Since pumpTransport splits a frame into max-packet-size
-		 * packets, one drained frame can cost many offers, so no arithmetic on
-		 * them may assume they count frames. They partition exactly:
-		 * `offered == accepted + refused`, and they count re-offers of one held
-		 * frame as well as first offers.
-		 *
-		 * `completed` is the frame-shaped counter and the one the no-loss
-		 * invariant uses. A frame is completed when its last packet is
-		 * accepted, so `drained == completed + undeliverable + (held ? 1 : 0)`
-		 * holds at every quantum boundary and is the no-loss invariant: nothing
-		 * this Board takes out of the hub can go anywhere except into the
-		 * device, into the hold, or into `undeliverable`.
-		 *
-		 * `undeliverable` is that third destination and it is a defect report
-		 * rather than a mode: a frame too large for the hold buffer left the
-		 * hub and can never be offered. The hub refuses such a frame before
-		 * the drain, so a non-zero reading means that guarantee broke. It is
-		 * not subtracted from `drained`, because the frame did leave the hub,
-		 * and it is not `refused`, because the device never saw it.
-		 *
-		 * `heldOffset` is how many bytes of the held frame the device has
-		 * already taken, so a partly-delivered frame is visible as a partly-
-		 * delivered frame rather than as an undelivered one. `heldSize` is
-		 * that frame's whole length. Both are 0 when nothing is held.
-		 *
-		 * `stallReports` counts the loud lines written for a frame the device
-		 * would not take within the datasheet's own NAK retry window. */
+		 * The no-loss invariant, which holds at every quantum boundary:
+		 * `drained == completed + undeliverable + (held ? 1 : 0)`. Nothing this
+		 * Board takes out of the hub can go anywhere except into the device,
+		 * into the hold, or into `undeliverable`. */
 		struct UsbTransportStats
 		{
 			uint64_t pumps         = 0;
 			uint64_t drained       = 0;
+
+			// Counted in packets, not frames: pumpTransport splits a frame into
+			// max-packet-size packets, so one drained frame can cost many
+			// offers, and re-offers of a held frame count too. They partition
+			// exactly: offered == accepted + refused.
 			uint64_t offered       = 0;
 			uint64_t accepted      = 0;
 			uint64_t refused       = 0;
+
+			// The frame-shaped counter, and the one the invariant above uses. A
+			// frame is completed when its last packet is accepted.
 			uint64_t completed     = 0;
+
+			// A defect report rather than a mode: a frame too large for the hold
+			// buffer that left the hub and can never be offered. The hub refuses
+			// such a frame before the drain, so a non-zero reading means that
+			// guarantee broke. Not subtracted from `drained`, because the frame
+			// did leave the hub; not `refused`, because the device never saw it.
 			uint64_t undeliverable = 0;
+
+			// The loud lines written for a frame the device would not take
+			// within the datasheet's own NAK retry window.
 			uint64_t stallReports  = 0;
 			uint64_t heldAttempts  = 0;
+
+			// How many bytes of the held frame the device has already taken, so
+			// a partly-delivered frame reads as one rather than as undelivered,
+			// and that frame's whole length. Both 0 when nothing is held.
 			size_t   heldOffset    = 0;
 			size_t   heldSize      = 0;
 			bool     held          = false;
