@@ -8,6 +8,7 @@ set(SOURCES
 	i2c.cpp i2c.h
 	i2cFlash.cpp i2cFlash.h
 	hd44780.cpp hd44780.h
+	isp1181.cpp isp1181.h
 	lcd.cpp lcd.h
 	lcdfonts.cpp lcdfonts.h
 	sciMidi.cpp sciMidi.h
@@ -24,6 +25,11 @@ target_link_libraries(hardwareLib PUBLIC 68kEmu synthLib)
 set_property(TARGET hardwareLib PROPERTY FOLDER "Gearmulator")
 
 target_include_directories(hardwareLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
+if(TARGET mcf5407::mcf5407)
+	target_include_directories(hardwareLib PUBLIC
+		$<TARGET_PROPERTY:mcf5407::mcf5407,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 
 if(BUILD_TESTING)
 	add_executable(hd44780_test hd44780_test.cpp)
@@ -45,6 +51,14 @@ if(BUILD_TESTING)
 	set_property(TARGET am29f_test PROPERTY EXCLUDE_FROM_ALL FALSE)
 	set_property(TARGET am29f_test PROPERTY FOLDER "Tests")
 	add_test(NAME am29f COMMAND am29f_test)
+
+	if(TARGET mcf5407::mcf5407)
+		add_executable(isp1181_test isp1181_test.cpp)
+		target_link_libraries(isp1181_test PRIVATE hardwareLib mcf5407::mcf5407)
+		set_property(TARGET isp1181_test PROPERTY EXCLUDE_FROM_ALL FALSE)
+		set_property(TARGET isp1181_test PROPERTY FOLDER "Tests")
+		add_test(NAME isp1181 COMMAND isp1181_test)
+	endif()
 endif()
 
 #target_compile_options(hardwareLib PRIVATE -fsanitize=thread)

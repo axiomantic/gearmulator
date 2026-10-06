@@ -382,7 +382,7 @@ target_sources(t0_sof_tick PRIVATE
 	../hdi08Adapter.cpp
 	../memoryMap.cpp)
 
-target_link_libraries(t0_sof_tick PRIVATE coldfire)
+target_link_libraries(t0_sof_tick PRIVATE coldfire hardwareLib)
 
 foreach(lib dsp56kEmu baseLib)
 	if(TARGET ${lib})
@@ -626,7 +626,7 @@ add_executable(t0_board_interrupts
 	../mailbox.cpp
 	../frame.cpp)
 
-target_link_libraries(t0_board_interrupts PRIVATE coldfire)
+target_link_libraries(t0_board_interrupts PRIVATE coldfire hardwareLib)
 
 target_include_directories(t0_board_interrupts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 

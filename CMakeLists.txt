@@ -82,37 +82,35 @@ set(CPACK_RPM_PACKAGE_AUTOREQ "yes")
 set(CPACK_RPM_PACKAGE_URL ${CPACK_DEBIAN_PACKAGE_HOMEPAGE})
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 
-# ----------------- the MCF5407 core, for the G2
+# ----------------- the ColdFire core, for the G2
 #
-# The core lives in its own repository, axiomantic/mcf5407. It is DECLARED here
+# The core lives in its own repository, axiomantic/coldfire. It is DECLARED here
 # and POPULATED nowhere unless source/claudia/rg2/rg2Lib/CMakeLists.txt turns
 # RG2_LINK_MCF5407 on. A declaration that is never populated costs nothing.
 #
-# Set RG2_MCF5407_SOURCE_DIR to a sibling checkout to build against that instead
-# of a fetched tree. RG2_MCF5407_GIT_TAG carries the pin.
+# Set RG2_COLDFIRE_SOURCE_DIR to a sibling checkout to build against that instead
+# of a fetched tree. RG2_COLDFIRE_GIT_TAG carries the pin.
 #
 # THE PIN IS A COMMIT AND NOT A BRANCH. A branch name re-resolves on every
 # clean configure, so a check against the core would measure a different core
 # from one run to the next. The pin is advanced by hand, and nothing in this
 # tree detects that it is stale.
-#
-# base.cmake appends `-Ofast` to the release flags of the whole build, mcf5407
-# test targets carry `-Werror`, and a current Apple clang deprecates the flag,
-# so a pin that predates mcf5407's probed `-Wno-error=deprecated-ofast` fails
-# to build on macOS/arm64.
-#
-# THE PIN MUST ALSO BE AT OR AFTER THE RENAME. The repository was mcf5307 until
-# 1279763, and a commit before it exports mcf5307::mcf5307 and the mcf5307_* C
-# ABI, neither of which this tree names any more. An older pin therefore fails
-# at the link step and not at the fetch, because the fetch still succeeds.
 
-set(RG2_MCF5407_SOURCE_DIR "" CACHE PATH "Build the MCF5407 core from this checkout instead of fetching it")
-set(RG2_MCF5407_GIT_TAG "c7e68903c734b22c7ebad63b65ef3dfc82faeec9" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
+# Backward compatibility alias
+if(RG2_MCF5407_SOURCE_DIR AND NOT RG2_COLDFIRE_SOURCE_DIR)
+	set(RG2_COLDFIRE_SOURCE_DIR "${RG2_MCF5407_SOURCE_DIR}")
+endif()
+if(RG2_MCF5407_GIT_TAG AND NOT RG2_COLDFIRE_GIT_TAG)
+	set(RG2_COLDFIRE_GIT_TAG "${RG2_MCF5407_GIT_TAG}")
+endif()
+
+set(RG2_COLDFIRE_SOURCE_DIR "" CACHE PATH "Build the ColdFire core from this checkout instead of fetching it")
+set(RG2_COLDFIRE_GIT_TAG "582764c53a0e95d5474c3f97f3dcf68e135936b4" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
 
 include(FetchContent)
 FetchContent_Declare(mcf5407
 	GIT_REPOSITORY https://github.com/axiomantic/coldfire.git
-	GIT_TAG ${RG2_MCF5407_GIT_TAG}
+	GIT_TAG ${RG2_COLDFIRE_GIT_TAG}
 )
 
 # ----------------- source
