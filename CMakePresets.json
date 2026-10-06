@@ -124,6 +124,23 @@
       "name": "github-Linux",
       "inherits": "github-base",
 	  "generator": ""
+    },
+    {
+      "name": "rg2",
+      "inherits": "default",
+      "displayName": "Red Gecko 2 standalone tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "gearmulator_BUILD_JUCEPLUGIN": "OFF",
+        "gearmulator_SYNTH_OSIRUS": "OFF",
+        "gearmulator_SYNTH_OSTIRUS": "OFF",
+        "gearmulator_SYNTH_VAVRA": "OFF",
+        "gearmulator_SYNTH_XENIA": "OFF",
+        "gearmulator_SYNTH_NODALRED2X": "OFF",
+        "gearmulator_SYNTH_JE8086": "OFF",
+        "gearmulator_SYNTH_88EMU": "OFF",
+        "gearmulator_SYNTH_REDGECKO2": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -166,6 +183,27 @@
       "name": "github-Linux",
       "inherits": "default",
       "configurePreset": "github-Linux"
+    },
+    {
+      "name": "rg2",
+      "configurePreset": "rg2",
+      "targets": [
+        "rg2_test_executables_all"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "rg2",
+      "configurePreset": "rg2",
+      "filter": {
+        "include": {
+          "name": "^t0_|^rg2_test_executables_build$"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ],
   "packagePresets":
