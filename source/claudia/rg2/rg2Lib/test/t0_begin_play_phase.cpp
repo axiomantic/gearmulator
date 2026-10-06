@@ -325,7 +325,7 @@ int main()
 		char what[256];
 
 		std::snprintf(what, sizeof(what),
-			"KNOWN POSITIVE: underrunFrames(%u) counts one underrun for each boot quantum", p);
+			"underrunFrames(%u) counts one underrun for each boot quantum", p);
 		checkEqual(s.underrunFrames(p), kBootQuanta, what);
 	}
 
@@ -334,13 +334,13 @@ int main()
 		char what[256];
 
 		std::snprintf(what, sizeof(what),
-			"KNOWN POSITIVE: secondBusUnderrunFrames(%u) counts one underrun for each window quantum", p);
+			"secondBusUnderrunFrames(%u) counts one underrun for each window quantum", p);
 		checkEqual(s.secondBusUnderrunFrames(p),
 			windowQuanta(0, kBootQuanta, config.secondBusFrameDivider), what);
 	}
 
 	checkEqual(s.longDispatchQuanta(0), kBootQuanta,
-		"KNOWN POSITIVE: the MCU context's longDispatchQuanta counts every boot quantum at rate 0/1");
+		"the MCU context's longDispatchQuanta counts every boot quantum at rate 0/1");
 
 	/* The boot regime touches neither queue, which "the source is empty" below
 	 * would otherwise be unable to distinguish from "the boot drained it". */
@@ -349,7 +349,7 @@ int main()
 
 	/* The owning thread is recorded by the first runFrames. */
 	check(s.owningThread() == std::this_thread::get_id(),
-		"KNOWN POSITIVE: the boot run recorded this thread as the owner");
+		"the boot run recorded this thread as the owner");
 
 	/* Step 4 runs exactly L quanta in the play regime, so the records it adds
 	 * are exactly L play quanta, in the play order. A regime gate that never
@@ -401,7 +401,7 @@ int main()
 		/* The second-bus expectation is a discriminator only if it is not zero,
 		 * so this guard is what stops the row above from being 0 == 0. */
 		check(expectedSecondBus > 0,
-			"KNOWN POSITIVE: the priming run covers at least one second-bus window quantum");
+			"the priming run covers at least one second-bus window quantum");
 
 		/* The priming run consumed exactly the L frames step 2 primed. Had step
 		 * 2 pushed fewer, the source would have run dry and starvedFrames would
@@ -439,7 +439,7 @@ int main()
 			"the CodecSink holds exactly lookaheadFrames frames at the hand-off");
 
 		checkEqual(s.underflowFrames(), static_cast<uint64_t>(kCapacity) + 1 - kLookahead,
-			"KNOWN POSITIVE: a pull the sink could not satisfy raises underflowFrames by the shortfall");
+			"a pull the sink could not satisfy raises underflowFrames by the shortfall");
 	}
 
 	{
@@ -451,7 +451,7 @@ int main()
 			"the CodecSource is EMPTY at the hand-off: it accepts its whole capacity");
 
 		checkEqual(s.overflowFrames(), 1u,
-			"KNOWN POSITIVE: the one frame past capacity was refused and counted");
+			"the one frame past capacity was refused and counted");
 	}
 
 	if(g_failures != 0)

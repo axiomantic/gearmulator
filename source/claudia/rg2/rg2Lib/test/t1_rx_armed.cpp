@@ -303,7 +303,7 @@ namespace
 		// nothing to do with the machine. The two are read by the same function
 		// from the same lines.
 		check(txArmed == 8,
-			"KNOWN POSITIVE: the parser reads txRequestArmed=1 on all eight positions, so it can extract a 1 "
+			"the parser reads txRequestArmed=1 on all eight positions, so it can extract a 1 "
 			"from these lines; got " + std::to_string(txArmed) + "/8");
 
 		check(rxArmed == 8,

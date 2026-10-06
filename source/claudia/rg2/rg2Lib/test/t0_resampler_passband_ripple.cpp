@@ -275,7 +275,7 @@ int main()
 		std::printf("info  analyzer known positive %.6f dB, known negative %.6f dB\n", unityDb, halfDb);
 
 		check(std::fabs(unityDb) < 1.0e-4,
-			"THE KNOWN POSITIVE: the analyzer reads a unit-amplitude coherent tone as 0 dB");
+			"the analyzer reads a unit-amplitude coherent tone as 0 dB");
 		check(std::fabs(halfDb - (-6.020599913279624)) < 1.0e-4,
 			"THE KNOWN NEGATIVE: the analyzer reads a half-amplitude coherent tone as -6.0206 dB, so it is not answering 0 dB blindly");
 	}

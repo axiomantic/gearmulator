@@ -564,7 +564,7 @@ int main()
 		const ObservedRegime observed = observeRegime(d, donor.trace);
 
 		check(observed == ObservedRegime::Play,
-			"case 0 KNOWN POSITIVE: after beginPlayPhase the donor reports the PLAY regime, so "
+			"case 0 after beginPlayPhase the donor reports the PLAY regime, so "
 			"the snapshot taken below is a play-regime snapshot and the instrument can tell the "
 			"two regimes apart -- observed " + spell(observed) +
 			", phases: " + spellTrace(donor.trace));

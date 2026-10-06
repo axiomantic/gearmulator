@@ -611,11 +611,11 @@ int main()
 		// wider access to an owned offset is refused.
 		boardWrite(board, kMbarBase + kAvrRegister, g_word, 0x0008u, status);
 		checkEqual(int(status), int(MCF5407_BUS_SIZE_ILLEGAL),
-			"KNOWN POSITIVE: a word write to $04B is refused, so the interrupt block owns it");
+			"a word write to $04B is refused, so the interrupt block owns it");
 
 		boardRead(board, kMbarBase + kAvrRegister, g_word, status);
 		checkEqual(int(status), int(MCF5407_BUS_SIZE_ILLEGAL),
-			"KNOWN POSITIVE: a word read of $04B is refused, so the interrupt block owns it");
+			"a word read of $04B is refused, so the interrupt block owns it");
 
 		// 6b. Known negative, same predicate. $049 is a Reserved byte of the
 		// same longword group. isInterruptOwned is the one predicate that

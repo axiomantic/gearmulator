@@ -220,13 +220,13 @@ namespace
 		for(unsigned p = 0; p < kDspCount; ++p)
 		{
 			std::snprintf(what, sizeof(what),
-				"%s: KNOWN POSITIVE: position %u was dispatched once for each of the %llu boot quanta",
+				"%s: position %u was dispatched once for each of the %llu boot quanta",
 				faultName(_fault), p, static_cast<unsigned long long>(kArmingQuanta));
 			checkEqual(executor.dispatches(p), kArmingQuanta, what);
 		}
 
 		std::snprintf(what, sizeof(what),
-			"%s: KNOWN POSITIVE: the whole job array is dispatched while no context has faulted",
+			"%s: the whole job array is dispatched while no context has faulted",
 			faultName(_fault));
 		checkEqual(executor.lastCount(), rg2::kJobCount, what);
 
@@ -418,7 +418,7 @@ int main()
 		s.runFrames(1);
 
 		check(board.faulted(),
-			"KNOWN POSITIVE: the first instruction fetch of an unmapped Board is a bus error");
+			"the first instruction fetch of an unmapped Board is a bus error");
 		check(s.faulted(), "the Scheduler reports the MCU fault");
 
 		/* Index 0 carries CoreHalted and no DSP index carries anything. */

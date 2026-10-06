@@ -122,7 +122,7 @@ int main()
 	/* The boot thread's own id must not be the default id, or the assertion
 	 * above and the one below would be the same assertion written twice. */
 	check(bootThread != std::thread::id{},
-		"KNOWN POSITIVE: this thread's id is not the default-constructed id");
+		"this thread's id is not the default-constructed id");
 
 	s.runFrames(kBootQuanta);
 
@@ -177,9 +177,9 @@ int main()
 	}
 
 	check(audioThread != std::thread::id{},
-		"KNOWN POSITIVE: the audio thread ran and reported its own id");
+		"the audio thread ran and reported its own id");
 	check(audioThread != bootThread,
-		"KNOWN POSITIVE: the audio thread is a DIFFERENT thread from the boot thread");
+		"the audio thread is a DIFFERENT thread from the boot thread");
 
 	check(recordAfterFirstCall != std::thread::id{},
 		"the audio phase's first runFrames recorded SOME owning thread");

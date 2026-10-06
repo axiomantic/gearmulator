@@ -350,10 +350,10 @@ int main()
 			"the scheduler stopped before the requested quanta were exhausted");
 
 		checkEqual(s.droppedFrames(), 1u,
-			"KNOWN POSITIVE: the refused frame was counted and NOT overwritten");
+			"the refused frame was counted and NOT overwritten");
 
 		checkEqual(s.starvedFrames(), ran,
-			"KNOWN POSITIVE: every play quantum past the priming consumed a zero frame the host never supplied");
+			"every play quantum past the priming consumed a zero frame the host never supplied");
 	}
 
 	/* -----------------------------------------------------------------
@@ -370,7 +370,7 @@ int main()
 		checkEqual(pulled, kCapacity, "the sink was FULL when the scheduler stopped");
 
 		checkEqual(s.underflowFrames(), 1u,
-			"KNOWN POSITIVE: the one frame the sink could not supply raised underflowFrames");
+			"the one frame the sink could not supply raised underflowFrames");
 	}
 
 	{
@@ -381,7 +381,7 @@ int main()
 		checkEqual(pushed, kCapacity, "the source was EMPTY: it accepts its whole capacity");
 
 		checkEqual(s.overflowFrames(), 1u,
-			"KNOWN POSITIVE: the one frame past capacity was refused and counted");
+			"the one frame past capacity was refused and counted");
 	}
 
 	if(g_failures != 0)

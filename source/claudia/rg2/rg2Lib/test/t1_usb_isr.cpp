@@ -1256,11 +1256,11 @@ int main()
 		check(real.windowFetches > 0,
 			"ep3-patch: the fetch counter saw instruction words at all during the window");
 		check(real.hitsKnownPositive > 0,
-			"ep3-patch KNOWN POSITIVE: the address the machine itself was sitting at is counted by the same probe");
+			"ep3-patch the address the machine itself was sitting at is counted by the same probe");
 		check(real.hitsKnownNegative == 0,
 			"ep3-patch KNOWN NEGATIVE: an address inside the vector table is never fetched as an instruction word");
 		check(control0.hitsKnownPositive > 0,
-			"ep0-small KNOWN POSITIVE: the same probe fires there too");
+			"ep0-small the same probe fires there too");
 		check(control0.hitsKnownNegative == 0,
 			"ep0-small KNOWN NEGATIVE: the vector-table address is still never fetched");
 
