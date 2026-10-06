@@ -1,59 +1,19 @@
 /* dspJob.cpp -- the DSP job body.
  *
- * The order inside the body is load-bearing. The sample offset is derived from
- * exactly this order and from no other:
+ * The order inside the body is load-bearing, and the sample offset is derived
+ * from exactly this order: the receive half of the frame, then the one step
+ * that consumes emulated cycles, then the transmit half. The three are labelled
+ * 1, 2 and 3 below and each carries the reasoning for what it does.
  *
- *   1.  receiveDspFrame(*c->audioEsai), and, only when
- *       c->frameIndex % c->secondBusFrameDivider == 0,
- *       receiveDspFrame(*c->secondEsai).
- *   2.  the budget/want/debt block, runDspCycles as ctx.run. This is the
- *       only step that consumes emulated cycles.
- *   3.  transmitDspFrame(*c->audioEsai), and, on the same condition as
- *       step 1, transmitDspFrame(*c->secondEsai).
+ * The interleave moves step 2's execution into steps 1 and 3. The frame helpers
+ * take a callback form that fires after each execTX and each execRX; this file
+ * computes want at the top, subdivides it per ESAI slot, and reconciles the debt
+ * once after both halves. runQuantum is not called.
  *
- * The interleave moves step 2's execution into steps 1 and 3. The two frame
- * helpers gain a callback form that invokes a caller-supplied callback after
- * each execTX and each execRX. dspJob computes want at the top -- using the
- * same formula runQuantum uses -- and passes a callback that subdivides want
- * into per-slot sub-budgets and calls runDspCycles for each. After both halves
- * complete, dspJob reconciles ctx.debt using the same floor-at-zero rule
- * runQuantum uses. runQuantum is not called.
- *
- * The want formula is restated here rather than imported from cycleDebt.h, and
- * is the same computation: want = alloc(ctx.rate, &ctx.acc) - ctx.debt. The
- * debt is reconciled after both halves: ctx.debt = totalSpent - want, floored
- * at zero.
- *
- * The sub-budget is a share of what remains, and the divisor is derived. Each
- * slot asks for its share of want MINUS what the quantum has already spent,
- * divided by the slots the frame has left to run; the slot count comes from
- * frameSlotBound, which reads the enables, the word counts and the second-bus
- * window that decide how many slots the helpers will actually run. Every
- * sub-call overshoots its own sub-budget by up to one dispatch unit, and
- * charging that overshoot to the slots that follow is what keeps the whole
- * quantum inside 0 <= debt < maxDispatchCost. A tail flush after step 3
- * delivers whatever a shorter-than-bounded frame left over, so the quantum
- * spends want plus at most one dispatch unit whatever the divisor says.
- *
- * Steps 1 and 3 run even when step 2 runs nothing. The want <= 0 branch pays a
- * debt down and executes no emulated cycle, and the frame cadence does not
- * depend on it: the scheduler owns the cadence, so a long-dispatch quantum
- * still transmits what the stale transmit registers carry.
- *
- * No EsaiClock is constructed for either port. The scheduler drives the ESAI
- * frame and no clock does.
- *
- * secondBusFrameDivider is never 0: Scheduler::create returns
- * Status::BadDivider and no object for that value, so the modulo cannot divide
- * by zero.
- *
- * The idle route. On real hardware the ESAI gates audio transfers, not core
- * execution. When the audio port has no enabled transmitters AND no enabled
- * receivers -- the reset state of every boot -- both helpers return before
- * their loops and the quantum's budget would never reach the core. dspJob then
- * runs the budget directly, frame-granular at frame position, behind the same
- * run gate; the two routes are exclusive per quantum and share one
- * reconciliation.
+ * Steps 1 and 3 run even when step 2 runs nothing: the scheduler owns the frame
+ * cadence, so a long-dispatch quantum still transmits what the stale transmit
+ * registers carry. No EsaiClock is constructed for either port -- the scheduler
+ * drives the ESAI frame and no clock does.
  */
 
 #include "dspContext.h"
@@ -109,7 +69,7 @@ namespace rg2
 			if(_c.audioEsai->hasEnabledTransmitters())
 				slots += _c.audioEsai->getTxWordCount() + 1u;
 
-			/* The second bus contributes its slots ONLY inside the window
+			/* The second bus contributes its slots only inside the window
 			 * steps 1 and 3 advance it in, and the caller decides that window
 			 * once so that one expression governs both. */
 			if(_secondBus)
@@ -144,22 +104,26 @@ namespace rg2
 		uint64_t totalSpent = 0;
 
 		/* The second bus advances only inside the window
-		 * ChainAdapter::advanceAll uses. It is decided ONCE, here, because the
+		 * ChainAdapter::advanceAll uses. It is decided once, here, because the
 		 * slot bound below and steps 1 and 3 must not be able to disagree
-		 * about which ports this quantum touches. */
+		 * about which ports this quantum touches.
+		 *
+		 * The divider is never 0: Scheduler::create answers Status::BadDivider
+		 * and builds no object for that value, so this modulo cannot divide by
+		 * zero. */
 		const bool secondBus = c->frameIndex % c->secondBusFrameDivider == 0;
 
 		/* The divisor is derived from the frame and is never a literal. The
-		 * callback fires once per ESAI SLOT across all four frame halves and
+		 * callback fires once per ESAI slot across all four frame halves and
 		 * not once per DSP slot, so the count that generates it is whatever the
 		 * enables, the word counts and the second-bus window make the helpers
 		 * run. frameSlotBound reads the same registers the helpers read, so a
 		 * change to any of them moves the divisor with it.
 		 *
 		 * The divisor is not load-bearing for correctness. Each sub-budget below
-		 * is taken from what REMAINS of want and the tail flush after step 3
+		 * is taken from what remains of want and the tail flush after step 3
 		 * delivers whatever the frame left undelivered, so the quantum spends
-		 * want plus at most ONE dispatch unit whatever the divisor says. A wrong
+		 * want plus at most one dispatch unit whatever the divisor says. A wrong
 		 * divisor can only make the interleave coarser or finer; it cannot make
 		 * the quantum overspend, and it cannot violate the debt invariant. */
 		c->slotBudgetDivisor = frameSlotBound(*c, secondBus);
@@ -170,7 +134,7 @@ namespace rg2
 			const uint32_t slot = c->slotDispatches++;
 
 			/* The share is of what remains, not of want. runDspCycles tests the
-			 * cycle counter BEFORE each dispatch, so every sub-call returns at
+			 * cycle counter before each dispatch, so every sub-call returns at
 			 * least its sub-budget and overshoots by up to one dispatch unit.
 			 * Subdividing want itself would let those k overshoots accumulate
 			 * into the debt; subdividing the remainder charges each overshoot
@@ -190,24 +154,28 @@ namespace rg2
 			totalSpent += runDspCycles(*c->dsp, subBudget(remaining, left, 0u));
 		};
 
-		/* Both frame helpers return before their loops when their
-		 * direction has no enabled channel, so an idle audio port leaves
-		 * the interleave's callbacks unfired and the quantum's budget
-		 * undelivered. The route is decided once per quantum here, at the
-		 * top, and a mid-quantum enable completes the chosen route: the
-		 * enable writes align slot counters to the next frame boundary, so
-		 * no current-frame slot can appear. The audio port alone gates --
+		/* On real hardware the ESAI gates audio transfers and not core
+		 * execution, so an idle port must not stop the core. Both frame
+		 * helpers return before their loops when their direction has no
+		 * enabled channel -- the reset state of every boot -- which would
+		 * leave the interleave's callbacks unfired and the quantum's budget
+		 * undelivered, so an idle audio port takes a direct route instead.
+		 *
+		 * The route is decided once per quantum here, at the top, and a
+		 * mid-quantum enable completes the chosen route: the enable writes
+		 * align slot counters to the next frame boundary, so no
+		 * current-frame slot can appear. The audio port alone gates --
 		 * secondEsai's enables decide nothing, which is the state a busy
 		 * audio bus beside an idle second bus already survives -- and idle
-		 * means no transmitters AND no receivers, not or: one enabled
-		 * direction still runs its half's slots through the interleave
-		 * below.
+		 * means no transmitters and no receivers, not one or the other: a
+		 * single enabled direction still runs its half's slots through the
+		 * interleave below.
 		 *
 		 * The two routes are exclusive per quantum. When the direct route
 		 * fires it replaces this quantum's core execution entirely and
 		 * all four helper calls run in their bare no-callback forms; a
 		 * mixed quantum would deliver the budget twice against one want.
-		 * Direct-run cycles join totalSpent BEFORE the single
+		 * Direct-run cycles join totalSpent before the single
 		 * reconciliation, so ctx.debt reconciles over them exactly as it
 		 * does over the interleave's per-slot spends.
 		 *
