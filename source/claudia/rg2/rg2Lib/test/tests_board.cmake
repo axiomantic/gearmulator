@@ -380,11 +380,9 @@ target_sources(t0_sof_tick PRIVATE
 	../latches.cpp
 	../hdi08Decode.cpp
 	../hdi08Adapter.cpp
-	../memoryMap.cpp
-	../sim.cpp
-	../timer.cpp
-	../uart0.cpp
-	../interruptController.cpp)
+	../memoryMap.cpp)
+
+target_link_libraries(t0_sof_tick PRIVATE coldfire)
 
 foreach(lib dsp56kEmu baseLib)
 	if(TARGET ${lib})
@@ -620,10 +618,6 @@ add_executable(t0_board_interrupts
 	../hdi08Decode.cpp
 	../hdi08Adapter.cpp
 	../memoryMap.cpp
-	../sim.cpp
-	../timer.cpp
-	../uart0.cpp
-	../interruptController.cpp
 	../mbus.cpp
 	../max1039.cpp
 	../dspSet.cpp
@@ -631,6 +625,8 @@ add_executable(t0_board_interrupts
 	../chainAdapter.cpp
 	../mailbox.cpp
 	../frame.cpp)
+
+target_link_libraries(t0_board_interrupts PRIVATE coldfire)
 
 target_include_directories(t0_board_interrupts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 

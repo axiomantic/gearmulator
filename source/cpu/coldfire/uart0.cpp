@@ -1,72 +1,26 @@
-// UART0, the MCF5307 DUART module on the board side.
-//
-// Facts from the MCF5307 User's Manual, section 14 "UART Module":
-//
-//   * The MCF5307 carries two UART modules, each an MC68681-compatible DUART
-//     with only channel A implemented.
-//   * The register address map: UART0 at MBAR+$1C0, UART1 at MBAR+$200, a
-//     four-byte stride, and a different register for read and for write at
-//     most addresses (Table 14-1).
-//   * One bus-width rule for the whole UART block: all UART module registers
-//     must be accessed as bytes.
-//   * UMR1: B/C[1:0] (bits 1:0) is the bits-per-character encoding; PM[1:0]
-//     (bits 4:3) is the parity-mode encoding. The mode-register pointer resets
-//     to UMR1 and advances to UMR2 after an access to UMR1.
-//   * UMR2: SB[3:0] is the stop-bit-length encoding; for a 6..8 bit character,
-//     SB=0111 selects one stop bit.
-//   * USR: bit 3 TxEMP, bit 2 TxRDY, bit 1 FFULL, bit 0 RxRDY, and the error
-//     bits RB, FE, PE, OE.
-//   * UCSR: RCS[3:0] / TCS[3:0]; $DD selects the system bus clock for both.
-//   * UCR: MISC[2:0] (bits 6:4), TC[1:0] (bits 3:2), RC[1:0] (bits 1:0). The
-//     reset-receiver, reset-transmitter, reset-mode-pointer and
-//     reset-error-status commands are the ones this model honours.
-//   * URB/UTB: the transmitter buffer is write-only and the receiver buffer
-//     read-only, at the same +0x0C address.
-//   * UIPCR is read-only at +0x10; on the G2 its bit 0 reads low (the Engine
-//     strap), which is why this model resets it to $0E and not the manual's
-//     all-high value.
-//   * UISR/UIMR: the UART interrupt output is asserted when a UISR flag is set
-//     and its UIMR mask bit is set.
-//   * UBG1/UBG2 are write only and cannot be read by the CPU. Their
-//     concatenation is the baud-rate preload; the minimum value is $0002.
-//   * UIVR: reset $0F, an uninitialised interrupt condition. The observed G2
-//     value is 0x42.
-//   * UIP and UOP: CTS state and the address-triggered output commands.
-//
-// The SIM interrupt-assignment table (Table 8-2) gives ICR4 to the UART at
-// MBAR+$1C0, which the controller calls internal source index 4. The manual
-// names that module UART1 (one-indexed); this model names it UART0. The index
-// is 4 either way.
-//
-// UART0 carries vector 0x42, divider 0x36, 8N1; UART1 is unused and reads back
-// its reset values.
-
 #include "uart0.h"
 
 #include <cstddef>
 
-namespace rg2
+namespace coldfire
 {
 	namespace
 	{
-		// The register offsets within a 0x40-byte UART module block, from
-		// Table 14-1.
 		constexpr uint32_t kMode = 0x00u;
-		constexpr uint32_t kStatusOrClock = 0x04u; // USR read / UCSR write
-		constexpr uint32_t kCommand = 0x08u;       // UCR write
-		constexpr uint32_t kBuffer = 0x0Cu;        // URB read / UTB write
-		constexpr uint32_t kStrapOrAux = 0x10u;    // UIPCR read / UACR write
-		constexpr uint32_t kIntStatusOrMask = 0x14u; // UISR read / UIMR write
-		constexpr uint32_t kBaudMsb = 0x18u;       // UBG1, write only
-		constexpr uint32_t kBaudLsb = 0x1Cu;       // UBG2, write only
-		constexpr uint32_t kIntVector = 0x30u;     // UIVR
-		constexpr uint32_t kInputPort = 0x34u;     // UIP, read only
-		constexpr uint32_t kOutputSet = 0x38u;     // UOP1, write only
-		constexpr uint32_t kOutputReset = 0x3Cu;   // UOP0, write only
+		constexpr uint32_t kStatusOrClock = 0x04u;
+		constexpr uint32_t kCommand = 0x08u;
+		constexpr uint32_t kBuffer = 0x0Cu;
+		constexpr uint32_t kStrapOrAux = 0x10u;
+		constexpr uint32_t kIntStatusOrMask = 0x14u;
+		constexpr uint32_t kBaudMsb = 0x18u;
+		constexpr uint32_t kBaudLsb = 0x1Cu;
+		constexpr uint32_t kIntVector = 0x30u;
+		constexpr uint32_t kInputPort = 0x34u;
+		constexpr uint32_t kOutputSet = 0x38u;
+		constexpr uint32_t kOutputReset = 0x3Cu;
 
 		constexpr int kRxFifoDepth = 4;
 
-		// MISC[2:0] and the enable/disable encodings of Tables 14-8..14-10.
 		constexpr uint8_t kMiscResetModePointer = 0x01u;
 		constexpr uint8_t kMiscResetReceiver = 0x02u;
 		constexpr uint8_t kMiscResetTransmitter = 0x03u;
@@ -81,6 +35,16 @@ namespace rg2
 	{
 		if(m_interrupts)
 			m_interrupts->setInternalVector(gUart0InterruptIndex, gUart0Vector);
+	}
+
+	void Uart0::setInterruptController(InterruptController* _interrupts)
+	{
+		m_interrupts = _interrupts;
+		if(m_interrupts)
+		{
+			m_interrupts->setInternalVector(gUart0InterruptIndex, gUart0Vector);
+			m_interrupts->setInternalPending(gUart0InterruptIndex, m_interruptAsserted);
+		}
 	}
 
 	Uart0::UartLoc Uart0::locate(const uint32_t _offset) const
@@ -102,11 +66,11 @@ namespace rg2
 	{
 		uint8_t value = 0;
 		if(m_txEnabled && !m_txHoldingValid)
-			value |= 0x0Cu;                 // TxEMP (bit 3) and TxRDY (bit 2)
+			value |= 0x0Cu;
 		if(m_rxFifoCount >= kRxFifoDepth)
-			value |= 0x02u;                 // FFULL (bit 1)
+			value |= 0x02u;
 		if(m_rxFifoCount > 0)
-			value |= 0x01u;                 // RxRDY (bit 0)
+			value |= 0x01u;
 		return value;
 	}
 
@@ -116,9 +80,7 @@ namespace rg2
 		{
 		case kMode:
 		{
-			// The mode-register pointer: reset to UMR1; an access to UMR1
-			// advances it to UMR2; an access to UMR2 leaves it there.
-			uint8_t value = m_modeUmr1 ? m_umr1 : m_umr2;
+			const uint8_t value = m_modeUmr1 ? m_umr1 : m_umr2;
 			m_modeUmr1 = false;
 			return value;
 		}
@@ -133,35 +95,28 @@ namespace rg2
 				recomputeInterrupt();
 				return byte;
 			}
-			return 0x00u; // reading an empty receiver returns zero
+			return 0x00u;
 		}
 		case kStrapOrAux:
-			// UIPCR. Read-only. On this machine bit 0 reads low (the Engine
-			// strap), so the reset value is $0E and not the manual's all-high
-			// figure.
 			return 0x0Eu;
 		case kIntStatusOrMask:
 		{
 			uint8_t value = 0;
 			if(m_rxFifoCount > 0)
-				value |= 0x02u;             // RxRDY duplicate (bit 1)
+				value |= 0x02u;
 			if(m_txEnabled && !m_txHoldingValid)
-				value |= 0x01u;             // TxRDY duplicate (bit 0)
+				value |= 0x01u;
 			return value;
 		}
 		case kBaudMsb:
 		case kBaudLsb:
-			// UBG1/UBG2 are write only and cannot be read by the CPU. A read
-			// returns zero.
 			return 0x00u;
 		case kIntVector:
 			return m_uivr;
 		case kInputPort:
-			// UIP bit 0 = CTS, idle high. No modem line is driven in this
-			// model, so it reads 1.
 			return 0x01u;
 		default:
-			return 0x00u; // Do not access and untouched gaps
+			return 0x00u;
 		}
 	}
 
@@ -181,12 +136,10 @@ namespace rg2
 			return;
 		}
 		case kStatusOrClock:
-			m_ucsr = _value; // UCSR, write only
+			m_ucsr = _value;
 			return;
 		case kCommand:
 		{
-			// UCR is a command register: one write performs the commands in
-			// its three fields.
 			const uint8_t misc = (_value >> 4) & 0x07u;
 			const uint8_t tc   = (_value >> 2) & 0x03u;
 			const uint8_t rc   =  _value        & 0x03u;
@@ -203,8 +156,8 @@ namespace rg2
 				m_txEnabled = false;
 				m_txHoldingValid = false;
 				break;
-			case kMiscResetErrorStatus: break; // no error bits are modelled
-			default: break;                      // break-control and no-op
+			case kMiscResetErrorStatus: break;
+			default: break;
 			}
 
 			if(tc == kEnable) m_txEnabled = true;
@@ -218,12 +171,6 @@ namespace rg2
 		}
 		case kBuffer:
 		{
-			// The transmitter buffer. A character loaded while the
-			// transmitter is disabled is not transmitted. This model
-			// delivers the byte to the MIDI-out
-			// consumer only when the transmitter is enabled. The byte is
-			// emitted at once because the emulated transmitter has no bit
-			// timing; the ShiftDuration belongs to the scheduler.
 			m_txHolding = _value;
 			m_txHoldingValid = true;
 			if(m_txEnabled && m_midiOut)
@@ -232,16 +179,13 @@ namespace rg2
 			return;
 		}
 		case kStrapOrAux:
-			m_uacr = _value; // UACR, write only
+			m_uacr = _value;
 			return;
 		case kIntStatusOrMask:
-			m_uimr = _value; // UIMR, write only
+			m_uimr = _value;
 			recomputeInterrupt();
 			return;
 		case kBaudMsb:
-			// UBG1: the upper byte of the baud-rate-generator preload. This
-			// is where the observed divider 0x36 is stored. It is data only:
-			// nothing here turns it into a frequency.
 			m_ubg1 = _value;
 			return;
 		case kBaudLsb:
@@ -252,9 +196,6 @@ namespace rg2
 			return;
 		case kOutputSet:
 		case kOutputReset:
-			// UOP1/UOP0 are address-triggered output commands. No MODEM output
-			// is driven in this model, so the commands are accepted and do
-			// nothing.
 			return;
 		default:
 			logLine("UNMODELLED", true, 8, gUart0Base + _local);
@@ -266,8 +207,8 @@ namespace rg2
 	{
 		switch(_local)
 		{
-		case kIntVector: return 0x0Fu; // UIVR resets to the uninitialised $0F
-		case kStrapOrAux: return 0x0Eu; // UIPCR with the Engine strap
+		case kIntVector: return 0x0Fu;
+		case kStrapOrAux: return 0x0Eu;
 		default: return 0x00u;
 		}
 	}
@@ -292,7 +233,7 @@ namespace rg2
 		}
 
 		if(loc.uart1)
-			return readReset(loc.local); // UART1 is unused: reset values only
+			return readReset(loc.local);
 
 		return readUart0(loc.local);
 	}
@@ -316,8 +257,6 @@ namespace rg2
 			return;
 		}
 
-		// UART1 is unused: writes are accepted and have no effect, exactly as
-		// a module no G2 signal reaches.
 		if(!loc.uart1)
 			writeUart0(loc.local, uint8_t(_value & 0xffu));
 	}
@@ -339,8 +278,6 @@ namespace rg2
 			m_rxFifoHead = (m_rxFifoHead + 1) % kRxFifoDepth;
 			++m_rxFifoCount;
 		}
-		// A FIFO already full: the new character is lost (overrun), which this
-		// model does not track beyond leaving OE at zero.
 		recomputeInterrupt();
 	}
 

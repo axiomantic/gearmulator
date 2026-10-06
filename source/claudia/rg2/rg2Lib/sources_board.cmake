@@ -5,7 +5,7 @@
 # file in this tree.
 
 list(APPEND RG2LIB_SOURCES memoryMap.cpp)
-list(APPEND RG2LIB_SOURCES sim.cpp)
+list(APPEND RG2LIB_SOURCES sim.h)
 list(APPEND RG2LIB_SOURCES panel.cpp)
 list(APPEND RG2LIB_SOURCES latches.cpp)
 list(APPEND RG2LIB_SOURCES hdi08Decode.cpp)
@@ -24,7 +24,6 @@ list(APPEND RG2LIB_SOURCES
 # ----------------- the two-tier interrupt controller
 list(APPEND RG2LIB_SOURCES
 	interruptController.h
-	interruptController.cpp
 )
 
 # ----------------- the bootstrap ROM
@@ -50,7 +49,6 @@ list(APPEND RG2LIB_SOURCES
 
 list(APPEND RG2LIB_SOURCES
 	uart0.h
-	uart0.cpp
 )
 
 # ----------------- the P-memory write funnel
@@ -110,7 +108,6 @@ list(APPEND RG2LIB_SOURCES
 
 list(APPEND RG2LIB_SOURCES
 	timer.h
-	timer.cpp
 )
 
 # ----------------- the GDB remote stub

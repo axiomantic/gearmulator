@@ -62,9 +62,14 @@
 #include <string>
 #include <vector>
 
-namespace rg2
+namespace coldfire
 {
 	class Uart0;
+}
+
+namespace rg2
+{
+	using Uart0 = coldfire::Uart0;
 	class TransportSocketServer;
 }
 

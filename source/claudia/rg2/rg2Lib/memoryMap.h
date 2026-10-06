@@ -19,6 +19,8 @@
 
 #include <mcf5407.h>
 
+#include "cpu/coldfire/busTarget.h"
+
 namespace rg2
 {
 	// The four recorded bases. Nothing else in this file is an address.
@@ -69,14 +71,7 @@ namespace rg2
 	// What a device model presents to the decode. The offset is relative to
 	// the base of the window the device sits in, so a device carries no
 	// knowledge of where the firmware put it.
-	class BusTarget
-	{
-	public:
-		virtual ~BusTarget() = default;
-
-		virtual uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) = 0;
-		virtual void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) = 0;
-	};
+	using BusTarget = coldfire::BusTarget;
 
 	class MemoryMap
 	{

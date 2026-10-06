@@ -44,6 +44,8 @@
 #include "transportHub.h"
 #include "uart0.h"
 
+#include "cpu/coldfire/mcf5407Soc.h"
+
 namespace rg2
 {
 	/* The panel board's analogue controls, in the order the converter scans
@@ -530,43 +532,7 @@ namespace rg2
 		 * The M-Bus arm's range is disjoint from both UART blocks, so the order
 		 * the branches are written in is a reading convenience rather than a
 		 * rule. */
-		class MbarRouter final : public BusTarget
-		{
-		public:
-			MbarRouter(Sim& _sim, Uart0& _uart0, MBus& _mbus, InterruptController& _interrupts)
-				: m_sim(_sim), m_uart0(_uart0), m_mbus(_mbus), m_interrupts(_interrupts) {}
-
-			uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-			void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
-
-		private:
-			// True when the offset belongs to UART0's model rather than the
-			// SIM's. The one strap offset the SIM answers is excluded here and
-			// nowhere else, so the rule has a single site.
-			static bool isUartOwned(uint32_t _offset);
-
-			// True when the offset belongs to the M-Bus module. The bound comes
-			// from mbus.h, so this file states no register address of its own.
-			static bool isMbusOwned(uint32_t _offset);
-
-			/* True when the offset is one of the register groups the
-			 * interrupt controller answers -- IRQPAR, AVR and the internal
-			 * control block. Every bound comes from interruptController.h, so
-			 * this file states no register address of its own.
-			 *
-			 * The controller is not a BusTarget, which is why it is not in
-			 * select() below. Every one of its registers is an 8-bit register,
-			 * so read and write dispatch to it directly and the BusTarget arm
-			 * below is left for the units that have one. */
-			static bool isInterruptOwned(uint32_t _offset);
-
-			BusTarget& select(uint32_t _offset);
-
-			Sim&                 m_sim;
-			Uart0&               m_uart0;
-			MBus&                m_mbus;
-			InterruptController& m_interrupts;
-		};
+		using MbarRouter = coldfire::Mcf5407Soc;
 
 		/* The ISP1181 answers CS3. The decode subtracts the window base and
 		 * hands the offset down, and the device expects exactly such a
