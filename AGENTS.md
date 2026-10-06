@@ -250,7 +250,7 @@ Both fire only when the override is set. The default path reaches neither.
   detection rather than performing it. Neither reaches the case that matters: a
   ctest run reconfigures from inside its own build fixture and that fixture does
   not inherit `DEVELOPER_DIR`, so the run reports every test `Not Run`.
-  `docs/divergence.md` carries the row for this file and the condition that
+  `doc/divergence.md` carries the row for this file and the condition that
   retires it.
 
 ## Tests

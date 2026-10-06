@@ -46,7 +46,7 @@ source_group("source" FILES ${RG2LIB_SOURCES})
 # flash, i2c and i2cFlash, lcd and lcdfonts for the panel display, and sciMidi.
 #
 # wLib is the Waldorf layer and this target does NOT link it. See
-# docs/divergence.md for the reason and the condition that would re-open it.
+# doc/divergence.md for the reason and the condition that would re-open it.
 
 target_link_libraries(rg2Lib PUBLIC hardwareLib dsp56kEmu synthLib)
 

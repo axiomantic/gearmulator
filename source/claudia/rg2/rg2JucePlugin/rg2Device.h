@@ -36,7 +36,7 @@
  * m_numSamplesProcessed for free, but wLib/wDevice.h declares a pure
  * virtual getDspEsxiClock() returning dsp56k::EsxiClock*, and the design
  * requires that this project constructs zero EsaiClock objects. See
- * docs/divergence.md. Do not re-open it.
+ * doc/divergence.md. Do not re-open it.
  */
 
 #pragma once
