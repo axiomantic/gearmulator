@@ -1,58 +1,22 @@
-/* The Board's constructor always calls attachHdi08Bridges, and
- * DspSet::stateLoad answers Status::BridgesAttached before its first write
- * whenever the set holds bridges -- so Scheduler::stateLoad brackets the DSP
- * limb with detachHdi08Bridges and its exact inverse reattachHdi08Bridges.
+/* The Scheduler's state round trip.
  *
- * That pair is a hazard. A detach and a re-attach that are not exactly inverse
- * would hide behind a green round trip: every borrowed programLanded pointer in
- * the Scheduler's own contexts is an address into a bridge, so a re-attach that
- * rebuilt the bridges, reordered them or dropped one would leave the run gate
- * reading a dangling or a foreign flag while every state comparison in this
- * file still matched. Case 1 pins the pair by the bridge identity at each index
- * -- the pointer value programLanded(i) answers -- and not by a count.
+ * Scheduler::stateLoad brackets the DSP limb with detachHdi08Bridges and its
+ * exact inverse reattachHdi08Bridges, because the Board's constructor always
+ * attaches the bridges and DspSet::stateLoad refuses a set that still holds
+ * them. That pair is this file's main hazard, and case 1 pins it.
  *
- * In a T0 fixture no firmware lands, every DSP run gate is shut, and DSP memory
- * never changes -- so a round trip that compared DSP state would be comparing a
- * zero with a zero and would pass against an implementation that saved nothing.
- * Three separate defences, and each one is asserted before the equality it
- * guards:
+ * No firmware lands here, so every DSP run gate is shut and DSP memory never
+ * changes by itself: a round trip that compared DSP state would be comparing a
+ * zero with a zero. Every equality this file asserts is therefore preceded by
+ * the observation that makes it non-vacuous -- that the state moved, that the
+ * save was not empty, and, for the DSP limb, that it was driven by hand.
  *
- *   1. The state moves. The digest at the save point and the digest 100 quanta
- *      later must differ, and the two images must differ byte-wise. The MCU
- *      context is what moves it: the fixture is a field of one repeated
- *      instruction, the core reports the whole cost of the instruction that
- *      crossed its budget, so the debt accrues and the accumulator walks its
- *      denominator.
- *   2. The load puts the machine back. The digest immediately after the load
- *      must equal the digest at the save point, which no zero-byte snapshot and
- *      no stateLoad that returns Ok without loading can satisfy -- both leave
- *      the digest where the second hundred quanta left it.
- *   3. The DSP limb is driven by hand. Case 5 writes a distinct generation into
- *      every slot's registers and into P, X and Y, saves through the Scheduler,
- *      writes a second generation, loads through the Scheduler, and reads the
- *      first generation back. Nothing in that case is a zero.
- *
- * "Identical output" here is not the frames pull() answers: the codec source
- * injects into audio mailbox 0, the codec sink is extracted from the tail
- * mailbox, and nothing carries a frame between them but the eight DSPs -- which
- * cannot run without firmware. Every pulled frame in a T0 fixture is a zero
- * frame whatever the Scheduler does. The output asserted here is instead the
- * whole observable state the hundred quanta produce: the accessor surface,
- * digest by digest, and the snapshot image byte for byte.
- *
- * The accumulator equality is the image equality. Scheduler carries no accessor
- * for McuContext::acc or DspContext::acc and this file adds none. The image
- * holds every accumulator, so a byte-identical image is a stronger statement
- * than accessor comparisons would be.
+ * No count is typed. The DSP count and the context count come from the set, the
+ * image sizes from the objects, and the instruction cost from the linked core.
  *
  * Nothing here is a language assert() and nothing catches an exception. Every
  * verdict is the failure counter, which no build type removes; the compile-time
- * half is static_assert, which fires in every build type. The default build is
- * Release and Release defines NDEBUG.
- *
- * No count is typed. The DSP count comes from the set, the context count from
- * the set, the image sizes from the objects, and the instruction cost from the
- * linked core.
+ * half is static_assert, which fires in every build type.
  */
 
 #include "board.h"
@@ -145,8 +109,9 @@ namespace
 		"DspSet::bridgesAttached answers a bool");
 
 	/* A Board with an SDRAM window full of one repeated instruction and a core
-	 * reset into it: it is the one part of a T0 Scheduler whose emulated state
-	 * moves, and a round trip over a machine whose state never moves is
+	 * reset into it: with no firmware it is the one part of a Scheduler whose
+	 * emulated state moves, and a round trip over a machine whose state never
+	 * moves is
 	 * satisfied by a snapshot of zero bytes. */
 	class Ram final : public rg2::BusTarget
 	{
@@ -247,9 +212,17 @@ namespace
 	};
 
 	/* The whole observable state of one Scheduler, read through the accessor
-	 * surface and through nothing else. It is what this file means by the
-	 * output of a hundred quanta: the codec sink cannot carry one in a
-	 * firmware-less fixture. */
+	 * surface and through nothing else. It is what this file means by the output
+	 * of a run, because the frames pull() answers cannot be: the codec source
+	 * injects into audio mailbox 0, the codec sink is extracted from the tail
+	 * mailbox, and nothing carries a frame between them but the DSPs -- which
+	 * cannot run without firmware. Every pulled frame here is a zero frame
+	 * whatever the Scheduler does.
+	 *
+	 * The accumulators are compared as part of the snapshot image rather than
+	 * here: Scheduler publishes no accessor for McuContext::acc or
+	 * DspContext::acc, and the image holds every one of them, so a
+	 * byte-identical image is the stronger statement. */
 	struct Digest
 	{
 		uint64_t              frameIndex = 0;
@@ -403,9 +376,9 @@ int main()
 	 * object. A re-attach that constructed fresh bridges would leave every one
 	 * of those borrowed pointers dangling; a re-attach that reordered them
 	 * would point each gate at another slot's flag; a re-attach that dropped
-	 * one would leave the last gate reading a null. None of the three is
-	 * visible in a state comparison, so this case pins the bridge identity at
-	 * each index. */
+	 * one would leave the last gate reading a null. None of these is visible in
+	 * a state comparison, so this case pins the bridge identity at each index --
+	 * the pointer value programLanded(i) answers, and not a count. */
 	{
 		Machine machine;
 		rg2::DspSet& set = machine.board.dspSet();
@@ -515,7 +488,7 @@ int main()
 	 * instruction it has started, so it retires exactly one and reports that
 	 * instruction's whole cost. It is measured rather than written down because
 	 * a core that clamped its return would make the debt identically zero, and
-	 * the MCU context is the one part of a T0 Scheduler whose state moves. */
+	 * with no firmware the MCU context is the one part whose state moves. */
 	int64_t instrCost = 0;
 	{
 		Machine probe;
@@ -787,7 +760,7 @@ int main()
 	}
 
 	/* Case 5, the DSP limb driven by hand through the Scheduler. No firmware
-	 * lands in a T0 fixture, every run gate is shut, and DSP memory never
+	 * lands in this fixture, every run gate is shut, and DSP memory never
 	 * changes by itself, so the DSP half of case 3's image equality is an
 	 * equality between two blocks of zeros: it would pass against a composition
 	 * that dropped the DSP limb entirely.
