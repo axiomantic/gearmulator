@@ -135,7 +135,6 @@ if(${CMAKE_PROJECT_NAME}_SYNTH_88EMU)
 endif()
 add_subdirectory(cpu/h8s)
 add_subdirectory(cpu/mc68k EXCLUDE_FROM_ALL)
-add_subdirectory(cpu/coldfire EXCLUDE_FROM_ALL)
 
 # mc68k does not declare an include root of its own, so #include "mc68k/..."
 # used to resolve only through the blanket source/ root that baseLib exported.
