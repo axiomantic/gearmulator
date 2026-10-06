@@ -52,6 +52,7 @@ namespace rg2
         }
 
     private:
+        void initRegisters(bool _engineStrap);
         cf_ctx* activeCtx() const;
         void logLine(const char* _reason, bool _isWrite, int _size, uint32_t _offset);
         static uint16_t onPortATrampoline(void* _user);

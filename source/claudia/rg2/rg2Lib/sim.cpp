@@ -99,7 +99,7 @@ namespace rg2
         }
     } // namespace
 
-    Sim::Sim(const bool _engineStrap)
+    void Sim::initRegisters(const bool _engineStrap)
     {
         for (uint8_t& protect : m_writeProtect)
             protect = 0xffu;
@@ -120,9 +120,20 @@ namespace rg2
             m_space[g_simUipcrOffset] |= 0x01u;
     }
 
+    Sim::Sim(const bool _engineStrap)
+    {
+        initRegisters(_engineStrap);
+    }
+
     Sim::Sim(const Model _model) : Sim(isEngineStrapSet(_model)) {}
 
-    Sim::Sim(cf_ctx*& _ctx) : Sim(false) { m_ctxPtr = &_ctx; }
+    Sim::Sim(cf_ctx*& _ctx) :
+        m_ctxPtr(&_ctx),
+        m_timer1(_ctx, Timer::gTimer1InterruptIndex),
+        m_timer2(_ctx, Timer::gTimer2InterruptIndex)
+    {
+        initRegisters(false);
+    }
 
     Sim::~Sim()
     {
@@ -204,12 +215,15 @@ namespace rg2
 
     void Sim::advanceTimers(const uint32_t _inputClocks)
     {
-        m_timer1.advance(_inputClocks);
-        m_timer2.advance(_inputClocks);
         cf_ctx* ctx = activeCtx();
         if (ctx)
         {
             cf_timer_tick(ctx, _inputClocks);
+        }
+        else
+        {
+            m_timer1.advance(_inputClocks);
+            m_timer2.advance(_inputClocks);
         }
         if (m_interrupts)
         {
