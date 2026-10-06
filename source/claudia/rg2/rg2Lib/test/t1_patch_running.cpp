@@ -1,60 +1,25 @@
-// A real `.pch2` delivered to booted, running firmware.
-// Tier T1: it needs the Clavia-derived artifacts and skips with a reason when
-// NMG2_ARTIFACTS does not resolve.
+// A real `.pch2` delivered to booted, running firmware. It needs the
+// Clavia-derived artifacts and skips with a reason when NMG2_ARTIFACTS does not
+// resolve.
 //
-// t0_usb_ingress_byte proves a patch byte reaches the device register file the
-// firmware reads, on a Board with no firmware in it. t1_boot and t1_egress boot
-// the firmware and load no patch. So `--impulse`'s `arrival=-1` is a statement
-// about an unpatched machine and says nothing about a patched one. This file is
-// the join.
-//
-// The two questions it makes answerable.
-//
-//   1. Does MCU routine 0x30032A82 fire on a real patch load? Nothing in the
-//      emulator names that address, so the only way to reach it is to let the
-//      firmware run the path.
-//
-//   2. Audio. `arrival=-1` on an unpatched machine is not a claim about a
-//      patched one.
+// The question: does the MCU routine at g_probeTarget fire on a real patch
+// load? Nothing in the emulator names that address, so the only way to reach it
+// is to let the firmware run the path. `--impulse`'s arrival=-1 is measured on
+// an unpatched machine and is not a claim about a patched one.
 //
 // The instrument needs no production change. The MCF5407 core fetches every
-// instruction word through the bus read callback -- `cpu.nim`'s
-// `ctx.readFn(ctx.user, ctx.pc, 2, addr status)` -- and Board::onRead routes
-// that to the MemoryMap, which routes it to the BusTarget attached at
-// Region::Sdram. That target is this file's Ram. So a counter on 16-bit reads
-// at one SDRAM offset is an instruction-fetch counter for that address, built
-// entirely inside the test.
+// instruction word through the bus read callback, Board::onRead routes that to
+// the MemoryMap, and the MemoryMap routes it to the BusTarget attached at
+// Region::Sdram -- which is this file's Ram. So a histogram over 16-bit SDRAM
+// reads is an instruction-fetch counter, built entirely inside the test. Its two
+// controls are documented where they are selected, and both are drawn from the
+// same population as the measurement, because a zero from a counter that never
+// fires is not a measurement.
 //
-// The instrument's controls, both from the same population. A zero from a
-// counter that never fires is not a measurement.
-//
-//   known positive   the most-visited address of the window: the argmax of a
-//                    histogram this file keeps over every 16-bit read in the
-//                    window. It is not named anywhere in this file; it is
-//                    whatever address this run read most, counted by the same
-//                    counter as every probe.
-//   known negative   an address inside the vector TABLE. Vectors are read as
-//                    32-bit longwords and never fetched as instruction words,
-//                    so the same counter must read 0 there.
-//
-// The argmax, and not the address the core happened to sit at when the window
-// opened: one instant of the machine is not a measure of how hard the counter
-// can fire, and the window can open inside an interrupt handler at an address
-// the window then reads once.
-//
-// The argmax is not certified to be an instruction -- it is the most-read
-// 16-bit location, and a hot 16-bit data read wins it just as legitimately. Its
-// job is to answer how large a count this counter can produce on this arm, so
-// that a zero elsewhere has a scale to be read against.
-//
-// Because the known positive is the maximum, `knownPositive >= hitsTarget`
-// holds by construction for every probe in this file. No such comparison is
-// asserted below, and none would mean anything if it were.
-//
-// And the control that makes the answer an answer: the whole run happens twice
-// on the same code path, once without a patch and once with one. A probe count
-// that is non-zero in both runs says the routine fires anyway; non-zero only in
-// the patched run is the patch load reaching it.
+// The control that makes the answer an answer: the whole run happens twice on
+// the same code path, once without a patch and once with one. A probe count that
+// is non-zero in both arms says the routine fires anyway; non-zero only in the
+// patched arm is the patch load reaching it.
 //
 // Every verdict is an observable and not an assert(). A release build deletes
 // assert(), so a predicate spelled as one is a predicate the shipped build does
@@ -190,16 +155,16 @@ namespace
 
 	// ------------------------------------------------- the CS3 peek instrument
 	//
-	// t0_usb_ingress_byte's instrument: the part's own peek command (0xD2)
-	// issued at the CS3 command port and read back at the CS3 data port, with
-	// the peek target selected by the endpoint-configuration command (0x20 +
-	// the endpoint's configuration slot, which is not its number). It reads the
-	// head byte of the OUT buffer the given endpoint delivers into, and answers
-	// the model's benign 0x00 when that buffer holds nothing.
+	// The part's own peek command (0xD2), issued at the CS3 command port and
+	// read back at the CS3 data port, with the peek target selected by the
+	// endpoint-configuration command (0x20 + the endpoint's configuration slot,
+	// which is not its number). It reads the head byte of the OUT buffer the
+	// given endpoint delivers into, and answers the model's benign 0x00 when
+	// that buffer holds nothing.
 	//
-	// t0_usb_ingress_byte runs it on a Board with no firmware in it. On a
-	// booted machine the same reading answers a different question: whether the
-	// firmware ever took the packet out.
+	// On a machine with no firmware this reading says whether a byte arrived. On
+	// a booted one it answers a different question: whether the firmware ever
+	// took the packet out.
 	constexpr uint32_t g_dataPort    = rg2::g_cs3Base + 0x00u;
 	constexpr uint32_t g_commandPort = rg2::g_cs3Base + 0x10u;
 
@@ -381,6 +346,11 @@ namespace
 		// The argmax over every counter: the address this run read more times
 		// than any other. Ties go to the lowest address, so the selection is
 		// deterministic across runs.
+		//
+		// It is not certified to be an instruction -- it is the most-read 16-bit
+		// location, and a hot 16-bit data read wins it just as legitimately. Its
+		// job is to say how large a count this counter can produce on this arm,
+		// so that a zero elsewhere has a scale to be read against.
 		Hottest hottest() const
 		{
 			return hottestInRange(rg2::g_sdramBase,
@@ -577,9 +547,8 @@ namespace
 
 	// ------------------------------------------------------ the impulse pattern
 	//
-	// t1_egress's two values: they differ from
-	// each other so a chain that carried slot 0 into both slots fails rather
-	// than passes, and neither is a power of two.
+	// The two values differ from each other, so a chain that carried slot 0 into
+	// both slots fails rather than passes, and neither is a power of two.
 	constexpr int32_t g_impulseLeft  = 0x0055AA33;
 	constexpr int32_t g_impulseRight = 0x00337799;
 
@@ -711,6 +680,14 @@ namespace
 		// The known positive of this arm: the argmax of this arm's own histogram.
 		// Each arm selects its own, because each arm is a separate run of the
 		// machine and one arm's figure says nothing about the other.
+		//
+		// The argmax rather than windowPc above: one instant of the machine is
+		// not a measure of how hard the counter can fire, and the window can open
+		// inside an interrupt handler at an address it then reads once.
+		//
+		// Being the maximum, it satisfies knownPositiveHits >= any probe's count
+		// by construction. No such comparison is asserted below, and none would
+		// mean anything if it were.
 		uint32_t knownPositiveAddr = 0;
 		uint64_t knownPositiveHits = 0;
 
@@ -1155,7 +1132,7 @@ namespace
 
 		std::cout << _label << ": windowOpenPc=" << hex32(_r.windowPc)
 		          << " readsAtWindowOpenPc=" << _r.windowPcHits
-		          << "  (this was the OLD known positive)" << std::endl;
+		          << "  (one instant of the machine, not a counter scale)" << std::endl;
 		std::cout << _label << ": KNOWN POSITIVE, any address (most-read of this run) "
 		          << hex32(_r.knownPositiveAddr) << " = " << _r.knownPositiveHits
 		          << (_r.knownPositiveAddr >= _r.imageEnd || _r.knownPositiveAddr < _r.imageBase
