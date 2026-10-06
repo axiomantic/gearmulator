@@ -17,7 +17,7 @@
 // drives it to zero instead of satisfying it.
 //
 // It drives Board::onRead and Board::onWrite rather than Board::busRead: those
-// are the exact function pointers the Board hands to mcf5407_create, so a core
+// are the exact function pointers the Board hands to cf_create, so a core
 // driven through them takes the path the real core takes. Nothing in this file
 // reaches the routing by any other door.
 //
@@ -279,7 +279,7 @@ namespace
 	constexpr uint32_t g_entryPc = 0x30000400u;
 	constexpr uint32_t g_entrySp = 0x30400000u;
 
-	// The register indices of the mcf5407 C ABI. 17 is the program counter,
+	// The register indices of the ColdFire C ABI. 17 is the program counter,
 	// 18 is the vector base register.
 	constexpr int g_regPc  = 17;
 	constexpr int g_regVbr = 18;
@@ -406,7 +406,7 @@ namespace
 			m_clearWrites   = 0;
 		}
 
-		/* A landmark counter at one address. mcf5407.h states that an instruction
+		/* A landmark counter at one address. coldfire.h states that an instruction
 		 * fetch presents a count of 2 bytes at the instruction's own address, which
 		 * reaches a BusTarget as a 16-bit access at exactly that offset, so a
 		 * 16-bit read here is how the core executing that instruction is seen.
@@ -427,13 +427,13 @@ namespace
 			return it == m_fetches.end() ? 0u : it->second;
 		}
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, cf_bus_status& _status) override
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5407_BUS_SIZE_ILLEGAL;
+				_status = CF_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
 
@@ -458,13 +458,13 @@ namespace
 			return value;
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status) override
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 
 			if(_size != 8 && _size != 16 && _size != 32)
 			{
-				_status = MCF5407_BUS_SIZE_ILLEGAL;
+				_status = CF_BUS_SIZE_ILLEGAL;
 				return;
 			}
 
@@ -564,7 +564,7 @@ namespace
 
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			const uint32_t byte = rg2::Board::onRead(&_board, base + col, g_byte, &status);
 
 			// Decode the five CGRAM glyphs back to the characters they render.
@@ -887,10 +887,10 @@ namespace
 
 		for(uint32_t i = 0; i < 16u; ++i)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			const uint32_t byte = rg2::Board::onRead(&board, g_entryPc + i, g_byte, &status);
 
-			if(status != MCF5407_BUS_OK || uint8_t(byte & 0xffu) != code[i])
+			if(status != CF_BUS_OK || uint8_t(byte & 0xffu) != code[i])
 				_result.readPathProven = false;
 		}
 
@@ -970,10 +970,10 @@ namespace
 			 * legal healthy value. */
 			if(_result.tcn2Latched == 0u)
 			{
-				mcf5407_bus_status tcnStatus = MCF5407_BUS_OK;
+				cf_bus_status tcnStatus = CF_BUS_OK;
 				const uint32_t tcnNow =
 					rg2::Board::onRead(&board, g_mbarBase + g_tcn2Offset, g_word, &tcnStatus);
-				if(tcnStatus == MCF5407_BUS_OK && tcnNow != 0u)
+				if(tcnStatus == CF_BUS_OK && tcnNow != 0u)
 					_result.tcn2Latched = tcnNow;
 			}
 
@@ -1050,10 +1050,10 @@ namespace
 			 * legal healthy value. */
 			if(_result.tcn2Latched == 0u)
 			{
-				mcf5407_bus_status tcnStatus = MCF5407_BUS_OK;
+				cf_bus_status tcnStatus = CF_BUS_OK;
 				const uint32_t tcnNow =
 					rg2::Board::onRead(&board, g_mbarBase + g_tcn2Offset, g_word, &tcnStatus);
-				if(tcnStatus == MCF5407_BUS_OK && tcnNow != 0u)
+				if(tcnStatus == CF_BUS_OK && tcnNow != 0u)
 					_result.tcn2Latched = tcnNow;
 			}
 		}
@@ -1070,10 +1070,10 @@ namespace
 		_result.mcuCycles = board.runMcu(g_cyclesPerIteration);
 
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			const uint32_t tcn2 =
 				rg2::Board::onRead(&board, g_mbarBase + g_tcn2Offset, g_word, &status);
-			_result.tcn2 = (status == MCF5407_BUS_OK) ? tcn2 : 0u;
+			_result.tcn2 = (status == CF_BUS_OK) ? tcn2 : 0u;
 		}
 
 		_result.busLog = board.memory().log();
@@ -1107,7 +1107,7 @@ namespace
 	// no run available to this file reaches a real banner and the true case
 	// cannot be observed. It is built instead: the
 	// expected bytes are driven into the display buffer through Board::onWrite --
-	// the exact static callback handed to mcf5407_create, so the same decode, the
+	// the exact static callback handed to cf_create, so the same decode, the
 	// same region and the same store the core's own writes reach -- and the
 	// predicate is read back.
 	//
@@ -1143,7 +1143,7 @@ namespace
 		{
 			for(uint32_t col = 0; col < g_lineWidth && col < _line.size(); ++col)
 			{
-				mcf5407_bus_status status = MCF5407_BUS_OK;
+				cf_bus_status status = CF_BUS_OK;
 				rg2::Board::onWrite(&board, g_displayBase + col, g_byte, uint32_t(uint8_t(_line[col])), &status);
 			}
 		}
@@ -1196,7 +1196,7 @@ namespace
 		{
 			ControlRig rig;
 
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			rg2::Board::onRead(&rig.board, g_bannerFunction - 2u, 2, &status);
 			rg2::Board::onRead(&rig.board, g_bannerFunction, 2, &status);
 

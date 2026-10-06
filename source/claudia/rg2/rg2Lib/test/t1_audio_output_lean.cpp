@@ -71,10 +71,10 @@ namespace
     {
     public:
         explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
-        uint32_t read(const uint32_t _o, const int _s, mcf5407_bus_status& _st) override
+        uint32_t read(const uint32_t _o, const int _s, cf_bus_status& _st) override
         {
-            _st = (_s == 8 || _s == 16 || _s == 32) ? MCF5407_BUS_OK : MCF5407_BUS_SIZE_ILLEGAL;
-            if (_st != MCF5407_BUS_OK)
+            _st = (_s == 8 || _s == 16 || _s == 32) ? CF_BUS_OK : CF_BUS_SIZE_ILLEGAL;
+            if (_st != CF_BUS_OK)
                 return 0u;
             uint32_t val = 0u, count = uint32_t(_s) / 8u;
             for (uint32_t i = 0; i < count; ++i)
@@ -82,10 +82,10 @@ namespace
                     val = (val << 8) | m_bytes[size_t(_o) + i];
             return val;
         }
-        void write(const uint32_t _o, const int _s, const uint32_t _val, mcf5407_bus_status& _st) override
+        void write(const uint32_t _o, const int _s, const uint32_t _val, cf_bus_status& _st) override
         {
-            _st = (_s == 8 || _s == 16 || _s == 32) ? MCF5407_BUS_OK : MCF5407_BUS_SIZE_ILLEGAL;
-            if (_st != MCF5407_BUS_OK)
+            _st = (_s == 8 || _s == 16 || _s == 32) ? CF_BUS_OK : CF_BUS_SIZE_ILLEGAL;
+            if (_st != CF_BUS_OK)
                 return;
             ++m_writes;
             const uint32_t count = uint32_t(_s) / 8u;

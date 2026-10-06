@@ -31,8 +31,8 @@ namespace coldfire
 
 		void setInterruptController(InterruptController* _interrupts);
 
-		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
 		void setMidiOut(MidiOutFn _fn, void* _user);
 		void receive(uint8_t _byte);

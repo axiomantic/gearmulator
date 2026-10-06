@@ -1,7 +1,7 @@
 // board.cpp owns the Board's lifetime and its public surface.
 //
 // stateSave/stateLoad serialise the Board's own determinism-relevant state
-// only. The core's mcf5407_state_* and isp1181_state_* blocks are not folded
+// only. The core's cf_state_* and isp1181_state_* blocks are not folded
 // in: doing so fixes a snapshot layout across two repositories.
 //
 // The routing. onRead and onWrite forward to busRead and busWrite, which hand
@@ -24,12 +24,12 @@
 //
 // memoryMap.cpp already fixes what an address in no window does: an access that
 // decodes to no region, or to a region with no target, reports
-// MCF5407_BUS_UNMAPPED and writes one log line. This file routes to that
-// decision and does not re-take it. A blanket MCF5407_BUS_OK is the one answer
+// CF_BUS_UNMAPPED and writes one log line. This file routes to that
+// decision and does not re-take it. A blanket CF_BUS_OK is the one answer
 // that is definitely wrong, because it makes an unmapped access
 // indistinguishable from a device that legitimately answered zero.
 //
-// The pinned core commit exports no mcf5407_state_* or isp1181_state_* C
+// The pinned core commit exports no cf_state_* or isp1181_state_* C
 // symbol, so there is nothing to embed here.
 
 #include "board.h"
@@ -47,7 +47,7 @@ namespace rg2
 {
     namespace
     {
-        /* The unit conversion of the bus `size` argument. mcf5407.h's `size` is
+        /* The unit conversion of the bus `size` argument. coldfire.h's `size` is
          * a count of bytes -- 1, 2 or 4 -- which is what a ColdFire SIZ[1:0]
          * transfer size encodes; memoryMap.h's `_size` is a width in bits --
          * 8, 16 or 32. The two readings disagree on every access a core can
@@ -122,9 +122,9 @@ namespace rg2
         return m_map.window(m_region).base + _offset;
     }
 
-    uint32_t Board::FlashWindow::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+    uint32_t Board::FlashWindow::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
     {
-        _status = MCF5407_BUS_OK;
+        _status = CF_BUS_OK;
 
         const uint32_t address = absolute(_offset);
 
@@ -140,14 +140,14 @@ namespace rg2
             break;
         }
 
-        _status = MCF5407_BUS_SIZE_ILLEGAL;
+        _status = CF_BUS_SIZE_ILLEGAL;
         return 0;
     }
 
     void Board::FlashWindow::write(const uint32_t _offset, const int _size, const uint32_t _value,
-                                   mcf5407_bus_status& _status)
+                                   cf_bus_status& _status)
     {
-        _status = MCF5407_BUS_OK;
+        _status = CF_BUS_OK;
 
         const uint32_t address = absolute(_offset);
 
@@ -169,12 +169,12 @@ namespace rg2
             break;
         }
 
-        _status = MCF5407_BUS_SIZE_ILLEGAL;
+        _status = CF_BUS_SIZE_ILLEGAL;
     }
 
-    uint32_t Board::Isp1181Window::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+    uint32_t Board::Isp1181Window::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
     {
-        _status = MCF5407_BUS_OK;
+        _status = CF_BUS_OK;
 
         /* The device answers every cycle at every offset, so neither arm can
          * produce anything but BUS_OK. The 16 and 32-bit cycles are answered
@@ -196,14 +196,14 @@ namespace rg2
             break;
         }
 
-        _status = MCF5407_BUS_SIZE_ILLEGAL;
+        _status = CF_BUS_SIZE_ILLEGAL;
         return 0;
     }
 
     void Board::Isp1181Window::write(const uint32_t _offset, const int _size, const uint32_t _value,
-                                     mcf5407_bus_status& _status)
+                                     cf_bus_status& _status)
     {
-        _status = MCF5407_BUS_OK;
+        _status = CF_BUS_OK;
 
         /* The low byte only: the model routes one register per address, so
          * there is no wider state to compose a multi-byte store into. */
@@ -218,15 +218,15 @@ namespace rg2
             break;
         }
 
-        _status = MCF5407_BUS_SIZE_ILLEGAL;
+        _status = CF_BUS_SIZE_ILLEGAL;
     }
 
-    uint32_t Board::busRead(const uint32_t _address, const int _size, mcf5407_bus_status& _status)
+    uint32_t Board::busRead(const uint32_t _address, const int _size, cf_bus_status& _status)
     {
         return m_memory.read(_address, _size, _status);
     }
 
-    void Board::busWrite(const uint32_t _address, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+    void Board::busWrite(const uint32_t _address, const int _size, const uint32_t _value, cf_bus_status& _status)
     {
         m_memory.write(_address, _size, _value, _status);
     }
@@ -245,9 +245,9 @@ namespace rg2
         // header.
     }
 
-    uint32_t Board::onRead(void* const user, const uint32_t addr, const int size, mcf5407_bus_status* const status)
+    uint32_t Board::onRead(void* const user, const uint32_t addr, const int size, cf_bus_status* const status)
     {
-        mcf5407_bus_status local = MCF5407_BUS_OK;
+        cf_bus_status local = CF_BUS_OK;
         const uint32_t value = static_cast<Board*>(user)->busRead(addr, busWidthBits(size), local);
         if (status)
             *status = local;
@@ -255,9 +255,9 @@ namespace rg2
     }
 
     void Board::onWrite(void* const user, const uint32_t addr, const int size, const uint32_t value,
-                        mcf5407_bus_status* const status)
+                        cf_bus_status* const status)
     {
-        mcf5407_bus_status local = MCF5407_BUS_OK;
+        cf_bus_status local = CF_BUS_OK;
         static_cast<Board*>(user)->busWrite(addr, busWidthBits(size), value, local);
         if (status)
             *status = local;
@@ -268,16 +268,16 @@ namespace rg2
         Board* const board = static_cast<Board*>(user);
 
         /* The guard is on the handle and not on the reset. Presenting a level 1
-         * to 6 interrupt immediately after mcf5407_reset is a defined case, so
+         * to 6 interrupt immediately after cf_reset is a defined case, so
          * a presentation before the first reset is fine; a presentation before
          * the core exists has nowhere to go. */
         if (!board->m_mcu)
             return;
 
         /* The whole current state, unconditionally, on every recomputation.
-         * mcf5407_set_irq is idempotent, which is what licenses the board to
+         * cf_set_irq is idempotent, which is what licenses the board to
          * present on a clear exactly as it does on an assert. */
-        mcf5407_set_irq(board->m_mcu, level, vector, autovector);
+        cf_set_irq(board->m_mcu, level, vector, autovector);
     }
 
     void Board::onInterruptAck(void*, const int, const uint8_t)
@@ -410,10 +410,11 @@ namespace rg2
          * reference and each one has to be fully built first. */
         attachHdi08Bridges(m_hdi08, m_dspSet);
 
-        // The Nim runtime must be initialised before any mcf5407_ call. It is
+        // The Nim runtime must be initialised before any cf_ call. It is
         // idempotent behind a latch, so the second Board in a process is safe.
-        mcf5407_runtime_init();
-        m_mcu = mcf5407_create(this, &Board::onRead, &Board::onWrite, &Board::onInterruptAck);
+        (void)cf_runtime_init();
+        const cf_config cfg{CF_ISA_A, 0xFFFFFFFFu, this, &Board::onRead, &Board::onWrite, &Board::onInterruptAck};
+        m_mcu = cf_create(&cfg);
 
         /* The handle is moved off the Stub deliberately and here. The Stub is
          * the create-time default: present in the CS3 window and inert -- every
@@ -614,7 +615,7 @@ namespace rg2
 
         /* The return is read. `isp1181_rx` answers 1 when an OUT buffer holds
          * the packet and 0 for the NAK, and the header marks it
-         * MCF5407_MUST_USE so a call that discarded it is a compiler
+         * CF_MUST_USE so a call that discarded it is a compiler
          * diagnostic. */
         if (m_usb.rx(m_usbProtocolEndpoint, m_heldBytes.data() + m_heldOffset, packetSize) == 1)
         {
@@ -692,7 +693,7 @@ namespace rg2
              * noexcept and runs at a quantum boundary; a stream insertion that
              * threw here would call std::terminate. */
             /* It reports what this side knows and names who knows the rest.
-             * `isp1181_rx` answers one bit, and mcf5407.h lists several
+             * `isp1181_rx` answers one bit, and coldfire.h lists several
              * distinct conditions behind it -- a full buffer and an oversized
              * packet among them. The Board cannot tell them apart and must not
              * guess. The cause lives in the device's own log, one line per
@@ -767,7 +768,7 @@ namespace rg2
     Board::~Board()
     {
         if (m_mcu)
-            mcf5407_destroy(m_mcu);
+            cf_destroy(m_mcu);
         m_mcu = nullptr;
     }
 
@@ -776,12 +777,12 @@ namespace rg2
         if (!m_mcu)
             return 0u;
 
-        const uint32_t cycles = mcf5407_exec(m_mcu, wantCycles);
+        const uint32_t cycles = cf_exec(m_mcu, wantCycles);
 
         /* The fault bit is taken from the core rather than decided here. It is
          * read back on the same call that advanced the core, so the answer
          * faulted() gives cannot drift from the machine it describes. */
-        m_faulted = mcf5407_faulted(m_mcu) != 0;
+        m_faulted = cf_faulted(m_mcu) != 0;
 
         /* The timers are advanced from the cycles this call actually ran, not
          * from the budget it was asked for. That is what makes a timer tick a
@@ -799,7 +800,7 @@ namespace rg2
         if (!m_mcu)
             return;
 
-        mcf5407_reset(m_mcu, initialSp, initialPc);
+        cf_reset(m_mcu, initialSp, initialPc);
 
         /* The reset clears the core's own fault, so a bit left standing here
          * would report a machine that no longer exists. */
@@ -810,21 +811,21 @@ namespace rg2
     {
         if (!m_mcu)
             return 0u;
-        return mcf5407_get_reg(m_mcu, index);
+        return cf_get_reg(m_mcu, index);
     }
 
     bool Board::setMcuReg(const int index, const uint32_t value) noexcept
     {
         if (!m_mcu)
             return false;
-        return mcf5407_set_reg(m_mcu, index, value) != 0;
+        return cf_set_reg(m_mcu, index, value) != 0;
     }
 
     bool Board::mcuHalted() const noexcept
     {
         if (!m_mcu)
             return false;
-        return mcf5407_halted(m_mcu) != 0;
+        return cf_halted(m_mcu) != 0;
     }
 
     void Board::tickSofIfDue(const uint64_t frameIndex) noexcept
@@ -869,7 +870,7 @@ namespace rg2
         std::memcpy(dst, &s, sizeof s);
     }
 
-    /* The reset reuses resetMcu rather than calling mcf5407_reset itself, so
+    /* The reset reuses resetMcu rather than calling cf_reset itself, so
      * the core's reset and the clearing of this class's fault bit stay one
      * decision in one place; a second call site here could drift from that one.
      *

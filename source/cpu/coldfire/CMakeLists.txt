@@ -1,15 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(coldfire)
+project(coldfireSoc)
 
-if(NOT TARGET mcf5407::mcf5407)
-	if(RG2_MCF5407_SOURCE_DIR AND NOT RG2_COLDFIRE_SOURCE_DIR)
-		set(RG2_COLDFIRE_SOURCE_DIR "${RG2_MCF5407_SOURCE_DIR}")
-	endif()
-	if(RG2_MCF5407_GIT_TAG AND NOT RG2_COLDFIRE_GIT_TAG)
-		set(RG2_COLDFIRE_GIT_TAG "${RG2_MCF5407_GIT_TAG}")
-	endif()
-
+if(NOT TARGET coldfire::coldfire)
 	if(RG2_COLDFIRE_SOURCE_DIR)
 		option(RG2_COLDFIRE_SOURCE_DIR_IS_NOT_THE_PIN "Build from RG2_COLDFIRE_SOURCE_DIR even when that checkout is not the pinned commit" OFF)
 		find_program(G2_GIT_EXECUTABLE NAMES git)
@@ -41,7 +34,7 @@ if(NOT TARGET mcf5407::mcf5407)
 			set(coldfireHeadIsPin TRUE)
 		endif()
 
-		if(NOT coldfireHeadIsPin AND NOT RG2_COLDFIRE_SOURCE_DIR_IS_NOT_THE_PIN AND NOT RG2_MCF5407_SOURCE_DIR_IS_NOT_THE_PIN)
+		if(NOT coldfireHeadIsPin AND NOT RG2_COLDFIRE_SOURCE_DIR_IS_NOT_THE_PIN)
 			message(FATAL_ERROR
 				"RG2_COLDFIRE_SOURCE_DIR points at ${RG2_COLDFIRE_SOURCE_DIR}, but "
 				"${coldfireDivergence}. Every result from this build tree would be a "
@@ -58,10 +51,10 @@ if(NOT TARGET mcf5407::mcf5407)
 				"${coldfireDivergence}. Results from this build tree do not describe the pin.")
 		endif()
 
-		add_subdirectory(${RG2_COLDFIRE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/mcf5407 EXCLUDE_FROM_ALL)
+		add_subdirectory(${RG2_COLDFIRE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/coldfire EXCLUDE_FROM_ALL)
 	else()
 		include(FetchContent)
-		FetchContent_MakeAvailable(mcf5407)
+		FetchContent_MakeAvailable(coldfire)
 	endif()
 endif()
 
@@ -69,8 +62,8 @@ set(COLDFIRE_SOURCES
 	busTarget.h
 	interruptController.h
 	interruptController.cpp
-	mcf5407Soc.h
-	mcf5407Soc.cpp
+	coldfireSoc.h
+	coldfireSoc.cpp
 	sim.h
 	sim.cpp
 	timer.h
@@ -79,16 +72,17 @@ set(COLDFIRE_SOURCES
 	uart0.cpp
 )
 
-add_library(coldfire STATIC ${COLDFIRE_SOURCES})
+add_library(coldfireSoc STATIC ${COLDFIRE_SOURCES})
 source_group("source" FILES ${COLDFIRE_SOURCES})
-set_property(TARGET coldfire PROPERTY FOLDER "cpu")
+set_property(TARGET coldfireSoc PROPERTY FOLDER "cpu")
 
-target_compile_features(coldfire PUBLIC cxx_std_20)
-target_include_directories(coldfire PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(coldfire PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_include_directories(coldfire PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+target_compile_features(coldfireSoc PUBLIC cxx_std_20)
+target_include_directories(coldfireSoc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(coldfireSoc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(coldfireSoc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 
-if(TARGET mcf5407::mcf5407)
-	target_include_directories(coldfire PUBLIC
-		$<TARGET_PROPERTY:mcf5407::mcf5407,INTERFACE_INCLUDE_DIRECTORIES>)
+if(TARGET coldfire::coldfire)
+	target_include_directories(coldfireSoc PUBLIC
+		$<TARGET_PROPERTY:coldfire::coldfire,INTERFACE_INCLUDE_DIRECTORIES>
+	)
 endif()

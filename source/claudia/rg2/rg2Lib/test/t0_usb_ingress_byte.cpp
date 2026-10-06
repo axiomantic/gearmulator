@@ -5,10 +5,10 @@
  * The property this file exists to hold: a byte of a `.pch2` object that a
  * plugin originates is readable, as that byte and not as the benign 0x00, at
  * the CS3 data port -- through Board::onRead, which is the exact function
- * pointer handed to mcf5407_create and therefore the exact path the MCU core
+ * pointer handed to cf_create and therefore the exact path the MCU core
  * takes when the firmware executes a load from the ISP1181.
  *
- * It is the check of the Board selecting MCF5407_ISP1181_BACKEND_FULL_MODEL on
+ * It is the check of the Board selecting hwLib::Isp1181::Backend::FullModel on
  * the handle it just created. Remove that call and the handle keeps the Stub
  * backend, which discards every packet and answers 0x00 at every offset, and
  * case 2 below reads 0x00.
@@ -124,7 +124,7 @@ namespace
 		if(slot < 0)
 			return 0x00u;
 
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		rg2::Board::onWrite(&_board, g_commandPort, g_byte,
 			uint32_t(g_endpointConfigBase) + uint32_t(slot), &status);
@@ -133,7 +133,7 @@ namespace
 
 		const uint32_t value = rg2::Board::onRead(&_board, g_dataPort, g_byte, &status);
 
-		check(status == MCF5407_BUS_OK,
+		check(status == CF_BUS_OK,
 			"the CS3 data-port read that carries the peek result completes with BUS_OK");
 
 		return uint8_t(value & 0xffu);

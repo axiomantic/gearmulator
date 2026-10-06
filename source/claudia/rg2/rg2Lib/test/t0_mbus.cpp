@@ -165,13 +165,13 @@ namespace
 
 	uint8_t rd(rg2::MBus& _bus, const uint32_t _offset)
 	{
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 		return uint8_t(_bus.read(_offset, g_byteWidth, status));
 	}
 
 	void wr(rg2::MBus& _bus, const uint32_t _offset, const uint8_t _value)
 	{
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 		_bus.write(_offset, g_byteWidth, _value, status);
 	}
 
@@ -338,16 +338,16 @@ namespace
 	}
 
 	uint32_t busRead(rg2::Board& _board, const uint32_t _address, const int _size,
-	                 mcf5407_bus_status& _status)
+	                 cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 		return rg2::Board::onRead(&_board, _address, _size, &_status);
 	}
 
 	void busWrite(rg2::Board& _board, const uint32_t _address, const int _size,
-	              const uint32_t _value, mcf5407_bus_status& _status)
+	              const uint32_t _value, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 		rg2::Board::onWrite(&_board, _address, _size, _value, &_status);
 	}
 }
@@ -559,21 +559,21 @@ int main()
 			rg2::Max1039 adc(makeAdcConfig());
 			rg2::MBus bus(&adc);
 
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			bus.write(offset, 8, 0x00u, status);
-			checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
+			checkEqual(uint32_t(status), uint32_t(CF_BUS_OK),
 			           "a byte write at " + hex32(offset) + " is legal");
 
-			status = MCF5407_BUS_OK;
+			status = CF_BUS_OK;
 			(void)bus.read(offset, 8, status);
-			checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
+			checkEqual(uint32_t(status), uint32_t(CF_BUS_OK),
 			           "a byte read at " + hex32(offset) + " is legal");
 
 			bus.clearLog();
 
-			status = MCF5407_BUS_OK;
+			status = CF_BUS_OK;
 			bus.write(offset, 16, 0x00u, status);
-			checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_SIZE_ILLEGAL),
+			checkEqual(uint32_t(status), uint32_t(CF_BUS_SIZE_ILLEGAL),
 			           "a 16-bit write at " + hex32(offset) + " is rejected");
 			checkLog(bus.log(),
 			         {"mbus: SIZE_ILLEGAL write of 16 bits at offset " + hex32(offset)},
@@ -581,9 +581,9 @@ int main()
 
 			bus.clearLog();
 
-			status = MCF5407_BUS_OK;
+			status = CF_BUS_OK;
 			(void)bus.read(offset, 32, status);
-			checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_SIZE_ILLEGAL),
+			checkEqual(uint32_t(status), uint32_t(CF_BUS_SIZE_ILLEGAL),
 			           "a 32-bit read at " + hex32(offset) + " is rejected");
 			checkLog(bus.log(),
 			         {"mbus: SIZE_ILLEGAL read of 32 bits at offset " + hex32(offset)},
@@ -598,9 +598,9 @@ int main()
 		rg2::Max1039 adc(makeAdcConfig());
 		rg2::MBus bus(&adc);
 
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 		(void)bus.read(rg2::MBus::g_madr + 1u, 8, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(CF_BUS_OK),
 		           "an unmodelled offset inside the module window completes");
 		checkLog(bus.log(),
 		         {"mbus: UNMODELLED read of 8 bits at offset "
@@ -615,7 +615,7 @@ int main()
 	// ==================================================================
 	{
 		rg2::Board board(makeBoardConfig());
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		// The M-Bus arm. The discriminator is the interlock and not a stored
 		// byte: the SIM models no register in this range and would store a
@@ -624,7 +624,7 @@ int main()
 		// reading the busy bit out of MBSR is a behaviour only the M-Bus model
 		// produces.
 		busWrite(board, g_mbarBase + rg2::MBus::g_mbcr, g_byte, rg2::MBus::g_msta, status);
-		checkEqual(uint32_t(status), uint32_t(MCF5407_BUS_OK),
+		checkEqual(uint32_t(status), uint32_t(CF_BUS_OK),
 		           "a byte write of MBCR through the board completes");
 
 		const uint32_t mbsr = busRead(board, g_mbarBase + rg2::MBus::g_mbsr, g_byte, status);
@@ -634,17 +634,17 @@ int main()
 		// The second, independent piece of evidence for the same routing: the
 		// M-Bus restricts every register to byte access and the SIM does not
 		// restrict this offset, because the SIM models no register there.
-		mcf5407_bus_status wideStatus = MCF5407_BUS_OK;
+		cf_bus_status wideStatus = CF_BUS_OK;
 		(void)busRead(board, g_mbarBase + rg2::MBus::g_mbcr, g_word, wideStatus);
-		checkEqual(uint32_t(wideStatus), uint32_t(MCF5407_BUS_SIZE_ILLEGAL),
+		checkEqual(uint32_t(wideStatus), uint32_t(CF_BUS_SIZE_ILLEGAL),
 		           "a 16-bit read of an M-Bus register is rejected by the M-Bus");
 
 		// Every register is reachable.
 		for(uint32_t offset = rg2::MBus::g_madr; offset <= rg2::MBus::g_mbdr; offset += 4u)
 		{
-			mcf5407_bus_status regStatus = MCF5407_BUS_OK;
+			cf_bus_status regStatus = CF_BUS_OK;
 			(void)busRead(board, g_mbarBase + offset, g_byte, regStatus);
-			checkEqual(uint32_t(regStatus), uint32_t(MCF5407_BUS_OK),
+			checkEqual(uint32_t(regStatus), uint32_t(CF_BUS_OK),
 			           "MBAR+" + hex32(offset) + " reaches a modelled M-Bus register");
 		}
 

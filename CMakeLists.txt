@@ -86,7 +86,7 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 #
 # The core lives in its own repository, axiomantic/coldfire. It is DECLARED here
 # and POPULATED nowhere unless source/claudia/rg2/rg2Lib/CMakeLists.txt turns
-# RG2_LINK_MCF5407 on. A declaration that is never populated costs nothing.
+# RG2_LINK_COLDFIRE on. A declaration that is never populated costs nothing.
 #
 # Set RG2_COLDFIRE_SOURCE_DIR to a sibling checkout to build against that instead
 # of a fetched tree. RG2_COLDFIRE_GIT_TAG carries the pin.
@@ -96,19 +96,11 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # from one run to the next. The pin is advanced by hand, and nothing in this
 # tree detects that it is stale.
 
-# Backward compatibility alias
-if(RG2_MCF5407_SOURCE_DIR AND NOT RG2_COLDFIRE_SOURCE_DIR)
-	set(RG2_COLDFIRE_SOURCE_DIR "${RG2_MCF5407_SOURCE_DIR}")
-endif()
-if(RG2_MCF5407_GIT_TAG AND NOT RG2_COLDFIRE_GIT_TAG)
-	set(RG2_COLDFIRE_GIT_TAG "${RG2_MCF5407_GIT_TAG}")
-endif()
-
 set(RG2_COLDFIRE_SOURCE_DIR "" CACHE PATH "Build the ColdFire core from this checkout instead of fetching it")
-set(RG2_COLDFIRE_GIT_TAG "582764c53a0e95d5474c3f97f3dcf68e135936b4" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
+set(RG2_COLDFIRE_GIT_TAG "1da717d7a7021ff00b168f2901cd7127939649c6" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
 
 include(FetchContent)
-FetchContent_Declare(mcf5407
+FetchContent_Declare(coldfire
 	GIT_REPOSITORY https://github.com/axiomantic/coldfire.git
 	GIT_TAG ${RG2_COLDFIRE_GIT_TAG}
 )

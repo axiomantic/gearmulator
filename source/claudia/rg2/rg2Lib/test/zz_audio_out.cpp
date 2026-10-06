@@ -45,19 +45,19 @@ namespace
 	{
 	public:
 		explicit Ram(const size_t _size) : m_bytes(_size, 0u) {}
-		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
+		uint32_t read(const uint32_t _offset, const int _size, cf_bus_status& _status) override
 		{
-			_status = (_size == 8 || _size == 16 || _size == 32) ? MCF5407_BUS_OK : MCF5407_BUS_SIZE_ILLEGAL;
-			if(_status != MCF5407_BUS_OK) return 0u;
+			_status = (_size == 8 || _size == 16 || _size == 32) ? CF_BUS_OK : CF_BUS_SIZE_ILLEGAL;
+			if(_status != CF_BUS_OK) return 0u;
 			uint32_t val = 0u, count = uint32_t(_size) / 8u;
 			for(uint32_t i = 0; i < count; ++i)
 				if(size_t(_offset) + i < m_bytes.size()) val = (val << 8) | m_bytes[size_t(_offset) + i];
 			return val;
 		}
-		void write(const uint32_t _offset, const int _size, const uint32_t _val, mcf5407_bus_status& _status) override
+		void write(const uint32_t _offset, const int _size, const uint32_t _val, cf_bus_status& _status) override
 		{
-			_status = (_size == 8 || _size == 16 || _size == 32) ? MCF5407_BUS_OK : MCF5407_BUS_SIZE_ILLEGAL;
-			if(_status != MCF5407_BUS_OK) return;
+			_status = (_size == 8 || _size == 16 || _size == 32) ? CF_BUS_OK : CF_BUS_SIZE_ILLEGAL;
+			if(_status != CF_BUS_OK) return;
 			const uint32_t count = uint32_t(_size) / 8u;
 			for(uint32_t i = 0; i < count; ++i) {
 				const size_t idx = size_t(_offset) + i;
@@ -98,7 +98,7 @@ namespace
 
 	unsigned portOfChainPosition(rg2::Board& _board, const unsigned _wanted, const unsigned _count) {
 		for(unsigned pos = 0; pos < _count; ++pos) {
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			const uint32_t entry = rg2::Board::onRead(&_board, 0x30116970u + pos * 4u, 4, &status);
 			const uint8_t low = uint8_t(~uint8_t((entry >> 3) & 0xffu));
 			if(low == 0u || (low & uint8_t(low - 1u)) != 0u) continue;

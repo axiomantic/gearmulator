@@ -9,7 +9,7 @@
 //
 //   0. The Board presents nothing while its core handle is null. Uart0's
 //      constructor programs its vector into the controller, which presents,
-//      and that happens before mcf5407_create has returned.
+//      and that happens before cf_create has returned.
 //
 //   1. A timer 2 reference match with TMR[ORI] set and ICR2 at MBAR+$04E
 //      programmed to 0x84 presents level 1, autovectored. The whole path is
@@ -57,7 +57,8 @@
 #include "../timer.h"
 #include "../uart0.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
+#include <isp1181.h>
 
 #include <cstdint>
 #include <iostream>
@@ -94,12 +95,12 @@ namespace
 
     // ------------------------------------------------------------ the double
     //
-    // The recording double is mcf5407_set_irq itself. This target compiles
-    // ../board.cpp and links no mcf5407 archive, so the definition below is the
-    // one the Board's present function reaches. mcf5407.h publishes no getter
+    // The recording double is cf_set_irq itself. This target compiles
+    // ../board.cpp and links no coldfire archive, so the definition below is the
+    // one the Board's present function reaches. coldfire.h publishes no getter
     // for the presented interrupt state, and the real symbol cannot be
     // interposed on a link that carries the archive, because
-    // `nm -g libmcf5407.a` puts _mcf5407_set_irq in the same member as
+    // `nm -g libcoldfire.a` puts _cf_set_irq in the same member as
     // _takeInterrupt and _pendingInterrupt, which the core's own execution path
     // needs.
     //
@@ -110,7 +111,7 @@ namespace
     struct SetIrqRecorder
     {
         int calls = 0;
-        mcf5407_ctx* ctx = nullptr;
+        cf_ctx* ctx = nullptr;
         int level = -999;
         uint8_t vector = 0xFFu;
         int autovector = -999;
@@ -187,16 +188,16 @@ namespace
     constexpr int g_byte = 1;
     constexpr int g_word = 2;
 
-    uint32_t boardRead(rg2::Board& _board, const uint32_t _address, const int _size, mcf5407_bus_status& _status)
+    uint32_t boardRead(rg2::Board& _board, const uint32_t _address, const int _size, cf_bus_status& _status)
     {
-        _status = MCF5407_BUS_OK;
+        _status = CF_BUS_OK;
         return rg2::Board::onRead(&_board, _address, _size, &_status);
     }
 
     void boardWrite(rg2::Board& _board, const uint32_t _address, const int _size, const uint32_t _value,
-                    mcf5407_bus_status& _status)
+                    cf_bus_status& _status)
     {
-        _status = MCF5407_BUS_OK;
+        _status = CF_BUS_OK;
         rg2::Board::onWrite(&_board, _address, _size, _value, &_status);
     }
 
@@ -208,14 +209,14 @@ namespace
     }
 } // namespace
 
-// The mcf5407 and isp1181 entry points ../board.cpp calls. This target links no
-// mcf5407 archive: the recording mcf5407_set_irq above is the observation
+// The ColdFire and isp1181 entry points ../board.cpp calls. This target links no
+// coldfire archive: the recording cf_set_irq above is the observation
 // mechanism, and a link that carried the archive would refuse it as a duplicate
 // symbol.
 //
-// Every stub answers the value mcf5407.h defines for a context that can do
+// Every stub answers the value coldfire.h defines for a context that can do
 // nothing. Nothing below is driven by any case in this file except
-// mcf5407_set_irq: the timers are advanced through Sim::advanceTimers and the
+// cf_set_irq: the timers are advanced through Sim::advanceTimers and the
 // registers are written through the Board's own bus callbacks, so no case here
 // needs a core that executes.
 namespace
@@ -268,38 +269,6 @@ void cf_state_save(const cf_ctx*, void*) {}
 
 void cf_state_load(cf_ctx*, const void*) {}
 
-int mcf5407_runtime_init(void) { return cf_runtime_init(); }
-
-mcf5407_ctx* mcf5407_create(void*, mcf5407_read_fn, mcf5407_write_fn, mcf5407_iack_fn)
-{
-    return cf_create(nullptr);
-}
-
-void mcf5407_destroy(mcf5407_ctx* ctx) { cf_destroy(ctx); }
-
-uint32_t mcf5407_exec(mcf5407_ctx* ctx, uint32_t cycles) { return cf_exec(ctx, cycles); }
-
-void mcf5407_reset(mcf5407_ctx* ctx, uint32_t sp, uint32_t pc) { cf_reset(ctx, sp, pc); }
-
-uint32_t mcf5407_get_reg(const mcf5407_ctx* ctx, int idx) { return cf_get_reg(ctx, idx); }
-
-int mcf5407_set_reg(mcf5407_ctx* ctx, int idx, uint32_t val) { return cf_set_reg(ctx, idx, val); }
-
-int mcf5407_halted(const mcf5407_ctx* ctx) { return cf_halted(ctx); }
-
-int mcf5407_faulted(const mcf5407_ctx* ctx) { return cf_faulted(ctx); }
-
-void mcf5407_set_irq(mcf5407_ctx* ctx, int level, uint8_t vector, int autovector)
-{
-    cf_set_irq(ctx, level, vector, autovector);
-}
-
-size_t mcf5407_state_size(void) { return cf_state_size(); }
-
-void mcf5407_state_save(const mcf5407_ctx* ctx, void* dst) { cf_state_save(ctx, dst); }
-
-void mcf5407_state_load(mcf5407_ctx* ctx, const void* src) { cf_state_load(ctx, src); }
-
 // The IRQ callback is recorded at the point the Board hands it over, and
 // case group 5 drives that pointer. A case that called a named Board
 // method instead would stay green with a null callback still installed at
@@ -321,7 +290,7 @@ void isp1181_write(isp1181_ctx*, uint32_t, uint8_t) {}
 
 /* The Board drains its transport hub into the device on every quantum
  * boundary, so board.cpp references this entry point and a target that
- * links no mcf5407 archive must supply it. It is a sink and not a recorder:
+ * links no coldfire archive must supply it. It is a sink and not a recorder:
  * nothing in this file drives the hub, so no frame ever reaches it.
  *
  * It answers 1, which is "an OUT buffer holds the packet". The Board reads
@@ -332,7 +301,7 @@ int isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t) { return 1; }
 
 /* The Board moves its handle off the Stub backend at construction, so
  * board.cpp references this entry point too and a target that links no
- * mcf5407 archive must supply it.
+ * coldfire archive must supply it.
  *
  * It answers 1, which is "the handle moved". The Board reads the return
  * only to detect a refusal, and a refusal is a state this file's fake
@@ -370,7 +339,7 @@ int main()
     // -----------------------------------------------------------------------
     // Case group 0. The Board presents nothing while its core handle is null.
     //
-    // The controller exists before mcf5407_create returns, and Uart0's own
+    // The controller exists before cf_create returns, and Uart0's own
     // constructor programs its vector into it, which recomputes and presents.
     // That presentation has no core to reach. The assertion is on
     // the whole construction, so it is red the moment the guard is removed:
@@ -392,7 +361,7 @@ int main()
     {
         rg2::Board board(mbarOnlyConfig());
 
-        mcf5407_bus_status status = MCF5407_BUS_OK;
+        cf_bus_status status = CF_BUS_OK;
 
         const uint32_t icr2 = kMbarBase + kIcrBase + uint32_t(rg2::Timer::gTimer2InterruptIndex);
         boardWrite(board, icr2, g_byte, makeIcr(1, 0, true), status);
@@ -428,7 +397,7 @@ int main()
         checkEqual(boardRead(board, kMbarBase + kTer2, g_byte, status), uint32_t(0u),
                    "the handler's write of 2 to MBAR+$191 clears TER2[REF]");
         checkEqual(g_recorder.calls, 1, "THE BOARD PRESENTS ON CLEAR AS WELL AS ON ASSERT: the clear presented once");
-        checkEqual(g_recorder.level, 0, "the presentation after the clear is MCF5407_IRQ_NONE");
+        checkEqual(g_recorder.level, 0, "the presentation after the clear is CF_IRQ_NONE");
         checkEqual(g_recorder.autovector, 0, "a level 0 presentation carries no autovector");
         checkEqual(uint32_t(g_recorder.vector), uint32_t(0x00u), "a level 0 presentation carries no vector");
     }
@@ -442,7 +411,7 @@ int main()
     {
         rg2::Board board(mbarOnlyConfig());
 
-        mcf5407_bus_status status = MCF5407_BUS_OK;
+        cf_bus_status status = CF_BUS_OK;
 
         const uint32_t icr1 = kMbarBase + kIcrBase + uint32_t(rg2::Timer::gTimer1InterruptIndex);
         boardWrite(board, icr1, g_byte, makeIcr(1, 0, true), status);
@@ -468,7 +437,7 @@ int main()
     {
         rg2::Board board(mbarOnlyConfig());
 
-        mcf5407_bus_status status = MCF5407_BUS_OK;
+        cf_bus_status status = CF_BUS_OK;
 
         const uint32_t icr2 = kMbarBase + kIcrBase + uint32_t(rg2::Timer::gTimer2InterruptIndex);
         const uint32_t icr4 = kMbarBase + kIcrBase + uint32_t(rg2::Uart0::gUart0InterruptIndex);
@@ -532,7 +501,7 @@ int main()
     {
         rg2::Board board(mbarOnlyConfig());
 
-        mcf5407_bus_status status = MCF5407_BUS_OK;
+        cf_bus_status status = CF_BUS_OK;
 
         check(g_usbIrq != nullptr, "THE IRQ WIRE EXISTS: the Board handed isp1181_create a non-null IRQ callback");
         checkEqual(g_usbIrqUser, static_cast<void*>(&board), "the IRQ callback carries THIS Board as its user pointer");
@@ -563,7 +532,7 @@ int main()
             g_usbIrq(g_usbIrqUser, 0);
 
             checkEqual(g_recorder.calls, 1, "the deassert presented exactly once");
-            checkEqual(g_recorder.level, 0, "the deassert drops the presentation to MCF5407_IRQ_NONE");
+            checkEqual(g_recorder.level, 0, "the deassert drops the presentation to CF_IRQ_NONE");
 
             // 5c. The level is the controller's, not the Board's. IRQPAR[1]
             // moves IRQ3 to level 6 by UM Table 8-4. A hardcoded level 3
@@ -596,17 +565,17 @@ int main()
     {
         rg2::Board board(mbarOnlyConfig());
 
-        mcf5407_bus_status status = MCF5407_BUS_OK;
+        cf_bus_status status = CF_BUS_OK;
 
         // 6a. Known positive. The router owns $04B, and the way that is
         // visible from the bus is the interrupt block's byte-only rule: a
         // wider access to an owned offset is refused.
         boardWrite(board, kMbarBase + kAvrRegister, g_word, 0x0008u, status);
-        checkEqual(int(status), int(MCF5407_BUS_SIZE_ILLEGAL),
+        checkEqual(int(status), int(CF_BUS_SIZE_ILLEGAL),
                    "KNOWN POSITIVE: a word write to $04B is refused, so the interrupt block owns it");
 
         boardRead(board, kMbarBase + kAvrRegister, g_word, status);
-        checkEqual(int(status), int(MCF5407_BUS_SIZE_ILLEGAL),
+        checkEqual(int(status), int(CF_BUS_SIZE_ILLEGAL),
                    "KNOWN POSITIVE: a word read of $04B is refused, so the interrupt block owns it");
 
         // 6b. Known negative, same predicate. $049 is a Reserved byte of the
@@ -616,12 +585,12 @@ int main()
         // swallowed the whole $048..$04B group would be red on this line.
         boardWrite(board, kMbarBase + kAvrGroupReserved, g_word, 0x0008u, status);
         checkEqual(
-            int(status), int(MCF5407_BUS_OK),
+            int(status), int(CF_BUS_OK),
             "KNOWN NEGATIVE: a word write to the Reserved $049 is accepted, so the interrupt block does NOT own it");
 
         boardRead(board, kMbarBase + kAvrGroupReserved, g_word, status);
         checkEqual(
-            int(status), int(MCF5407_BUS_OK),
+            int(status), int(CF_BUS_OK),
             "KNOWN NEGATIVE: a word read of the Reserved $049 is accepted, so the interrupt block does NOT own it");
 
         // 6c. The firmware's own write, asserted from the controller's state.
@@ -629,7 +598,7 @@ int main()
         // answering the byte it was handed. readRegister is the controller, so
         // only a byte that actually reached the controller reads back here.
         boardWrite(board, kMbarBase + kAvrRegister, g_byte, 0x08u, status);
-        checkEqual(int(status), int(MCF5407_BUS_OK), "the firmware's byte write to $04B is accepted");
+        checkEqual(int(status), int(CF_BUS_OK), "the firmware's byte write to $04B is accepted");
         checkEqual(uint32_t(board.interrupts().readRegister(kAvrRegister)), uint32_t(0x08u),
                    "THE BYTE REACHES THE CONTROLLER: AVR reads back 0x08 from the controller itself");
         checkEqual(boardRead(board, kMbarBase + kAvrRegister, g_byte, status), uint32_t(0x08u),

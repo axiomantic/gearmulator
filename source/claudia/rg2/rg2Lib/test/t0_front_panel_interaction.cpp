@@ -8,7 +8,7 @@
 #include "panel.h"
 #include "sim.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
 
 #include <array>
 #include <cstdint>
@@ -84,27 +84,27 @@ namespace
 			delete m_map;
 		}
 
-		uint32_t read(const uint32_t _address, const int _size, mcf5407_bus_status& _status)
+		uint32_t read(const uint32_t _address, const int _size, cf_bus_status& _status)
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			return rg2::memoryMapRead(m_map, _address, _size, &_status);
 		}
 
-		void write(const uint32_t _address, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+		void write(const uint32_t _address, const int _size, const uint32_t _value, cf_bus_status& _status)
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			rg2::memoryMapWrite(m_map, _address, _size, _value, &_status);
 		}
 
 		uint32_t read(const uint32_t _address, const int _size)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			return read(_address, _size, status);
 		}
 
 		void write(const uint32_t _address, const int _size, const uint32_t _value)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			write(_address, _size, _value, status);
 		}
 
@@ -192,7 +192,7 @@ int main()
 	// reserved for the hardware strap.
 	{
 		PanelFixture fixture;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// 1. Quiescent state: all buttons unpressed.
 		for(uint8_t col = 0; col < rg2::Panel::kMaxCols; ++col)
@@ -201,7 +201,7 @@ int main()
 			// Walking zero write across CS4 base (offsets 0x0000..0x000e)
 			const uint32_t scanAddr = g_cs4Base + (col % 8u) * 2u;
 			fixture.write(scanAddr, 16, scanWord, status);
-			checkEqual(status, MCF5407_BUS_OK, "walking-zero scan write completes");
+			checkEqual(status, CF_BUS_OK, "walking-zero scan write completes");
 			checkEqual(fixture.panel().getActiveRowMask(), uint16_t(0u),
 				"quiescent scan reports zero active rows");
 			checkEqual(fixture.panel().getRowBits(), uint16_t(0xFFFFu),
@@ -209,7 +209,7 @@ int main()
 
 			// Port A PADAT read through SIM: all row bits high (0xFFFF), strap bit 9 low (~0x0200) -> 0xFDFF
 			const uint32_t padat = fixture.read(g_mbarBase + g_padatOffset, 16, status);
-			checkEqual(status, MCF5407_BUS_OK, "PADAT 16-bit read completes");
+			checkEqual(status, CF_BUS_OK, "PADAT 16-bit read completes");
 			checkEqual(padat, uint32_t(0xFDFFu), "quiescent PADAT read returns 0xFDFF with strap bit 9 clear");
 		}
 
@@ -274,7 +274,7 @@ int main()
 	// (offsets 1..7 for encoders 0..6).
 	{
 		PanelFixture fixture;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// Verify initial quiescent deltas
 		for(uint8_t i = 0; i < rg2::Panel::kMaxEncoders; ++i)
@@ -296,7 +296,7 @@ int main()
 
 		// Read Latch 1 (CS5 offset 1) via bus
 		uint32_t latchVal = fixture.read(g_cs5Base + 1u, 8, status);
-		checkEqual(status, MCF5407_BUS_OK, "reading latch 1 completes");
+		checkEqual(status, CF_BUS_OK, "reading latch 1 completes");
 		checkEqual(latchVal, uint32_t(1u), "latch 1 bus read returns +1 delta");
 
 		// 2. Fast CW rotation: accumulate 7 ticks on Encoder 2.
@@ -366,7 +366,7 @@ int main()
 	// while preserving the hardware strap in bits 5:4.
 	{
 		PanelFixture fixture;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// 1. All 8 encoder rings: single-dot, bar, and off patterns.
 		const uint16_t ringPatterns[8] = {
@@ -392,13 +392,13 @@ int main()
 		// 2. Bus write updates across Latches 1..7 for Rings 0..6.
 		// Write 16-bit word to Latch 1 (CS5 offset 1) driving 15-LED pattern 0x7FFF
 		fixture.write(g_cs5Base + 1u, 16, 0x7FFFu, status);
-		checkEqual(status, MCF5407_BUS_OK, "16-bit write to latch 1 completes");
+		checkEqual(status, CF_BUS_OK, "16-bit write to latch 1 completes");
 		checkEqual(fixture.panel().getLedRingState(0), uint16_t(0x7FFFu),
 			"ring 0 updated to 15-LED full pattern via CS5 write");
 
 		// Write 8-bit pattern to Latch 7 (CS5 offset 7) driving Ring 6
 		fixture.write(g_cs5Base + 7u, 8, 0x55u, status);
-		checkEqual(status, MCF5407_BUS_OK, "8-bit write to latch 7 completes");
+		checkEqual(status, CF_BUS_OK, "8-bit write to latch 7 completes");
 		checkEqual(fixture.panel().getLedRingState(6), uint16_t(0x55u),
 			"ring 6 updated via latch 7 write");
 
@@ -409,7 +409,7 @@ int main()
 
 		// Activate Slot A (bit 0 = 1) and Variation 1 (bit 6 = 1): pattern 0x41
 		fixture.write(g_cs5Base, 8, 0x41u, status);
-		checkEqual(status, MCF5407_BUS_OK, "latch 0 write completes");
+		checkEqual(status, CF_BUS_OK, "latch 0 write completes");
 		// Read back: strap bits 5:4 (0x30) preserved + LED bits 0x41 = 0x71
 		uint32_t latch0Val = fixture.read(g_cs5Base, 8);
 		checkEqual(latch0Val, uint32_t(0x71u), "latch 0 read preserves strap 0x30 and activates slot A & var 1");
@@ -437,13 +437,13 @@ int main()
 	//     Param LCD 4 (Encoders 6 & 7): offset 0x80..0x9F
 	{
 		PanelFixture fixture;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// 1. Verify display buffer reads zero prior to writes.
 		for(uint32_t off = 0; off < 0xA0u; off += 16u)
 		{
 			const uint32_t val = fixture.read(g_cs4Base + off, 32, status);
-			checkEqual(status, MCF5407_BUS_OK, "display read completes");
+			checkEqual(status, CF_BUS_OK, "display read completes");
 			checkEqual(val, uint32_t(0u), "display buffer initializes quiescent zero");
 		}
 
@@ -502,14 +502,14 @@ int main()
 
 		// 6. Boundary check: access at end of configured display window (offset 0x3FF)
 		fixture.write(g_cs4Base + 0x3FFu, 8, 0xA5u, status);
-		checkEqual(status, MCF5407_BUS_OK, "write to last byte of display window completes");
+		checkEqual(status, CF_BUS_OK, "write to last byte of display window completes");
 		const uint32_t lastByte = fixture.read(g_cs4Base + 0x3FFu, 8, status);
-		checkEqual(status, MCF5407_BUS_OK, "read from last byte of display window completes");
+		checkEqual(status, CF_BUS_OK, "read from last byte of display window completes");
 		checkEqual(lastByte, uint32_t(0xA5u), "last byte in display buffer returns stored value");
 
 		// Access beyond display window is unmapped and returns zero
 		const uint32_t beyondByte = fixture.read(g_cs4Base + 0x400u, 8, status);
-		checkEqual(status, MCF5407_BUS_UNMAPPED, "read beyond display window returns BUS_UNMAPPED");
+		checkEqual(status, CF_BUS_UNMAPPED, "read beyond display window returns BUS_UNMAPPED");
 		checkEqual(beyondByte, uint32_t(0u), "read beyond display window returns 0");
 	}
 

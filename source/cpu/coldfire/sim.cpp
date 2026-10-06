@@ -174,13 +174,13 @@ namespace coldfire
 			+ " bits at offset " + hex32(_offset));
 	}
 
-	uint32_t Sim::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+	uint32_t Sim::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", false, _size, _offset);
 			return 0;
 		}
@@ -191,7 +191,7 @@ namespace coldfire
 			logLine("UNMODELLED", false, _size, _offset);
 		else if(spec->byteAccessOnly && _size != 8)
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", false, _size, _offset);
 			return 0;
 		}
@@ -222,13 +222,13 @@ namespace coldfire
 		return value;
 	}
 
-	void Sim::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+	void Sim::write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", true, _size, _offset);
 			return;
 		}
@@ -239,7 +239,7 @@ namespace coldfire
 			logLine("UNMODELLED", true, _size, _offset);
 		else if(spec->byteAccessOnly && _size != 8)
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			logLine("SIZE_ILLEGAL", true, _size, _offset);
 			return;
 		}

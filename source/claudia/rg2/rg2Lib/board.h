@@ -28,7 +28,7 @@
 #include <type_traits>
 #include <vector>
 
-#include <mcf5407.h>
+#include <coldfire.h>
 
 #include "dspSet.h"
 #include "flash.h"
@@ -46,7 +46,7 @@
 
 #include "hardwareLib/isp1181.h"
 
-#include "cpu/coldfire/mcf5407Soc.h"
+#include "cpu/coldfire/coldfireSoc.h"
 
 namespace rg2
 {
@@ -181,7 +181,7 @@ namespace rg2
          * `src/isp1181/isp1181.nim` gives that endpoint `(64, 1)`, and that
          * row is itself recorded there as a measurement of the emulated
          * firmware rather than a property of the part. The model exposes no
-         * query for it -- `mcf5407.h` declares no `isp1181_max_packet` -- so
+         * query for it -- `coldfire.h` declares no `isp1181_max_packet` -- so
          * this figure is duplicated from a table this repository cannot read.
          * The durable repair is a query on that ABI; until it exists, the two
          * numbers are kept in step by hand and the drift fails loudly rather
@@ -240,12 +240,12 @@ namespace rg2
     class Board final
     {
     public:
-        /* Creates the MCF5407 core context, initialises the Nim runtime once,
+        /* Creates the ColdFire core context, initialises the Nim runtime once,
          * and logs the G2_MCU_CORE_CLOCK_HZ placeholder line exactly once. */
         Board();
 
         /* Builds the units from `_config`, attaches each to the region it
-         * answers, and points the MCF5407 core's bus callbacks at the decode.
+         * answers, and points the ColdFire core's bus callbacks at the decode.
          * Every base and every size comes from `_config`; this class chooses
          * none of them. */
         explicit Board(const BoardConfig& _config);
@@ -258,24 +258,24 @@ namespace rg2
         Board& operator=(Board&&) = delete;
 
         /* One quantum of the MCU context. Returns the emulated cycles spent --
-         * exactly what mcf5407_exec returns. It forwards directly to
-         * mcf5407_exec, which already takes a cycle budget. uint32_t, not
+         * exactly what cf_exec returns. It forwards directly to
+         * cf_exec, which already takes a cycle budget. uint32_t, not
          * int64_t: it returns exactly what the core returned, and the Scheduler
          * widens at the call site.
          *
          * The return may exceed `wantCycles`, by up to the cost of one
-         * instruction, because mcf5407_exec finishes the instruction it
+         * instruction, because cf_exec finishes the instruction it
          * started. That overrun is not a defect to absorb here: it is what
          * rg2::runQuantum's cycle debt exists to carry, and clamping it in this
          * method would make the debt identically zero. */
         uint32_t runMcu(uint32_t wantCycles) noexcept;
 
-        /* True when the MCF5407 core stopped because an instruction trapped --
+        /* True when the ColdFire core stopped because an instruction trapped --
          * a bus error, an illegal instruction word, an illegal effective address
          * for the opcode, an illegal operand size or a divide by zero.
          *
          * Fault and halt are different flags and this method reports the fault.
-         * mcf5407.h is the authority: a valid
+         * coldfire.h is the authority: a valid
          * opcode with no implemented semantics halts without faulting, and a
          * faulted core is always also halted. mcuHalted() below is the wider
          * condition. */
@@ -286,7 +286,7 @@ namespace rg2
          *
          * mcuReg and setMcuReg take the register file's own index: 0 to 7 are
          * d0 to d7, 8 to 15 are a0 to a7, 16 is the status register and 17 is
-         * the program counter. mcf5407.h owns that mapping and this class
+         * the program counter. coldfire.h owns that mapping and this class
          * restates none of it. setMcuReg answers false for an out-of-range index
          * and for a nil core, which is what the C call already answers. */
         void resetMcu(uint32_t initialSp, uint32_t initialPc) noexcept;
@@ -310,7 +310,7 @@ namespace rg2
 
         /* The MCU context's determinism-relevant state, embedded in the
          * Scheduler snapshot. This serialises the Board's own state only; the
-         * core's mcf5407_state_* and isp1181_state_* blocks are not folded in.
+         * core's cf_state_* and isp1181_state_* blocks are not folded in.
          *
          * stateLoad reports Status::Ok, or Status::BadStateImage for an image
          * whose version word is not the one this build writes. An exception is
@@ -323,7 +323,7 @@ namespace rg2
         void stateSave(void* dst) const noexcept;
         Status stateLoad(const void* src) noexcept;
 
-        /* The reset covers the MCF5407 core, through the same mcf5407_reset the
+        /* The reset covers the ColdFire core, through the same cf_reset the
          * resetMcu above drives; this class's own snapshot state -- the fault
          * bit and the last frame index; and the DSP set, through DspSet::reset.
          *
@@ -342,11 +342,11 @@ namespace rg2
          * `_size` here is a width in BITS -- 8, 16 or 32 -- which is the
          * MemoryMap's unit and not the core's. The two callbacks below take the
          * core's unit and convert; this pair is below that conversion. */
-        uint32_t busRead(uint32_t _address, int _size, mcf5407_bus_status& _status);
-        void busWrite(uint32_t _address, int _size, uint32_t _value, mcf5407_bus_status& _status);
+        uint32_t busRead(uint32_t _address, int _size, cf_bus_status& _status);
+        void busWrite(uint32_t _address, int _size, uint32_t _value, cf_bus_status& _status);
 
         /* The installed callbacks, public on purpose: these are the exact
-         * function pointers handed to mcf5407_create, so they are the path the
+         * function pointers handed to cf_create, so they are the path the
          * core takes.
          *
          * They are not a second route into the Board. Each one forwards to
@@ -354,14 +354,14 @@ namespace rg2
          * between the two sides, and does nothing else.
          *
          * `size` here is a count of BYTES -- 1, 2 or 4 -- because that is what
-         * mcf5407.h hands an mcf5407_read_fn and an mcf5407_write_fn, and these
+         * coldfire.h hands a cf_read_fn and a cf_write_fn, and these
          * two are that pair. busRead and busWrite above take bits, and the
          * conversion between the two units happens here and nowhere else. A
          * caller that drives these directly must therefore supply 1, 2 or 4; any
-         * other value is refused as MCF5407_BUS_SIZE_ILLEGAL, 8, 16 and 32
+         * other value is refused as CF_BUS_SIZE_ILLEGAL, 8, 16 and 32
          * included, because those are legal widths in the other unit. */
-        static uint32_t onRead(void* user, uint32_t addr, int size, mcf5407_bus_status* status);
-        static void onWrite(void* user, uint32_t addr, int size, uint32_t value, mcf5407_bus_status* status);
+        static uint32_t onRead(void* user, uint32_t addr, int size, cf_bus_status* status);
+        static void onWrite(void* user, uint32_t addr, int size, uint32_t value, cf_bus_status* status);
 
         /* The Board's transport hub. The attachments -- the internal
          * client, the forked G2-Edit socket and the usbip adapter -- share one
@@ -387,7 +387,7 @@ namespace rg2
          * in the constructor's member initialiser list.
          *
          * A frame the device refuses is held and re-offered, not discarded.
-         * `isp1181_rx` answers 0 for a NAK, and mcf5407.h states what that
+         * `isp1181_rx` answers 0 for a NAK, and coldfire.h states what that
          * costs: "THE PACKET IS GONE IN EVERY ONE OF THOSE CASES - a refusal
          * here is a dropped packet and not a deferred one". So the deferral
          * has to live on this side of the call, and it does: the refused
@@ -511,8 +511,8 @@ namespace rg2
             {
             }
 
-            uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-            void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+            uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+            void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
         private:
             uint32_t absolute(uint32_t _offset) const;
@@ -534,7 +534,7 @@ namespace rg2
          * The M-Bus arm's range is disjoint from both UART blocks, so the order
          * the branches are written in is a reading convenience rather than a
          * rule. */
-        using MbarRouter = coldfire::Mcf5407Soc;
+        using MbarRouter = coldfire::ColdfireSoc;
 
         /* The ISP1181 answers CS3. The decode subtracts the window base and
          * hands the offset down, and the device expects exactly such a
@@ -547,8 +547,8 @@ namespace rg2
         public:
             explicit Isp1181Window(hwLib::Isp1181& _usb) : m_usb(_usb) {}
 
-            uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-            void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+            uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+            void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
         private:
             hwLib::Isp1181& m_usb;
@@ -577,7 +577,7 @@ namespace rg2
          * here would silently override the bit the firmware programmed.
          *
          * It is a no-op while the core handle is null. The controller exists
-         * before `mcf5407_create` returns, and `Uart0`'s constructor programs
+         * before `cf_create` returns, and `Uart0`'s constructor programs
          * its vector into the controller, which presents; that presentation
          * has no core to reach. */
         static void onInterruptPresent(void* user, int level, uint8_t vector, int autovector);
@@ -593,7 +593,7 @@ namespace rg2
          * every change -- so the present callback runs while the members below
          * it are still raw storage. m_mcu is the member it reads, so it is
          * initialised before any unit that can present exists. */
-        mcf5407_ctx* m_mcu;
+        cf_ctx* m_mcu;
         InterruptController m_interrupts;
 
         MemoryMap m_memory;

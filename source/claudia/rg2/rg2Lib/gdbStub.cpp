@@ -36,7 +36,7 @@ namespace rg2
 	namespace
 	{
 		// The registers GDB's m68k target expects, in its order, which is the
-		// register file's own order. mcf5407.h owns the mapping.
+		// register file's own order. coldfire.h owns the mapping.
 		constexpr int g_regCount = 18;
 		constexpr int g_regPc    = 17;
 
@@ -66,7 +66,7 @@ namespace rg2
 		constexpr uint64_t g_unbounded = ~uint64_t(0);
 
 		// The size a byte access presents to Board::onRead and Board::onWrite, in
-		// the core's unit: mcf5407.h states it once per callback typedef, and
+		// the core's unit: coldfire.h states it once per callback typedef, and
 		// `size` there is a count of BYTES and never a width in bits.
 		constexpr int g_byte = 1;
 
@@ -257,14 +257,14 @@ namespace rg2
 
 	// ------------------------------------------------------------ the bus hook
 
-	uint32_t GdbStub::Watcher::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+	uint32_t GdbStub::Watcher::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
 	{
 		m_stub.noteAccess(m_map.window(m_region).base + _offset, _size, false);
 		return m_inner.read(_offset, _size, _status);
 	}
 
 	void GdbStub::Watcher::write(const uint32_t _offset, const int _size, const uint32_t _value,
-	                             mcf5407_bus_status& _status)
+	                             cf_bus_status& _status)
 	{
 		m_stub.noteAccess(m_map.window(m_region).base + _offset, _size, true);
 		m_inner.write(_offset, _size, _value, _status);
@@ -512,7 +512,7 @@ namespace rg2
 	}
 
 	/* The program counter is read-only through setMcuReg, and that is the core's
-	 * rule and not this file's: mcf5407.h states it at index 17. The value is
+	 * rule and not this file's: coldfire.h states it at index 17. The value is
 	 * offered and the core keeps its own, so a `G` carrying a PC is accepted and
 	 * changes nothing. */
 	std::string GdbStub::writeRegisters(const std::string& _hex)
@@ -560,10 +560,10 @@ namespace rg2
 
 		for(uint32_t i = 0; i < length; ++i)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
-			const uint32_t     value  = Board::onRead(&m_board, address + i, g_byte, &status);
+			cf_bus_status  status = CF_BUS_OK;
+			const uint32_t value  = Board::onRead(&m_board, address + i, g_byte, &status);
 
-			if(status != MCF5407_BUS_OK)
+			if(status != CF_BUS_OK)
 				return g_error;
 
 			reply += hexByte(uint8_t(value & 0xffu));
@@ -602,10 +602,10 @@ namespace rg2
 			   !hexDigit(_arguments[pos + size_t(i) * 2u + 1u], low))
 				return g_error;
 
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			Board::onWrite(&m_board, address + i, g_byte, (high << 4) | low, &status);
 
-			if(status != MCF5407_BUS_OK)
+			if(status != CF_BUS_OK)
 				return g_error;
 		}
 
@@ -613,7 +613,7 @@ namespace rg2
 	}
 
 	/* One instruction and not one cycle. `Board::runMcu(1)` forwards to
-	 * `mcf5407_exec(ctx, 1)`, whose loop runs while `spent < maxCycles` -- so a
+	 * `cf_exec(ctx, 1)`, whose loop runs while `spent < maxCycles` -- so a
 	 * budget of one executes one whole instruction of whatever cost, and a budget
 	 * of zero executes nothing at all. */
 	std::string GdbStub::step()

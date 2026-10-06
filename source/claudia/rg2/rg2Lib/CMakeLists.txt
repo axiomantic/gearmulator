@@ -48,7 +48,7 @@ source_group("source" FILES ${RG2LIB_SOURCES})
 # wLib is the Waldorf layer and this target does NOT link it. See
 # docs/divergence.md for the reason and the condition that would re-open it.
 
-target_link_libraries(rg2Lib PUBLIC coldfire hardwareLib dsp56kEmu synthLib)
+target_link_libraries(rg2Lib PUBLIC coldfireSoc hardwareLib dsp56kEmu synthLib)
 
 if(DSP56300_DEBUGGER)
 	target_link_libraries(rg2Lib PUBLIC dsp56kDebugger)
@@ -66,25 +66,18 @@ set_property(TARGET rg2Lib PROPERTY FOLDER "RG2")
 target_include_directories(rg2Lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_include_directories(rg2Lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-# ----------------- the MCF5407 core
+# ----------------- the ColdFire core
 #
 # The link is BEHIND AN OPTION and the option defaults to ON, because the target
-# mcf5407::mcf5407 now exists. The option stays, rather than becoming an
+# coldfire::coldfire now exists. The option stays, rather than becoming an
 # unconditional link, so a build that only wants the DSP side of rg2Lib can turn
 # the core off and skip fetching a second repository.
 # The root CMakeLists.txt declares where the sources come from.
 
-option(RG2_LINK_MCF5407 "Link the MCF5407 core" ON)
+option(RG2_LINK_COLDFIRE "Link the ColdFire core" ON)
 
-if(RG2_LINK_MCF5407)
-	if(NOT TARGET mcf5407::mcf5407)
-		if(RG2_MCF5407_SOURCE_DIR AND NOT RG2_COLDFIRE_SOURCE_DIR)
-			set(RG2_COLDFIRE_SOURCE_DIR "${RG2_MCF5407_SOURCE_DIR}")
-		endif()
-		if(RG2_MCF5407_GIT_TAG AND NOT RG2_COLDFIRE_GIT_TAG)
-			set(RG2_COLDFIRE_GIT_TAG "${RG2_MCF5407_GIT_TAG}")
-		endif()
-
+if(RG2_LINK_COLDFIRE)
+	if(NOT TARGET coldfire::coldfire)
 		if(RG2_COLDFIRE_SOURCE_DIR)
 			option(RG2_COLDFIRE_SOURCE_DIR_IS_NOT_THE_PIN "Build from RG2_COLDFIRE_SOURCE_DIR even when that checkout is not the pinned commit" OFF)
 			find_program(G2_GIT_EXECUTABLE NAMES git)
@@ -116,7 +109,7 @@ if(RG2_LINK_MCF5407)
 				set(coldfireHeadIsPin TRUE)
 			endif()
 
-			if(NOT coldfireHeadIsPin AND NOT RG2_COLDFIRE_SOURCE_DIR_IS_NOT_THE_PIN AND NOT RG2_MCF5407_SOURCE_DIR_IS_NOT_THE_PIN)
+			if(NOT coldfireHeadIsPin AND NOT RG2_COLDFIRE_SOURCE_DIR_IS_NOT_THE_PIN)
 				message(FATAL_ERROR
 					"RG2_COLDFIRE_SOURCE_DIR points at ${RG2_COLDFIRE_SOURCE_DIR}, but "
 					"${coldfireDivergence}. Every result from this build tree would be a "
@@ -133,13 +126,13 @@ if(RG2_LINK_MCF5407)
 					"${coldfireDivergence}. Results from this build tree do not describe the pin.")
 			endif()
 
-			add_subdirectory(${RG2_COLDFIRE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/mcf5407 EXCLUDE_FROM_ALL)
+			add_subdirectory(${RG2_COLDFIRE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/coldfire EXCLUDE_FROM_ALL)
 		else()
 			include(FetchContent)
-			FetchContent_MakeAvailable(mcf5407)
+			FetchContent_MakeAvailable(coldfire)
 		endif()
 	endif()
-	target_link_libraries(rg2Lib PUBLIC mcf5407::mcf5407)
+	target_link_libraries(rg2Lib PUBLIC coldfire::coldfire)
 endif()
 
 # ----------------- the tests

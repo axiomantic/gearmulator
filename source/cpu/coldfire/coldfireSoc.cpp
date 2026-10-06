@@ -1,8 +1,8 @@
-#include "mcf5407Soc.h"
+#include "coldfireSoc.h"
 
 namespace coldfire
 {
-	Mcf5407Soc::Mcf5407Soc(void* _irqUser, InterruptPresentFn _irqPresent, bool _engineStrap)
+	ColdfireSoc::ColdfireSoc(void* _irqUser, InterruptPresentFn _irqPresent, bool _engineStrap)
 		: m_ownedIntc(_irqUser, _irqPresent)
 		, m_ownedSim(_engineStrap)
 		, m_ownedUart0(&m_ownedIntc)
@@ -13,7 +13,7 @@ namespace coldfire
 		m_ownedSim.setInterruptController(&m_ownedIntc);
 	}
 
-	Mcf5407Soc::Mcf5407Soc(Sim& _sim, Uart0& _uart0, BusTarget& _mbus, InterruptController& _interrupts)
+	ColdfireSoc::ColdfireSoc(Sim& _sim, Uart0& _uart0, BusTarget& _mbus, InterruptController& _interrupts)
 		: m_interrupts(&_interrupts)
 		, m_sim(&_sim)
 		, m_uart0(&_uart0)
@@ -21,7 +21,7 @@ namespace coldfire
 	{
 	}
 
-	Mcf5407Soc::Mcf5407Soc(Sim& _sim, Uart0& _uart0, BusTarget* _mbus, InterruptController& _interrupts)
+	ColdfireSoc::ColdfireSoc(Sim& _sim, Uart0& _uart0, BusTarget* _mbus, InterruptController& _interrupts)
 		: m_interrupts(&_interrupts)
 		, m_sim(&_sim)
 		, m_uart0(&_uart0)
@@ -29,7 +29,7 @@ namespace coldfire
 	{
 	}
 
-	bool Mcf5407Soc::isUartOwned(const uint32_t _offset)
+	bool ColdfireSoc::isUartOwned(const uint32_t _offset)
 	{
 		if(_offset == g_simUipcrOffset)
 			return false;
@@ -40,12 +40,12 @@ namespace coldfire
 		return _offset >= Uart0::gUart1Base && _offset < Uart0::gUart1Base + Uart0::gUartModuleSize;
 	}
 
-	bool Mcf5407Soc::isMbusOwned(const uint32_t _offset)
+	bool ColdfireSoc::isMbusOwned(const uint32_t _offset)
 	{
 		return _offset >= gMbusBase && _offset < gMbusBase + gMbusSize;
 	}
 
-	bool Mcf5407Soc::isInterruptOwned(const uint32_t _offset)
+	bool ColdfireSoc::isInterruptOwned(const uint32_t _offset)
 	{
 		if(_offset == InterruptController::gIrqparOffset)
 			return true;
@@ -55,7 +55,7 @@ namespace coldfire
 			&& _offset < InterruptController::gIcrBase + InterruptController::gIcrCount;
 	}
 
-	BusTarget& Mcf5407Soc::select(const uint32_t _offset)
+	BusTarget& ColdfireSoc::select(const uint32_t _offset)
 	{
 		if(m_mbus && isMbusOwned(_offset))
 			return *m_mbus;
@@ -64,32 +64,32 @@ namespace coldfire
 		return *m_sim;
 	}
 
-	uint32_t Mcf5407Soc::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+	uint32_t ColdfireSoc::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
 	{
 		if(isInterruptOwned(_offset))
 		{
 			if(_size != 8)
 			{
-				_status = MCF5407_BUS_SIZE_ILLEGAL;
+				_status = CF_BUS_SIZE_ILLEGAL;
 				return 0u;
 			}
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			return m_interrupts->readRegister(_offset);
 		}
 
 		return select(_offset).read(_offset, _size, _status);
 	}
 
-	void Mcf5407Soc::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+	void ColdfireSoc::write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status)
 	{
 		if(isInterruptOwned(_offset))
 		{
 			if(_size != 8)
 			{
-				_status = MCF5407_BUS_SIZE_ILLEGAL;
+				_status = CF_BUS_SIZE_ILLEGAL;
 				return;
 			}
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			m_interrupts->writeRegister(_offset, uint8_t(_value & 0xffu));
 			return;
 		}

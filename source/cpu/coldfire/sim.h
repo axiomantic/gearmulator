@@ -33,8 +33,8 @@ namespace coldfire
 		{
 		}
 
-		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
 		const std::vector<std::string>& log() const { return m_log; }
 		void clearLog() { m_log.clear(); }

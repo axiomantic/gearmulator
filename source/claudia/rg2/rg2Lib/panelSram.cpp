@@ -23,13 +23,13 @@ namespace rg2
 		return true;
 	}
 
-	uint32_t PanelSram::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+	uint32_t PanelSram::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 
 		if(_size != 8 && _size != 16 && _size != 32)
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			return 0u;
 		}
 
@@ -59,13 +59,13 @@ namespace rg2
 		return value;
 	}
 
-	void PanelSram::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+	void PanelSram::write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 
 		if(_size != 8 && _size != 16 && _size != 32)
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			return;
 		}
 

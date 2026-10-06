@@ -31,8 +31,8 @@ namespace rg2
 
 		explicit Panel(uint32_t _displaySize, Latches* _latches = nullptr);
 
-		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
 		void attachLatches(Latches* _latches) noexcept;
 

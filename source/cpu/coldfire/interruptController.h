@@ -1,5 +1,5 @@
 // The two-tier interrupt controller: the MCF5407 / MCF5307 SIM's centralized interrupt
-// controller, on the board side of the mcf5407_set_irq contract. The board
+// controller, on the board side of the cf_set_irq contract. The board
 // owns every pending bit and every priority decision; this class is that
 // decision. It arbitrates among the internal module sources and the four
 // external interrupt pins, computes the single highest-priority winner, and
@@ -24,7 +24,7 @@ namespace coldfire
 		Irq1 = 3,
 	};
 
-	// The present callback. `level` is MCF5407_IRQ_NONE (0) for none, or 1 to
+	// The present callback. `level` is CF_IRQ_NONE (0) for none, or 1 to
 	// 7. `vector` is the pass-through vector number used when `autovector` is
 	// zero; a non-zero `autovector` makes the core use the autovector for
 	// `level` and ignore `vector`.

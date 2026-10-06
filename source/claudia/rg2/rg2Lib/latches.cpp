@@ -67,13 +67,13 @@ namespace rg2
 			m_ledRings[_ringIndex] = _state;
 	}
 
-	uint32_t Latches::read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+	uint32_t Latches::read(const uint32_t _offset, const int _size, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			return 0;
 		}
 
@@ -98,13 +98,13 @@ namespace rg2
 		return value;
 	}
 
-	void Latches::write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+	void Latches::write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status)
 	{
-		_status = MCF5407_BUS_OK;
+		_status = CF_BUS_OK;
 
 		if(!isLegalWidth(_size))
 		{
-			_status = MCF5407_BUS_SIZE_ILLEGAL;
+			_status = CF_BUS_SIZE_ILLEGAL;
 			return;
 		}
 

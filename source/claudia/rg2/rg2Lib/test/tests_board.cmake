@@ -4,24 +4,24 @@
 # source/claudia/rg2/rg2Lib/test/. The NAME is the exact string passed to -r. Edit no
 # other CMake file in this tree.
 
-# ----------------- the mcf5407::mcf5407 link
+# ----------------- the coldfire::coldfire link
 #
-# The test links rg2Lib and nothing else. It never names mcf5407::mcf5407 on its
+# The test links rg2Lib and nothing else. It never names coldfire::coldfire on its
 # own link line, so the header and the symbol both have to arrive through
 # rg2Lib's own PUBLIC link. Naming the core here as well would let this test pass
 # with that line deleted.
 #
 # The target is declared unconditionally and is not guarded by
-# if(RG2_LINK_MCF5407). The guard would make the option-OFF build succeed by
+# if(RG2_LINK_COLDFIRE). The guard would make the option-OFF build succeed by
 # building nothing; the negative case asserts that the option-OFF build fails at
-# the compile step on the missing mcf5407.h.
+# the compile step on the missing coldfire.h.
 
-add_executable(t0_mcf5407_link t0_mcf5407_link.cpp)
-target_link_libraries(t0_mcf5407_link PRIVATE rg2Lib)
-set_property(TARGET t0_mcf5407_link PROPERTY FOLDER "RG2/test")
+add_executable(t0_coldfire_link t0_coldfire_link.cpp)
+target_link_libraries(t0_coldfire_link PRIVATE rg2Lib)
+set_property(TARGET t0_coldfire_link PROPERTY FOLDER "RG2/test")
 
-add_test(NAME t0_mcf5407_link COMMAND t0_mcf5407_link)
-set_tests_properties(t0_mcf5407_link PROPERTIES LABELS "UnitTest")
+add_test(NAME t0_coldfire_link COMMAND t0_coldfire_link)
+set_tests_properties(t0_coldfire_link PROPERTIES LABELS "UnitTest")
 
 # ----------------- the memory decode and the two bus callbacks
 
@@ -84,7 +84,7 @@ set_tests_properties(t0_anomaly_log PROPERTIES LABELS "UnitTest")
 # this block is what puts it there. A cache variable names a sibling checkout
 # when a local engineer has one, and FetchContent fetches a pinned commit when
 # nobody has, mirroring the arrangement the root CMakeLists.txt uses for
-# mcf5407.
+# coldfire.
 
 set(RG2_TOOLS_SOURCE_DIR "" CACHE PATH "A checkout of axiomantic/nmg2-tools to use instead of fetching one")
 set(RG2_TOOLS_GIT_TAG "oracle-wire-compose-2026-09-01" CACHE STRING "The commit or tag of axiomantic/nmg2-tools to fetch")
@@ -274,29 +274,29 @@ set_tests_properties(t0_hdi08_nonblocking PROPERTIES LABELS "UnitTest" TIMEOUT 1
 # This target compiles board.cpp and links no library, and that is the
 # observation mechanism rather than a shortcut. The behaviour under test is a
 # call the Board makes out to isp1181_tick, and the shipped Board exposes no way
-# to observe it. The test therefore supplies its own definitions of the mcf5407
-# entry points board.cpp uses, which requires that libmcf5407.a is absent from
+# to observe it. The test therefore supplies its own definitions of the coldfire
+# entry points board.cpp uses, which requires that libcoldfire.a is absent from
 # this link: defining isp1181_tick while that archive is on the link line is a
 # duplicate-symbol error as soon as anything pulls the archive member that also
 # defines it. Linking rg2Lib would put that archive on the line through rg2Lib's
 # own PUBLIC link.
 #
-# The mcf5407 include directory is taken from the imported target's INTERFACE
+# The coldfire include directory is taken from the imported target's INTERFACE
 # property rather than linking it, so the header arrives and the archive does
 # not.
 #
 # The executable is declared unconditionally and only the include directory is
-# guarded. At RG2_LINK_MCF5407=OFF the imported target does not exist, so naming
+# guarded. At RG2_LINK_COLDFIRE=OFF the imported target does not exist, so naming
 # it in a generator expression fails the generate step of any configure that
 # turns the option off. Guarding the target instead of the executable keeps the negative
 # case intact: at OFF this target still builds and still fails at the compile
-# step on the missing mcf5407.h, rather than passing by building nothing.
+# step on the missing coldfire.h, rather than passing by building nothing.
 
 add_executable(t0_sof_tick t0_sof_tick.cpp ../board.cpp)
 target_include_directories(t0_sof_tick PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-if(TARGET mcf5407::mcf5407)
+if(TARGET coldfire::coldfire)
 	target_include_directories(t0_sof_tick PRIVATE
-		$<TARGET_PROPERTY:mcf5407::mcf5407,INTERFACE_INCLUDE_DIRECTORIES>)
+		$<TARGET_PROPERTY:coldfire::coldfire,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 set_property(TARGET t0_sof_tick PROPERTY FOLDER "RG2/test")
 
@@ -307,9 +307,9 @@ set_tests_properties(t0_sof_tick PROPERTIES LABELS "UnitTest")
 #
 # The test links rg2Lib and names no other library. The funnel is a rg2Lib source,
 # and the just-in-time compiler it must notify arrives through rg2Lib's own
-# PUBLIC link of dsp56kEmu. Nothing here references mcf5407::mcf5407, so no
+# PUBLIC link of dsp56kEmu. Nothing here references coldfire::coldfire, so no
 # if(TARGET) guard is needed: this block stays inert in a configure that turns
-# RG2_LINK_MCF5407 off.
+# RG2_LINK_COLDFIRE off.
 #
 # NMG2_ARTIFACTS is not read. Every word the test puts into P memory is
 # assembled from text the test file authors, so no Clavia byte reaches it.
@@ -325,14 +325,14 @@ set_tests_properties(t0_pmem_funnel PROPERTIES LABELS "UnitTest")
 #
 # The test links rg2Lib and names no other library, and the distinction from
 # t0_sof_tick is deliberate. t0_sof_tick compiles ../board.cpp directly and
-# defines the mcf5407 entry points itself, so it must keep libmcf5407.a off the
+# defines the coldfire entry points itself, so it must keep libcoldfire.a off the
 # link line. This test needs the opposite: the real Flash, Panel, Latches,
 # Hdi08Adapter, MemoryMap, Sim and Uart0, all of which are rg2Lib sources, plus
 # the real board.cpp that composes them. Linking rg2Lib delivers every one of
-# them with the real mcf5407 behind it.
+# them with the real coldfire behind it.
 #
-# Nothing here references mcf5407::mcf5407, so no if(TARGET) guard is needed:
-# this block stays inert in a configure that turns RG2_LINK_MCF5407 off.
+# Nothing here references coldfire::coldfire, so no if(TARGET) guard is needed:
+# this block stays inert in a configure that turns RG2_LINK_COLDFIRE off.
 #
 # NMG2_ARTIFACTS is not read. Both flash images the test loads are byte patterns
 # the test file authors, so no Clavia byte reaches it and the tier stays T0.
@@ -348,8 +348,8 @@ set_tests_properties(t0_board_routing PROPERTIES LABELS "UnitTest")
 #
 # board.h holds the composed units by value, so it includes hdi08Adapter.h,
 # which includes "hdi08Port.h". t0_sof_tick does not link rg2Lib:
-# it compiles ../board.cpp directly and defines the mcf5407 entry points itself,
-# to keep libmcf5407.a off its link line.
+# it compiles ../board.cpp directly and defines the coldfire entry points itself,
+# to keep libcoldfire.a off its link line.
 #
 # The include directory is taken from hardwareLib's INTERFACE property and the
 # target is not linked, so the header arrives and no archive joins the link. The
@@ -370,9 +370,9 @@ endif()
 # ones name only what they add.
 #
 # It does not weaken what t0_sof_tick's own block protects. That block keeps
-# libmcf5407.a off the link line, because the test defines the mcf5407 entry
+# libcoldfire.a off the link line, because the test defines the coldfire entry
 # points itself and the archive would collide with them. No source added by any
-# of these blocks is an mcf5407 source.
+# of these blocks is a coldfire source.
 
 target_sources(t0_sof_tick PRIVATE
 	../flash.cpp
@@ -382,7 +382,7 @@ target_sources(t0_sof_tick PRIVATE
 	../hdi08Adapter.cpp
 	../memoryMap.cpp)
 
-target_link_libraries(t0_sof_tick PRIVATE coldfire hardwareLib)
+target_link_libraries(t0_sof_tick PRIVATE coldfireSoc hardwareLib)
 
 foreach(lib dsp56kEmu baseLib)
 	if(TARGET ${lib})
@@ -398,8 +398,8 @@ endforeach()
 #
 # The test links rg2Lib and nothing else, which is the arrangement
 # t0_board_routing already uses for the same reason: it drives Board::onRead and
-# Board::onWrite with the real mcf5407 behind them, and rg2Lib carries that link
-# itself. Nothing here references mcf5407::mcf5407, so no if(TARGET) guard is
+# Board::onWrite with the real coldfire behind them, and rg2Lib carries that link
+# itself. Nothing here references coldfire::coldfire, so no if(TARGET) guard is
 # needed and none is written.
 
 add_executable(t0_cs2_cfi t0_cs2_cfi.cpp)
@@ -419,8 +419,8 @@ set_tests_properties(t0_cs2_cfi PROPERTIES LABELS "UnitTest")
 #
 # The test links rg2Lib and nothing else, which is the arrangement
 # t0_board_routing and t0_cs2_cfi already use: it drives Board::onRead and
-# Board::onWrite with the real mcf5407 core behind them. Nothing here references
-# mcf5407::mcf5407, so no if(TARGET) guard is needed and none is written.
+# Board::onWrite with the real coldfire core behind them. Nothing here references
+# coldfire::coldfire, so no if(TARGET) guard is needed and none is written.
 
 add_executable(t0_bus_size_unit t0_bus_size_unit.cpp)
 target_link_libraries(t0_bus_size_unit PRIVATE rg2Lib)
@@ -436,8 +436,8 @@ set_tests_properties(t0_bus_size_unit PROPERTIES LABELS "UnitTest")
 # interlock the firmware requires, which no static status byte can satisfy.
 #
 # The test links rg2Lib and nothing else: some of its cases drive Board::onRead
-# and Board::onWrite with the real mcf5407 core behind them. Nothing here
-# references mcf5407::mcf5407, so no if(TARGET) guard is needed and none is
+# and Board::onWrite with the real coldfire core behind them. Nothing here
+# references coldfire::coldfire, so no if(TARGET) guard is needed and none is
 # written.
 
 add_executable(t0_mbus t0_mbus.cpp)
@@ -523,7 +523,7 @@ set_tests_properties(t0_board_mcu_handle PROPERTIES LABELS "UnitTest")
 #
 # It links rg2Lib and nothing else: it constructs a Board over its own
 # BoardConfig and drives Board::onRead / Board::onWrite, the exact pointers
-# mcf5407_create receives.
+# cf_create receives.
 
 add_executable(t0_cs3_wire t0_cs3_wire.cpp)
 target_link_libraries(t0_cs3_wire PRIVATE rg2Lib)
@@ -546,7 +546,7 @@ set_tests_properties(t0_cs3_wire PROPERTIES LABELS "UnitTest")
 # cannot drift; NMG2_ARTIFACTS is a cache variable, so whichever include site
 # sets it first wins and the second set is a no-op with the same value.
 #
-# It links rg2Lib and nothing else. Naming mcf5407::mcf5407 here would let the
+# It links rg2Lib and nothing else. Naming coldfire::coldfire here would let the
 # test pass with rg2Lib's own link line deleted.
 
 add_executable(t1_sprintf_isolated t1_sprintf_isolated.cpp)
@@ -594,17 +594,17 @@ set_tests_properties(t0_timer PROPERTIES LABELS "UnitTest")
 # t0_interrupts already drives InterruptController directly and cannot see that
 # defect at all.
 #
-# This target compiles board.cpp and links no mcf5407 archive. The behaviour
-# under test is a call the Board makes out to mcf5407_set_irq, and mcf5407.h
+# This target compiles board.cpp and links no coldfire archive. The behaviour
+# under test is a call the Board makes out to cf_set_irq, and coldfire.h
 # publishes no getter for the presented interrupt state, so the test supplies
 # that entry point itself and records what arrives. The archive cannot be on the
-# link line: `nm -g libmcf5407.a` puts _mcf5407_set_irq in the same member as
+# link line: `nm -g libcoldfire.a` puts _cf_set_irq in the same member as
 # _takeInterrupt and _pendingInterrupt, which the core needs, so the member is
 # always pulled and the test's own definition would be a duplicate symbol.
 # Linking rg2Lib would put that archive on the line through rg2Lib's own PUBLIC
 # link, so this target names the rg2Lib sources board.cpp needs instead.
 #
-# The mcf5407 include directory is taken from the imported target's INTERFACE
+# The coldfire include directory is taken from the imported target's INTERFACE
 # property rather than linking it, so the header arrives and the archive does
 # not. The executable is declared unconditionally and only the property
 # references are guarded.
@@ -626,13 +626,13 @@ add_executable(t0_board_interrupts
 	../mailbox.cpp
 	../frame.cpp)
 
-target_link_libraries(t0_board_interrupts PRIVATE coldfire hardwareLib)
+target_link_libraries(t0_board_interrupts PRIVATE coldfireSoc hardwareLib)
 
 target_include_directories(t0_board_interrupts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-if(TARGET mcf5407::mcf5407)
+if(TARGET coldfire::coldfire)
 	target_include_directories(t0_board_interrupts PRIVATE
-		$<TARGET_PROPERTY:mcf5407::mcf5407,INTERFACE_INCLUDE_DIRECTORIES>)
+		$<TARGET_PROPERTY:coldfire::coldfire,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 if(TARGET hardwareLib)
@@ -671,7 +671,7 @@ set_tests_properties(t0_board_interrupts PROPERTIES LABELS "UnitTest")
 #
 # It links rg2Lib and nothing else: the real board.cpp with the real DspSet and
 # Hdi08Bridge behind it are all rg2Lib sources. Nothing here references
-# mcf5407::mcf5407, so no if(TARGET) guard is needed.
+# coldfire::coldfire, so no if(TARGET) guard is needed.
 
 add_executable(t1_dsp_handshake t1_dsp_handshake.cpp)
 target_link_libraries(t1_dsp_handshake PRIVATE rg2Lib)
@@ -855,9 +855,9 @@ set_tests_properties(t0_gdb_script PROPERTIES LABELS "UnitTest")
 # ----------------- Board-to-TransportHub consequence: the two targets that
 #                   compile ../board.cpp on their own
 #
-# transportHub.cpp is not an mcf5407 source and pulls no library onto either
+# transportHub.cpp is not a coldfire source and pulls no library onto either
 # link line -- it includes only <atomic>, <cstring> and its own header -- so the
-# property both targets protect, that no mcf5407 archive reaches them, is
+# property both targets protect, that no coldfire archive reaches them, is
 # untouched.
 
 target_sources(t0_sof_tick PRIVATE ../transportHub.cpp)

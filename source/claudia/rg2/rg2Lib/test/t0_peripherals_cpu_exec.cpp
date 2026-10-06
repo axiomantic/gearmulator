@@ -1,4 +1,4 @@
-// End-to-end ColdFire CPU execution tests for MCF5407 on-chip peripherals.
+// End-to-end ColdFire CPU execution tests for ColdFire on-chip peripherals.
 //
 // What this test proves:
 //
@@ -24,7 +24,7 @@
 #include "../sim.h"
 #include "../timer.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
 
 #include <cstdint>
 #include <cstring>
@@ -70,12 +70,12 @@ namespace
     public:
         explicit TestRam(const size_t _size) : m_bytes(_size, 0) {}
 
-        uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status) override
+        uint32_t read(const uint32_t _offset, const int _size, cf_bus_status& _status) override
         {
-            _status = MCF5407_BUS_OK;
+            _status = CF_BUS_OK;
             if (_size != 8 && _size != 16 && _size != 32)
             {
-                _status = MCF5407_BUS_SIZE_ILLEGAL;
+                _status = CF_BUS_SIZE_ILLEGAL;
                 return 0u;
             }
 
@@ -91,12 +91,12 @@ namespace
             return value;
         }
 
-        void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status) override
+        void write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status) override
         {
-            _status = MCF5407_BUS_OK;
+            _status = CF_BUS_OK;
             if (_size != 8 && _size != 16 && _size != 32)
             {
-                _status = MCF5407_BUS_SIZE_ILLEGAL;
+                _status = CF_BUS_SIZE_ILLEGAL;
                 return;
             }
 
@@ -180,7 +180,7 @@ namespace
 
     // --------------------------------------------------------- Assembly routines
     //
-    // Binary opcode sequences assembled for ColdFire MCF5407 (ISA_A):
+    // Binary opcode sequences assembled for ColdFire (ISA_A):
     //
     // Routine 1:
     //   moveq   #0, %d0
@@ -289,7 +289,7 @@ int main()
         // Advancing the MCU advanced the timers by the cycles spent. Since
         // TRR1 = 5 with prescaler = 0, the counter reached 5, setting TER1[REF]
         // and asserting level 6 autovectored interrupt on the arbiter.
-        mcf5407_bus_status busStatus = MCF5407_BUS_OK;
+        cf_bus_status busStatus = CF_BUS_OK;
         const uint32_t ter1 = board.sim().read(0x151, 8, busStatus);
         checkEqual(ter1 & kTerRef, uint32_t(kTerRef), "Timer 1 compare match set TER1[REF] event flag");
         checkEqual(board.interrupts().presentedLevel(), 6, "InterruptController presents level 6 for Timer 1 match");
@@ -382,7 +382,7 @@ int main()
 
         board.resetMcu(kInitialSp, kCodeEntry);
 
-        mcf5407_bus_status busStatus = MCF5407_BUS_OK;
+        cf_bus_status busStatus = CF_BUS_OK;
         (void)busStatus;
 
         // Quantum 1: runs configuration and enters mask loop.

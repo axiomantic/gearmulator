@@ -45,8 +45,8 @@ namespace rg2
 
 		explicit Latches(uint32_t _windowSize, Model _model = Model::G2X, Panel* _panel = nullptr);
 
-		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
 		void attachPanel(Panel* _panel) noexcept;
 

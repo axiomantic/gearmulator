@@ -138,7 +138,7 @@ int main()
 {
 	std::printf("t0_construction_rejection: g_useJIT = %s\n", dsp56k::g_useJIT ? "true" : "false");
 
-	/* ONE Board and ONE Executor for every case. The Board creates the MCF5407
+	/* ONE Board and ONE Executor for every case. The Board creates the ColdFire
 	 * core context and initialises the Nim runtime, so one per case would pay
 	 * that for each row without exercising anything this file claims. */
 	rg2::SerialExecutor executor;

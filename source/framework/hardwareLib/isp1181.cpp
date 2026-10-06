@@ -1,6 +1,7 @@
 #include "isp1181.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
+#include <isp1181.h>
 
 #include <cstring>
 #include <utility>

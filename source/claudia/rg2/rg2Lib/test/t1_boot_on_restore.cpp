@@ -408,7 +408,7 @@ namespace
 
 		for(uint32_t col = 0; col < g_lineWidth; ++col)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			const uint32_t byte = rg2::Board::onRead(&_board, base + col, g_byte, &status);
 
 			out += char(byte & 0xffu);

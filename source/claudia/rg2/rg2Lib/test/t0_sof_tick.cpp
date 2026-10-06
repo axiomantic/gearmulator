@@ -19,9 +19,9 @@
 //
 // How the tick is observed, and why the target links no library. This
 // executable compiles board.cpp together with this file and supplies its own
-// definitions of the mcf5407 C entry points board.cpp uses. That makes
+// definitions of the ColdFire C entry points board.cpp uses. That makes
 // isp1181_tick observable without adding a test-only accessor to the shipped
-// Board. Defining isp1181_tick while also linking libmcf5407.a is a
+// Board. Defining isp1181_tick while also linking libcoldfire.a is a
 // duplicate-symbol link error the moment anything in the link pulls the archive
 // member that defines it, so the seam is taken by owning the whole link line
 // instead. The Board creates and destroys its USB device, so isp1181_create and
@@ -54,7 +54,8 @@
 #include <string>
 #include <vector>
 
-#include <mcf5407.h>
+#include <coldfire.h>
+#include <isp1181.h>
 
 namespace
 {
@@ -125,8 +126,8 @@ namespace
     // the allocator happened to reuse.
     std::deque<int> g_usbTokens;
 
-    // The token mcf5407_create hands back. Board only stores it and passes it
-    // back to mcf5407_exec and mcf5407_destroy, so any non-null address does.
+    // The token cf_create hands back. Board only stores it and passes it
+    // back to cf_exec and cf_destroy, so any non-null address does.
     int g_coreToken = 0;
 
     // Clear the call records between runs. The token pool above is deliberately
@@ -246,8 +247,8 @@ namespace
     }
 } // namespace
 
-// The mcf5407 C entry points board.cpp uses, supplied here so that the tick is
-// observable and no library is linked. The signatures are include/mcf5407.h's.
+// The ColdFire C entry points board.cpp uses, supplied here so that the tick is
+// observable and no library is linked. The signatures are coldfire.h's.
 extern "C" {
 /* Answers 1, which is "the runtime is usable". coldfire.h states the status
  * is a truth value and not a POSIX error code, and 0 is reserved for a
@@ -287,38 +288,6 @@ void cf_state_save(const cf_ctx*, void*) {}
 
 void cf_state_load(cf_ctx*, const void*) {}
 
-int mcf5407_runtime_init(void) { return cf_runtime_init(); }
-
-mcf5407_ctx* mcf5407_create(void*, mcf5407_read_fn, mcf5407_write_fn, mcf5407_iack_fn)
-{
-    return cf_create(nullptr);
-}
-
-void mcf5407_destroy(mcf5407_ctx* ctx) { cf_destroy(ctx); }
-
-uint32_t mcf5407_exec(mcf5407_ctx* ctx, uint32_t cycles) { return cf_exec(ctx, cycles); }
-
-void mcf5407_reset(mcf5407_ctx* ctx, uint32_t sp, uint32_t pc) { cf_reset(ctx, sp, pc); }
-
-uint32_t mcf5407_get_reg(const mcf5407_ctx* ctx, int idx) { return cf_get_reg(ctx, idx); }
-
-int mcf5407_set_reg(mcf5407_ctx* ctx, int idx, uint32_t val) { return cf_set_reg(ctx, idx, val); }
-
-int mcf5407_halted(const mcf5407_ctx* ctx) { return cf_halted(ctx); }
-
-int mcf5407_faulted(const mcf5407_ctx* ctx) { return cf_faulted(ctx); }
-
-void mcf5407_set_irq(mcf5407_ctx* ctx, int level, uint8_t vector, int autovector)
-{
-    cf_set_irq(ctx, level, vector, autovector);
-}
-
-size_t mcf5407_state_size(void) { return cf_state_size(); }
-
-void mcf5407_state_save(const mcf5407_ctx* ctx, void* dst) { cf_state_save(ctx, dst); }
-
-void mcf5407_state_load(mcf5407_ctx* ctx, const void* src) { cf_state_load(ctx, src); }
-
 /* A distinct, non-null handle on every call, and never a repeat. This is
  * the whole reason the assertions below can say "correct" rather than only
  * "constant" -- see the file header. */
@@ -347,7 +316,7 @@ void isp1181_write(isp1181_ctx*, const uint32_t, const uint8_t) {}
 
 /* The Board drains its transport hub into the device on every quantum
  * boundary, so board.cpp references this entry point and a target that
- * links no mcf5407 archive must supply it. It is a sink and not a recorder:
+ * links no coldfire archive must supply it. It is a sink and not a recorder:
  * nothing in this file drives the hub, so no frame ever reaches it.
  *
  * It answers 1, which is "an OUT buffer holds the packet". The Board reads
@@ -358,7 +327,7 @@ int isp1181_rx(isp1181_ctx*, int, const uint8_t*, size_t) { return 1; }
 
 /* The Board moves its handle off the Stub backend at construction, so
  * board.cpp references this entry point too and a target that links no
- * mcf5407 archive must supply it.
+ * coldfire archive must supply it.
  *
  * It answers 1, which is "the handle moved". The Board reads the return
  * only to detect a refusal, and a refusal is a state this file's fake

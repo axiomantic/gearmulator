@@ -11,7 +11,7 @@
 #include "model.h"
 #include "panel.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
 
 #include <cstdint>
 #include <iostream>
@@ -81,15 +81,15 @@ namespace
 
 		~Board() { delete m_map; }
 
-		uint32_t read(const uint32_t _address, const int _size, mcf5407_bus_status& _status)
+		uint32_t read(const uint32_t _address, const int _size, cf_bus_status& _status)
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			return rg2::memoryMapRead(m_map, _address, _size, &_status);
 		}
 
-		void write(const uint32_t _address, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+		void write(const uint32_t _address, const int _size, const uint32_t _value, cf_bus_status& _status)
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			rg2::memoryMapWrite(m_map, _address, _size, _value, &_status);
 		}
 
@@ -115,11 +115,11 @@ int main()
 	// ERR at 0x3001B86C. This machine is 0b11.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		const uint32_t latch = board.read(0x15000000u, 8, status);
 
-		checkEqual(status, MCF5407_BUS_OK, "the CS5 latch answers a read");
+		checkEqual(status, CF_BUS_OK, "the CS5 latch answers a read");
 		checkEqual((latch >> 4) & 0x3u, uint32_t(0x3u),
 			"the panel latch at 0x15000000 returns bits 5:4 = 0b11, which is model code 1, the G2X");
 
@@ -142,10 +142,10 @@ int main()
 	// the identifier would present a different machine one instruction later.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		board.write(0x15000000u, 8, 0x00u, status);
-		checkEqual(status, MCF5407_BUS_OK, "a write to the identifier latch completes");
+		checkEqual(status, CF_BUS_OK, "a write to the identifier latch completes");
 		checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, uint32_t(0x3u),
 			"the identifier still reads 0b11 after a write of zero");
 
@@ -180,7 +180,7 @@ int main()
 		for(const Expectation& expectation : expectations)
 		{
 			Board board(g_displayBase, expectation.model);
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 
 			checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, expectation.bits,
 				expectation.what);
@@ -195,13 +195,13 @@ int main()
 	// asserted.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		checkEqual(board.read(0x15000001u, 8, status), uint32_t(0),
 			"an output latch reads zero before anything is written to it");
 
 		board.write(0x15000001u, 8, 0xa5u, status);
-		checkEqual(status, MCF5407_BUS_OK, "a write to an output latch completes");
+		checkEqual(status, CF_BUS_OK, "a write to an output latch completes");
 		checkEqual(board.read(0x15000001u, 8, status), uint32_t(0xa5u),
 			"an output latch returns the last value written to it");
 
@@ -237,13 +237,13 @@ int main()
 	// image running and this is a T0 check.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0),
 			"the display buffer reads zero before anything is written to it");
 
 		board.write(g_displayBase, 32, 0x4e4d4732u, status);
-		checkEqual(status, MCF5407_BUS_OK, "a 32-bit write to the display buffer completes");
+		checkEqual(status, CF_BUS_OK, "a 32-bit write to the display buffer completes");
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0x4e4d4732u),
 			"the display buffer returns the 32-bit value this test wrote");
 
@@ -286,9 +286,9 @@ int main()
 		{
 			for(const int width : widths)
 			{
-				mcf5407_bus_status status = MCF5407_BUS_OK;
+				cf_bus_status status = CF_BUS_OK;
 				const uint32_t value = board.read(g_displayBase + offset, width, status);
-				if(status != MCF5407_BUS_OK)
+				if(status != CF_BUS_OK)
 					everyPollCompleted = false;
 				if(value != 0)
 					everyPollIsQuiescent = false;
@@ -303,9 +303,9 @@ int main()
 		bool everyLatchPollCompleted = true;
 		for(uint32_t offset = 0; offset < g_latchWindowSize; ++offset)
 		{
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			board.read(rg2::g_cs5Base + offset, 8, status);
-			if(status != MCF5407_BUS_OK)
+			if(status != CF_BUS_OK)
 				everyLatchPollCompleted = false;
 		}
 
@@ -319,11 +319,11 @@ int main()
 	// Latch writes to CS5 offsets 1..7 update the corresponding 15-LED ring states.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// Writing 8-bit pattern to Latch 1 (CS5 offset 1) updates LED ring 0
 		board.write(rg2::g_cs5Base + 1u, 8, 0x5Au, status);
-		checkEqual(status, MCF5407_BUS_OK, "latch 1 write completes");
+		checkEqual(status, CF_BUS_OK, "latch 1 write completes");
 		checkEqual(uint32_t(board.panel().getLedRingState(0)), uint32_t(0x5Au),
 			"latch 1 write updates LED ring 0 state query");
 		checkEqual(uint32_t(board.latches().getLedRingState(0)), uint32_t(0x5Au),
@@ -331,13 +331,13 @@ int main()
 
 		// Writing 16-bit pattern across latches 1 and 2 updates LED ring 0 with full 15-bit value
 		board.write(rg2::g_cs5Base + 1u, 16, 0x7FFFu, status);
-		checkEqual(status, MCF5407_BUS_OK, "16-bit latch write completes");
+		checkEqual(status, CF_BUS_OK, "16-bit latch write completes");
 		checkEqual(uint32_t(board.panel().getLedRingState(0)), uint32_t(0x7FFFu),
 			"16-bit latch write updates LED ring 0 with 15-LED pattern");
 
 		// Writing to Latch 7 (CS5 offset 7) updates LED ring 6
 		board.write(rg2::g_cs5Base + 7u, 8, 0xA5u, status);
-		checkEqual(status, MCF5407_BUS_OK, "latch 7 write completes");
+		checkEqual(status, CF_BUS_OK, "latch 7 write completes");
 		checkEqual(uint32_t(board.panel().getLedRingState(6)), uint32_t(0xA5u),
 			"latch 7 write updates LED ring 6 state query");
 	}
@@ -348,7 +348,7 @@ int main()
 	// Setting encoder deltas on the panel exposes the delta on CS5 latch reads.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// Set encoder 0 delta to +5
 		board.panel().setEncoderDelta(0, 5);
@@ -357,14 +357,14 @@ int main()
 
 		// Reading Latch 1 (CS5 offset 1) returns the encoder delta
 		uint32_t readVal = board.read(rg2::g_cs5Base + 1u, 8, status);
-		checkEqual(status, MCF5407_BUS_OK, "reading latch 1 completes");
+		checkEqual(status, CF_BUS_OK, "reading latch 1 completes");
 		checkEqual(readVal, uint32_t(5u),
 			"reading latch 1 returns encoder 0 delta");
 
 		// Set encoder 3 delta to -4 (0xFC in two's complement)
 		board.panel().setEncoderDelta(3, -4);
 		readVal = board.read(rg2::g_cs5Base + 4u, 8, status);
-		checkEqual(status, MCF5407_BUS_OK, "reading latch 4 completes");
+		checkEqual(status, CF_BUS_OK, "reading latch 4 completes");
 		checkEqual(uint32_t(uint8_t(readVal)), uint32_t(uint8_t(-4)),
 			"reading latch 4 returns negative encoder 3 delta in two's complement");
 
@@ -382,7 +382,7 @@ int main()
 	// columns; pressed buttons pull corresponding return rows low for PADAT reads.
 	{
 		Board board;
-		mcf5407_bus_status status = MCF5407_BUS_UNMAPPED;
+		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// Initially, with no buttons pressed, all rows are idle (high in PADAT / active-low)
 		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u),
@@ -396,7 +396,7 @@ int main()
 
 		// Scan column 0: 16-bit walking zero 0x7FFF (bit 15 is 0) written to CS4 base
 		board.write(g_displayBase, 16, 0x7FFFu, status);
-		checkEqual(status, MCF5407_BUS_OK, "CS4 column 0 scan write completes");
+		checkEqual(status, CF_BUS_OK, "CS4 column 0 scan write completes");
 
 		// Row 2 must now be sensed active
 		check(board.panel().isRowActive(2), "row 2 is sensed active during column 0 scan");
@@ -407,7 +407,7 @@ int main()
 
 		// Scan column 1: walking zero 0xBFFF (bit 14 is 0) written to CS4 base
 		board.write(g_displayBase, 16, 0xBFFFu, status);
-		checkEqual(status, MCF5407_BUS_OK, "CS4 column 1 scan write completes");
+		checkEqual(status, CF_BUS_OK, "CS4 column 1 scan write completes");
 
 		// Button at (2,0) is NOT on column 1, so row 2 is no longer active
 		check(!board.panel().isRowActive(2), "row 2 is inactive during column 1 scan");
@@ -426,7 +426,7 @@ int main()
 
 		// 32-bit walking zero write: 0xFFFF7FFF scans column 0 and senses row 2 again
 		board.write(g_displayBase, 32, 0xFFFF7FFFu, status);
-		checkEqual(status, MCF5407_BUS_OK, "32-bit CS4 scan write completes");
+		checkEqual(status, CF_BUS_OK, "32-bit CS4 scan write completes");
 		check(board.panel().isRowActive(2), "row 2 sensed active under 32-bit 0xFFFF7FFF scan");
 
 		// Release button at (2,0)

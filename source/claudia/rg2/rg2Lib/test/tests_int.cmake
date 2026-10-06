@@ -12,7 +12,7 @@
 # it does not fail an artifact-less machine.
 #
 # It links rg2Lib and nothing else, so the Board, the MemoryMap and the core all
-# have to arrive through rg2Lib's own PUBLIC link. Naming mcf5407::mcf5407 here
+# have to arrive through rg2Lib's own PUBLIC link. Naming coldfire::coldfire here
 # would let the test pass with rg2Lib's own link line deleted.
 
 add_executable(t1_boot t1_boot.cpp)

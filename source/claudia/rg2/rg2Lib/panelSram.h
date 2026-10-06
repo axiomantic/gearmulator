@@ -53,8 +53,8 @@ namespace rg2
 	public:
 		explicit PanelSram(MemoryMap& _memory);
 
-		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
 		/* Copies an image into the bank at an absolute address. False when the
 		 * image is empty, does not start inside the bank, or does not fit in

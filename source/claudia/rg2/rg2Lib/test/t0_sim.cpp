@@ -32,7 +32,7 @@
 #include "model.h"
 #include "sim.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
 
 #include <cstdint>
 #include <iostream>
@@ -193,15 +193,15 @@ namespace
 
 		~Bus() { delete m_map; }
 
-		uint32_t read(const uint32_t _offset, const int _size, mcf5407_bus_status& _status)
+		uint32_t read(const uint32_t _offset, const int _size, cf_bus_status& _status)
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			return rg2::memoryMapRead(m_map, g_mbarBase + _offset, _size, &_status);
 		}
 
-		void write(const uint32_t _offset, const int _size, const uint32_t _value, mcf5407_bus_status& _status)
+		void write(const uint32_t _offset, const int _size, const uint32_t _value, cf_bus_status& _status)
 		{
-			_status = MCF5407_BUS_OK;
+			_status = CF_BUS_OK;
 			rg2::memoryMapWrite(m_map, g_mbarBase + _offset, _size, _value, &_status);
 		}
 
@@ -275,7 +275,7 @@ namespace
 	// "do you have a register here".
 	bool modelAnswersAt(Bus& _bus, const uint32_t _offset)
 	{
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 		_bus.sim().clearLog();
 		_bus.read(_offset, 8, status);
 		return _bus.sim().log().empty();
@@ -286,7 +286,7 @@ namespace
 	// recovers the model's write-protect mask from behaviour alone.
 	uint8_t modelWritableMask(Bus& _bus, const uint32_t _offset)
 	{
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		_bus.write(_offset, 8, 0x00u, status);
 		const uint8_t low = uint8_t(_bus.read(_offset, 8, status));
@@ -315,10 +315,10 @@ int main()
 			if(!r.resetIsKnown)
 				continue;
 
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			const uint32_t value = bus.read(r.offset, r.widthBits, status);
 
-			checkEqual(status, MCF5407_BUS_OK,
+			checkEqual(status, CF_BUS_OK,
 				std::string("the reset read of ") + r.name + " completes");
 			checkEqual(value, r.resetValue,
 				std::string(r.name) + " reads its reset value " + hex32(r.resetValue));
@@ -338,15 +338,15 @@ int main()
 		{
 			const uint32_t pattern = 0x5aa55aa5u & widthMask(r.widthBits);
 
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 			bus.write(r.offset, r.widthBits, pattern, status);
 
-			checkEqual(status, MCF5407_BUS_OK,
+			checkEqual(status, CF_BUS_OK,
 				std::string("a write to ") + r.name + " at its own width completes");
 
 			const uint32_t readBack = bus.read(r.offset, r.widthBits, status);
 
-			checkEqual(status, MCF5407_BUS_OK,
+			checkEqual(status, CF_BUS_OK,
 				std::string("a read of ") + r.name + " at its own width completes");
 
 			// A write-one-to-clear row reads its reset value for the same
@@ -374,7 +374,7 @@ int main()
 	// machine one instruction later.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		checkEqual((bus.read(0x248, 16, status) >> 9) & 1u, uint32_t(0),
 			"Port A data at MBAR+0x248 reads bit 9 LOW, so the machine is expanded");
@@ -410,14 +410,14 @@ int main()
 
 			for(const int width : widths)
 			{
-				mcf5407_bus_status readStatus = MCF5407_BUS_OK;
+				cf_bus_status readStatus = CF_BUS_OK;
 				bus.read(r.offset, width, readStatus);
-				checkEqual(readStatus, MCF5407_BUS_OK,
+				checkEqual(readStatus, CF_BUS_OK,
 					std::string("a ") + std::to_string(width) + "-bit read of " + r.name + " is accepted");
 
-				mcf5407_bus_status writeStatus = MCF5407_BUS_OK;
+				cf_bus_status writeStatus = CF_BUS_OK;
 				bus.write(r.offset, width, 0u, writeStatus);
-				checkEqual(writeStatus, MCF5407_BUS_OK,
+				checkEqual(writeStatus, CF_BUS_OK,
 					std::string("a ") + std::to_string(width) + "-bit write to " + r.name + " is accepted");
 			}
 		}
@@ -431,10 +431,10 @@ int main()
 	// A model that accepted every width at every offset fails this group.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		bus.read(0x1d0, 16, status);
-		checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL, "a 16-bit read of UIPCR is rejected");
+		checkEqual(status, CF_BUS_SIZE_ILLEGAL, "a 16-bit read of UIPCR is rejected");
 		checkEqual(bus.sim().log().size(), size_t(1), "a rejected 16-bit read writes exactly one log line");
 		checkEqual(bus.logLine(0),
 			std::string("sim: SIZE_ILLEGAL read of 16 bits at offset 0x000001d0"),
@@ -442,21 +442,21 @@ int main()
 
 		bus.sim().clearLog();
 		bus.read(0x1d0, 32, status);
-		checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL, "a 32-bit read of UIPCR is rejected");
+		checkEqual(status, CF_BUS_SIZE_ILLEGAL, "a 32-bit read of UIPCR is rejected");
 		checkEqual(bus.logLine(0),
 			std::string("sim: SIZE_ILLEGAL read of 32 bits at offset 0x000001d0"),
 			"the log line of the 32-bit read names its own width");
 
 		bus.sim().clearLog();
 		bus.write(0x1d0, 16, 0u, status);
-		checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL, "a 16-bit write to UACR is rejected");
+		checkEqual(status, CF_BUS_SIZE_ILLEGAL, "a 16-bit write to UACR is rejected");
 		checkEqual(bus.logLine(0),
 			std::string("sim: SIZE_ILLEGAL write of 16 bits at offset 0x000001d0"),
 			"the log line of the write names the write direction");
 
 		bus.sim().clearLog();
 		bus.read(0x1d0, 8, status);
-		checkEqual(status, MCF5407_BUS_OK, "an 8-bit read of UIPCR is accepted");
+		checkEqual(status, CF_BUS_OK, "an 8-bit read of UIPCR is accepted");
 		checkEqual(bus.sim().log().size(), size_t(0), "an accepted access writes no log line");
 	}
 
@@ -485,15 +485,15 @@ int main()
 		for(const Expectation& expectation : expectations)
 		{
 			Bus bus(expectation.model);
-			mcf5407_bus_status status = MCF5407_BUS_OK;
+			cf_bus_status status = CF_BUS_OK;
 
 			checkEqual(bus.read(0x1d0, 8, status), expectation.uipcr, expectation.what);
-			checkEqual(status, MCF5407_BUS_OK, "the strap read completes");
+			checkEqual(status, CF_BUS_OK, "the strap read completes");
 		}
 
 		// The strap is a strap on every model, not only on the default.
 		Bus engine(rg2::Model::Engine);
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 		engine.write(0x1d0, 8, 0x00u, status);
 		checkEqual(engine.read(0x1d0, 8, status), uint32_t(0x0fu),
 			"a write cannot clear the Engine strap, because a write reaches UACR");
@@ -560,11 +560,11 @@ int main()
 	// leaves a trace.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		const uint32_t value = bus.read(0x0f0, 32, status);
 
-		checkEqual(status, MCF5407_BUS_OK, "a reserved offset completes rather than faulting");
+		checkEqual(status, CF_BUS_OK, "a reserved offset completes rather than faulting");
 		checkEqual(value, uint32_t(0), "a reserved offset reads zero");
 		checkEqual(bus.logLine(0),
 			std::string("sim: UNMODELLED read of 32 bits at offset 0x000000f0"),
@@ -585,7 +585,7 @@ int main()
 	// at $0AA -- while the model logs the same write UNMODELLED.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		struct Measured
 		{
@@ -607,7 +607,7 @@ int main()
 			bus.sim().clearLog();
 			bus.write(m.offset, m.widthBits, m.value, status);
 
-			checkEqual(status, MCF5407_BUS_OK,
+			checkEqual(status, CF_BUS_OK,
 				std::string("the boot loader's write of ") + m.name + " at " + hex32(m.offset) + " completes");
 			checkEqual(bus.sim().log().size(), size_t(0),
 				std::string("the boot loader's write of ") + m.name + " is MODELLED, so the SIM logs nothing");
@@ -642,7 +642,7 @@ int main()
 	// every group above and fails here.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		const uint32_t csar[] = {0x080, 0x08c, 0x098, 0x0a4, 0x0b0, 0x0bc};
 		const size_t count = sizeof(csar) / sizeof(csar[0]);
@@ -669,7 +669,7 @@ int main()
 	// chip-select family.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		checkEqual(bus.sim().log().size(), size_t(0), "the log starts empty");
 
@@ -777,11 +777,11 @@ int main()
 	// reads back exactly like a modelled one.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		// An offset inside the window that no register covers.
 		bus.write(0x0f0, 32, 0xffffffffu, status);
-		checkEqual(status, MCF5407_BUS_OK, "a write to the reserved offset 0x0f0 completes rather than faulting");
+		checkEqual(status, CF_BUS_OK, "a write to the reserved offset 0x0f0 completes rather than faulting");
 		checkEqual(bus.read(0x0f0, 32, status), uint32_t(0),
 			"the reserved offset 0x0f0 still reads zero after a write of all ones, because a write to a reserved address has no effect");
 
@@ -807,7 +807,7 @@ int main()
 		bus.sim().clearLog();
 		bus.write(0x086, 32, 0xdeadbeefu, status);
 
-		checkEqual(status, MCF5407_BUS_OK, "a 32-bit write starting inside CSMR0 and running into the reserved hole completes");
+		checkEqual(status, CF_BUS_OK, "a 32-bit write starting inside CSMR0 and running into the reserved hole completes");
 		checkEqual(bus.sim().log().size(), size_t(0),
 			"the write is not logged UNMODELLED, because the offset it starts at is a register the model carries");
 		checkEqual(bus.read(0x084, 32, status), uint32_t(0x0000deadu),
@@ -882,16 +882,16 @@ int main()
 	// Driving it through the decode could never reach the branch.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 		const int illegal[] = {0, 4, 12, 24, 64};
 
 		for(const int width : illegal)
 		{
 			bus.sim().clearLog();
-			status = MCF5407_BUS_OK;
+			status = CF_BUS_OK;
 			const uint32_t value = bus.sim().read(0x080, width, status);
 
-			checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL,
+			checkEqual(status, CF_BUS_SIZE_ILLEGAL,
 				std::string("the SIM rejects a ") + std::to_string(width) + "-bit read");
 			checkEqual(value, uint32_t(0),
 				std::string("a rejected ") + std::to_string(width) + "-bit read returns zero");
@@ -902,10 +902,10 @@ int main()
 				std::string("the log line of the ") + std::to_string(width) + "-bit read names its width, its offset and its direction");
 
 			bus.sim().clearLog();
-			status = MCF5407_BUS_OK;
+			status = CF_BUS_OK;
 			bus.sim().write(0x080, width, 0xffffffffu, status);
 
-			checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL,
+			checkEqual(status, CF_BUS_SIZE_ILLEGAL,
 				std::string("the SIM rejects a ") + std::to_string(width) + "-bit write");
 			checkEqual(bus.logLine(0),
 				std::string("sim: SIZE_ILLEGAL write of ") + std::to_string(width) + " bits at offset 0x00000080",
@@ -913,17 +913,17 @@ int main()
 		}
 
 		// A rejected write changes nothing.
-		status = MCF5407_BUS_OK;
+		status = CF_BUS_OK;
 		checkEqual(bus.sim().read(0x080, 16, status), uint32_t(0),
 			"CSAR0 is unchanged by every rejected write above, so a rejected access reaches no storage");
 
 		// The two guards are separate: the same widths driven through the
 		// decode are rejected by the decode, and the SIM never sees them.
 		bus.sim().clearLog();
-		status = MCF5407_BUS_OK;
+		status = CF_BUS_OK;
 		bus.read(0x080, 24, status);
 
-		checkEqual(status, MCF5407_BUS_SIZE_ILLEGAL, "the decode rejects a 24-bit read before the SIM sees it");
+		checkEqual(status, CF_BUS_SIZE_ILLEGAL, "the decode rejects a 24-bit read before the SIM sees it");
 		checkEqual(bus.sim().log().size(), size_t(0),
 			"the SIM writes no log line for a width the decode already rejected, so the two width guards are separate layers");
 	}
@@ -943,12 +943,12 @@ int main()
 	// the register boundary would fail here.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		bus.sim().clearLog();
 		bus.write(0x08a, 32, 0x11223344u, status);
 
-		checkEqual(status, MCF5407_BUS_OK, "a 32-bit write at CSCR0 is accepted");
+		checkEqual(status, CF_BUS_OK, "a 32-bit write at CSCR0 is accepted");
 		checkEqual(bus.sim().log().size(), size_t(0),
 			"the 32-bit write at CSCR0 is not logged UNMODELLED, because CSCR0 is a register the model carries");
 		checkEqual(bus.read(0x08a, 16, status), uint32_t(0x1122u),
@@ -991,7 +991,7 @@ int main()
 	// the access started at.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		// The read bound. The two bytes past the top must contribute nothing.
 		// They are the write-protect bytes of MBAR+0x000 and MBAR+0x001, which
@@ -1002,7 +1002,7 @@ int main()
 		bus.sim().clearLog();
 		const uint32_t value = bus.read(0x3fe, 32, status);
 
-		checkEqual(status, MCF5407_BUS_OK,
+		checkEqual(status, CF_BUS_OK,
 			"a 32-bit read that runs off the top of the MBAR window completes rather than faulting");
 		checkEqual(value, uint32_t(0),
 			"a 32-bit read at MBAR+0x3fe reads zero for the two bytes that lie past the top of the window, rather than the bytes the model stores after it");
@@ -1028,12 +1028,12 @@ int main()
 	}
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		bus.sim().clearLog();
 		bus.write(0x3fe, 32, 0xdeadbeefu, status);
 
-		checkEqual(status, MCF5407_BUS_OK,
+		checkEqual(status, CF_BUS_OK,
 			"a 32-bit write that runs off the top of the MBAR window completes rather than faulting");
 
 		// Asserted before modelWritableMask runs, because that helper drives
@@ -1074,12 +1074,12 @@ int main()
 	// modelled one.
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		bus.sim().clearLog();
 		bus.write(0x106, 32, 0x11223344u, status);
 
-		checkEqual(status, MCF5407_BUS_OK,
+		checkEqual(status, CF_BUS_OK,
 			"a 32-bit write starting in the reserved hole below DACR0 completes rather than faulting");
 		checkEqual(bus.sim().log().size(), size_t(1),
 			"the write writes exactly one log line, because the offset it starts at is one no register covers");
@@ -1095,14 +1095,14 @@ int main()
 	}
 	{
 		Bus bus;
-		mcf5407_bus_status status = MCF5407_BUS_OK;
+		cf_bus_status status = CF_BUS_OK;
 
 		bus.write(0x108, 32, 0xa5a5a5a5u, status);
 
 		bus.sim().clearLog();
 		const uint32_t value = bus.read(0x106, 32, status);
 
-		checkEqual(status, MCF5407_BUS_OK,
+		checkEqual(status, CF_BUS_OK,
 			"a 32-bit read starting in the reserved hole below DACR0 completes rather than faulting");
 		checkEqual(bus.sim().log().size(), size_t(1),
 			"the read writes exactly one log line, because the offset it starts at is one no register covers");

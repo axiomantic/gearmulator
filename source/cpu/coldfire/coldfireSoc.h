@@ -10,22 +10,22 @@
 
 namespace coldfire
 {
-	class Mcf5407Soc : public BusTarget
+	class ColdfireSoc : public BusTarget
 	{
 	public:
 		static constexpr uint32_t gMbusBase = 0x280u;
 		static constexpr uint32_t gMbusSize = 0x14u;
 
-		explicit Mcf5407Soc(void* _irqUser = nullptr, InterruptPresentFn _irqPresent = nullptr, bool _engineStrap = false);
+		explicit ColdfireSoc(void* _irqUser = nullptr, InterruptPresentFn _irqPresent = nullptr, bool _engineStrap = false);
 
 		template<typename ModelType, typename = std::enable_if_t<!std::is_same_v<std::decay_t<ModelType>, bool>>>
-		explicit Mcf5407Soc(void* _irqUser, InterruptPresentFn _irqPresent, ModelType _model)
-			: Mcf5407Soc(_irqUser, _irqPresent, bool(isEngineStrapSet(_model)))
+		explicit ColdfireSoc(void* _irqUser, InterruptPresentFn _irqPresent, ModelType _model)
+			: ColdfireSoc(_irqUser, _irqPresent, bool(isEngineStrapSet(_model)))
 		{
 		}
 
-		Mcf5407Soc(Sim& _sim, Uart0& _uart0, BusTarget& _mbus, InterruptController& _interrupts);
-		Mcf5407Soc(Sim& _sim, Uart0& _uart0, BusTarget* _mbus, InterruptController& _interrupts);
+		ColdfireSoc(Sim& _sim, Uart0& _uart0, BusTarget& _mbus, InterruptController& _interrupts);
+		ColdfireSoc(Sim& _sim, Uart0& _uart0, BusTarget* _mbus, InterruptController& _interrupts);
 
 		InterruptController& interrupts() { return *m_interrupts; }
 		const InterruptController& interrupts() const { return *m_interrupts; }
@@ -41,8 +41,8 @@ namespace coldfire
 
 		void advanceTimers(uint32_t _inputClocks) { m_sim->advanceTimers(_inputClocks); }
 
-		uint32_t read(uint32_t _offset, int _size, mcf5407_bus_status& _status) override;
-		void write(uint32_t _offset, int _size, uint32_t _value, mcf5407_bus_status& _status) override;
+		uint32_t read(uint32_t _offset, int _size, cf_bus_status& _status) override;
+		void write(uint32_t _offset, int _size, uint32_t _value, cf_bus_status& _status) override;
 
 		static bool isUartOwned(uint32_t _offset);
 		static bool isMbusOwned(uint32_t _offset);

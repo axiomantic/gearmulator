@@ -1,5 +1,5 @@
 // An isolated probe of the firmware's own `sprintf`, driven directly against
-// the MCF5407 core with NO boot, NO peripherals and NO Board.
+// the ColdFire core with NO boot, NO peripherals and NO Board.
 //
 // Cell-level write tracing of the booted machine showed
 // that OS banner line 1 -- composed by
@@ -51,7 +51,7 @@
 #include "../artifactResolver.h"
 #include "gatedFixture.h"
 
-#include <mcf5407.h>
+#include <coldfire.h>
 
 #include <cstdint>
 #include <cstring>
@@ -128,7 +128,7 @@ namespace
 	// written, and a stray 0x09 cannot be confused with the fill.
 	constexpr uint8_t g_fill = 0xAAu;
 
-	// The register indices mcf5407.h publishes: 8..15 are a0..a7, 17 is the PC.
+	// The register indices coldfire.h publishes: 8..15 are a0..a7, 17 is the PC.
 	constexpr int g_regA7 = 15;
 	constexpr int g_regPc = 17;
 
@@ -181,9 +181,9 @@ namespace
 		}
 	};
 
-	// The two callbacks handed to mcf5407_create. Big endian, because the part
+	// The two callbacks handed to cf_create. Big endian, because the part
 	// is.
-	uint32_t onRead(void* _user, const uint32_t _address, const int _size, mcf5407_bus_status* _status)
+	uint32_t onRead(void* _user, const uint32_t _address, const int _size, cf_bus_status* _status)
 	{
 		Ram& ram = *static_cast<Ram*>(_user);
 
@@ -191,7 +191,7 @@ namespace
 		{
 			++ram.faults;
 			ram.lastFaultAddress = _address;
-			*_status = MCF5407_BUS_UNMAPPED;
+			*_status = CF_BUS_UNMAPPED;
 			return 0;
 		}
 
@@ -202,7 +202,7 @@ namespace
 	}
 
 	void onWrite(void* _user, const uint32_t _address, const int _size, const uint32_t _value,
-		mcf5407_bus_status* _status)
+		cf_bus_status* _status)
 	{
 		Ram& ram = *static_cast<Ram*>(_user);
 
@@ -210,7 +210,7 @@ namespace
 		{
 			++ram.faults;
 			ram.lastFaultAddress = _address;
-			*_status = MCF5407_BUS_UNMAPPED;
+			*_status = CF_BUS_UNMAPPED;
 			return;
 		}
 
@@ -328,12 +328,19 @@ namespace
 		ram.poke32(sp + 12, _argA);
 		ram.poke32(sp + 16, _argB);
 
-		mcf5407_runtime_init();
+		(void)cf_runtime_init();
 
-		mcf5407_ctx* mcu = mcf5407_create(&ram, &onRead, &onWrite, nullptr);
+		cf_config cfg{};
+		cfg.isa = CF_ISA_A;
+		cfg.vbr_mask = 0xFFFFFFFFu;
+		cfg.user = &ram;
+		cfg.rd = &onRead;
+		cfg.wr = &onWrite;
+
+		cf_ctx* mcu = cf_create(&cfg);
 		if(!mcu)
 		{
-			std::cout << "FAIL mcf5407_create returned no context" << std::endl;
+			std::cout << "FAIL cf_create returned no context" << std::endl;
 			return false;
 		}
 
@@ -342,24 +349,24 @@ namespace
 		// interface. A7 is then re-stated through set_reg so that the frame
 		// above is what the callee sees, whatever reset chose to do with the
 		// value it was handed.
-		mcf5407_reset(mcu, sp, g_sprintfEntry);
-		mcf5407_set_reg(mcu, g_regA7, sp);
+		cf_reset(mcu, sp, g_sprintfEntry);
+		cf_set_reg(mcu, g_regA7, sp);
 
 		uint32_t spent = 0;
 		while(spent < g_cycleBudget)
 		{
-			spent += mcf5407_exec(mcu, g_cyclesPerIteration);
+			spent += cf_exec(mcu, g_cyclesPerIteration);
 
-			if(mcf5407_halted(mcu))
+			if(cf_halted(mcu))
 				break;
 
-			if(mcf5407_get_reg(mcu, g_regPc) == g_sentinel)
+			if(cf_get_reg(mcu, g_regPc) == g_sentinel)
 				break;
 		}
 
 		_result.cycles = spent;
-		_result.pc = mcf5407_get_reg(mcu, g_regPc);
-		_result.faulted = mcf5407_faulted(mcu) != 0;
+		_result.pc = cf_get_reg(mcu, g_regPc);
+		_result.faulted = cf_faulted(mcu) != 0;
 		// Either PC is proof the formatter returned here: this core fetches the
 		// sentinel word, advances the program counter past it and
 		// then stops, so the PC settles at sentinel + 2 and the faulted flag is
@@ -373,7 +380,7 @@ namespace
 		for(size_t i = 0; i < _readBack; ++i)
 			_result.buffer.push_back(ram.peek8(g_bufferAddr + static_cast<uint32_t>(i)));
 
-		mcf5407_destroy(mcu);
+		cf_destroy(mcu);
 		return true;
 	}
 
