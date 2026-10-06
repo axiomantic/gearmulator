@@ -10,48 +10,17 @@
 //   * "All UART module registers must be accessed as bytes." MBAR+$1D0 is
 //     UIPCR1, a UART module register, and it is the one access-width
 //     restriction this model enforces.
-//   * MBAR+$1D0 is UIPCR1 on read and UACR1 on write. Both are 8 bits.
-//   * Port A data at MBAR+$248 bit 9 reads LOW and the bit is an INPUT.
-//     is_expanded() at 0x30037F64 reads it. The manual gives PADAT reset
-//     $0000 with no strap; the strap is ours.
-//   * MBAR+$1D0 bit 0 reads zero, so the machine is not an Engine.
-//     detect_model() at 0x30050864 reads it. This is why the reset value
-//     modelled here is $0E and not the manual's $0F.
-//   * The G2 wires six chip selects, CS0 to CS5. The part carries eight.
-//     CS6 and CS7 are not modelled, because no G2 signal reaches them.
+//   * MBAR+$1D0 is UIPCR1 on read and UACR1 on write. Both are 8 bits. That
+//     offset belongs to the UART block, which another file owns; this model
+//     answers it because the firmware reads it as a model strap.
+//   * The manual states no access-width rule for the chip-select, DRAM
+//     controller, timer or parallel-port registers. This model accepts every
+//     width on them, which is a property of the model and not a claim about
+//     the part.
 //
-// The chip-select rows below do not match the 1998 manual and must not be
-// corrected to it. The manual documents an earlier silicon mask with one
-// shared CSBAR; the G2 carries the newer layout. The boot loader,
-// BOOT_128_Loader.bin, writes CSAR3 at MBAR+$0A4 = $1300, CSMR3 at
-// MBAR+$0A8 = $00000001 and CSCR3 at MBAR+$0AE = $0540. Under the 1998
-// layout those are reserved holes and the writes would have no effect. The
-// USB driver reaches the ISP1181 at 0x13000000, which CSAR3 = $1300 gives
-// directly under the newer layout and which the 1998 layout would put at
-// 0x13600000. The three measured offsets are each exactly $24 above the CS0
-// register of the same kind, so the family repeats every twelve bytes as
-// CSARn, CSMRn, CSCRn. CSARn is a 16-bit value, CSMRn a 32-bit value, CSCRn
-// a 16-bit value.
-//
-// The differences, so that no later reader has to rediscover them:
-//
-//   $098  modelled CSAR2, 16 bits. 1998 manual: CSBAR, 8 bits, shared by
-//         CS2 to CS7.
-//   $09C  modelled CSMR2, 32 bits. 1998 manual: CSMR2, 16 bits.
-//   $0A4  modelled CSAR3, 16 bits. 1998 manual: reserved, 32 bits.
-//   $0A8  modelled CSMR3, 32 bits. 1998 manual: CSMR3 at $0AA, 16 bits.
-//   $0B0  modelled CSAR4, 16 bits. 1998 manual: reserved, 32 bits.
-//   $0B4  modelled CSMR4, 32 bits. 1998 manual: CSMR4 at $0B6, 16 bits.
-//   $0BC  modelled CSAR5, 16 bits. 1998 manual: reserved, 32 bits.
-//   $0C0  modelled CSMR5, 32 bits. 1998 manual: CSMR5 at $0C2, 16 bits.
-//
-// The manual states no access-width rule for the chip-select, DRAM
-// controller, timer or parallel-port registers. This model accepts every
-// width on them, which is a property of the model and not a claim about the
-// part.
-//
-// MBAR+$1D0 belongs to the UART block, which another file owns. This model
-// answers that one offset because the firmware reads it as a model strap.
+// The individual registers carry their own evidence in the table below, and the
+// chip-select rows carry the divergence from the manual that they must not be
+// corrected to.
 
 #include "sim.h"
 #include "panel.h"
@@ -75,9 +44,33 @@ namespace rg2
 
 		constexpr RegisterSpec g_registers[] =
 		{
-			// The six chip selects the G2 wires, one CSARn, CSMRn and CSCRn
-			// each. These rows do not match the 1998 manual; the head of this
-			// file has the evidence and the list of differences.
+			// The six chip selects the G2 wires, CS0 to CS5, one CSARn, CSMRn and
+			// CSCRn each. The part carries eight; CS6 and CS7 are not modelled
+			// because no G2 signal reaches them.
+			//
+			// These rows do not match the 1998 manual and must not be corrected
+			// to it. The manual documents an earlier silicon mask with one
+			// shared CSBAR; the G2 carries the newer layout. The boot loader
+			// BOOT_128_Loader.bin writes CSAR3 at MBAR+$0A4 = $1300, CSMR3 at
+			// MBAR+$0A8 = $00000001 and CSCR3 at MBAR+$0AE = $0540, which are
+			// reserved holes under the 1998 layout where the writes would have
+			// no effect. The USB driver reaches the ISP1181 at 0x13000000, which
+			// CSAR3 = $1300 gives directly under the newer layout and which the
+			// 1998 layout would put at 0x13600000. Those three measured offsets
+			// are each exactly $24 above the CS0 register of the same kind, so
+			// the family repeats every twelve bytes as CSARn, CSMRn, CSCRn, with
+			// CSARn 16 bits, CSMRn 32 bits and CSCRn 16 bits.
+			//
+			// Where the modelled row differs from the manual:
+			//
+			//   $098  CSAR2, 16 bits. Manual: CSBAR, 8 bits, shared CS2 to CS7.
+			//   $09C  CSMR2, 32 bits. Manual: CSMR2, 16 bits.
+			//   $0A4  CSAR3, 16 bits. Manual: reserved, 32 bits.
+			//   $0A8  CSMR3, 32 bits. Manual: CSMR3 at $0AA, 16 bits.
+			//   $0B0  CSAR4, 16 bits. Manual: reserved, 32 bits.
+			//   $0B4  CSMR4, 32 bits. Manual: CSMR4 at $0B6, 16 bits.
+			//   $0BC  CSAR5, 16 bits. Manual: reserved, 32 bits.
+			//   $0C0  CSMR5, 32 bits. Manual: CSMR5 at $0C2, 16 bits.
 			{0x080, 2, Access::ReadWrite, false, 0,      0, "CSAR0"},
 			{0x084, 4, Access::ReadWrite, false, 0,      0, "CSMR0"},
 			{0x08a, 2, Access::ReadWrite, false, 0,      0, "CSCR0"},
@@ -116,17 +109,22 @@ namespace rg2
 			{0x18c, 2, Access::ReadWrite, false, 0x0000, 0, "TCN2"},
 			{0x191, 1, Access::ReadWrite, false, 0x00,   0, "TER2"},
 
-			// The model strap. The manual gives UIPCR reset $0F; bit 0 is
-			// fixed at zero on this machine, so it presents $0E. A read
-			// returns UIPCR and a write reaches UACR, so a write never changes
-			// what a read returns.
+			// The model strap. MBAR+$1D0 bit 0 reads zero on this machine, so
+			// the machine is not an Engine; detect_model() at 0x30050864 reads
+			// it. The
+			// manual gives UIPCR reset $0F, which is why the value modelled
+			// here is $0E. A read returns UIPCR and a write reaches UACR, so a
+			// write never changes what a read returns.
 			//
 			// strapBits is $00 here on purpose: Access::ReadOnly already holds
 			// every bit of the register, so naming bit 0 again would add no
 			// protection.
 			{0x1d0, 1, Access::ReadOnly,  true,  0x0e,   0x00, "UIPCR"},
 
-			// The parallel port. Port A bit 9 is an input strap.
+			// The parallel port. Port A data at MBAR+$248 bit 9 is an input and
+			// reads low;
+			// is_expanded() at 0x30037F64 reads it. The manual gives PADAT reset
+			// $0000 with no strap, so the strap is this board's.
 			{0x244, 2, Access::ReadWrite, false, 0x0000, 0x0000, "PADDR"},
 			{0x248, 2, Access::ReadWrite, false, 0x0000, 0x0200, "PADAT"},
 		};
