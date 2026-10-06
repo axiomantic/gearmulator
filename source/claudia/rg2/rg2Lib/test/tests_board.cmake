@@ -886,3 +886,12 @@ set_property(TARGET t0_callback_timer PROPERTY FOLDER "RG2/test")
 
 add_test(NAME t0_callback_timer COMMAND t0_callback_timer)
 set_tests_properties(t0_callback_timer PROPERTIES LABELS "UnitTest")
+
+# ----------------- ColdFire peripheral end-to-end CPU execution
+
+add_executable(t0_peripherals_cpu_exec t0_peripherals_cpu_exec.cpp)
+target_link_libraries(t0_peripherals_cpu_exec PRIVATE rg2Lib)
+set_property(TARGET t0_peripherals_cpu_exec PROPERTY FOLDER "RG2/test")
+
+add_test(NAME t0_peripherals_cpu_exec COMMAND t0_peripherals_cpu_exec)
+set_tests_properties(t0_peripherals_cpu_exec PROPERTIES LABELS "UnitTest")
