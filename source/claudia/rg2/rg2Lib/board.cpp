@@ -878,7 +878,6 @@ namespace rg2
          * from the budget it was asked for. That is what makes a timer tick a
          * function of executed cycles and keeps it deterministic under the
          * scheduler's quantum. */
-        cf_timer_tick(m_mcu, cycles);
         m_sim.advanceTimers(cycles);
         m_interrupts.notifyPresent();
 

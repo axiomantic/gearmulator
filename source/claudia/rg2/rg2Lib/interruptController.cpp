@@ -146,7 +146,7 @@ namespace rg2
         if (_offset == gAvrOffset)
             return m_avr;
         if (_offset >= gIcrBase && _offset < gIcrBase + gIcrCount)
-            m_icr[_offset - gIcrBase];
+            return m_icr[_offset - gIcrBase];
         return 0x00u;
     }
 
