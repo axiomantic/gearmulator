@@ -8,7 +8,7 @@ Gecko 2 (RG2) device under `source/claudia/rg2/`.
 
 Repository: `axiomantic/gearmulator`. Upstream: `dsp56300/gearmulator`.
 Licence: GPL-3.0. Contributions must be GPL-3.0 compatible, with attribution.
-Code here cannot move into `mcf5407` or `nmg2-tools` unless this project wrote
+Code here cannot move into `coldfire` or `nmg2-tools` unless this project wrote
 it.
 
 The RG2 work is `source/claudia/rg2`: `rg2Lib`, `rg2JucePlugin`, `rg2TestConsole`. It
@@ -450,7 +450,7 @@ one of them. Check the branch before you report a file as absent.
 ## Git
 
 Never push to a default branch without permission. Merging your own verified
-pull request into `main` of `mcf5407`, `nmg2-tools` or `nmg2-artifacts` needs no
+pull request into `main` of `coldfire`, `nmg2-tools` or `nmg2-artifacts` needs no
 permission. Never force push without stating what it discards first.
 
 Never run a tree-wide git operation in a checkout you share with anyone:
@@ -491,7 +491,7 @@ projects. They stay open until this project is completely done. Not until the
 checks are green. Not until a reviewer is satisfied. Not until the stack looks
 mergeable.
 
-**The one standing exception.** `mcf5407`, `nmg2-tools` and `nmg2-artifacts` are
+**The one standing exception.** `coldfire`, `nmg2-tools` and `nmg2-artifacts` are
 the operator's own and have no upstream. There an agent opens its pull request
 into `main` and merges it when its own verification is done. That exception
 stops there. It does not extend to the forks: `dsp56300`, `mc68k`, `gearmulator`
