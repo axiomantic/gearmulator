@@ -1,0 +1,617 @@
+<rml>
+	<head>
+		<link type="text/template" href="tus_colorpicker.rml"/>
+		<link type="text/template" href="tus_patchmanager.rml"/>
+		<link type="text/rcss" href="tus_default.rcss"/>
+		<link type="text/rcss" href="tus_juceskin.rcss"/>
+		<link type="text/rcss" href="rg2Default.rcss"/>
+	</head>
+	<body id="Root" rootScale="1.000000" style="left: 0dp; top: 0dp; width: 1024dp; height: 560dp;">
+		<div class="g2_chassis">
+			<!-- Top Jack & Brand Lip -->
+			<div class="chassis_top_lip">
+				<div class="jack_labels_row">
+					<span class="jack_lbl">MIC IN</span>
+					<span class="jack_lbl">HEADPHONES</span>
+					<span class="jack_lbl">IN 1</span>
+					<span class="jack_lbl">IN 2</span>
+					<span class="jack_lbl">IN 3</span>
+					<span class="jack_lbl">IN 4</span>
+					<span class="jack_lbl">OUT 1</span>
+					<span class="jack_lbl">OUT 2</span>
+					<span class="jack_lbl">OUT 3</span>
+					<span class="jack_lbl">OUT 4</span>
+					<span class="jack_lbl">MIDI IN</span>
+					<span class="jack_lbl">MIDI OUT</span>
+					<span class="jack_lbl">MIDI THRU</span>
+					<span class="jack_lbl">USB</span>
+					<span class="jack_lbl">CTRL.PEDAL</span>
+					<span class="jack_lbl">SUST.PEDAL</span>
+				</div>
+				<div class="top_brand_bar">
+					<div class="brand_title_group">
+						<span class="clavia_logo">clavia</span>
+						<span class="brand_title">nord modular G2</span>
+						<span class="brand_sub">RED GECKO 2</span>
+					</div>
+					<div id="socket_status" class="socket_status socket_listening">
+						<span id="socket_indicator" class="socket_indicator"></span>
+						<div class="socket_details">
+							<div class="socket_meta_row">
+								<span class="socket_label">BRIDGE:</span>
+								<span id="socket_badge" class="socket_badge">LISTENING</span>
+							</div>
+							<span id="socket_text" class="socket_text">127.0.0.1:7777</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Main Grey Recessed Panel Surface -->
+			<div class="panel_faceplate">
+				<!-- LEFT SECTION: Performance & Utility Console -->
+				<div class="left_console">
+					<!-- Top Row: Master/Mic Levels, System, Patch, Store, Display Mode -->
+					<div class="left_top_row">
+						<div class="knob_block">
+							<span class="ctrl_label">Master Level</span>
+							<div class="rotary_knob_frame">
+								<input type="range" id="master_volume" class="knob_slider" min="0" max="1" step="0.005" value="1.0"/>
+							</div>
+							<div class="level_readout_tiny">
+								<span id="volume_display">100%</span>
+								<span id="volume_db_display">0.0 dB</span>
+							</div>
+						</div>
+
+						<div class="knob_block">
+							<span class="ctrl_label">Mic Level</span>
+							<div class="rotary_knob_frame">
+								<div class="knob_cap_static"></div>
+							</div>
+							<div class="mic_meter_row">
+								<span class="meter_dot unlit"></span>
+								<span class="meter_dot unlit"></span>
+								<span class="meter_dot unlit"></span>
+								<span class="meter_tag">-20 -12 0dB</span>
+							</div>
+						</div>
+
+						<div class="sys_store_cluster">
+							<div class="sys_btn_col">
+								<div class="btn_with_led">
+									<span id="led_system" class="panel_led led_unlit"></span>
+									<button id="btn_system" class="g2_btn btn_dark" isToggle="0">System</button>
+								</div>
+								<span class="sub_text_tiny">Dump One</span>
+							</div>
+							<div class="sys_btn_col">
+								<div class="btn_with_led">
+									<span id="led_patch" class="panel_led led_lit"></span>
+									<button id="btn_patch" class="g2_btn btn_dark" isToggle="0">Patch</button>
+								</div>
+							</div>
+							<div class="sys_btn_col">
+								<div class="btn_with_led">
+									<button id="btn_store" class="g2_btn btn_red" isToggle="0">Store</button>
+								</div>
+								<span class="sub_text_tiny">Store As...</span>
+							</div>
+						</div>
+
+						<div class="disp_mode_cluster">
+							<span class="ctrl_label">Display Mode</span>
+							<div class="rocker_switch_col">
+								<span id="led_buttons" class="panel_led led_lit"></span>
+								<span class="sub_text_tiny">Buttons</span>
+								<button id="btn_display_mode" class="rocker_switch" isToggle="1">Perf.Mode</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- Main Patch LCD -->
+					<div class="main_lcd_container">
+						<div class="lcd_bezel">
+							<div class="lcd_screen main_lcd_screen">
+								<div id="main_lcd_line1" class="lcd_row">1:5</div>
+								<div id="main_lcd_line2" class="lcd_row">NORD MODULAR G2</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Mid Row: Navigator, Data Wheel, Keyboard Assign Slots -->
+					<div class="left_mid_row">
+						<!-- Navigator & Data Wheel -->
+						<div class="wheel_nav_col">
+							<div class="data_wheel_unit">
+								<div id="data_wheel" class="big_data_wheel">
+									<div class="wheel_dent"></div>
+								</div>
+							</div>
+							<div class="nav_cross_unit">
+								<button id="nav_up" class="nav_btn btn_up">&#x25B2;</button>
+								<div class="nav_mid_row">
+									<button id="nav_left" class="nav_btn btn_left">&#x25C0;</button>
+									<button id="nav_right" class="nav_btn btn_right">&#x25B6;</button>
+								</div>
+								<button id="nav_down" class="nav_btn btn_down">&#x25BC;</button>
+								<span class="sub_text_tiny">Sort Mode</span>
+							</div>
+							<div class="patch_load_col">
+								<span id="led_patch_load" class="panel_led led_lit"></span>
+								<button id="btn_patch_load" class="g2_btn btn_rect_narrow" isToggle="0">Load</button>
+								<span class="sub_text_tiny">Patch Load</span>
+							</div>
+						</div>
+
+						<!-- Keyboard Assign / Slot Section -->
+						<div class="kb_assign_box">
+							<div class="kb_assign_header">
+								<span class="section_caption">Keyboard Assign</span>
+							</div>
+							<div class="slots_flex_row">
+								<div class="slot_col">
+									<span id="slot_led_a" class="panel_led slot_led slot_led_lit"></span>
+									<button id="slot_a" class="slotButton slot_btn_g2" isToggle="1">A</button>
+								</div>
+								<div class="slot_col">
+									<span id="slot_led_b" class="panel_led slot_led slot_led_unlit"></span>
+									<button id="slot_b" class="slotButton slot_btn_g2" isToggle="1">B</button>
+								</div>
+								<div class="slot_col">
+									<span id="slot_led_c" class="panel_led slot_led slot_led_unlit"></span>
+									<button id="slot_c" class="slotButton slot_btn_g2" isToggle="1">C</button>
+								</div>
+								<div class="slot_col">
+									<span id="slot_led_d" class="panel_led slot_led slot_led_unlit"></span>
+									<button id="slot_d" class="slotButton slot_btn_g2" isToggle="1">D</button>
+								</div>
+								<div class="split_col">
+									<span id="led_kb_split" class="panel_led led_unlit"></span>
+									<button id="btn_kb_split" class="g2_btn btn_rect" isToggle="0">KB Split</button>
+									<span class="sub_text_tiny">Split Point</span>
+								</div>
+							</div>
+							<div class="kb_assign_footer">
+								<span class="sub_text_tiny">Active Slots / Focus</span>
+								<span id="active_slot_display" class="active_slot_badge">Slot A</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- Bottom Row: Octave Shift, Panic, Shift, Focus/Copy -->
+					<div class="left_bottom_row">
+						<div class="octave_group">
+							<div class="octave_leds_row">
+								<span id="octave_led_1" class="panel_led led_unlit"></span>
+								<span id="octave_led_2" class="panel_led led_unlit"></span>
+								<span id="octave_led_3" class="panel_led led_lit"></span>
+								<span id="octave_led_4" class="panel_led led_unlit"></span>
+							</div>
+							<div class="octave_btns_row">
+								<button id="octave_down" class="g2_btn btn_octave" isToggle="0">&#x25C0;</button>
+								<button id="octave_up" class="g2_btn btn_octave" isToggle="0">&#x25B6;</button>
+							</div>
+							<span class="sub_text_tiny">Octave Shift (Global)</span>
+						</div>
+
+						<div class="util_btn_col">
+							<button id="btn_panic" class="g2_btn btn_rect" isToggle="0">Panic</button>
+							<span class="sub_text_tiny">KB Hold</span>
+						</div>
+
+						<div class="util_btn_col">
+							<button id="btn_focus_copy" class="g2_btn btn_rect" isToggle="0">Copy</button>
+							<span class="sub_text_tiny">Focus/Paste</span>
+						</div>
+
+						<div class="shift_col">
+							<button id="btn_shift" class="g2_btn btn_shift" isToggle="1">Shift</button>
+							<span class="sub_text_tiny">Clear</span>
+						</div>
+
+						<!-- Pitch Stick & Mod Wheel preview controllers -->
+						<div class="perf_controllers_box">
+							<div class="stick_wheel_col">
+								<span class="perf_label">PITCH</span>
+								<input type="range" id="pitch_stick" class="perf_slider" min="0" max="1" step="0.01" value="0.5"/>
+							</div>
+							<div class="stick_wheel_col">
+								<span class="perf_label">MOD</span>
+								<input type="range" id="mod_wheel" class="perf_slider" min="0" max="1" step="0.01" value="0.0"/>
+							</div>
+							<div class="comm_leds_col">
+								<span id="led_midi_in" class="comm_led unlit"></span>
+								<span class="comm_lbl">MIDI</span>
+								<span id="led_usb" class="comm_led lit"></span>
+								<span class="comm_lbl">USB</span>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Vertical Inset Divider -->
+				<div class="panel_console_divider"></div>
+
+				<!-- RIGHT SECTION: Parameter LCDs, 8 Encoders with 15-LED Rings, Variations, Pages -->
+				<div class="right_console">
+					<!-- Parameter Section Header Labels -->
+					<div class="param_header_row">
+						<div class="param_col_hdr"><span class="col_hdr_text">Master Clock / Voice Mode</span></div>
+						<div class="param_col_hdr"><span class="col_hdr_text">Arpeggiator</span></div>
+						<div class="param_col_hdr"><span class="col_hdr_text">Vibrato / Glide</span></div>
+						<div class="param_col_hdr"><span class="col_hdr_text">Pitch Bend / Patch Level</span></div>
+					</div>
+
+					<!-- 4 Green Backlit Parameter LCDs -->
+					<div class="param_lcds_row">
+						<!-- LCD 1: Encoders 0 & 1 -->
+						<div class="param_lcd_frame">
+							<div class="param_lcd_screen">
+								<div class="param_lcd_subcol">
+									<span id="param_title_0" class="param_name">Freq</span>
+									<span id="param_val_0" class="param_data">1.05kHz</span>
+								</div>
+								<div class="param_lcd_vert_split"></div>
+								<div class="param_lcd_subcol">
+									<span id="param_title_1" class="param_name">Res</span>
+									<span id="param_val_1" class="param_data">1.15</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- LCD 2: Encoders 2 & 3 -->
+						<div class="param_lcd_frame">
+							<div class="param_lcd_screen">
+								<div class="param_lcd_subcol">
+									<span id="param_title_2" class="param_name">Amount</span>
+									<span id="param_val_2" class="param_data">64.1</span>
+								</div>
+								<div class="param_lcd_vert_split"></div>
+								<div class="param_lcd_subcol">
+									<span id="param_title_3" class="param_name">Amount</span>
+									<span id="param_val_3" class="param_data">77.3</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- LCD 3: Encoders 4 & 5 -->
+						<div class="param_lcd_frame">
+							<div class="param_lcd_screen">
+								<div class="param_lcd_subcol">
+									<span id="param_title_4" class="param_name">Amount</span>
+									<span id="param_val_4" class="param_data">0</span>
+								</div>
+								<div class="param_lcd_vert_split"></div>
+								<div class="param_lcd_subcol">
+									<span id="param_title_5" class="param_name">Amount</span>
+									<span id="param_val_5" class="param_data">0</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- LCD 4: Encoders 6 & 7 -->
+						<div class="param_lcd_frame">
+							<div class="param_lcd_screen">
+								<div class="param_lcd_subcol">
+									<span id="param_title_6" class="param_name">Type</span>
+									<span id="param_val_6" class="param_data">LP</span>
+								</div>
+								<div class="param_lcd_vert_split"></div>
+								<div class="param_lcd_subcol">
+									<span id="param_title_7" class="param_name">XFade</span>
+									<span id="param_val_7" class="param_data">2</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Patch Settings button on far right -->
+						<div class="patch_settings_box">
+							<span id="patch_settings_led" class="panel_led led_lit"></span>
+							<button id="btn_patch_settings" class="g2_btn btn_rect_narrow" isToggle="0">Global</button>
+							<span class="sub_text_tiny">Patch Set.</span>
+						</div>
+					</div>
+
+					<!-- 8 Rotary Encoders with 15-LED Circular Rings and Column Select Buttons -->
+					<div class="encoders_cluster">
+						<!-- Column Group 1 (Encoders 0 & 1) -->
+						<div class="encoder_pair_group">
+							<div class="encoder_col">
+								<div id="ring_0" class="led_ring_container">
+									<span id="r0_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r0_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r0_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r0_led3" class="ring_led ring_led_3 lit"></span>
+									<span id="r0_led4" class="ring_led ring_led_4 lit"></span>
+									<span id="r0_led5" class="ring_led ring_led_5 unlit"></span>
+									<span id="r0_led6" class="ring_led ring_led_6 unlit"></span>
+									<span id="r0_led7" class="ring_led ring_led_7 unlit"></span>
+									<span id="r0_led8" class="ring_led ring_led_8 unlit"></span>
+									<span id="r0_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r0_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r0_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r0_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r0_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r0_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_0" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_0" class="g2_btn btn_col_select" isToggle="0">1</button>
+							</div>
+
+							<div class="encoder_col">
+								<div id="ring_1" class="led_ring_container">
+									<span id="r1_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r1_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r1_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r1_led3" class="ring_led ring_led_3 lit"></span>
+									<span id="r1_led4" class="ring_led ring_led_4 lit"></span>
+									<span id="r1_led5" class="ring_led ring_led_5 lit"></span>
+									<span id="r1_led6" class="ring_led ring_led_6 lit"></span>
+									<span id="r1_led7" class="ring_led ring_led_7 unlit"></span>
+									<span id="r1_led8" class="ring_led ring_led_8 unlit"></span>
+									<span id="r1_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r1_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r1_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r1_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r1_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r1_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_1" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_1" class="g2_btn btn_col_select" isToggle="0">2</button>
+							</div>
+						</div>
+
+						<!-- Column Group 2 (Encoders 2 & 3) -->
+						<div class="encoder_pair_group">
+							<div class="encoder_col">
+								<div id="ring_2" class="led_ring_container">
+									<span id="r2_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r2_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r2_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r2_led3" class="ring_led ring_led_3 lit"></span>
+									<span id="r2_led4" class="ring_led ring_led_4 lit"></span>
+									<span id="r2_led5" class="ring_led ring_led_5 lit"></span>
+									<span id="r2_led6" class="ring_led ring_led_6 lit"></span>
+									<span id="r2_led7" class="ring_led ring_led_7 lit"></span>
+									<span id="r2_led8" class="ring_led ring_led_8 lit"></span>
+									<span id="r2_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r2_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r2_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r2_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r2_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r2_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_2" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_2" class="g2_btn btn_col_select" isToggle="0">3</button>
+							</div>
+
+							<div class="encoder_col">
+								<div id="ring_3" class="led_ring_container">
+									<span id="r3_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r3_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r3_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r3_led3" class="ring_led ring_led_3 lit"></span>
+									<span id="r3_led4" class="ring_led ring_led_4 lit"></span>
+									<span id="r3_led5" class="ring_led ring_led_5 lit"></span>
+									<span id="r3_led6" class="ring_led ring_led_6 lit"></span>
+									<span id="r3_led7" class="ring_led ring_led_7 lit"></span>
+									<span id="r3_led8" class="ring_led ring_led_8 lit"></span>
+									<span id="r3_led9" class="ring_led ring_led_9 lit"></span>
+									<span id="r3_led10" class="ring_led ring_led_10 lit"></span>
+									<span id="r3_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r3_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r3_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r3_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_3" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_3" class="g2_btn btn_col_select" isToggle="0">4</button>
+							</div>
+						</div>
+
+						<!-- Column Group 3 (Encoders 4 & 5) -->
+						<div class="encoder_pair_group">
+							<div class="encoder_col">
+								<div id="ring_4" class="led_ring_container">
+									<span id="r4_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r4_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r4_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r4_led3" class="ring_led ring_led_3 unlit"></span>
+									<span id="r4_led4" class="ring_led ring_led_4 unlit"></span>
+									<span id="r4_led5" class="ring_led ring_led_5 unlit"></span>
+									<span id="r4_led6" class="ring_led ring_led_6 unlit"></span>
+									<span id="r4_led7" class="ring_led ring_led_7 unlit"></span>
+									<span id="r4_led8" class="ring_led ring_led_8 unlit"></span>
+									<span id="r4_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r4_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r4_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r4_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r4_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r4_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_4" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_4" class="g2_btn btn_col_select" isToggle="0">5</button>
+							</div>
+
+							<div class="encoder_col">
+								<div id="ring_5" class="led_ring_container">
+									<span id="r5_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r5_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r5_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r5_led3" class="ring_led ring_led_3 unlit"></span>
+									<span id="r5_led4" class="ring_led ring_led_4 unlit"></span>
+									<span id="r5_led5" class="ring_led ring_led_5 unlit"></span>
+									<span id="r5_led6" class="ring_led ring_led_6 unlit"></span>
+									<span id="r5_led7" class="ring_led ring_led_7 unlit"></span>
+									<span id="r5_led8" class="ring_led ring_led_8 unlit"></span>
+									<span id="r5_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r5_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r5_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r5_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r5_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r5_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_5" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_5" class="g2_btn btn_col_select" isToggle="0">6</button>
+							</div>
+						</div>
+
+						<!-- Column Group 4 (Encoders 6 & 7) -->
+						<div class="encoder_pair_group">
+							<div class="encoder_col">
+								<div id="ring_6" class="led_ring_container">
+									<span id="r6_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r6_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r6_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r6_led3" class="ring_led ring_led_3 lit"></span>
+									<span id="r6_led4" class="ring_led ring_led_4 lit"></span>
+									<span id="r6_led5" class="ring_led ring_led_5 lit"></span>
+									<span id="r6_led6" class="ring_led ring_led_6 unlit"></span>
+									<span id="r6_led7" class="ring_led ring_led_7 unlit"></span>
+									<span id="r6_led8" class="ring_led ring_led_8 unlit"></span>
+									<span id="r6_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r6_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r6_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r6_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r6_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r6_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_6" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_6" class="g2_btn btn_col_select" isToggle="0">7</button>
+							</div>
+
+							<div class="encoder_col">
+								<div id="ring_7" class="led_ring_container">
+									<span id="r7_led0" class="ring_led ring_led_0 lit"></span>
+									<span id="r7_led1" class="ring_led ring_led_1 lit"></span>
+									<span id="r7_led2" class="ring_led ring_led_2 lit"></span>
+									<span id="r7_led3" class="ring_led ring_led_3 lit"></span>
+									<span id="r7_led4" class="ring_led ring_led_4 lit"></span>
+									<span id="r7_led5" class="ring_led ring_led_5 lit"></span>
+									<span id="r7_led6" class="ring_led ring_led_6 lit"></span>
+									<span id="r7_led7" class="ring_led ring_led_7 lit"></span>
+									<span id="r7_led8" class="ring_led ring_led_8 unlit"></span>
+									<span id="r7_led9" class="ring_led ring_led_9 unlit"></span>
+									<span id="r7_led10" class="ring_led ring_led_10 unlit"></span>
+									<span id="r7_led11" class="ring_led ring_led_11 unlit"></span>
+									<span id="r7_led12" class="ring_led ring_led_12 unlit"></span>
+									<span id="r7_led13" class="ring_led ring_led_13 unlit"></span>
+									<span id="r7_led14" class="ring_led ring_led_14 unlit"></span>
+									<div id="encoder_7" class="encoder_rotor"><div class="knob_dial"><span class="dial_dot"></span></div></div>
+								</div>
+								<button id="col_btn_7" class="g2_btn btn_col_select" isToggle="0">8</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- Bottom Row: Variations Strip + Parameter Pages Column -->
+					<div class="right_bottom_row">
+						<!-- Variations Strip -->
+						<div class="variations_box">
+							<div class="variations_header">
+								<span class="variations_title">VARIATIONS</span>
+							</div>
+							<div class="var_buttons_row">
+								<div class="var_btn_item">
+									<span id="var_led_1" class="panel_led led_lit"></span>
+									<button id="var_btn_1" class="g2_btn btn_var" isToggle="0">1</button>
+									<span class="var_sub_tag">Wheel</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_2" class="panel_led led_unlit"></span>
+									<button id="var_btn_2" class="g2_btn btn_var" isToggle="0">2</button>
+									<span class="var_sub_tag">Velocity</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_3" class="panel_led led_unlit"></span>
+									<button id="var_btn_3" class="g2_btn btn_var" isToggle="0">3</button>
+									<span class="var_sub_tag">Keyboard</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_4" class="panel_led led_unlit"></span>
+									<button id="var_btn_4" class="g2_btn btn_var" isToggle="0">4</button>
+									<span class="var_sub_tag">Aft.Touch</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_5" class="panel_led led_unlit"></span>
+									<button id="var_btn_5" class="g2_btn btn_var" isToggle="0">5</button>
+									<span class="var_sub_tag">Sust.Ped</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_6" class="panel_led led_unlit"></span>
+									<button id="var_btn_6" class="g2_btn btn_var" isToggle="0">6</button>
+									<span class="var_sub_tag">Ctrl.Ped</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_7" class="panel_led led_unlit"></span>
+									<button id="var_btn_7" class="g2_btn btn_var" isToggle="0">7</button>
+									<span class="var_sub_tag">P.Stick</span>
+								</div>
+								<div class="var_btn_item">
+									<span id="var_led_8" class="panel_led led_unlit"></span>
+									<button id="var_btn_8" class="g2_btn btn_var" isToggle="0">8</button>
+									<span class="var_sub_tag">Group 8</span>
+								</div>
+								<div class="morph_btn_item">
+									<span id="led_morph" class="panel_led led_unlit"></span>
+									<button id="btn_morph" class="g2_btn btn_var" isToggle="0">Morph</button>
+									<span class="var_sub_tag">Var.Init</span>
+								</div>
+								<div class="morph_group_item">
+									<span class="panel_led led_lit"></span>
+									<button id="btn_morph_1" class="g2_btn btn_small" isToggle="0">1</button>
+								</div>
+								<div class="morph_group_item">
+									<span class="panel_led led_unlit"></span>
+									<button id="btn_morph_2" class="g2_btn btn_small" isToggle="0">2</button>
+								</div>
+								<div class="morph_group_item">
+									<span class="panel_led led_unlit"></span>
+									<button id="btn_morph_3" class="g2_btn btn_small" isToggle="0">3</button>
+								</div>
+							</div>
+						</div>
+
+						<!-- Parameter Pages Column (A..E) -->
+						<div class="param_pages_column">
+							<span class="pages_hdr_title">PARAMETER PAGES</span>
+							<div class="pages_list">
+								<div class="page_btn_item">
+									<span id="page_led_a" class="panel_led page_led led_lit"></span>
+									<button id="page_btn_a" class="page_btn" isToggle="0">A</button>
+									<span class="page_name_lbl">Osc</span>
+								</div>
+								<div class="page_btn_item">
+									<span id="page_led_b" class="panel_led page_led led_unlit"></span>
+									<button id="page_btn_b" class="page_btn" isToggle="0">B</button>
+									<span class="page_name_lbl">LFO</span>
+								</div>
+								<div class="page_btn_item">
+									<span id="page_led_c" class="panel_led page_led led_unlit"></span>
+									<button id="page_btn_c" class="page_btn" isToggle="0">C</button>
+									<span class="page_name_lbl">Env</span>
+								</div>
+								<div class="page_btn_item">
+									<span id="page_led_d" class="panel_led page_led led_unlit"></span>
+									<button id="page_btn_d" class="page_btn" isToggle="0">D</button>
+									<span class="page_name_lbl">Filter</span>
+								</div>
+								<div class="page_btn_item">
+									<span id="page_led_e" class="panel_led page_led led_unlit"></span>
+									<button id="page_btn_e" class="page_btn" isToggle="0">E</button>
+									<span class="page_name_lbl">Effect</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Bottom Chassis Rim with Original Clavia Attribution -->
+			<div class="chassis_bottom_lip">
+				<span class="bottom_lip_left">RED GECKO 2 &bull; GEARMULATOR DSP56300 VA EMULATION</span>
+				<span class="bottom_lip_right">MODULAR SYNTHESIZER MADE IN SWEDEN BY CLAVIA 1.0</span>
+			</div>
+		</div>
+	</body>
+</rml>
