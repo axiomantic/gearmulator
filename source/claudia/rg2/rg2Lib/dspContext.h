@@ -30,7 +30,7 @@ namespace rg2
 	};
 
 	// Standard layout: recovered from JobContext* via pointer interconversion.
-	struct alignas(64) DspContext
+	struct DspContext
 	{
 		JobContext base; // MUST be first.
 		unsigned position; // 0 .. dspCount-1 (chain position)

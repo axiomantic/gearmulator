@@ -118,7 +118,7 @@ namespace rg2
 		void reset() noexcept;
 
 	private:
-		struct alignas(64) Slot
+		struct Slot
 		{
 			Slot(const dsp56k::IMemoryValidator& validator, uint32_t secondBusFrameRateHz);
 
