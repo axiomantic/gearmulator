@@ -980,17 +980,11 @@ namespace hwLib
 
 		if (m_fifos[index].isEmpty())
 		{
-			char buf[128];
-			std::snprintf(buf, sizeof(buf), "isp1181: %s has no packet to send; host is not called", g_fifoNames[index].c_str());
-			note(buf);
 			return false;
 		}
 
 		if (m_fifos[index].front().length == 0)
 		{
-			char buf[128];
-			std::snprintf(buf, sizeof(buf), "isp1181: %s holds an empty packet; host is not called", g_fifoNames[index].c_str());
-			note(buf);
 			return false;
 		}
 
@@ -1051,6 +1045,24 @@ namespace hwLib
 		m_captureMaxLen = 0;
 		m_captureActualLen = nullptr;
 		return result;
+	}
+
+	bool Isp1181::hasPendingIn(const int _endpoint) const
+	{
+		if (_endpoint < 0 || _endpoint >= static_cast<int>(g_inBufferOfEndpoint.size()))
+			return false;
+		const size_t index = g_inBufferOfEndpoint[_endpoint];
+		return !m_fifos[index].isEmpty() && m_fifos[index].front().length > 0;
+	}
+
+	bool Isp1181::hasPendingIn() const
+	{
+		for (const auto ep : {0, 1, 2})
+		{
+			if (hasPendingIn(ep))
+				return true;
+		}
+		return false;
 	}
 
 	void Isp1181::tick(const uint32_t _sofFrames)

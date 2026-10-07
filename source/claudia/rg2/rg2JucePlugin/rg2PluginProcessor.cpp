@@ -90,18 +90,27 @@ namespace rg2JucePlugin
 			if (hasPpq)
 			{
 				const double ppqPerSample = (bpm / 60.0) / sampleRate;
-				for (int sample = 0; sample < numSamples; ++sample)
+				if (ppqPerSample > 0.0)
 				{
-					const double currentPpq = ppqPosition + static_cast<double>(sample) * ppqPerSample;
-					const auto currentTick = static_cast<int64_t>(std::floor(currentPpq * 24.0));
+					const auto startTick = static_cast<int64_t>(std::floor(ppqPosition * 24.0));
+					if (m_lastPpqTick < 0 || startTick < m_lastPpqTick || startTick > m_lastPpqTick + 24)
+						m_lastPpqTick = startTick - 1;
 
-					if (m_lastPpqTick < 0 || currentTick < m_lastPpqTick || currentTick > m_lastPpqTick + 24)
-						m_lastPpqTick = currentTick - 1;
-
-					if (currentTick > m_lastPpqTick)
+					int64_t k = m_lastPpqTick + 1;
+					while (true)
 					{
+						const double targetPpq = static_cast<double>(k) / 24.0;
+						const double sampleOffset = (targetPpq - ppqPosition) / ppqPerSample;
+						int sample = static_cast<int>(std::ceil(sampleOffset - 1e-9));
+						if (sample < 0)
+							sample = 0;
+
+						if (sample >= numSamples)
+							break;
+
 						midiMessages.addEvent(juce::MidiMessage::midiClock(), sample);
-						m_lastPpqTick = currentTick;
+						m_lastPpqTick = k;
+						++k;
 					}
 				}
 			}

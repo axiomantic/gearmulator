@@ -43,34 +43,6 @@ namespace rg2
 		return slots;
 	}
 
-	uint32_t transmitDspFrame(dsp56k::Esai& esai,
-		const std::function<void()>& _callback) noexcept
-	{
-		if(!esai.hasEnabledTransmitters())
-			return 0;
-
-		const uint32_t start = esai.getTxFrameCounter();
-		/* The bound is read before the loop starts, because a guest TCR
-		 * write that clears TEM mid-loop causes execTX to return without
-		 * advancing the frame counter, and the frame-counted while would
-		 * spin forever. The bound is the safety net. */
-		const uint32_t bound = esai.getTxWordCount() + 1u;
-
-		uint32_t slots = 0;
-
-		while(esai.getTxFrameCounter() == start && slots < bound)
-		{
-			esai.execTX();
-			++slots;
-			_callback();
-		}
-
-		assert(slots <= esai.getTxWordCount() + 1u
-			&& "a transmit frame cost more slots than the word count allows");
-
-		return slots;
-	}
-
 	uint32_t receiveDspFrame(dsp56k::Esai& esai) noexcept
 	{
 		if(!esai.hasEnabledReceivers())
@@ -83,36 +55,6 @@ namespace rg2
 
 		for(uint32_t i = 0; i < slots; ++i)
 			esai.execRX();
-
-		return slots;
-	}
-
-	uint32_t receiveDspFrame(dsp56k::Esai& esai,
-		const std::function<void()>& _callback) noexcept
-	{
-		if(!esai.hasEnabledReceivers())
-			return 0;
-
-		const uint32_t bound = esai.getRxWordCount() + 1u;
-
-		/* THE RETURN IS THE SLOTS DRIVEN AND NOT THE BOUND. The early
-		 * break below is exactly the case where the two differ, and
-		 * returning the bound there reports slots that were never
-		 * driven -- the one perturbation this form exists to expose. */
-		uint32_t slots = 0;
-
-		for(uint32_t i = 0; i < bound; ++i)
-		{
-			esai.execRX();
-			++slots;
-			_callback();
-			/* Re-read the bound inside the loop body and terminate
-			 * early if getRxWordCount() changes. A guest RCCR write that
-			 * changes the word count mid-loop leaves the for iterating
-			 * against a stale value; the re-read prevents that. */
-			if(esai.getRxWordCount() + 1u != bound)
-				break;
-		}
 
 		return slots;
 	}

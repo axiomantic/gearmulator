@@ -50,6 +50,8 @@ namespace hwLib
 		int setup(const uint8_t* _data, size_t _len);
 		int inToken(int _endpoint);
 		int inToken(int _endpoint, uint8_t* _buffer, size_t _maxLen, size_t* _actualLen = nullptr);
+		bool hasPendingIn(int _endpoint) const;
+		bool hasPendingIn() const;
 
 		void tick(uint32_t _sofFrames = 1);
 		uint16_t frameNumber() const { return m_frameNumber; }

@@ -1005,21 +1005,32 @@ namespace rg2
 		 * it supports: push delivers a whole chunk before runFrames consumes any of
 		 * it, runFrames produces a whole chunk before pull takes any, and a chunk
 		 * is never larger than the host block the queues were sized for. */
+		const float* const inBase0 = _inputs.size() > 0 ? _inputs[0] : nullptr;
+		const float* const inBase1 = _inputs.size() > 1 ? _inputs[1] : nullptr;
+		const float* const inBase2 = _inputs.size() > 2 ? _inputs[2] : nullptr;
+		const float* const inBase3 = _inputs.size() > 3 ? _inputs[3] : nullptr;
+
+		float* const outBase0 = _outputs.size() > 0 ? _outputs[0] : nullptr;
+		float* const outBase1 = _outputs.size() > 1 ? _outputs[1] : nullptr;
+		float* const outBase2 = _outputs.size() > 2 ? _outputs[2] : nullptr;
+		float* const outBase3 = _outputs.size() > 3 ? _outputs[3] : nullptr;
+
 		for (size_t offset = 0; offset < _samples; offset += kFramesPerChunk)
 		{
 			const size_t chunk = _samples - offset < kFramesPerChunk ? _samples - offset : kFramesPerChunk;
 
+			const float* const in0 = inBase0 ? inBase0 + offset : nullptr;
+			const float* const in1 = inBase1 ? inBase1 + offset : nullptr;
+			const float* const in2 = inBase2 ? inBase2 + offset : nullptr;
+			const float* const in3 = inBase3 ? inBase3 + offset : nullptr;
+
 			// The ingress conversion. Host floats to Q23 frames, one per sample.
 			for (size_t s = 0; s < chunk; ++s)
 			{
-				m_inFrames[s].slot[0] =
-					_inputs[0] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[0][offset + s])) : 0;
-				m_inFrames[s].slot[1] =
-					_inputs[1] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[1][offset + s])) : 0;
-				m_inFrames[s].slot[2] =
-					_inputs[2] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[2][offset + s])) : 0;
-				m_inFrames[s].slot[3] =
-					_inputs[3] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[3][offset + s])) : 0;
+				m_inFrames[s].slot[0] = in0 ? static_cast<int32_t>(dsp56k::sample2dsp(in0[s])) : 0;
+				m_inFrames[s].slot[1] = in1 ? static_cast<int32_t>(dsp56k::sample2dsp(in1[s])) : 0;
+				m_inFrames[s].slot[2] = in2 ? static_cast<int32_t>(dsp56k::sample2dsp(in2[s])) : 0;
+				m_inFrames[s].slot[3] = in3 ? static_cast<int32_t>(dsp56k::sample2dsp(in3[s])) : 0;
 			}
 
 			// One call to Scheduler::push for the chunk, before runFrames consumes
@@ -1039,31 +1050,33 @@ namespace rg2
 			// never preserved.
 			const size_t taken = m_driver->pull(m_outFrames.data(), chunk);
 
+			float* const out0 = outBase0 ? outBase0 + offset : nullptr;
+			float* const out1 = outBase1 ? outBase1 + offset : nullptr;
+			float* const out2 = outBase2 ? outBase2 + offset : nullptr;
+			float* const out3 = outBase3 ? outBase3 + offset : nullptr;
+
 			for (size_t s = 0; s < taken; ++s)
 			{
-				if (_outputs[0])
-					_outputs[0][offset + s] =
-						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[0]));
-				if (_outputs[1])
-					_outputs[1][offset + s] =
-						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[1]));
-				if (_outputs[2])
-					_outputs[2][offset + s] =
-						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[2]));
-				if (_outputs[3])
-					_outputs[3][offset + s] =
-						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[3]));
+				if (out0)
+					out0[s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[0]));
+				if (out1)
+					out1[s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[1]));
+				if (out2)
+					out2[s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[2]));
+				if (out3)
+					out3[s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[3]));
 			}
-			for (size_t s = taken; s < chunk; ++s)
+			if (taken < chunk)
 			{
-				if (_outputs[0])
-					_outputs[0][offset + s] = 0.0f;
-				if (_outputs[1])
-					_outputs[1][offset + s] = 0.0f;
-				if (_outputs[2])
-					_outputs[2][offset + s] = 0.0f;
-				if (_outputs[3])
-					_outputs[3][offset + s] = 0.0f;
+				const size_t tail = chunk - taken;
+				if (out0)
+					std::memset(out0 + taken, 0, tail * sizeof(float));
+				if (out1)
+					std::memset(out1 + taken, 0, tail * sizeof(float));
+				if (out2)
+					std::memset(out2 + taken, 0, tail * sizeof(float));
+				if (out3)
+					std::memset(out3 + taken, 0, tail * sizeof(float));
 			}
 		}
 

@@ -17,7 +17,7 @@ namespace rg2
 {
 	/* One ESAI TDM frame: eight slots of 24-bit audio, sign-extended.
 	 * Q23 fixed point: 1.0 is 0x800000. */
-	struct Frame
+	struct alignas(64) Frame
 	{
 		static constexpr unsigned kSlots = 8;
 		int32_t slot[kSlots];

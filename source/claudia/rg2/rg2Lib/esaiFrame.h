@@ -16,16 +16,23 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstdint>
-#include <functional>
 
-namespace dsp56k
-{
-	class Esai;
-}
+#include "dsp56kEmu/esai.h"
 
 namespace rg2
 {
+	struct alignas(64) IngressSlot
+	{
+		int32_t slot = 0;
+	};
+
+	struct alignas(64) EgressSlot
+	{
+		int32_t slot = 0;
+	};
+
 	/* Advances one whole transmit FRAME and returns the slot count it cost.
 	 *
 	 * Returns 0 when no transmitter is enabled. That guard is what makes the
@@ -53,8 +60,29 @@ namespace rg2
 	 * The bound is not a second termination condition in the shipped shape.
 	 * It is the safety net the interleave requires, because a guest that
 	 * clears TEM mid-frame is a real firmware event and not a pathology. */
-	uint32_t transmitDspFrame(dsp56k::Esai& esai,
-		const std::function<void()>& _callback) noexcept;
+	template<typename Callback>
+	uint32_t transmitDspFrame(dsp56k::Esai& esai, Callback&& _callback) noexcept
+	{
+		if(!esai.hasEnabledTransmitters())
+			return 0;
+
+		const uint32_t start = esai.getTxFrameCounter();
+		const uint32_t bound = esai.getTxWordCount() + 1u;
+
+		uint32_t slots = 0;
+
+		while(esai.getTxFrameCounter() == start && slots < bound)
+		{
+			esai.execTX();
+			++slots;
+			_callback();
+		}
+
+		assert(slots <= esai.getTxWordCount() + 1u
+			&& "a transmit frame cost more slots than the word count allows");
+
+		return slots;
+	}
 
 	/* Advances one whole receive FRAME and returns the slot count, which is
 	 * exactly getRxWordCount() + 1.
@@ -83,6 +111,24 @@ namespace rg2
 	 * The return is the slots actually driven, so an early break reports
 	 * fewer than getRxWordCount() + 1. Returning the bound on that path
 	 * would hide the very perturbation the re-read exists to catch. */
-	uint32_t receiveDspFrame(dsp56k::Esai& esai,
-		const std::function<void()>& _callback) noexcept;
+	template<typename Callback>
+	uint32_t receiveDspFrame(dsp56k::Esai& esai, Callback&& _callback) noexcept
+	{
+		if(!esai.hasEnabledReceivers())
+			return 0;
+
+		const uint32_t bound = esai.getRxWordCount() + 1u;
+		uint32_t slots = 0;
+
+		for(uint32_t i = 0; i < bound; ++i)
+		{
+			esai.execRX();
+			++slots;
+			_callback();
+			if(esai.getRxWordCount() + 1u != bound)
+				break;
+		}
+
+		return slots;
+	}
 }
