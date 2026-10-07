@@ -97,7 +97,7 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION_SUMMARY})
 # tree detects that it is stale.
 
 set(RG2_COLDFIRE_SOURCE_DIR "" CACHE PATH "Build the ColdFire core from this checkout instead of fetching it")
-set(RG2_COLDFIRE_GIT_TAG "9b0031c0b2df1609c0617cb79d099e0d29a1cd8e" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
+set(RG2_COLDFIRE_GIT_TAG "4c774161970a00b7642cfe75fa37c2024a9e295b" CACHE STRING "The commit or tag of axiomantic/coldfire to fetch")
 
 include(FetchContent)
 FetchContent_Declare(coldfire
