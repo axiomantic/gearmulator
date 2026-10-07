@@ -10,7 +10,7 @@ namespace rg2
 {
 	uint32_t transmitDspFrame(dsp56k::Esai& esai) noexcept
 	{
-		if(!esai.hasEnabledTransmitters())
+		if (!esai.hasEnabledTransmitters())
 			return 0;
 
 		/* The loop counts frames and not slots, and that is the whole reason
@@ -23,7 +23,7 @@ namespace rg2
 
 		uint32_t slots = 0;
 
-		while(esai.getTxFrameCounter() == start)
+		while (esai.getTxFrameCounter() == start)
 		{
 			esai.execTX();
 			++slots;
@@ -37,15 +37,14 @@ namespace rg2
 		 * catches the defect at its source, and t0_esai_frame asserts the same
 		 * bound itself, on every quantum, in every build type. An assertion
 		 * that fires only in a build nobody runs is not a check. */
-		assert(slots <= esai.getTxWordCount() + 1u
-			&& "a transmit frame cost more slots than the word count allows");
+		assert(slots <= esai.getTxWordCount() + 1u && "a transmit frame cost more slots than the word count allows");
 
 		return slots;
 	}
 
 	uint32_t receiveDspFrame(dsp56k::Esai& esai) noexcept
 	{
-		if(!esai.hasEnabledReceivers())
+		if (!esai.hasEnabledReceivers())
 			return 0;
 
 		/* A fixed count, and it is exact. The scheduler is the only execRX
@@ -53,9 +52,9 @@ namespace rg2
 		 * phase between two quanta. */
 		const uint32_t slots = esai.getRxWordCount() + 1u;
 
-		for(uint32_t i = 0; i < slots; ++i)
+		for (uint32_t i = 0; i < slots; ++i)
 			esai.execRX();
 
 		return slots;
 	}
-}
+} // namespace rg2

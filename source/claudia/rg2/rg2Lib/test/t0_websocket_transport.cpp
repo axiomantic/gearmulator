@@ -410,9 +410,11 @@ int main()
 	rg2::StampedFrame burstFrames[4];
 	const size_t drainedBurst = hub.drainToDevice(burstFrames, 4);
 	checkEqual(drainedBurst, 2, "hub received 2 burst frames");
-	check(burstFrames[0].frame.size == 2 && burstFrames[0].frame.data[0] == 0xA1 && burstFrames[0].frame.data[1] == 0xA2,
+	check(burstFrames[0].frame.size == 2 && burstFrames[0].frame.data[0] == 0xA1 &&
+			  burstFrames[0].frame.data[1] == 0xA2,
 		  "first burst frame payload matches");
-	check(burstFrames[1].frame.size == 2 && burstFrames[1].frame.data[0] == 0xB1 && burstFrames[1].frame.data[1] == 0xB2,
+	check(burstFrames[1].frame.size == 2 && burstFrames[1].frame.data[0] == 0xB1 &&
+			  burstFrames[1].frame.data[1] == 0xB2,
 		  "second burst frame payload matches");
 
 	closeSocket(multiFd);

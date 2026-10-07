@@ -60,10 +60,9 @@ namespace rg2
 	 * The bound is not a second termination condition in the shipped shape.
 	 * It is the safety net the interleave requires, because a guest that
 	 * clears TEM mid-frame is a real firmware event and not a pathology. */
-	template<typename Callback>
-	uint32_t transmitDspFrame(dsp56k::Esai& esai, Callback&& _callback) noexcept
+	template <typename Callback> uint32_t transmitDspFrame(dsp56k::Esai& esai, Callback&& _callback) noexcept
 	{
-		if(!esai.hasEnabledTransmitters())
+		if (!esai.hasEnabledTransmitters())
 			return 0;
 
 		const uint32_t start = esai.getTxFrameCounter();
@@ -71,15 +70,14 @@ namespace rg2
 
 		uint32_t slots = 0;
 
-		while(esai.getTxFrameCounter() == start && slots < bound)
+		while (esai.getTxFrameCounter() == start && slots < bound)
 		{
 			esai.execTX();
 			++slots;
 			_callback();
 		}
 
-		assert(slots <= esai.getTxWordCount() + 1u
-			&& "a transmit frame cost more slots than the word count allows");
+		assert(slots <= esai.getTxWordCount() + 1u && "a transmit frame cost more slots than the word count allows");
 
 		return slots;
 	}
@@ -111,24 +109,23 @@ namespace rg2
 	 * The return is the slots actually driven, so an early break reports
 	 * fewer than getRxWordCount() + 1. Returning the bound on that path
 	 * would hide the very perturbation the re-read exists to catch. */
-	template<typename Callback>
-	uint32_t receiveDspFrame(dsp56k::Esai& esai, Callback&& _callback) noexcept
+	template <typename Callback> uint32_t receiveDspFrame(dsp56k::Esai& esai, Callback&& _callback) noexcept
 	{
-		if(!esai.hasEnabledReceivers())
+		if (!esai.hasEnabledReceivers())
 			return 0;
 
 		const uint32_t bound = esai.getRxWordCount() + 1u;
 		uint32_t slots = 0;
 
-		for(uint32_t i = 0; i < bound; ++i)
+		for (uint32_t i = 0; i < bound; ++i)
 		{
 			esai.execRX();
 			++slots;
 			_callback();
-			if(esai.getRxWordCount() + 1u != bound)
+			if (esai.getRxWordCount() + 1u != bound)
 				break;
 		}
 
 		return slots;
 	}
-}
+} // namespace rg2
