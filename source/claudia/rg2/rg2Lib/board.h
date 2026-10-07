@@ -147,6 +147,7 @@ namespace rg2
 		InterruptController& interrupts() { return m_interrupts; }
 		Flash& flash() { return m_flash; }
 		Panel& panel() { return m_panel; }
+		const Panel& panel() const { return m_panel; }
 		Latches& latches() { return m_latches; }
 		Hdi08Adapter& hdi08() { return m_hdi08; }
 		Sim& sim() { return m_sim; }

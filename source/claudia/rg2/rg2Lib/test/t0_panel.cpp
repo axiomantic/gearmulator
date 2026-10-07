@@ -25,7 +25,7 @@ namespace
 	void check(const bool _condition, const std::string& _what)
 	{
 		++g_cases;
-		if(_condition)
+		if (_condition)
 		{
 			std::cout << "ok   " << _what << std::endl;
 			return;
@@ -34,17 +34,15 @@ namespace
 		++g_failures;
 	}
 
-	template<typename T>
-	void checkEqual(const T& _actual, const T& _expected, const std::string& _what)
+	template <typename T> void checkEqual(const T& _actual, const T& _expected, const std::string& _what)
 	{
 		++g_cases;
-		if(_actual == _expected)
+		if (_actual == _expected)
 		{
 			std::cout << "ok   " << _what << std::endl;
 			return;
 		}
-		std::cout << "FAIL " << _what << ": expected <" << _expected
-			<< ">, got <" << _actual << ">" << std::endl;
+		std::cout << "FAIL " << _what << ": expected <" << _expected << ">, got <" << _actual << ">" << std::endl;
 		++g_failures;
 	}
 
@@ -62,10 +60,8 @@ namespace
 	class Board
 	{
 	public:
-		explicit Board(const uint32_t _displayBase = g_displayBase,
-			const rg2::Model _model = rg2::Model::G2X)
-			: m_panel(g_displaySize)
-			, m_latches(g_latchWindowSize, _model)
+		explicit Board(const uint32_t _displayBase = g_displayBase, const rg2::Model _model = rg2::Model::G2X) :
+			m_panel(g_displaySize), m_latches(g_latchWindowSize, _model)
 		{
 			m_panel.attachLatches(&m_latches);
 			m_latches.attachPanel(&m_panel);
@@ -102,7 +98,7 @@ namespace
 		rg2::Latches m_latches;
 		rg2::MemoryMap* m_map = nullptr;
 	};
-}
+} // namespace
 
 int main()
 {
@@ -121,17 +117,15 @@ int main()
 
 		checkEqual(status, CF_BUS_OK, "the CS5 latch answers a read");
 		checkEqual((latch >> 4) & 0x3u, uint32_t(0x3u),
-			"the panel latch at 0x15000000 returns bits 5:4 = 0b11, which is model code 1, the G2X");
+				   "the panel latch at 0x15000000 returns bits 5:4 = 0b11, which is model code 1, the G2X");
 
 		// A stub that returns zero gives panel bits 0b00, which boots and
 		// presents a plain G2.
-		check(latch != 0u,
-			"the panel latch does not return zero, which would present a plain G2");
+		check(latch != 0u, "the panel latch does not return zero, which would present a plain G2");
 
 		// The other six bits have no recorded source. The model reads them
 		// zero and says so, and this case holds that statement to account.
-		checkEqual(latch, uint32_t(0x30u),
-			"the six bits no authority records read zero, so the latch byte is 0x30");
+		checkEqual(latch, uint32_t(0x30u), "the six bits no authority records read zero, so the latch byte is 0x30");
 	}
 
 	// -----------------------------------------------------------------------
@@ -147,11 +141,11 @@ int main()
 		board.write(0x15000000u, 8, 0x00u, status);
 		checkEqual(status, CF_BUS_OK, "a write to the identifier latch completes");
 		checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, uint32_t(0x3u),
-			"the identifier still reads 0b11 after a write of zero");
+				   "the identifier still reads 0b11 after a write of zero");
 
 		board.write(0x15000000u, 8, 0xffu, status);
 		checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, uint32_t(0x3u),
-			"the identifier still reads 0b11 after a write of all ones");
+				   "the identifier still reads 0b11 after a write of all ones");
 	}
 
 	// -----------------------------------------------------------------------
@@ -165,25 +159,23 @@ int main()
 		struct Expectation
 		{
 			rg2::Model model;
-			uint32_t  bits;
+			uint32_t bits;
 			const char* what;
 		};
 
-		const Expectation expectations[] =
-		{
-			{rg2::Model::G2,     0x0u, "a plain G2 straps 0b00"},
-			{rg2::Model::G2X,    0x3u, "a G2X straps 0b11"},
-			{rg2::Model::Rack,   0x2u, "a Rack straps 0b10"},
+		const Expectation expectations[] = {
+			{rg2::Model::G2, 0x0u, "a plain G2 straps 0b00"},
+			{rg2::Model::G2X, 0x3u, "a G2X straps 0b11"},
+			{rg2::Model::Rack, 0x2u, "a Rack straps 0b10"},
 			{rg2::Model::Engine, 0x0u, "an Engine straps 0b00, because UIPCR decides before panel_id() runs"},
 		};
 
-		for(const Expectation& expectation : expectations)
+		for (const Expectation& expectation : expectations)
 		{
 			Board board(g_displayBase, expectation.model);
 			cf_bus_status status = CF_BUS_OK;
 
-			checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, expectation.bits,
-				expectation.what);
+			checkEqual((board.read(0x15000000u, 8, status) >> 4) & 0x3u, expectation.bits, expectation.what);
 		}
 	}
 
@@ -198,15 +190,15 @@ int main()
 		cf_bus_status status = CF_BUS_OK;
 
 		checkEqual(board.read(0x15000001u, 8, status), uint32_t(0),
-			"an output latch reads zero before anything is written to it");
+				   "an output latch reads zero before anything is written to it");
 
 		board.write(0x15000001u, 8, 0xa5u, status);
 		checkEqual(status, CF_BUS_OK, "a write to an output latch completes");
 		checkEqual(board.read(0x15000001u, 8, status), uint32_t(0xa5u),
-			"an output latch returns the last value written to it");
+				   "an output latch returns the last value written to it");
 
 		checkEqual(board.read(0x15000000u, 8, status), uint32_t(0x30u),
-			"a write to one latch does not disturb the identifier latch");
+				   "a write to one latch does not disturb the identifier latch");
 	}
 
 	// -----------------------------------------------------------------------
@@ -220,13 +212,12 @@ int main()
 		Board other(g_otherDisplayBase);
 
 		checkEqual(board.map().decode(g_displayBase), rg2::Region::Cs4,
-			"the display buffer answers at the base its configuration gave it");
+				   "the display buffer answers at the base its configuration gave it");
 		checkEqual(other.map().decode(g_displayBase), rg2::Region::None,
-			"a board configured elsewhere answers nothing at that base");
-		checkEqual(other.map().decode(g_otherDisplayBase), rg2::Region::Cs4,
-			"the other board answers at its own base");
+				   "a board configured elsewhere answers nothing at that base");
+		checkEqual(other.map().decode(g_otherDisplayBase), rg2::Region::Cs4, "the other board answers at its own base");
 		checkEqual(board.map().decode(g_otherDisplayBase), rg2::Region::None,
-			"the first board answers nothing at the other base");
+				   "the first board answers nothing at the other base");
 	}
 
 	// -----------------------------------------------------------------------
@@ -240,32 +231,32 @@ int main()
 		cf_bus_status status = CF_BUS_OK;
 
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0),
-			"the display buffer reads zero before anything is written to it");
+				   "the display buffer reads zero before anything is written to it");
 
 		board.write(g_displayBase, 32, 0x4e4d4732u, status);
 		checkEqual(status, CF_BUS_OK, "a 32-bit write to the display buffer completes");
 		checkEqual(board.read(g_displayBase, 32, status), uint32_t(0x4e4d4732u),
-			"the display buffer returns the 32-bit value this test wrote");
+				   "the display buffer returns the 32-bit value this test wrote");
 
 		board.write(g_displayBase + 0x10u, 16, 0x1234u, status);
 		checkEqual(board.read(g_displayBase + 0x10u, 16, status), uint32_t(0x1234u),
-			"the display buffer returns the 16-bit value this test wrote");
+				   "the display buffer returns the 16-bit value this test wrote");
 
 		board.write(g_displayBase + 0x20u, 8, 0x5au, status);
 		checkEqual(board.read(g_displayBase + 0x20u, 8, status), uint32_t(0x5au),
-			"the display buffer returns the 8-bit value this test wrote");
+				   "the display buffer returns the 8-bit value this test wrote");
 
 		// The buffer is big-endian, like the part. A 32-bit write followed by
 		// four byte reads is what says so.
 		checkEqual(board.read(g_displayBase + 0u, 8, status), uint32_t(0x4eu),
-			"byte 0 of the 32-bit write is its most significant byte");
+				   "byte 0 of the 32-bit write is its most significant byte");
 		checkEqual(board.read(g_displayBase + 1u, 8, status), uint32_t(0x4du), "byte 1 follows");
 		checkEqual(board.read(g_displayBase + 2u, 8, status), uint32_t(0x47u), "byte 2 follows");
 		checkEqual(board.read(g_displayBase + 3u, 8, status), uint32_t(0x32u),
-			"byte 3 of the 32-bit write is its least significant byte");
+				   "byte 3 of the 32-bit write is its least significant byte");
 
 		checkEqual(board.read(g_displayBase + 0x10u, 16, status), uint32_t(0x1234u),
-			"a later write elsewhere did not disturb an earlier one");
+				   "a later write elsewhere did not disturb an earlier one");
 	}
 
 	// -----------------------------------------------------------------------
@@ -282,41 +273,41 @@ int main()
 		bool everyPollIsQuiescent = true;
 		const int widths[] = {8, 16, 32};
 
-		for(uint32_t offset = 0; offset < g_displaySize; offset += 4u)
+		for (uint32_t offset = 0; offset < g_displaySize; offset += 4u)
 		{
-			for(const int width : widths)
+			for (const int width : widths)
 			{
 				cf_bus_status status = CF_BUS_OK;
 				const uint32_t value = board.read(g_displayBase + offset, width, status);
-				if(status != CF_BUS_OK)
+				if (status != CF_BUS_OK)
 					everyPollCompleted = false;
-				if(value != 0)
+				if (value != 0)
 					everyPollIsQuiescent = false;
 			}
 		}
 
 		check(everyPollCompleted,
-			"every offset of the display window answers a poll at every legal width, so no boot loop spins for ever");
+			  "every offset of the display window answers a poll at every legal width, so no boot loop spins for ever");
 		check(everyPollIsQuiescent,
-			"a freshly built panel reports no key down, no encoder moving and no button pressed");
+			  "a freshly built panel reports no key down, no encoder moving and no button pressed");
 
 		bool everyLatchPollCompleted = true;
-		for(uint32_t offset = 0; offset < g_latchWindowSize; ++offset)
+		for (uint32_t offset = 0; offset < g_latchWindowSize; ++offset)
 		{
 			cf_bus_status status = CF_BUS_OK;
 			board.read(rg2::g_cs5Base + offset, 8, status);
-			if(status != CF_BUS_OK)
+			if (status != CF_BUS_OK)
 				everyLatchPollCompleted = false;
 		}
 
 		check(everyLatchPollCompleted,
-			"every offset of the CS5 window answers a poll, so no latch poll spins for ever");
+			  "every offset of the CS5 window answers a poll, so no latch poll spins for ever");
 	}
 
 	// -----------------------------------------------------------------------
-	// Case group 7. Latches 1..7 drive LED rings (schematic ModularG2_Panel Sheet 5).
+	// Case group 7. Latches 1..8 drive LED rings (schematic ModularG2_Panel Sheet 5).
 	//
-	// Latch writes to CS5 offsets 1..7 update the corresponding 15-LED ring states.
+	// Latch writes to CS5 offsets 1..8 update the corresponding 15-LED ring states.
 	{
 		Board board;
 		cf_bus_status status = CF_BUS_UNMAPPED;
@@ -325,21 +316,42 @@ int main()
 		board.write(rg2::g_cs5Base + 1u, 8, 0x5Au, status);
 		checkEqual(status, CF_BUS_OK, "latch 1 write completes");
 		checkEqual(uint32_t(board.panel().getLedRingState(0)), uint32_t(0x5Au),
-			"latch 1 write updates LED ring 0 state query");
+				   "latch 1 write updates LED ring 0 state query");
 		checkEqual(uint32_t(board.latches().getLedRingState(0)), uint32_t(0x5Au),
-			"latches getLedRingState(0) reflects latch 1 write");
+				   "latches getLedRingState(0) reflects latch 1 write");
 
 		// Writing 16-bit pattern across latches 1 and 2 updates LED ring 0 with full 15-bit value
 		board.write(rg2::g_cs5Base + 1u, 16, 0x7FFFu, status);
 		checkEqual(status, CF_BUS_OK, "16-bit latch write completes");
 		checkEqual(uint32_t(board.panel().getLedRingState(0)), uint32_t(0x7FFFu),
-			"16-bit latch write updates LED ring 0 with 15-LED pattern");
+				   "16-bit latch write updates LED ring 0 with 15-LED pattern");
 
 		// Writing to Latch 7 (CS5 offset 7) updates LED ring 6
 		board.write(rg2::g_cs5Base + 7u, 8, 0xA5u, status);
 		checkEqual(status, CF_BUS_OK, "latch 7 write completes");
 		checkEqual(uint32_t(board.panel().getLedRingState(6)), uint32_t(0xA5u),
-			"latch 7 write updates LED ring 6 state query");
+				   "latch 7 write updates LED ring 6 state query");
+
+		// Writing to Latch 8 (CS5 offset 8) updates LED ring 7
+		board.write(rg2::g_cs5Base + 8u, 8, 0xC3u, status);
+		checkEqual(status, CF_BUS_OK, "latch 8 write completes");
+		checkEqual(uint32_t(board.panel().getLedRingState(7)), uint32_t(0xC3u),
+				   "latch 8 write updates LED ring 7 state query");
+		checkEqual(uint32_t(board.latches().getLedRingState(7)), uint32_t(0xC3u),
+				   "latches getLedRingState(7) reflects latch 8 write");
+
+		// All 8 LED rings updated via Latches 1..8
+		for (uint8_t ring = 0; ring < rg2::Latches::kMaxLedRings; ++ring)
+		{
+			const uint8_t latchOffset = ring + 1u;
+			const uint8_t pattern = uint8_t(0x10u + ring);
+			board.write(rg2::g_cs5Base + latchOffset, 8, pattern, status);
+			checkEqual(status, CF_BUS_OK, "latch write completes");
+			checkEqual(uint32_t(board.panel().getLedRingState(ring)), uint32_t(pattern),
+					   "latch write updates LED ring state query");
+			checkEqual(uint32_t(board.latches().getLedRingState(ring)), uint32_t(pattern),
+					   "latches getLedRingState reflects latch write");
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -352,27 +364,55 @@ int main()
 
 		// Set encoder 0 delta to +5
 		board.panel().setEncoderDelta(0, 5);
-		checkEqual(int(board.panel().getEncoderDelta(0)), 5,
-			"panel reports configured encoder 0 delta");
+		checkEqual(int(board.panel().getEncoderDelta(0)), 5, "panel reports configured encoder 0 delta");
 
 		// Reading Latch 1 (CS5 offset 1) returns the encoder delta
 		uint32_t readVal = board.read(rg2::g_cs5Base + 1u, 8, status);
 		checkEqual(status, CF_BUS_OK, "reading latch 1 completes");
-		checkEqual(readVal, uint32_t(5u),
-			"reading latch 1 returns encoder 0 delta");
+		checkEqual(readVal, uint32_t(5u), "reading latch 1 returns encoder 0 delta");
 
 		// Set encoder 3 delta to -4 (0xFC in two's complement)
 		board.panel().setEncoderDelta(3, -4);
 		readVal = board.read(rg2::g_cs5Base + 4u, 8, status);
 		checkEqual(status, CF_BUS_OK, "reading latch 4 completes");
 		checkEqual(uint32_t(uint8_t(readVal)), uint32_t(uint8_t(-4)),
-			"reading latch 4 returns negative encoder 3 delta in two's complement");
+				   "reading latch 4 returns negative encoder 3 delta in two's complement");
 
 		// Resetting encoder delta to 0 returns the latch to quiescent 0
 		board.panel().setEncoderDelta(0, 0);
 		readVal = board.read(rg2::g_cs5Base + 1u, 8, status);
-		checkEqual(readVal, uint32_t(0u),
-			"resetting encoder delta restores latch to quiescent state");
+		checkEqual(readVal, uint32_t(0u), "resetting encoder delta restores latch to quiescent state");
+
+		// Set encoder 7 delta to +9
+		board.panel().setEncoderDelta(7, 9);
+		checkEqual(int(board.panel().getEncoderDelta(7)), 9, "panel reports configured encoder 7 delta");
+
+		// Writing to latch 8 while delta is non-zero does not hide the encoder 7 delta on read
+		board.write(rg2::g_cs5Base + 8u, 8, 0x55u, status);
+		readVal = board.read(rg2::g_cs5Base + 8u, 8, status);
+		checkEqual(status, CF_BUS_OK, "reading latch 8 completes");
+		checkEqual(readVal, uint32_t(9u), "active encoder 7 delta overrides written latch 8 value on read");
+
+		// Resetting encoder 7 delta to 0 returns the latch to quiescent 0
+		board.panel().setEncoderDelta(7, 0);
+		readVal = board.read(rg2::g_cs5Base + 8u, 8, status);
+		checkEqual(readVal, uint32_t(0u), "resetting encoder 7 delta restores latch 8 to quiescent state");
+
+		// All 8 encoders exposed via Latches 1..8 reads
+		for (uint8_t enc = 0; enc < rg2::Latches::kMaxEncoders; ++enc)
+		{
+			const int8_t delta = int8_t(enc * 3 + 1);
+			board.panel().setEncoderDelta(enc, delta);
+			checkEqual(int(board.panel().getEncoderDelta(enc)), int(delta), "panel reports configured encoder delta");
+
+			const uint32_t read = board.read(rg2::g_cs5Base + enc + 1u, 8, status);
+			checkEqual(status, CF_BUS_OK, "reading encoder latch completes");
+			checkEqual(uint32_t(uint8_t(read)), uint32_t(uint8_t(delta)), "reading latch returns encoder delta");
+
+			board.panel().setEncoderDelta(enc, 0);
+			const uint32_t readZero = board.read(rg2::g_cs5Base + enc + 1u, 8, status);
+			checkEqual(readZero, uint32_t(0u), "resetting encoder delta restores latch to quiescent state");
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -385,10 +425,8 @@ int main()
 		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// Initially, with no buttons pressed, all rows are idle (high in PADAT / active-low)
-		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u),
-			"initially no button return rows are active");
-		checkEqual(board.panel().getRowBits(), uint16_t(0xFFFFu),
-			"PADAT return rows idle high with pull-ups");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u), "initially no button return rows are active");
+		checkEqual(board.panel().getRowBits(), uint16_t(0xFFFFu), "PADAT return rows idle high with pull-ups");
 
 		// Press button at row 2, column 0
 		board.panel().setButtonPressed(2, 0, true);
@@ -400,10 +438,9 @@ int main()
 
 		// Row 2 must now be sensed active
 		check(board.panel().isRowActive(2), "row 2 is sensed active during column 0 scan");
-		checkEqual(board.panel().getActiveRowMask(), uint16_t(1u << 2),
-			"active row mask has bit 2 set");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(1u << 2), "active row mask has bit 2 set");
 		checkEqual(board.panel().getRowBits(), uint16_t(~(1u << 2)),
-			"PADAT row bits has bit 2 driven low by pressed button");
+				   "PADAT row bits has bit 2 driven low by pressed button");
 
 		// Scan column 1: walking zero 0xBFFF (bit 14 is 0) written to CS4 base
 		board.write(g_displayBase, 16, 0xBFFFu, status);
@@ -411,18 +448,16 @@ int main()
 
 		// Button at (2,0) is NOT on column 1, so row 2 is no longer active
 		check(!board.panel().isRowActive(2), "row 2 is inactive during column 1 scan");
-		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u),
-			"active row mask is zero during column 1 scan");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(0u), "active row mask is zero during column 1 scan");
 		checkEqual(board.panel().getRowBits(), uint16_t(0xFFFFu),
-			"PADAT rows return to idle high during column 1 scan");
+				   "PADAT rows return to idle high during column 1 scan");
 
 		// Press button at row 5, column 1 as well
 		board.panel().setButtonPressed(5, 1, true);
 		// Column 1 is still selected: row 5 should be sensed active
 		board.write(g_displayBase, 16, 0xBFFFu, status);
 		check(board.panel().isRowActive(5), "row 5 is sensed active during column 1 scan");
-		checkEqual(board.panel().getActiveRowMask(), uint16_t(1u << 5),
-			"active row mask has bit 5 set");
+		checkEqual(board.panel().getActiveRowMask(), uint16_t(1u << 5), "active row mask has bit 5 set");
 
 		// 32-bit walking zero write: 0xFFFF7FFF scans column 0 and senses row 2 again
 		board.write(g_displayBase, 32, 0xFFFF7FFFu, status);
@@ -433,16 +468,32 @@ int main()
 		board.panel().setButtonPressed(2, 0, false);
 		board.write(g_displayBase, 32, 0xFFFF7FFFu, status);
 		check(!board.panel().isRowActive(2), "row 2 is inactive after button release");
+
+		// setButtonState(col, row, isDown) with hardware matrix coordinates
+		board.panel().setButtonState(rg2::Panel::kNavUpCol, rg2::Panel::kNavUpRow, true);
+		check(board.panel().isButtonPressed(rg2::Panel::kNavUpRow, rg2::Panel::kNavUpCol),
+			  "setButtonState activates Nav Up button");
+
+		const uint16_t navScanWord = static_cast<uint16_t>(~(1u << (15u - rg2::Panel::kNavUpCol)));
+		board.write(g_displayBase, 16, navScanWord, status);
+		check(board.panel().isRowActive(rg2::Panel::kNavUpRow), "Nav Up row is active during column scan");
+
+		board.panel().setButtonState(rg2::Panel::kNavUpCol, rg2::Panel::kNavUpRow, false);
+		board.write(g_displayBase, 16, navScanWord, status);
+		check(!board.panel().isRowActive(rg2::Panel::kNavUpRow), "Nav Up row is inactive after setButtonState release");
+
+		board.panel().setButtonState(rg2::Panel::kDisplayModeCol, rg2::Panel::kDisplayModeRow, true);
+		check(board.panel().isButtonPressed(rg2::Panel::kDisplayModeRow, rg2::Panel::kDisplayModeCol),
+			  "setButtonState activates Display Mode button");
+		board.panel().setButtonState(rg2::Panel::kDisplayModeCol, rg2::Panel::kDisplayModeRow, false);
 	}
 
-	if(g_failures)
+	if (g_failures)
 	{
-		std::cout << "t0_panel: " << g_failures << " of " << g_cases
-			<< " cases failed" << std::endl;
+		std::cout << "t0_panel: " << g_failures << " of " << g_cases << " cases failed" << std::endl;
 		return 1;
 	}
 
-	std::cout << "t0_panel: " << g_cases << " of " << g_cases
-		<< " cases passed" << std::endl;
+	std::cout << "t0_panel: " << g_cases << " of " << g_cases << " cases passed" << std::endl;
 	return 0;
 }

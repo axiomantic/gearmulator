@@ -6,7 +6,7 @@
 // 74HC374 octal latches:
 // - Latch 0 (offset 0): holds the panel model identifier strap in bits 5:4.
 //   Writes cannot alter the strap bits (R79/R80 resistors).
-// - Latches 1..7 (offsets 1..7): output latches driving 15-LED encoder rings
+// - Latches 1..8 (offsets 1..8): output latches driving 15-LED encoder rings
 //   and encoder delta multiplexing.
 //
 // Mainboard connector P7 connects to panel connector P1 via a 26-pin ribbon
@@ -56,10 +56,12 @@ namespace rg2
 		uint16_t getLedRingState(uint8_t _ringIndex) const noexcept;
 		void setLedRingState(uint8_t _ringIndex, uint16_t _state) noexcept;
 
+		uint8_t getLatch(uint32_t _offset) const noexcept;
+
 	private:
 		std::vector<uint8_t> m_latch;
 		Panel* m_panel = nullptr;
 		int8_t m_encoderDeltas[kMaxEncoders] = {};
 		uint16_t m_ledRings[kMaxLedRings] = {};
 	};
-}
+} // namespace rg2

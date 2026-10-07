@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "memoryMap.h"
@@ -36,9 +37,30 @@ namespace rg2
 
 		void attachLatches(Latches* _latches) noexcept;
 
+		// Front panel matrix button coordinates (row 0..7, col 0..15)
+		static constexpr uint8_t kNavUpRow = 6;
+		static constexpr uint8_t kNavUpCol = 0;
+		static constexpr uint8_t kNavDownRow = 6;
+		static constexpr uint8_t kNavDownCol = 1;
+		static constexpr uint8_t kNavLeftRow = 6;
+		static constexpr uint8_t kNavLeftCol = 2;
+		static constexpr uint8_t kNavRightRow = 6;
+		static constexpr uint8_t kNavRightCol = 3;
+
+		static constexpr uint8_t kDisplayModeRow = 7;
+		static constexpr uint8_t kDisplayModeCol = 0;
+		static constexpr uint8_t kPatchSettingsRow = 7;
+		static constexpr uint8_t kPatchSettingsCol = 1;
+		static constexpr uint8_t kMorphRow = 7;
+		static constexpr uint8_t kMorphCol = 2;
+
+		static constexpr uint8_t kSysRow = 0;
+		static constexpr uint8_t kSysCol = 0;
+
 		// Button state management
 		void setButtonPressed(uint8_t _row, uint8_t _col, bool _pressed) noexcept;
 		bool isButtonPressed(uint8_t _row, uint8_t _col) const noexcept;
+		void setButtonState(uint8_t _col, uint8_t _row, bool _isDown) noexcept;
 
 		// Encoder deltas
 		void setEncoderDelta(uint8_t _encoderIndex, int8_t _delta) noexcept;
@@ -59,30 +81,23 @@ namespace rg2
 
 		bool isRowActive(uint8_t _row) const noexcept;
 
-		void tick(uint64_t _frameIndex) noexcept
-		{
-			(void)_frameIndex;
-		}
+		// Display buffer (CS4) character reader and version counter
+		std::string readDisplayText(uint32_t _offset, uint32_t _length) const;
+		uint32_t displayVersion() const noexcept { return m_displayVersion; }
 
-		std::size_t stateSize() const noexcept
-		{
-			return 0;
-		}
+		void tick(uint64_t _frameIndex) noexcept { (void)_frameIndex; }
 
-		void stateSave(void* _dst) const noexcept
-		{
-			(void)_dst;
-		}
+		std::size_t stateSize() const noexcept { return 0; }
 
-		void stateLoad(const void* _src) noexcept
-		{
-			(void)_src;
-		}
+		void stateSave(void* _dst) const noexcept { (void)_dst; }
+
+		void stateLoad(const void* _src) noexcept { (void)_src; }
 
 	private:
 		void updateMatrixScan(uint16_t _scanWord) noexcept;
 
 		std::vector<uint8_t> m_display;
+		uint32_t m_displayVersion = 0;
 		Latches* m_latches = nullptr;
 
 		bool m_buttons[kMaxRows][kMaxCols] = {};
@@ -93,4 +108,4 @@ namespace rg2
 		uint16_t m_activeRowMask = 0u;
 		uint16_t m_rowBits = 0xFFFFu;
 	};
-}
+} // namespace rg2

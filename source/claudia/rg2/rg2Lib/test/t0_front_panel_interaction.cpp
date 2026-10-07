@@ -24,7 +24,7 @@ namespace
 	void check(const bool _condition, const std::string& _what)
 	{
 		++g_cases;
-		if(_condition)
+		if (_condition)
 		{
 			std::cout << "ok   " << _what << std::endl;
 			return;
@@ -33,17 +33,15 @@ namespace
 		++g_failures;
 	}
 
-	template<typename T>
-	void checkEqual(const T& _actual, const T& _expected, const std::string& _what)
+	template <typename T> void checkEqual(const T& _actual, const T& _expected, const std::string& _what)
 	{
 		++g_cases;
-		if(_actual == _expected)
+		if (_actual == _expected)
 		{
 			std::cout << "ok   " << _what << std::endl;
 			return;
 		}
-		std::cout << "FAIL " << _what << ": expected <" << _expected
-			<< ">, got <" << _actual << ">" << std::endl;
+		std::cout << "FAIL " << _what << ": expected <" << _expected << ">, got <" << _actual << ">" << std::endl;
 		++g_failures;
 	}
 
@@ -51,18 +49,16 @@ namespace
 	// CS4 base is configuration; 0x40000000 is used here as a distinct address space.
 	constexpr uint32_t g_cs4Base = 0x40000000u;
 	constexpr uint32_t g_displayBufferSize = 0x00000400u; // 1024 bytes
-	constexpr uint32_t g_cs5Base = rg2::g_cs5Base;         // 0x15000000
-	constexpr uint32_t g_latchWindowSize = 0x10u;         // 16 bytes
-	constexpr uint32_t g_mbarBase = 0x10000000u;          // MBAR peripheral space
-	constexpr uint32_t g_padatOffset = 0x248u;            // Port A Data Register (PADAT)
+	constexpr uint32_t g_cs5Base = rg2::g_cs5Base; // 0x15000000
+	constexpr uint32_t g_latchWindowSize = 0x10u; // 16 bytes
+	constexpr uint32_t g_mbarBase = 0x10000000u; // MBAR peripheral space
+	constexpr uint32_t g_padatOffset = 0x248u; // Port A Data Register (PADAT)
 
 	class PanelFixture
 	{
 	public:
-		explicit PanelFixture(const rg2::Model _model = rg2::Model::G2X)
-			: m_panel(g_displayBufferSize)
-			, m_latches(g_latchWindowSize, _model)
-			, m_sim(_model)
+		explicit PanelFixture(const rg2::Model _model = rg2::Model::G2X) :
+			m_panel(g_displayBufferSize), m_latches(g_latchWindowSize, _model), m_sim(_model)
 		{
 			m_panel.attachLatches(&m_latches);
 			m_latches.attachPanel(&m_panel);
@@ -79,10 +75,7 @@ namespace
 			m_map->attach(rg2::Region::Mbar, &m_sim);
 		}
 
-		~PanelFixture()
-		{
-			delete m_map;
-		}
+		~PanelFixture() { delete m_map; }
 
 		uint32_t read(const uint32_t _address, const int _size, cf_bus_status& _status)
 		{
@@ -116,13 +109,13 @@ namespace
 		void writeText32(const uint32_t _displayOffset, const std::string& _text)
 		{
 			const uint32_t targetBase = g_cs4Base + _displayOffset;
-			for(size_t i = 0; i < _text.size(); i += 4)
+			for (size_t i = 0; i < _text.size(); i += 4)
 			{
 				uint32_t word = 0;
-				for(size_t b = 0; b < 4; ++b)
+				for (size_t b = 0; b < 4; ++b)
 				{
 					word <<= 8;
-					if((i + b) < _text.size())
+					if ((i + b) < _text.size())
 						word |= static_cast<uint8_t>(_text[i + b]);
 				}
 				write(targetBase + static_cast<uint32_t>(i), 32, word);
@@ -134,7 +127,7 @@ namespace
 		{
 			std::string result;
 			result.reserve(_length);
-			for(size_t i = 0; i < _length; ++i)
+			for (size_t i = 0; i < _length; ++i)
 			{
 				const uint32_t byteVal = read(g_cs4Base + _displayOffset + static_cast<uint32_t>(i), 8);
 				result.push_back(static_cast<char>(byteVal & 0xFFu));
@@ -163,10 +156,10 @@ namespace
 			const uint8_t newState = static_cast<uint8_t>(((_phaseA ? 1 : 0) << 1) | (_phaseB ? 1 : 0));
 			// Transition matrix: -1 = CCW, +1 = CW, 0 = invalid or no movement
 			static const int8_t deltaTable[4][4] = {
-				{  0,  1, -1,  0 }, // from 00 to 00, 01, 10, 11
-				{ -1,  0,  0,  1 }, // from 01 to 00, 01, 10, 11
-				{  1,  0,  0, -1 }, // from 10 to 00, 01, 10, 11
-				{  0, -1,  1,  0 }  // from 11 to 00, 01, 10, 11
+				{0, 1, -1, 0}, // from 00 to 00, 01, 10, 11
+				{-1, 0, 0, 1}, // from 01 to 00, 01, 10, 11
+				{1, 0, 0, -1}, // from 10 to 00, 01, 10, 11
+				{0, -1, 1, 0} // from 11 to 00, 01, 10, 11
 			};
 			quarterTicks += deltaTable[state & 3u][newState & 3u];
 			state = newState;
@@ -179,7 +172,7 @@ namespace
 			return static_cast<int8_t>(full);
 		}
 	};
-}
+} // namespace
 
 int main()
 {
@@ -195,17 +188,16 @@ int main()
 		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// 1. Quiescent state: all buttons unpressed.
-		for(uint8_t col = 0; col < rg2::Panel::kMaxCols; ++col)
+		for (uint8_t col = 0; col < rg2::Panel::kMaxCols; ++col)
 		{
 			const uint16_t scanWord = static_cast<uint16_t>(~(1u << (15u - col)));
 			// Walking zero write across CS4 base (offsets 0x0000..0x000e)
 			const uint32_t scanAddr = g_cs4Base + (col % 8u) * 2u;
 			fixture.write(scanAddr, 16, scanWord, status);
 			checkEqual(status, CF_BUS_OK, "walking-zero scan write completes");
-			checkEqual(fixture.panel().getActiveRowMask(), uint16_t(0u),
-				"quiescent scan reports zero active rows");
+			checkEqual(fixture.panel().getActiveRowMask(), uint16_t(0u), "quiescent scan reports zero active rows");
 			checkEqual(fixture.panel().getRowBits(), uint16_t(0xFFFFu),
-				"quiescent scan keeps all row return bits idle high");
+					   "quiescent scan keeps all row return bits idle high");
 
 			// Port A PADAT read through SIM: all row bits high (0xFFFF), strap bit 9 low (~0x0200) -> 0xFDFF
 			const uint32_t padat = fixture.read(g_mbarBase + g_padatOffset, 16, status);
@@ -277,16 +269,16 @@ int main()
 		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// Verify initial quiescent deltas
-		for(uint8_t i = 0; i < rg2::Panel::kMaxEncoders; ++i)
+		for (uint8_t i = 0; i < rg2::Panel::kMaxEncoders; ++i)
 		{
 			checkEqual(int(fixture.panel().getEncoderDelta(i)), 0, "encoder starts at delta 0");
 		}
 
 		// 1. Clockwise (CW) rotation on Encoder 0: 4 transitions produce +1 tick.
 		QuadratureEncoder enc0;
-		enc0.update(false, true);  // 00 -> 01
-		enc0.update(true,  true);  // 01 -> 11
-		enc0.update(true,  false); // 11 -> 10
+		enc0.update(false, true); // 00 -> 01
+		enc0.update(true, true); // 01 -> 11
+		enc0.update(true, false); // 11 -> 10
 		enc0.update(false, false); // 10 -> 00
 		const int8_t tickCw = enc0.consumeFullTicks();
 		checkEqual(int(tickCw), 1, "quadrature CW cycle decoded to +1 tick");
@@ -301,11 +293,11 @@ int main()
 
 		// 2. Fast CW rotation: accumulate 7 ticks on Encoder 2.
 		QuadratureEncoder enc2;
-		for(int step = 0; step < 7; ++step)
+		for (int step = 0; step < 7; ++step)
 		{
 			enc2.update(false, true);
-			enc2.update(true,  true);
-			enc2.update(true,  false);
+			enc2.update(true, true);
+			enc2.update(true, false);
 			enc2.update(false, false);
 		}
 		const int8_t tickFastCw = enc2.consumeFullTicks();
@@ -318,9 +310,9 @@ int main()
 
 		// 3. Counter-Clockwise (CCW) rotation on Encoder 4: reverse transitions produce -1 tick.
 		QuadratureEncoder enc4;
-		enc4.update(true,  false); // 00 -> 10
-		enc4.update(true,  true);  // 10 -> 11
-		enc4.update(false, true);  // 11 -> 01
+		enc4.update(true, false); // 00 -> 10
+		enc4.update(true, true); // 10 -> 11
+		enc4.update(false, true); // 11 -> 01
 		enc4.update(false, false); // 01 -> 00
 		const int8_t tickCcw = enc4.consumeFullTicks();
 		checkEqual(int(tickCcw), -1, "quadrature CCW cycle decoded to -1 tick");
@@ -332,10 +324,10 @@ int main()
 
 		// 4. Larger CCW decrement: -10 ticks on Encoder 5.
 		QuadratureEncoder enc5;
-		for(int step = 0; step < 10; ++step)
+		for (int step = 0; step < 10; ++step)
 		{
-			enc5.update(true,  false);
-			enc5.update(true,  true);
+			enc5.update(true, false);
+			enc5.update(true, true);
 			enc5.update(false, true);
 			enc5.update(false, false);
 		}
@@ -345,7 +337,7 @@ int main()
 		fixture.panel().setEncoderDelta(5, tickFastCcw);
 		latchVal = fixture.read(g_cs5Base + 6u, 8); // Encoder 5 is Latch 6
 		checkEqual(uint8_t(latchVal), uint8_t(static_cast<int8_t>(-10)),
-			"latch 6 bus read returns -10 as two's complement 0xF6");
+				   "latch 6 bus read returns -10 as two's complement 0xF6");
 
 		// 5. Delta clear/acknowledgment back to quiescent zero.
 		fixture.panel().setEncoderDelta(0, 0);
@@ -377,16 +369,16 @@ int main()
 			0x0007u, // Ring 4: 3-LED bar
 			0x003Fu, // Ring 5: 6-LED bar
 			0x07FFu, // Ring 6: 11-LED bar
-			0x7FFFu  // Ring 7: all 15 LEDs illuminated
+			0x7FFFu // Ring 7: all 15 LEDs illuminated
 		};
 
-		for(uint8_t i = 0; i < 8; ++i)
+		for (uint8_t i = 0; i < 8; ++i)
 		{
 			fixture.panel().setLedRingState(i, ringPatterns[i]);
 			checkEqual(fixture.panel().getLedRingState(i), ringPatterns[i],
-				"panel reports configured LED ring pattern");
+					   "panel reports configured LED ring pattern");
 			checkEqual(fixture.latches().getLedRingState(i), ringPatterns[i],
-				"latches reflect configured LED ring pattern");
+					   "latches reflect configured LED ring pattern");
 		}
 
 		// 2. Bus write updates across Latches 1..7 for Rings 0..6.
@@ -394,13 +386,12 @@ int main()
 		fixture.write(g_cs5Base + 1u, 16, 0x7FFFu, status);
 		checkEqual(status, CF_BUS_OK, "16-bit write to latch 1 completes");
 		checkEqual(fixture.panel().getLedRingState(0), uint16_t(0x7FFFu),
-			"ring 0 updated to 15-LED full pattern via CS5 write");
+				   "ring 0 updated to 15-LED full pattern via CS5 write");
 
 		// Write 8-bit pattern to Latch 7 (CS5 offset 7) driving Ring 6
 		fixture.write(g_cs5Base + 7u, 8, 0x55u, status);
 		checkEqual(status, CF_BUS_OK, "8-bit write to latch 7 completes");
-		checkEqual(fixture.panel().getLedRingState(6), uint16_t(0x55u),
-			"ring 6 updated via latch 7 write");
+		checkEqual(fixture.panel().getLedRingState(6), uint16_t(0x55u), "ring 6 updated via latch 7 write");
 
 		// 3. Slot and Variation LEDs on Latch 0 (CS5 offset 0).
 		// G2X model strap has bits 5:4 = 0b11 (0x30).
@@ -413,16 +404,22 @@ int main()
 		// Read back: strap bits 5:4 (0x30) preserved + LED bits 0x41 = 0x71
 		uint32_t latch0Val = fixture.read(g_cs5Base, 8);
 		checkEqual(latch0Val, uint32_t(0x71u), "latch 0 read preserves strap 0x30 and activates slot A & var 1");
+		checkEqual(uint32_t(fixture.latches().getLatch(0)), uint32_t(0x71u),
+				   "latches getLatch(0) returns active slot A and var 1 with strap");
 
 		// Activate Slots B, C, D (bits 1..3 = 0x0E) and Variation 2 (bit 7 = 0x80): pattern 0x8E
 		fixture.write(g_cs5Base, 8, 0x8Eu);
 		latch0Val = fixture.read(g_cs5Base, 8);
 		checkEqual(latch0Val, uint32_t(0xBEu), "latch 0 read reflects slots B, C, D and var 2 with strap intact");
+		checkEqual(uint32_t(fixture.latches().getLatch(0)), uint32_t(0xBEu),
+				   "latches getLatch(0) returns active slots B, C, D and var 2 with strap");
 
 		// Clear all slot and variation LEDs: write 0x00
 		fixture.write(g_cs5Base, 8, 0x00u);
 		latch0Val = fixture.read(g_cs5Base, 8);
 		checkEqual(latch0Val, uint32_t(0x30u), "clearing LEDs restores latch 0 to base strap 0x30");
+		checkEqual(uint32_t(fixture.latches().getLatch(0)), uint32_t(0x30u),
+				   "latches getLatch(0) returns strap 0x30 with LEDs cleared");
 	}
 
 	// -----------------------------------------------------------------------
@@ -440,7 +437,7 @@ int main()
 		cf_bus_status status = CF_BUS_UNMAPPED;
 
 		// 1. Verify display buffer reads zero prior to writes.
-		for(uint32_t off = 0; off < 0xA0u; off += 16u)
+		for (uint32_t off = 0; off < 0xA0u; off += 16u)
 		{
 			const uint32_t val = fixture.read(g_cs4Base + off, 32, status);
 			checkEqual(status, CF_BUS_OK, "display read completes");
@@ -456,16 +453,14 @@ int main()
 			const char* name;
 		};
 
-		const DisplayContent displays[5] = {
-			{ 0x000u, "1:5 Nord Lead G2", "Poly Synth V1.6 ", "Main Patch 2x16 LCD" },
-			{ 0x020u, "Freq    Res     ", "1.05kHz 1.15    ", "Param LCD 1 (Enc 0/1)" },
-			{ 0x040u, "Rate    Wave    ", "4.20Hz  Tri     ", "Param LCD 2 (Enc 2/3)" },
-			{ 0x060u, "Attack  Decay   ", "12ms    350ms   ", "Param LCD 3 (Enc 4/5)" },
-			{ 0x080u, "Type    Drive   ", "LP24    15%     ", "Param LCD 4 (Enc 6/7)" }
-		};
+		const DisplayContent displays[5] = {{0x000u, "1:5 Nord Lead G2", "Poly Synth V1.6 ", "Main Patch 2x16 LCD"},
+											{0x020u, "Freq    Res     ", "1.05kHz 1.15    ", "Param LCD 1 (Enc 0/1)"},
+											{0x040u, "Rate    Wave    ", "4.20Hz  Tri     ", "Param LCD 2 (Enc 2/3)"},
+											{0x060u, "Attack  Decay   ", "12ms    350ms   ", "Param LCD 3 (Enc 4/5)"},
+											{0x080u, "Type    Drive   ", "LP24    15%     ", "Param LCD 4 (Enc 6/7)"}};
 
 		// 3. Write and verify text across all 5 displays using 32-bit accesses.
-		for(const auto& disp : displays)
+		for (const auto& disp : displays)
 		{
 			fixture.writeText32(disp.offset, disp.line1);
 			fixture.writeText32(disp.offset + 16u, disp.line2);
@@ -486,19 +481,16 @@ int main()
 
 		const std::string updatedParam1L2 = fixture.readText(0x30u, 16);
 		checkEqual(updatedParam1L2, std::string("2.40kHz 1.15    "),
-			"byte/word write successfully updates parameter value in Param LCD 1");
+				   "byte/word write successfully updates parameter value in Param LCD 1");
 
 		// 5. Non-interference check: verify that all other 4 displays are intact.
 		checkEqual(fixture.readText(0x000u, 16), std::string("1:5 Nord Lead G2"),
-			"Main LCD line 1 unaffected by Param LCD 1 edit");
+				   "Main LCD line 1 unaffected by Param LCD 1 edit");
 		checkEqual(fixture.readText(0x010u, 16), std::string("Poly Synth V1.6 "),
-			"Main LCD line 2 unaffected by Param LCD 1 edit");
-		checkEqual(fixture.readText(0x040u, 16), std::string("Rate    Wave    "),
-			"Param LCD 2 line 1 unaffected");
-		checkEqual(fixture.readText(0x060u, 16), std::string("Attack  Decay   "),
-			"Param LCD 3 line 1 unaffected");
-		checkEqual(fixture.readText(0x080u, 16), std::string("Type    Drive   "),
-			"Param LCD 4 line 1 unaffected");
+				   "Main LCD line 2 unaffected by Param LCD 1 edit");
+		checkEqual(fixture.readText(0x040u, 16), std::string("Rate    Wave    "), "Param LCD 2 line 1 unaffected");
+		checkEqual(fixture.readText(0x060u, 16), std::string("Attack  Decay   "), "Param LCD 3 line 1 unaffected");
+		checkEqual(fixture.readText(0x080u, 16), std::string("Type    Drive   "), "Param LCD 4 line 1 unaffected");
 
 		// 6. Boundary check: access at end of configured display window (offset 0x3FF)
 		fixture.write(g_cs4Base + 0x3FFu, 8, 0xA5u, status);
@@ -511,16 +503,28 @@ int main()
 		const uint32_t beyondByte = fixture.read(g_cs4Base + 0x400u, 8, status);
 		checkEqual(status, CF_BUS_UNMAPPED, "read beyond display window returns BUS_UNMAPPED");
 		checkEqual(beyondByte, uint32_t(0u), "read beyond display window returns 0");
+
+		// 7. Custom character code level meter glyphs (0x00..0x07) in CS4 LCD display buffer.
+		// On Clavia G2, custom CGRAM characters 0x00..0x07 represent 8-level bar graph meters.
+		for (uint8_t glyph = 0; glyph < 8; ++glyph)
+		{
+			fixture.write(g_cs4Base + 0x50u + glyph, 8, glyph, status);
+			checkEqual(status, CF_BUS_OK, "write custom glyph to display buffer completes");
+		}
+		const std::string meterRead = fixture.panel().readDisplayText(0x50u, 8);
+		checkEqual(meterRead.size(), size_t(8), "meter text read length matches");
+		for (uint8_t glyph = 0; glyph < 8; ++glyph)
+		{
+			checkEqual(uint8_t(meterRead[glyph]), glyph, "custom character glyph code preserved in CS4 buffer");
+		}
 	}
 
-	if(g_failures)
+	if (g_failures)
 	{
-		std::cout << "t0_front_panel_interaction: " << g_failures << " of " << g_cases
-			<< " cases failed" << std::endl;
+		std::cout << "t0_front_panel_interaction: " << g_failures << " of " << g_cases << " cases failed" << std::endl;
 		return 1;
 	}
 
-	std::cout << "t0_front_panel_interaction: " << g_cases << " of " << g_cases
-		<< " cases passed" << std::endl;
+	std::cout << "t0_front_panel_interaction: " << g_cases << " of " << g_cases << " cases passed" << std::endl;
 	return 0;
 }
