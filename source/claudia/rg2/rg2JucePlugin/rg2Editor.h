@@ -71,7 +71,7 @@ namespace rg2JucePlugin
 		void bindPerformanceControls();
 		void bindParameterListeners();
 		void updateLedRings();
-		void updateParamLcds();
+		void updateParamLcds(int _encoderIndex = -1);
 		void updateLcdDisplays(const rg2::Panel& _panel);
 		void updatePanelLeds(const rg2::Latches& _latches);
 
@@ -120,6 +120,7 @@ namespace rg2JucePlugin
 		std::array<Rml::Element*, 8> m_varButtons{};
 		std::array<Rml::Element*, 8> m_varLeds{};
 		uint8_t m_activeVariation = 0;
+		uint8_t m_activeSlot = 0;
 
 		Rml::Element* m_octaveDownBtn = nullptr;
 		Rml::Element* m_octaveUpBtn = nullptr;
@@ -141,6 +142,16 @@ namespace rg2JucePlugin
 												 0xFFFFu, 0xFFFFu, 0xFFFFu, 0xFFFFu};
 		std::array<float, 8> m_lastRingEncoderVals{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
 		uint8_t m_lastLatch0 = 0xFF;
+
+		Rml::Element* m_activeSlotDisplay = nullptr;
+		Rml::Element* m_socketStatus = nullptr;
+		Rml::Element* m_socketBadge = nullptr;
+		Rml::Element* m_socketText = nullptr;
+		Rml::Element* m_ledSystem = nullptr;
+
+		uint64_t m_lastRingVersion = 0xFFFFFFFFFFFFFFFFull;
+		std::array<uint16_t, 8> m_lastRingLitMasks{0xFFFFu, 0xFFFFu, 0xFFFFu, 0xFFFFu,
+												   0xFFFFu, 0xFFFFu, 0xFFFFu, 0xFFFFu};
 
 		Rml::Element* m_pitchStick = nullptr;
 		bool m_isDraggingPitchStick = false;

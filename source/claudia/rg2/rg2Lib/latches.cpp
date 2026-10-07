@@ -57,7 +57,13 @@ namespace rg2
 	void Latches::setLedRingState(const uint8_t _ringIndex, const uint16_t _state) noexcept
 	{
 		if (_ringIndex < kMaxLedRings)
-			m_ledRings[_ringIndex] = _state;
+		{
+			if (m_ledRings[_ringIndex] != _state)
+			{
+				m_ledRings[_ringIndex] = _state;
+				++m_ringVersion;
+			}
+		}
 	}
 
 	uint8_t Latches::getLatch(const uint32_t _offset) const noexcept
@@ -133,10 +139,12 @@ namespace rg2
 			if (index >= 1u && index <= kMaxLedRings)
 			{
 				const uint8_t ringIdx = uint8_t(index - 1u);
-				if (_size == 16 && byte == 0)
-					m_ledRings[ringIdx] = uint16_t(_value & 0xffffu);
-				else
-					m_ledRings[ringIdx] = incoming;
+				const uint16_t newRingVal = (_size == 16 && byte == 0) ? uint16_t(_value & 0xffffu) : incoming;
+				if (m_ledRings[ringIdx] != newRingVal)
+				{
+					m_ledRings[ringIdx] = newRingVal;
+					++m_ringVersion;
+				}
 
 				if (m_panel != nullptr)
 					m_panel->setLedRingState(ringIdx, m_ledRings[ringIdx]);

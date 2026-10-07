@@ -193,18 +193,17 @@ namespace rg2
 			++m_displayVersion;
 	}
 
+	std::string_view Panel::readDisplayView(const uint32_t _offset, const uint32_t _length) const noexcept
+	{
+		if (_offset >= m_display.size())
+			return {};
+		const size_t avail = m_display.size() - _offset;
+		const size_t len = (static_cast<size_t>(_length) <= avail) ? static_cast<size_t>(_length) : avail;
+		return std::string_view(reinterpret_cast<const char*>(m_display.data() + _offset), len);
+	}
+
 	std::string Panel::readDisplayText(const uint32_t _offset, const uint32_t _length) const
 	{
-		std::string result;
-		result.reserve(_length);
-		for (uint32_t i = 0; i < _length; ++i)
-		{
-			const uint32_t index = _offset + i;
-			if (index < m_display.size())
-				result.push_back(static_cast<char>(m_display[index]));
-			else
-				break;
-		}
-		return result;
+		return std::string(readDisplayView(_offset, _length));
 	}
 } // namespace rg2

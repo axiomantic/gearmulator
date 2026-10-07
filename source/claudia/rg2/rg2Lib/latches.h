@@ -55,6 +55,7 @@ namespace rg2
 
 		uint16_t getLedRingState(uint8_t _ringIndex) const noexcept;
 		void setLedRingState(uint8_t _ringIndex, uint16_t _state) noexcept;
+		uint64_t ringVersion() const noexcept { return m_ringVersion; }
 
 		uint8_t getLatch(uint32_t _offset) const noexcept;
 
@@ -63,5 +64,6 @@ namespace rg2
 		Panel* m_panel = nullptr;
 		int8_t m_encoderDeltas[kMaxEncoders] = {};
 		uint16_t m_ledRings[kMaxLedRings] = {};
+		uint64_t m_ringVersion = 0;
 	};
 } // namespace rg2

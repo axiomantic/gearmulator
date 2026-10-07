@@ -1688,14 +1688,16 @@ input.range.perf_mod_wheel sliderarrowinc
 }
 
 .panel_led.led_unlit,
-.panel_led.slot_led_unlit
+.panel_led.slot_led_unlit,
+.panel_led.unlit
 {
 	background-color: #301214;
 	border: none;
 }
 
 .panel_led.led_lit,
-.panel_led.slot_led_lit
+.panel_led.slot_led_lit,
+.panel_led.lit
 {
 	background-color: #ff3838;
 	border: none;
