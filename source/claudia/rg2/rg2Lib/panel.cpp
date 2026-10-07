@@ -38,6 +38,16 @@ namespace rg2
 		if (_row < kMaxRows && _col < kMaxCols)
 		{
 			m_buttons[_row][_col] = _pressed;
+			if (_pressed)
+				m_buttonRowMask[_row] |= uint16_t(1u << (15u - _col));
+			else
+				m_buttonRowMask[_row] &= uint16_t(~(1u << (15u - _col)));
+
+			uint16_t any = 0;
+			for (uint8_t r = 0; r < kMaxRows; ++r)
+				any |= m_buttonRowMask[r];
+			m_hasAnyButtonPressed = (any != 0);
+
 			updateMatrixScan(m_lastScanWord);
 		}
 	}
@@ -107,21 +117,13 @@ namespace rg2
 		m_activeRowMask = 0u;
 		m_rowBits = 0xFFFFu;
 
+		if (!m_hasAnyButtonPressed)
+			return;
+
+		const uint16_t activeCols = uint16_t(~_scanWord);
 		for (uint8_t r = 0; r < kMaxRows; ++r)
 		{
-			bool rowHit = false;
-			for (uint8_t c = 0; c < kMaxCols; ++c)
-			{
-				// Firmware writes 16-bit walking zero (0xFFFF7FFF, shifted right by 1 each step).
-				// Step c has bit (15 - c) driven low (0).
-				const bool colActive = (((_scanWord >> (15u - c)) & 1u) == 0u);
-				if (colActive && m_buttons[r][c])
-				{
-					rowHit = true;
-					break;
-				}
-			}
-			if (rowHit)
+			if ((m_buttonRowMask[r] & activeCols) != 0u)
 			{
 				m_activeRowMask |= uint16_t(1u << r);
 				m_rowBits &= uint16_t(~(1u << r));
