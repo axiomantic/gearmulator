@@ -101,6 +101,8 @@ namespace rg2
 		Latches* m_latches = nullptr;
 
 		bool m_buttons[kMaxRows][kMaxCols] = {};
+		uint16_t m_buttonRowMask[kMaxRows] = {};
+		bool m_hasAnyButtonPressed = false;
 		int8_t m_encoderDeltas[kMaxEncoders] = {};
 		uint16_t m_ledRings[kMaxLedRings] = {};
 

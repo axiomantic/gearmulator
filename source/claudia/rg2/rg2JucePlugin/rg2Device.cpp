@@ -33,6 +33,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -166,6 +167,47 @@ namespace rg2
 	 * It is a nested class of Device and not a file-local one, because
 	 * m_sdram is a member and a member's type must be nameable in the
 	 * header. The header declares it and this is its definition. */
+	template <typename T, size_t Alignment = 64> struct AlignedAllocator
+	{
+		using value_type = T;
+
+		template <typename U> struct rebind
+		{
+			using other = AlignedAllocator<U, Alignment>;
+		};
+
+		AlignedAllocator() noexcept = default;
+		template <typename U> constexpr AlignedAllocator(const AlignedAllocator<U, Alignment>&) noexcept {}
+
+		T* allocate(std::size_t n)
+		{
+			if (n == 0)
+				return nullptr;
+			void* ptr = nullptr;
+#if defined(_WIN32)
+			ptr = _aligned_malloc(n * sizeof(T), Alignment);
+			if (!ptr)
+				throw std::bad_alloc();
+#else
+			if (posix_memalign(&ptr, Alignment, n * sizeof(T)) != 0)
+				throw std::bad_alloc();
+#endif
+			return static_cast<T*>(ptr);
+		}
+
+		void deallocate(T* p, std::size_t) noexcept
+		{
+#if defined(_WIN32)
+			_aligned_free(p);
+#else
+			free(p);
+#endif
+		}
+
+		template <typename U> bool operator==(const AlignedAllocator<U, Alignment>&) const noexcept { return true; }
+		template <typename U> bool operator!=(const AlignedAllocator<U, Alignment>&) const noexcept { return false; }
+	};
+
 	class Device::Sdram final : public BusTarget
 	{
 	public:
@@ -194,24 +236,40 @@ namespace rg2
 				return 0u;
 			}
 
+			const uint32_t bytes = uint32_t(_size) / 8u;
+
+			if (size_t(_offset) + bytes <= m_bytes.size())
+			{
+				if (_size == 32)
+				{
+					uint32_t val;
+					std::memcpy(&val, m_bytes.data() + _offset, sizeof(uint32_t));
+					return __builtin_bswap32(val);
+				}
+				if (_size == 16)
+				{
+					uint16_t val;
+					std::memcpy(&val, m_bytes.data() + _offset, sizeof(uint16_t));
+					return __builtin_bswap16(val);
+				}
+				return m_bytes[_offset];
+			}
+
 			/* An access past the end reads zero and reports no bus error, and
 			 * it is not a convenience. The window this store answers is the one the
 			 * BoardConfig above declares, so an offset past its end has already
 			 * been let through by the decode; reporting a fault here makes the
 			 * core TRAP, which sets Board::faulted(), which the Scheduler
-			 * reports and which stops the boot dead. Measured: with a bus error
-			 * on this path the boot faulted inside its first 64 quanta and
-			 * reached nothing. */
-			const uint32_t bytes = uint32_t(_size) / 8u;
+			 * reports and which stops the boot dead. */
+			if (_offset >= m_bytes.size())
+				return 0u;
 
 			uint32_t value = 0;
-
 			for (uint32_t i = 0; i < bytes; ++i)
 			{
 				const size_t index = size_t(_offset) + i;
 				value = (value << 8) | (index < m_bytes.size() ? m_bytes[index] : 0u);
 			}
-
 			return value;
 		}
 
@@ -225,14 +283,33 @@ namespace rg2
 				return;
 			}
 
-			// A write past the end is DISCARDED and reports no bus error, for the
-			// reason the read path states.
 			const uint32_t bytes = uint32_t(_size) / 8u;
+
+			if (size_t(_offset) + bytes <= m_bytes.size())
+			{
+				if (_size == 32)
+				{
+					const uint32_t swapped = __builtin_bswap32(_value);
+					std::memcpy(m_bytes.data() + _offset, &swapped, sizeof(uint32_t));
+					return;
+				}
+				if (_size == 16)
+				{
+					const uint16_t swapped = __builtin_bswap16(static_cast<uint16_t>(_value));
+					std::memcpy(m_bytes.data() + _offset, &swapped, sizeof(uint16_t));
+					return;
+				}
+				m_bytes[_offset] = static_cast<uint8_t>(_value & 0xffu);
+				return;
+			}
+
+			// A write past the end is DISCARDED and reports no bus error
+			if (_offset >= m_bytes.size())
+				return;
 
 			for (uint32_t i = 0; i < bytes; ++i)
 			{
 				const size_t index = size_t(_offset) + i;
-
 				if (index >= m_bytes.size())
 					continue;
 
@@ -241,7 +318,7 @@ namespace rg2
 		}
 
 	private:
-		std::vector<uint8_t> m_bytes;
+		std::vector<uint8_t, AlignedAllocator<uint8_t, 64>> m_bytes;
 	};
 
 	Device::Device(const synthLib::DeviceCreateParams& _params) : synthLib::Device(_params), m_driver(&m_owningDriver)

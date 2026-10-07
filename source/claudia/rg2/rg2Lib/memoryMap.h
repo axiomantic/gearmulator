@@ -24,10 +24,10 @@
 namespace rg2
 {
 	// The four recorded bases. Nothing else in this file is an address.
-	constexpr uint32_t g_cs1Base = 0x11000000u;    // the HDI08 array
-	constexpr uint32_t g_cs3Base = 0x13000000u;    // the ISP1181 USB device
-	constexpr uint32_t g_cs5Base = 0x15000000u;    // the latches
-	constexpr uint32_t g_sdramBase = 0x30000000u;  // the SDRAM
+	constexpr uint32_t g_cs1Base = 0x11000000u; // the HDI08 array
+	constexpr uint32_t g_cs3Base = 0x13000000u; // the ISP1181 USB device
+	constexpr uint32_t g_cs5Base = 0x15000000u; // the latches
+	constexpr uint32_t g_sdramBase = 0x30000000u; // the SDRAM
 
 	enum class Region
 	{
@@ -73,10 +73,21 @@ namespace rg2
 	// knowledge of where the firmware put it.
 	using BusTarget = rg2::BusTarget;
 
+	struct RegionEntry
+	{
+		Window window;
+		BusTarget* target = nullptr;
+	};
+
 	class MemoryMap
 	{
 	public:
 		explicit MemoryMap(const MemoryMapConfig& _config);
+		MemoryMap(const MemoryMap& _other);
+		MemoryMap& operator=(const MemoryMap& _other);
+		MemoryMap(MemoryMap&& _other) noexcept;
+		MemoryMap& operator=(MemoryMap&& _other) noexcept;
+		~MemoryMap() = default;
 
 		// Region::None when no window answers. Windows are examined in the
 		// order of the Region enumeration and the first match wins.
@@ -98,10 +109,12 @@ namespace rg2
 		void clearLog() { m_log.clear(); }
 
 	private:
+		void initRegions();
 		void logFailure(cf_bus_status _status, bool _isWrite, int _size, uint32_t _address);
 
 		MemoryMapConfig m_config;
-		BusTarget* m_targets[9] = {};
+		uint8_t m_regionStorage[sizeof(RegionEntry) * 9 + 64] = {};
+		RegionEntry* m_regions = nullptr;
 		std::vector<std::string> m_log;
 	};
 
@@ -115,4 +128,4 @@ namespace rg2
 	// 32-bit bus accesses, so a decomposition would be a model error.
 	uint32_t memoryMapRead(void* _user, uint32_t _address, int _size, cf_bus_status* _status);
 	void memoryMapWrite(void* _user, uint32_t _address, int _size, uint32_t _value, cf_bus_status* _status);
-}
+} // namespace rg2
