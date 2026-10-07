@@ -23,12 +23,12 @@
 
 namespace rg2
 {
-	struct alignas(64) IngressSlot
+	struct IngressSlot
 	{
 		int32_t slot = 0;
 	};
 
-	struct alignas(64) EgressSlot
+	struct EgressSlot
 	{
 		int32_t slot = 0;
 	};
