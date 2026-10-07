@@ -24,7 +24,7 @@
 
 namespace
 {
-	std::string trimString(const std::string& str)
+	std::string trimString(std::string_view str)
 	{
 		size_t start = 0;
 		while (start < str.size() &&
@@ -36,10 +36,10 @@ namespace
 		while (end > start &&
 			   (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r' || str[end - 1] == '\n'))
 			--end;
-		return str.substr(start, end - start);
+		return std::string(str.substr(start, end - start));
 	}
 
-	bool extractLcdText(const std::string& raw, std::string& out)
+	bool extractLcdText(std::string_view raw, std::string& out)
 	{
 		out.clear();
 
@@ -145,6 +145,12 @@ namespace rg2JucePlugin
 				m_slotLeds[p] = findChild(name4, false);
 			}
 		}
+
+		m_activeSlotDisplay = findChild("active_slot_display", false);
+		m_socketStatus = findChild("socket_status", false);
+		m_socketBadge = findChild("socket_badge", false);
+		m_socketText = findChild("socket_text", false);
+		m_ledSystem = findChild("led_system", false);
 
 		bindFrontPanel();
 		bindPortControls();
@@ -671,10 +677,10 @@ namespace rg2JucePlugin
 												  else if (std::string(nb.id) == "btn_sys")
 												  {
 													  m_systemActive = !m_systemActive;
-													  if (auto* led = findChild("led_system", false))
+													  if (m_ledSystem)
 													  {
-														  led->SetClass("led_lit", m_systemActive);
-														  led->SetClass("led_unlit", !m_systemActive);
+														  m_ledSystem->SetClass("led_lit", m_systemActive);
+														  m_ledSystem->SetClass("led_unlit", !m_systemActive);
 													  }
 													  btn->SetClass("checked", m_systemActive);
 												  }
@@ -737,16 +743,35 @@ namespace rg2JucePlugin
 				juceRmlUi::EventListener::Add(m_varButtons[v], Rml::EventId::Click,
 											  [this, v](Rml::Event&)
 											  {
-												  m_activeVariation = static_cast<uint8_t>(v);
-												  for (size_t i = 0; i < 8; ++i)
+												  const uint8_t oldVar = m_activeVariation;
+												  const uint8_t newVar = static_cast<uint8_t>(v);
+												  if (oldVar != newVar)
 												  {
-													  if (m_varLeds[i])
+													  if (oldVar < m_varLeds.size())
 													  {
-														  m_varLeds[i]->SetClass("led_lit", i == m_activeVariation);
-														  m_varLeds[i]->SetClass("led_unlit", i != m_activeVariation);
+														  if (m_varLeds[oldVar])
+														  {
+															  m_varLeds[oldVar]->SetClass("lit", false);
+															  m_varLeds[oldVar]->SetClass("unlit", true);
+															  m_varLeds[oldVar]->SetClass("led_lit", false);
+															  m_varLeds[oldVar]->SetClass("led_unlit", true);
+														  }
+														  if (m_varButtons[oldVar])
+															  m_varButtons[oldVar]->SetClass("checked", false);
 													  }
-													  if (m_varButtons[i])
-														  m_varButtons[i]->SetClass("checked", i == m_activeVariation);
+													  if (newVar < m_varLeds.size())
+													  {
+														  if (m_varLeds[newVar])
+														  {
+															  m_varLeds[newVar]->SetClass("lit", true);
+															  m_varLeds[newVar]->SetClass("unlit", false);
+															  m_varLeds[newVar]->SetClass("led_lit", true);
+															  m_varLeds[newVar]->SetClass("led_unlit", false);
+														  }
+														  if (m_varButtons[newVar])
+															  m_varButtons[newVar]->SetClass("checked", true);
+													  }
+													  m_activeVariation = newVar;
 												  }
 												  triggerButtonPress(2, static_cast<uint8_t>(v));
 											  });
@@ -877,7 +902,7 @@ namespace rg2JucePlugin
 							}
 
 							updateLedRings();
-							updateParamLcds();
+							updateParamLcds(static_cast<int>(i));
 						}
 					});
 
@@ -918,7 +943,7 @@ namespace rg2JucePlugin
 		}
 	}
 
-	void Editor::updateParamLcds()
+	void Editor::updateParamLcds(int _encoderIndex)
 	{
 		struct ParamDesc
 		{
@@ -973,15 +998,22 @@ namespace rg2JucePlugin
 																			  {"Level", "0.0dB"}}}}};
 
 		const auto& currentParams = pageParams[m_activePage < 5 ? m_activePage : 0];
-		for (size_t i = 0; i < 8; ++i)
+		const size_t startIdx = (_encoderIndex >= 0 && _encoderIndex < 8) ? static_cast<size_t>(_encoderIndex) : 0;
+		const size_t endIdx = (_encoderIndex >= 0 && _encoderIndex < 8) ? startIdx + 1 : 8;
+
+		for (size_t i = startIdx; i < endIdx; ++i)
 		{
-			if (m_paramTitles[i])
-				m_paramTitles[i]->SetInnerRML(Rml::StringUtilities::EncodeRml(currentParams[i].title));
+			const std::string title = currentParams[i].title;
+			if (m_paramTitles[i] && title != m_lastParamTitles[i])
+			{
+				m_lastParamTitles[i] = title;
+				m_paramTitles[i]->SetInnerRML(Rml::StringUtilities::EncodeRml(title));
+			}
+
 			if (m_paramVals[i])
 			{
 				const float v = m_encoderValues[i];
 				std::string displayVal;
-				const std::string title = currentParams[i].title;
 				if (title == "Freq")
 				{
 					const float freq = 20.0f * std::pow(1000.0f, v);
@@ -1044,7 +1076,12 @@ namespace rg2JucePlugin
 					std::snprintf(buf, sizeof(buf), "%.1f", v * 100.0f);
 					displayVal = buf;
 				}
-				m_paramVals[i]->SetInnerRML(Rml::StringUtilities::EncodeRml(displayVal));
+
+				if (displayVal != m_lastParamVals[i])
+				{
+					m_lastParamVals[i] = displayVal;
+					m_paramVals[i]->SetInnerRML(Rml::StringUtilities::EncodeRml(displayVal));
+				}
 			}
 		}
 	}
@@ -1055,30 +1092,46 @@ namespace rg2JucePlugin
 		auto* g2Dev = g2Proc ? g2Proc->getG2Device() : nullptr;
 		auto* board = g2Dev ? g2Dev->board() : nullptr;
 
+		const uint64_t currentVersion = board ? board->latches().ringVersion() : 0;
+		if (m_draggingEncoder == -1 && currentVersion == m_lastRingVersion)
+			return;
+		m_lastRingVersion = currentVersion;
+
 		for (size_t i = 0; i < 8; ++i)
 		{
 			const uint16_t ringState = board ? board->latches().getLedRingState(static_cast<uint8_t>(i)) : 0;
 			const float encoderVal = m_encoderValues[i];
 
-			if (ringState == m_lastRingStates[i] && std::abs(encoderVal - m_lastRingEncoderVals[i]) < 0.001f)
+			uint16_t currentMask = 0;
+			if (ringState != 0)
+			{
+				currentMask = ringState & 0x7FFFu;
+			}
+			else
+			{
+				const int activeLedMax = static_cast<int>(std::round(encoderVal * 14.0f));
+				if (activeLedMax >= 0)
+				{
+					const int clampedMax = std::min(activeLedMax, 14);
+					currentMask = static_cast<uint16_t>((1u << (clampedMax + 1)) - 1);
+				}
+			}
+
+			const uint16_t diff = currentMask ^ m_lastRingLitMasks[i];
+			if (diff == 0)
 				continue;
 
-			m_lastRingStates[i] = ringState;
-			m_lastRingEncoderVals[i] = encoderVal;
-
-			const int activeLedMax = static_cast<int>(std::round(encoderVal * 14.0f));
+			m_lastRingLitMasks[i] = currentMask;
 
 			for (size_t j = 0; j < 15; ++j)
 			{
+				if ((diff & (1u << j)) == 0)
+					continue;
+
 				if (!m_ringLeds[i][j])
 					continue;
 
-				bool isLit = false;
-				if (ringState != 0)
-					isLit = (ringState & (1u << j)) != 0;
-				else
-					isLit = (static_cast<int>(j) <= activeLedMax);
-
+				const bool isLit = (currentMask & (1u << j)) != 0;
 				m_ringLeds[i][j]->SetClass("lit", isLit);
 				m_ringLeds[i][j]->SetClass("unlit", !isLit);
 			}
@@ -1138,30 +1191,41 @@ namespace rg2JucePlugin
 	{
 		jucePluginEditorLib::Editor::onCurrentPartChanged(_part);
 
-		for (size_t p = 0; p < m_slotButtons.size(); ++p)
+		const uint8_t newPart = (_part < 4 ? _part : 0);
+		if (m_activeSlot < m_slotLeds.size() && m_activeSlot != newPart)
 		{
-			const bool active = (static_cast<uint8_t>(p) == _part);
-			if (m_slotButtons[p])
-				m_slotButtons[p]->setChecked(active);
-			if (m_slotLeds[p])
+			if (m_slotButtons[m_activeSlot])
+				m_slotButtons[m_activeSlot]->setChecked(false);
+			if (m_slotLeds[m_activeSlot])
 			{
-				m_slotLeds[p]->SetClass("slot_led_lit", active);
-				m_slotLeds[p]->SetClass("slot_led_unlit", !active);
-				m_slotLeds[p]->SetClass("lit", active);
-				m_slotLeds[p]->SetClass("unlit", !active);
-				m_slotLeds[p]->SetClass("led_lit", active);
-				m_slotLeds[p]->SetClass("led_unlit", !active);
+				m_slotLeds[m_activeSlot]->SetClass("lit", false);
+				m_slotLeds[m_activeSlot]->SetClass("unlit", true);
+				m_slotLeds[m_activeSlot]->SetClass("slot_led_lit", false);
+				m_slotLeds[m_activeSlot]->SetClass("slot_led_unlit", true);
 			}
 		}
-
-		if (auto* activeDisplay = findChild("active_slot_display", false))
+		if (newPart < m_slotLeds.size())
 		{
-			const char slotLetter = static_cast<char>('A' + (_part < 4 ? _part : 0));
+			if (m_slotButtons[newPart])
+				m_slotButtons[newPart]->setChecked(true);
+			if (m_slotLeds[newPart])
+			{
+				m_slotLeds[newPart]->SetClass("lit", true);
+				m_slotLeds[newPart]->SetClass("unlit", false);
+				m_slotLeds[newPart]->SetClass("slot_led_lit", true);
+				m_slotLeds[newPart]->SetClass("slot_led_unlit", false);
+			}
+		}
+		m_activeSlot = newPart;
+
+		if (m_activeSlotDisplay)
+		{
+			const char slotLetter = static_cast<char>('A' + newPart);
 			const std::string text = std::string("Slot ") + slotLetter;
-			activeDisplay->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
+			m_activeSlotDisplay->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
 		}
 
-		triggerButtonPress(5, _part < 4 ? _part : 0);
+		triggerButtonPress(5, newPart);
 	}
 
 	void Editor::timerCallback()
@@ -1235,8 +1299,8 @@ namespace rg2JucePlugin
 		m_lastDisplayVersion = currentVersion;
 
 		// Main Patch Display: 2 lines of 16 characters at CS4 offsets 0x00 and 0x10
-		const std::string line1Raw = _panel.readDisplayText(0x00u, 16u);
-		const std::string line2Raw = _panel.readDisplayText(0x10u, 16u);
+		const std::string_view line1Raw = _panel.readDisplayView(0x00u, 16u);
+		const std::string_view line2Raw = _panel.readDisplayView(0x10u, 16u);
 
 		std::string line1;
 		if (extractLcdText(line1Raw, line1))
@@ -1270,8 +1334,8 @@ namespace rg2JucePlugin
 			const uint32_t titleOffset = lcdBase + static_cast<uint32_t>((i % 2) * 8u);
 			const uint32_t valOffset = lcdBase + 16u + static_cast<uint32_t>((i % 2) * 8u);
 
-			const std::string titleRaw = _panel.readDisplayText(titleOffset, 8u);
-			const std::string valRaw = _panel.readDisplayText(valOffset, 8u);
+			const std::string_view titleRaw = _panel.readDisplayView(titleOffset, 8u);
+			const std::string_view valRaw = _panel.readDisplayView(valOffset, 8u);
 
 			std::string title;
 			if (extractLcdText(titleRaw, title))
@@ -1307,38 +1371,38 @@ namespace rg2JucePlugin
 		if (m_lastLatch0 == 0xFF && ledBits == 0)
 			return;
 
+		const uint8_t prevLatch0 = m_lastLatch0;
 		m_lastLatch0 = latch0;
 
 		const uint8_t slotMask = latch0 & 0x0Fu;
+		const uint8_t changedSlots = (prevLatch0 ^ latch0) & 0x0Fu;
 		for (size_t p = 0; p < m_slotLeds.size(); ++p)
 		{
+			if (prevLatch0 != 0xFF && (changedSlots & (1u << p)) == 0)
+				continue;
+
 			const bool lit = (slotMask & (1u << p)) != 0;
 			if (m_slotLeds[p])
 			{
-				m_slotLeds[p]->SetClass("slot_led_lit", lit);
-				m_slotLeds[p]->SetClass("slot_led_unlit", !lit);
 				m_slotLeds[p]->SetClass("lit", lit);
 				m_slotLeds[p]->SetClass("unlit", !lit);
-				m_slotLeds[p]->SetClass("led_lit", lit);
-				m_slotLeds[p]->SetClass("led_unlit", !lit);
+				m_slotLeds[p]->SetClass("slot_led_lit", lit);
+				m_slotLeds[p]->SetClass("slot_led_unlit", !lit);
 			}
 			if (m_slotButtons[p])
 				m_slotButtons[p]->setChecked(lit);
 		}
 
-		if (slotMask != 0)
+		if (slotMask != 0 && m_activeSlotDisplay)
 		{
-			if (auto* activeDisplay = findChild("active_slot_display", false))
+			for (size_t p = 0; p < 4; ++p)
 			{
-				for (size_t p = 0; p < 4; ++p)
+				if (slotMask & (1u << p))
 				{
-					if (slotMask & (1u << p))
-					{
-						const char slotLetter = static_cast<char>('A' + p);
-						const std::string text = std::string("Slot ") + slotLetter;
-						activeDisplay->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
-						break;
-					}
+					const char slotLetter = static_cast<char>('A' + p);
+					const std::string text = std::string("Slot ") + slotLetter;
+					m_activeSlotDisplay->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
+					break;
 				}
 			}
 		}
@@ -1349,35 +1413,47 @@ namespace rg2JucePlugin
 		if (var1Lit || var2Lit)
 		{
 			const uint8_t activeVar = var1Lit ? 0 : 1;
-			m_activeVariation = activeVar;
-			for (size_t i = 0; i < 8; ++i)
+			if (activeVar != m_activeVariation)
 			{
-				const bool lit = (i == activeVar);
-				if (m_varLeds[i])
+				if (m_activeVariation < m_varLeds.size())
 				{
-					m_varLeds[i]->SetClass("led_lit", lit);
-					m_varLeds[i]->SetClass("led_unlit", !lit);
-					m_varLeds[i]->SetClass("lit", lit);
-					m_varLeds[i]->SetClass("unlit", !lit);
+					if (m_varLeds[m_activeVariation])
+					{
+						m_varLeds[m_activeVariation]->SetClass("lit", false);
+						m_varLeds[m_activeVariation]->SetClass("unlit", true);
+						m_varLeds[m_activeVariation]->SetClass("led_lit", false);
+						m_varLeds[m_activeVariation]->SetClass("led_unlit", true);
+					}
+					if (m_varButtons[m_activeVariation])
+						m_varButtons[m_activeVariation]->SetClass("checked", false);
 				}
-				if (m_varButtons[i])
-					m_varButtons[i]->SetClass("checked", lit);
+				if (activeVar < m_varLeds.size())
+				{
+					if (m_varLeds[activeVar])
+					{
+						m_varLeds[activeVar]->SetClass("lit", true);
+						m_varLeds[activeVar]->SetClass("unlit", false);
+						m_varLeds[activeVar]->SetClass("led_lit", true);
+						m_varLeds[activeVar]->SetClass("led_unlit", false);
+					}
+					if (m_varButtons[activeVar])
+						m_varButtons[activeVar]->SetClass("checked", true);
+				}
+				m_activeVariation = activeVar;
 			}
 		}
-		else
+		else if (m_activeVariation < 2)
 		{
-			for (size_t i = 0; i < 2; ++i)
+			if (m_varLeds[m_activeVariation])
 			{
-				if (m_varLeds[i])
-				{
-					m_varLeds[i]->SetClass("led_lit", false);
-					m_varLeds[i]->SetClass("led_unlit", true);
-					m_varLeds[i]->SetClass("lit", false);
-					m_varLeds[i]->SetClass("unlit", true);
-				}
-				if (m_varButtons[i])
-					m_varButtons[i]->SetClass("checked", false);
+				m_varLeds[m_activeVariation]->SetClass("lit", false);
+				m_varLeds[m_activeVariation]->SetClass("unlit", true);
+				m_varLeds[m_activeVariation]->SetClass("led_lit", false);
+				m_varLeds[m_activeVariation]->SetClass("led_unlit", true);
 			}
+			if (m_varButtons[m_activeVariation])
+				m_varButtons[m_activeVariation]->SetClass("checked", false);
+			m_activeVariation = 0xFF;
 		}
 	}
 
@@ -1415,26 +1491,26 @@ namespace rg2JucePlugin
 		if (state != m_lastSocketState)
 		{
 			m_lastSocketState = state;
-			if (auto* statusElem = findChild("socket_status", false))
+			if (m_socketStatus)
 			{
-				statusElem->SetClass("socket_connected", state == 2);
-				statusElem->SetClass("socket_listening", state == 1);
-				statusElem->SetClass("socket_offline", state == 0);
+				m_socketStatus->SetClass("socket_connected", state == 2);
+				m_socketStatus->SetClass("socket_listening", state == 1);
+				m_socketStatus->SetClass("socket_offline", state == 0);
 			}
-			if (auto* badgeElem = findChild("socket_badge", false))
+			if (m_socketBadge)
 			{
 				const char* badgeText = (state == 2 ? "ONLINE" : (state == 1 ? "LISTENING" : "PORT BUSY"));
-				badgeElem->SetInnerRML(badgeText);
+				m_socketBadge->SetInnerRML(badgeText);
 			}
 		}
 
 		if (text != m_lastSocketStatusText)
 		{
 			m_lastSocketStatusText = text;
-			if (auto* textElem = findChild("socket_text", false))
-				textElem->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
-			else if (auto* statusElem = findChild("socket_status", false))
-				statusElem->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
+			if (m_socketText)
+				m_socketText->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
+			else if (m_socketStatus)
+				m_socketStatus->SetInnerRML(Rml::StringUtilities::EncodeRml(text));
 		}
 	}
 

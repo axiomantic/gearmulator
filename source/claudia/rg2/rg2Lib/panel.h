@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "memoryMap.h"
@@ -83,6 +84,7 @@ namespace rg2
 
 		// Display buffer (CS4) character reader and version counter
 		std::string readDisplayText(uint32_t _offset, uint32_t _length) const;
+		std::string_view readDisplayView(uint32_t _offset, uint32_t _length) const noexcept;
 		uint32_t displayVersion() const noexcept { return m_displayVersion; }
 
 		void tick(uint64_t _frameIndex) noexcept { (void)_frameIndex; }
