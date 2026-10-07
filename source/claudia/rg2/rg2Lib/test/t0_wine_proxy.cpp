@@ -14,7 +14,7 @@
 #include "../../rg2WineProxy/rg2usb.h"
 #include "../../rg2WineProxy/setupapi_proxy.h"
 #include "../transportHub.h"
-#include "../transportSocket.h"
+#include "../transportWebSocket.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -71,10 +72,10 @@ namespace
 int main()
 {
 	/* ------------------------------------------------------------- case 1.
-	 * Compile-time contracts. TransportSocketServer must derive from
+	 * Compile-time contracts. TransportWebSocketServer must derive from
 	 * TransportEndpoint directly. */
-	static_assert(std::is_base_of_v<rg2::TransportEndpoint, rg2::TransportSocketServer>,
-				  "TransportSocketServer must derive from TransportEndpoint");
+	static_assert(std::is_base_of_v<rg2::TransportEndpoint, rg2::TransportWebSocketServer>,
+				  "TransportWebSocketServer must derive from TransportEndpoint");
 
 	static_assert(rg2::wine::kIoctlRegisterEvent == 0x222000u, "IOCTL 0x222000 registers completion event");
 	static_assert(rg2::wine::kIoctlUnregisterEvent == 0x222004u, "IOCTL 0x222004 unregisters completion event");
@@ -86,7 +87,8 @@ int main()
 	check(rg2::wine::isClaviaDeviceGuid("{CB3ED981-6125-4047-BC2A-292E370CC89A}"), "GUID string matches in uppercase");
 	check(rg2::wine::isClaviaDeviceGuid("{cb3ed981-6125-4047-bc2a-292e370cc89a}"),
 		  "GUID string matches case-insensitively");
-	check(!rg2::wine::isClaviaDeviceGuid("{11111111-2222-3333-4444-555555555555}"), "Non-matching GUID string rejected");
+	check(!rg2::wine::isClaviaDeviceGuid("{11111111-2222-3333-4444-555555555555}"),
+		  "Non-matching GUID string rejected");
 
 	const uint8_t validGuidBytes[16] = {0x81, 0xD9, 0x3E, 0xCB, 0x25, 0x61, 0x47, 0x40,
 										0xBC, 0x2A, 0x29, 0x2E, 0x37, 0x0C, 0xC8, 0x9A};
@@ -102,7 +104,7 @@ int main()
 	/* ------------------------------------------------------------- case 2.
 	 * Server listening and client connection over loopback. */
 	rg2::TransportHub hub(1024, 16);
-	rg2::TransportSocketServer server(hub, 0); // 0 selects ephemeral port
+	rg2::TransportWebSocketServer server(hub, 0); // 0 selects ephemeral port
 
 	check(server.listen(), "server binds and listens on loopback");
 	const uint16_t port = server.port();
@@ -110,10 +112,21 @@ int main()
 
 	rg2::wine::G2UsbDeviceSession session;
 	check(!session.isConnected(), "session initially disconnected");
-	check(session.connectToHub("127.0.0.1", port), "session connects to server");
 
-	check(server.acceptClient(true), "server accepts client connection");
+	std::thread serverThread(
+		[&server]()
+		{
+			if (server.acceptClient(true))
+			{
+				server.pumpSocket(100);
+			}
+		});
+
+	check(session.connectToHub("127.0.0.1", port), "session connects to server");
+	serverThread.join();
+
 	check(server.hasClient(), "server confirms client connected");
+	check(server.isUpgraded(), "server confirms client upgraded to websocket");
 	check(session.isConnected(), "session confirms connected");
 
 	/* ------------------------------------------------------------- case 3.

@@ -9,8 +9,9 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 i686-w64-mingw32-g++ -shared -O2 -std=c++17 \
 	-static -static-libgcc -static-libstdc++ \
 	-I"$DIR" -I"$DIR/../rg2Lib" \
-	"$DIR/setupapi_wine.cpp" "$DIR/rg2usb.cpp" "$DIR/setupapi.def" \
+	"$DIR/setupapi_wine.cpp" "$DIR/rg2usb.cpp" "$DIR/../rg2Lib/instanceRegistry.cpp" "$DIR/setupapi.def" \
 	-lws2_32 -lsetupapi \
 	-o "$DIR/setupapi.dll"
+
 
 echo "Successfully built $DIR/setupapi.dll"
