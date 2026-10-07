@@ -274,6 +274,7 @@ namespace rg2
 	TransportWebSocketServer::TransportWebSocketServer(TransportHub& _hub, const uint16_t _port) :
 		m_hub(_hub), m_requestedPort(_port)
 	{
+		m_txBuffer.reserve(4096);
 		socketsReady();
 		m_allowedOrigins.push_back("http://localhost");
 		m_allowedOrigins.push_back("https://localhost");
@@ -405,6 +406,7 @@ namespace rg2
 		socketSetOption(m_clientFd, IPPROTO_TCP, TCP_NODELAY, 1);
 		setNonBlocking(m_clientFd);
 		m_rxBuffer.clear();
+		m_rxOffset = 0;
 		m_hasClient.store(true, std::memory_order_release);
 		m_isUpgraded.store(false, std::memory_order_release);
 		return true;
@@ -418,6 +420,7 @@ namespace rg2
 		m_isUpgraded.store(false, std::memory_order_release);
 		socketClose(m_clientFd);
 		m_rxBuffer.clear();
+		m_rxOffset = 0;
 	}
 
 	void TransportWebSocketServer::close() noexcept
@@ -436,26 +439,26 @@ namespace rg2
 		const uint8_t channel = (_frame.size == 16) ? 1 : 0;
 		const size_t totalPayload = 1 + _frame.size;
 
-		std::vector<uint8_t> frameBuffer;
+		std::lock_guard<std::mutex> lock(m_txMutex);
 		if (totalPayload < 126)
 		{
-			frameBuffer.resize(2 + totalPayload);
-			frameBuffer[0] = 0x82u; // FIN | binary
-			frameBuffer[1] = static_cast<uint8_t>(totalPayload);
-			frameBuffer[2] = channel;
+			m_txBuffer.resize(2 + totalPayload);
+			m_txBuffer[0] = 0x82u; // FIN | binary
+			m_txBuffer[1] = static_cast<uint8_t>(totalPayload);
+			m_txBuffer[2] = channel;
 			if (_frame.size > 0)
-				std::memcpy(frameBuffer.data() + 3, _frame.data, _frame.size);
+				std::memcpy(m_txBuffer.data() + 3, _frame.data, _frame.size);
 		}
 		else if (totalPayload <= 0xFFFFu)
 		{
-			frameBuffer.resize(4 + totalPayload);
-			frameBuffer[0] = 0x82u;
-			frameBuffer[1] = 126u;
-			frameBuffer[2] = static_cast<uint8_t>((totalPayload >> 8) & 0xFFu);
-			frameBuffer[3] = static_cast<uint8_t>(totalPayload & 0xFFu);
-			frameBuffer[4] = channel;
+			m_txBuffer.resize(4 + totalPayload);
+			m_txBuffer[0] = 0x82u;
+			m_txBuffer[1] = 126u;
+			m_txBuffer[2] = static_cast<uint8_t>((totalPayload >> 8) & 0xFFu);
+			m_txBuffer[3] = static_cast<uint8_t>(totalPayload & 0xFFu);
+			m_txBuffer[4] = channel;
 			if (_frame.size > 0)
-				std::memcpy(frameBuffer.data() + 5, _frame.data, _frame.size);
+				std::memcpy(m_txBuffer.data() + 5, _frame.data, _frame.size);
 		}
 		else
 		{
@@ -464,7 +467,7 @@ namespace rg2
 			return;
 		}
 
-		if (!socketSendAll(m_clientFd, frameBuffer.data(), frameBuffer.size()))
+		if (!socketSendAll(m_clientFd, m_txBuffer.data(), m_txBuffer.size()))
 		{
 			disconnectClient();
 			return;
@@ -612,6 +615,7 @@ namespace rg2
 			}
 
 			m_rxBuffer.erase(m_rxBuffer.begin(), m_rxBuffer.begin() + headerEnd + 4);
+			m_rxOffset = 0;
 			m_isUpgraded.store(true, std::memory_order_release);
 			return true;
 		}
@@ -628,10 +632,13 @@ namespace rg2
 	size_t TransportWebSocketServer::processFrames() noexcept
 	{
 		size_t delivered = 0;
-		while (m_rxBuffer.size() >= 2)
+		while ((m_rxBuffer.size() - m_rxOffset) >= 2)
 		{
-			const uint8_t b0 = m_rxBuffer[0];
-			const uint8_t b1 = m_rxBuffer[1];
+			const uint8_t* const rxPtr = m_rxBuffer.data() + m_rxOffset;
+			const size_t rxAvail = m_rxBuffer.size() - m_rxOffset;
+
+			const uint8_t b0 = rxPtr[0];
+			const uint8_t b1 = rxPtr[1];
 
 			const uint8_t opcode = b0 & 0x0Fu;
 			const bool isMasked = (b1 & 0x80u) != 0;
@@ -642,35 +649,35 @@ namespace rg2
 
 			if (len7 == 126)
 			{
-				if (m_rxBuffer.size() < hdrLen + 2)
+				if (rxAvail < hdrLen + 2)
 					break;
-				payloadLen = (uint64_t(m_rxBuffer[2]) << 8) | uint64_t(m_rxBuffer[3]);
+				payloadLen = (uint64_t(rxPtr[2]) << 8) | uint64_t(rxPtr[3]);
 				hdrLen += 2;
 			}
 			else if (len7 == 127)
 			{
-				if (m_rxBuffer.size() < hdrLen + 8)
+				if (rxAvail < hdrLen + 8)
 					break;
 				payloadLen = 0;
 				for (int i = 0; i < 8; ++i)
-					payloadLen = (payloadLen << 8) | uint64_t(m_rxBuffer[hdrLen + i]);
+					payloadLen = (payloadLen << 8) | uint64_t(rxPtr[hdrLen + i]);
 				hdrLen += 8;
 			}
 
 			const uint8_t* maskKey = nullptr;
 			if (isMasked)
 			{
-				if (m_rxBuffer.size() < hdrLen + 4)
+				if (rxAvail < hdrLen + 4)
 					break;
-				maskKey = m_rxBuffer.data() + hdrLen;
+				maskKey = rxPtr + hdrLen;
 				hdrLen += 4;
 			}
 
 			const size_t totalFrameSize = hdrLen + static_cast<size_t>(payloadLen);
-			if (m_rxBuffer.size() < totalFrameSize)
+			if (rxAvail < totalFrameSize)
 				break;
 
-			uint8_t* const payload = m_rxBuffer.data() + hdrLen;
+			uint8_t* const payload = m_rxBuffer.data() + m_rxOffset + hdrLen;
 			if (isMasked && maskKey)
 			{
 				for (size_t i = 0; i < payloadLen; ++i)
@@ -719,7 +726,18 @@ namespace rg2
 				}
 			}
 
-			m_rxBuffer.erase(m_rxBuffer.begin(), m_rxBuffer.begin() + totalFrameSize);
+			m_rxOffset += totalFrameSize;
+		}
+
+		if (m_rxOffset >= m_rxBuffer.size())
+		{
+			m_rxBuffer.clear();
+			m_rxOffset = 0;
+		}
+		else if (m_rxOffset >= 16384)
+		{
+			m_rxBuffer.erase(m_rxBuffer.begin(), m_rxBuffer.begin() + m_rxOffset);
+			m_rxOffset = 0;
 		}
 
 		return delivered;
@@ -741,6 +759,16 @@ namespace rg2
 				const long n = socketRecv(m_clientFd, temp, sizeof(temp));
 				if (n > 0)
 				{
+					if (m_rxOffset >= m_rxBuffer.size())
+					{
+						m_rxBuffer.clear();
+						m_rxOffset = 0;
+					}
+					else if (m_rxOffset >= 16384)
+					{
+						m_rxBuffer.erase(m_rxBuffer.begin(), m_rxBuffer.begin() + m_rxOffset);
+						m_rxOffset = 0;
+					}
 					m_rxBuffer.insert(m_rxBuffer.end(), temp, temp + n);
 				}
 				else

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -82,7 +83,11 @@ namespace rg2
 		std::atomic<bool> m_hasClient{false};
 		std::atomic<bool> m_isUpgraded{false};
 
+		mutable std::mutex m_txMutex;
+		std::vector<uint8_t> m_txBuffer;
+
 		std::vector<uint8_t> m_rxBuffer;
+		size_t m_rxOffset = 0;
 		std::vector<std::string> m_allowedOrigins;
 		std::string m_authToken;
 

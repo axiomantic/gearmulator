@@ -209,6 +209,28 @@ int main()
 	check(sameBytes(readBuffer, bytesRead, bulkInPayload, sizeof(bulkInPayload)),
 		  "read bytes match device emitted bulk payload");
 
+	/* ------------------------------------------------------------ case 6b.
+	 * Chunked Bulk IN: readFile in small slices exercises m_bulkOffset cursor and compaction. */
+	uint8_t chunkedPayload[48];
+	fillPattern(chunkedPayload, sizeof(chunkedPayload), 123u);
+	hub.fromDevice(rg2::ProtocolFrame{chunkedPayload, sizeof(chunkedPayload)});
+	session.pumpSocket();
+	checkEqual(session.bulkInQueueDepth(), 48u, "bulkInQueueDepth reports 48 bytes unread");
+
+	uint8_t chunk1[16];
+	size_t read1 = 0;
+	check(session.readFile(chunk1, sizeof(chunk1), read1), "first slice read succeeds");
+	checkEqual(read1, 16u, "first slice read 16 bytes");
+	check(sameBytes(chunk1, 16u, chunkedPayload, 16u), "first slice matches prefix");
+	checkEqual(session.bulkInQueueDepth(), 32u, "bulkInQueueDepth decreases after slice read");
+
+	uint8_t chunk2[32];
+	size_t read2 = 0;
+	check(session.readFile(chunk2, sizeof(chunk2), read2), "second slice read succeeds");
+	checkEqual(read2, 32u, "second slice read 32 bytes");
+	check(sameBytes(chunk2, 32u, chunkedPayload + 16, 32u), "second slice matches remainder");
+	checkEqual(session.bulkInQueueDepth(), 0u, "bulkInQueueDepth is 0 after full read");
+
 	/* ------------------------------------------------------------- case 7.
 	 * Clean disconnect. */
 	session.disconnect();

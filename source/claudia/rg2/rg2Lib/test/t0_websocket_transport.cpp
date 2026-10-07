@@ -366,6 +366,58 @@ int main()
 
 	server.setAuthToken(""); // Reset token to unauthenticated default
 
+	/* ------------------------------------------------------------ case 14.
+	 * De-framing memory efficiency: multiple frames in a single socket read
+	 * exercise m_rxOffset cursor advancing and compaction. */
+	const int multiFd = connectClientSocket(port);
+	check(multiFd >= 0, "multi-frame client connects");
+	check(server.acceptClient(true), "server accepts multi-frame client");
+
+	const std::string multiHandshake = "GET / HTTP/1.1\r\n"
+									   "Host: 127.0.0.1\r\n"
+									   "Upgrade: websocket\r\n"
+									   "Connection: Upgrade\r\n"
+									   "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+									   "Sec-WebSocket-Version: 13\r\n"
+									   "\r\n";
+	::send(multiFd, multiHandshake.data(), multiHandshake.size(), 0);
+	server.pumpSocket(100);
+	check(server.isUpgraded(), "server upgraded for multi-frame test");
+
+	char drainBuf[1024];
+	::recv(multiFd, drainBuf, sizeof(drainBuf), 0);
+
+	std::vector<uint8_t> burst;
+	const uint8_t mKey[4] = {0x11, 0x22, 0x33, 0x44};
+	const uint8_t pA[3] = {0x00, 0xA1, 0xA2};
+	burst.push_back(0x82);
+	burst.push_back(0x80 | 3);
+	burst.insert(burst.end(), mKey, mKey + 4);
+	for (size_t i = 0; i < 3; ++i)
+		burst.push_back(pA[i] ^ mKey[i % 4]);
+
+	const uint8_t pB[3] = {0x00, 0xB1, 0xB2};
+	burst.push_back(0x82);
+	burst.push_back(0x80 | 3);
+	burst.insert(burst.end(), mKey, mKey + 4);
+	for (size_t i = 0; i < 3; ++i)
+		burst.push_back(pB[i] ^ mKey[i % 4]);
+
+	::send(multiFd, reinterpret_cast<const char*>(burst.data()), burst.size(), 0);
+	const size_t burstDelivered = server.pumpSocket(100);
+	checkEqual(burstDelivered, 2, "both frames delivered in single pumpSocket call");
+
+	rg2::StampedFrame burstFrames[4];
+	const size_t drainedBurst = hub.drainToDevice(burstFrames, 4);
+	checkEqual(drainedBurst, 2, "hub received 2 burst frames");
+	check(burstFrames[0].frame.size == 2 && burstFrames[0].frame.data[0] == 0xA1 && burstFrames[0].frame.data[1] == 0xA2,
+		  "first burst frame payload matches");
+	check(burstFrames[1].frame.size == 2 && burstFrames[1].frame.data[0] == 0xB1 && burstFrames[1].frame.data[1] == 0xB2,
+		  "second burst frame payload matches");
+
+	closeSocket(multiFd);
+	server.disconnectClient();
+
 	server.close();
 
 	if (failures == 0)

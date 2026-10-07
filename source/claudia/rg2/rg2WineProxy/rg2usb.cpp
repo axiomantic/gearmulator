@@ -303,8 +303,10 @@ namespace rg2::wine
 		std::lock_guard<std::mutex> queueLock(m_queueMutex);
 		socketClose(m_sockFd);
 		m_rxStream.clear();
+		m_rxOffset = 0;
 		m_notificationQueue.clear();
 		m_bulkInQueue.clear();
+		m_bulkOffset = 0;
 	}
 
 	bool G2UsbDeviceSession::isConnected() const noexcept
@@ -321,7 +323,7 @@ namespace rg2::wine
 		m_eventRegistered = true;
 
 		std::lock_guard<std::mutex> lock(m_queueMutex);
-		if (!m_notificationQueue.empty() || !m_bulkInQueue.empty())
+		if (!m_notificationQueue.empty() || (m_bulkInQueue.size() > m_bulkOffset))
 			notifyEventIfRegistered();
 
 		return true;
@@ -425,11 +427,21 @@ namespace rg2::wine
 
 		{
 			std::lock_guard<std::mutex> lock(m_queueMutex);
-			if (!m_bulkInQueue.empty())
+			if (m_bulkInQueue.size() > m_bulkOffset)
 			{
-				const size_t count = std::min(maxBytes, m_bulkInQueue.size());
-				std::memcpy(dst, m_bulkInQueue.data(), count);
-				m_bulkInQueue.erase(m_bulkInQueue.begin(), m_bulkInQueue.begin() + count);
+				const size_t count = std::min(maxBytes, m_bulkInQueue.size() - m_bulkOffset);
+				std::memcpy(dst, m_bulkInQueue.data() + m_bulkOffset, count);
+				m_bulkOffset += count;
+				if (m_bulkOffset >= m_bulkInQueue.size())
+				{
+					m_bulkInQueue.clear();
+					m_bulkOffset = 0;
+				}
+				else if (m_bulkOffset >= 16384)
+				{
+					m_bulkInQueue.erase(m_bulkInQueue.begin(), m_bulkInQueue.begin() + m_bulkOffset);
+					m_bulkOffset = 0;
+				}
 				bytesRead = count;
 				return true;
 			}
@@ -438,12 +450,22 @@ namespace rg2::wine
 		pumpSocket(0);
 
 		std::lock_guard<std::mutex> lock(m_queueMutex);
-		if (m_bulkInQueue.empty())
+		if (m_bulkInQueue.size() <= m_bulkOffset)
 			return true;
 
-		const size_t count = std::min(maxBytes, m_bulkInQueue.size());
-		std::memcpy(dst, m_bulkInQueue.data(), count);
-		m_bulkInQueue.erase(m_bulkInQueue.begin(), m_bulkInQueue.begin() + count);
+		const size_t count = std::min(maxBytes, m_bulkInQueue.size() - m_bulkOffset);
+		std::memcpy(dst, m_bulkInQueue.data() + m_bulkOffset, count);
+		m_bulkOffset += count;
+		if (m_bulkOffset >= m_bulkInQueue.size())
+		{
+			m_bulkInQueue.clear();
+			m_bulkOffset = 0;
+		}
+		else if (m_bulkOffset >= 16384)
+		{
+			m_bulkInQueue.erase(m_bulkInQueue.begin(), m_bulkInQueue.begin() + m_bulkOffset);
+			m_bulkOffset = 0;
+		}
 		bytesRead = count;
 		return true;
 	}
@@ -466,17 +488,20 @@ namespace rg2::wine
 			uint8_t temp[4096];
 			while (true)
 			{
-				{
-					std::lock_guard<std::mutex> sockLock(m_socketMutex);
-					fd = m_sockFd;
-				}
-				if (fd == -1)
-					return packetsProcessed;
-
 				const long n = socketRecv(fd, temp, sizeof(temp));
 				if (n > 0)
 				{
 					std::lock_guard<std::mutex> lock(m_queueMutex);
+					if (m_rxOffset >= m_rxStream.size())
+					{
+						m_rxStream.clear();
+						m_rxOffset = 0;
+					}
+					else if (m_rxOffset >= 16384)
+					{
+						m_rxStream.erase(m_rxStream.begin(), m_rxStream.begin() + m_rxOffset);
+						m_rxOffset = 0;
+					}
 					m_rxStream.insert(m_rxStream.end(), temp, temp + n);
 				}
 				else
@@ -492,10 +517,13 @@ namespace rg2::wine
 
 			{
 				std::lock_guard<std::mutex> lock(m_queueMutex);
-				while (m_rxStream.size() >= 2)
+				while ((m_rxStream.size() - m_rxOffset) >= 2)
 				{
-					const uint8_t b0 = m_rxStream[0];
-					const uint8_t b1 = m_rxStream[1];
+					const uint8_t* const rxPtr = m_rxStream.data() + m_rxOffset;
+					const size_t rxAvail = m_rxStream.size() - m_rxOffset;
+
+					const uint8_t b0 = rxPtr[0];
+					const uint8_t b1 = rxPtr[1];
 					const uint8_t opcode = b0 & 0x0F;
 					const bool isMasked = (b1 & 0x80) != 0;
 					const uint8_t len7 = b1 & 0x7F;
@@ -505,35 +533,35 @@ namespace rg2::wine
 
 					if (len7 == 126)
 					{
-						if (m_rxStream.size() < hdrLen + 2)
+						if (rxAvail < hdrLen + 2)
 							break;
-						payloadLen = (static_cast<uint64_t>(m_rxStream[2]) << 8) | static_cast<uint64_t>(m_rxStream[3]);
+						payloadLen = (static_cast<uint64_t>(rxPtr[2]) << 8) | static_cast<uint64_t>(rxPtr[3]);
 						hdrLen += 2;
 					}
 					else if (len7 == 127)
 					{
-						if (m_rxStream.size() < hdrLen + 8)
+						if (rxAvail < hdrLen + 8)
 							break;
 						payloadLen = 0;
 						for (int i = 0; i < 8; ++i)
-							payloadLen = (payloadLen << 8) | static_cast<uint64_t>(m_rxStream[hdrLen + i]);
+							payloadLen = (payloadLen << 8) | static_cast<uint64_t>(rxPtr[hdrLen + i]);
 						hdrLen += 8;
 					}
 
 					const uint8_t* maskKey = nullptr;
 					if (isMasked)
 					{
-						if (m_rxStream.size() < hdrLen + 4)
+						if (rxAvail < hdrLen + 4)
 							break;
-						maskKey = m_rxStream.data() + hdrLen;
+						maskKey = rxPtr + hdrLen;
 						hdrLen += 4;
 					}
 
 					const size_t totalFrameSize = hdrLen + static_cast<size_t>(payloadLen);
-					if (m_rxStream.size() < totalFrameSize)
+					if (rxAvail < totalFrameSize)
 						break;
 
-					uint8_t* const payload = m_rxStream.data() + hdrLen;
+					uint8_t* const payload = m_rxStream.data() + m_rxOffset + hdrLen;
 					if (isMasked && maskKey)
 					{
 						for (size_t i = 0; i < payloadLen; ++i)
@@ -544,6 +572,7 @@ namespace rg2::wine
 					{
 						socketClose(m_sockFd);
 						m_rxStream.clear();
+						m_rxOffset = 0;
 						return packetsProcessed;
 					}
 					else if (opcode == 0x09) // Ping -> reply Pong
@@ -585,7 +614,18 @@ namespace rg2::wine
 						}
 					}
 
-					m_rxStream.erase(m_rxStream.begin(), m_rxStream.begin() + totalFrameSize);
+					m_rxOffset += totalFrameSize;
+				}
+
+				if (m_rxOffset >= m_rxStream.size())
+				{
+					m_rxStream.clear();
+					m_rxOffset = 0;
+				}
+				else if (m_rxOffset >= 16384)
+				{
+					m_rxStream.erase(m_rxStream.begin(), m_rxStream.begin() + m_rxOffset);
+					m_rxOffset = 0;
 				}
 			}
 
@@ -636,7 +676,7 @@ namespace rg2::wine
 	size_t G2UsbDeviceSession::bulkInQueueDepth() const noexcept
 	{
 		std::lock_guard<std::mutex> lock(m_queueMutex);
-		return m_bulkInQueue.size();
+		return m_bulkInQueue.size() > m_bulkOffset ? (m_bulkInQueue.size() - m_bulkOffset) : 0;
 	}
 
 	void G2UsbDeviceSession::notifyEventIfRegistered() noexcept

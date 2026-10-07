@@ -77,7 +77,9 @@ namespace rg2::wine
         EventSignaler m_eventSignaler;
 
         std::vector<uint8_t> m_rxStream;
+        size_t m_rxOffset = 0;
         std::deque<std::array<uint8_t, 16>> m_notificationQueue;
         std::vector<uint8_t> m_bulkInQueue;
+        size_t m_bulkOffset = 0;
     };
 } // namespace rg2::wine
