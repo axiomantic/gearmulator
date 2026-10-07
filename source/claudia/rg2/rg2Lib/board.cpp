@@ -575,9 +575,12 @@ namespace rg2
         if (m_usb.rawContext() == nullptr)
             return;
 
-        m_usb.inToken(0);
-        m_usb.inToken(1);
-        m_usb.inToken(2);
+        if (m_lastFrameIndex % g_quantaPerSofFrame == 0u || m_usb.hasPendingIn())
+        {
+            m_usb.inToken(0);
+            m_usb.inToken(1);
+            m_usb.inToken(2);
+        }
 
         if (drained != 0)
         {
@@ -921,25 +924,8 @@ namespace rg2
 
     void Board::tickSofIfDue(const uint64_t frameIndex) noexcept
     {
-        /* The Board owns the test and the Scheduler never makes it. The
-         * Scheduler calls this on every frame, unconditionally, and passes the
-         * authoritative virtual frame index; the 96:1 relation is a property of
-         * the USB device model rather than of the scheduler, so it is tested
-         * here.
-         *
-         * The transport is pumped first, and this method is where it happens
-         * because scheduler.cpp calls this on every frame, unconditionally,
-         * immediately before runMcu: it is already the per-quantum boundary a
-         * hub drain must sit on. The SOF test below must not gate it -- a drain
-         * that ran once every 96 quanta would make the hub's frame index count
-         * SOF frames rather than quanta.
-         *
-         * The order is deliberate. The frames cross into the device before the
-         * MCU runs the quantum that may read them, so a frame that entered at
-         * quantum N is visible to the firmware in quantum N and not in N+1. */
-        pumpTransport();
-
         m_lastFrameIndex = frameIndex;
+        pumpTransport();
 
         if (frameIndex % g_quantaPerSofFrame != 0u)
             return;

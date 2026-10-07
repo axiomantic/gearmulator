@@ -165,7 +165,7 @@ namespace rg2
 		c->slotBudgetDivisor = frameSlotBound(*c, secondBus);
 		c->slotDispatches    = 0u;
 
-		const std::function<void()> run = [&]() noexcept
+		auto run = [&]() noexcept
 		{
 			const uint32_t slot = c->slotDispatches++;
 
