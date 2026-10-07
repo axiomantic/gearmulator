@@ -24,3 +24,12 @@ list(APPEND RG2LIB_SOURCES
 list(APPEND RG2LIB_SOURCES
 	transportSocket.h
 	transportSocket.cpp)
+
+list(APPEND RG2LIB_SOURCES
+	transportWebSocket.h
+	transportWebSocket.cpp)
+
+list(APPEND RG2LIB_SOURCES
+	instanceRegistry.h
+	instanceRegistry.cpp)
+

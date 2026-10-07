@@ -310,3 +310,31 @@ set_property(TARGET t0_wine_proxy PROPERTY FOLDER "RG2/test")
 
 add_test(NAME t0_wine_proxy COMMAND t0_wine_proxy)
 set_tests_properties(t0_wine_proxy PROPERTIES LABELS "UnitTest")
+
+# ----------------- The WebSocket transport server
+#
+# Tests the RFC 6455 WebSocket server endpoint attached to TransportHub,
+# verifying handshake negotiation, frame unmasking, and bidirectional messaging.
+
+add_executable(t0_websocket_transport
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_websocket_transport.cpp)
+target_link_libraries(t0_websocket_transport PRIVATE rg2Lib)
+set_property(TARGET t0_websocket_transport PROPERTY FOLDER "RG2/test")
+
+add_test(NAME t0_websocket_transport COMMAND t0_websocket_transport)
+set_tests_properties(t0_websocket_transport PROPERTIES LABELS "UnitTest")
+
+# ----------------- The instance discovery and SetupAPI registry
+#
+# Tests multi-instance registry, setupapi.ini parsing, JSON discovery persistence,
+# and device path bidirectional formatting and resolution.
+
+add_executable(t0_instance_registry
+	${CMAKE_CURRENT_SOURCE_DIR}/t0_instance_registry.cpp)
+target_link_libraries(t0_instance_registry PRIVATE rg2Lib)
+set_property(TARGET t0_instance_registry PROPERTY FOLDER "RG2/test")
+
+add_test(NAME t0_instance_registry COMMAND t0_instance_registry)
+set_tests_properties(t0_instance_registry PROPERTIES LABELS "UnitTest")
+
+
