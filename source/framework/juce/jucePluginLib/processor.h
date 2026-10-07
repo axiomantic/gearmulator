@@ -197,6 +197,8 @@ namespace pluginLib
 
 	protected:
 		void destroyController();
+		void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+		void processBlockBypassed(juce::AudioBuffer<float>& _buffer, juce::MidiBuffer& _midiMessages) override;
 
 	private:
 		void prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock) override;
@@ -212,8 +214,6 @@ namespace pluginLib
 		bool acceptsMidi() const override;
 		bool producesMidi() const override;
 		bool isMidiEffect() const override;
-		void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
-		void processBlockBypassed(juce::AudioBuffer<float>& _buffer, juce::MidiBuffer& _midiMessages) override;
 
 	public:
 		// ---- Audio capture (for automated audio verification, driven by the MCP server) ----

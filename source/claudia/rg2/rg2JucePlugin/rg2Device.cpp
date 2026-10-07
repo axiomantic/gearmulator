@@ -11,8 +11,8 @@
 
 #include "rg2Device.h"
 
+#include "instanceRegistry.h"
 #include "rg2State.h"
-#include "transportSocket.h"
 
 #include "rg2/timebase.h"
 
@@ -21,6 +21,13 @@
 #include "status.h"
 
 #include "dsp56kEmu/audio.h"
+
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 
 #include <algorithm>
 #include <cassert>
@@ -69,9 +76,9 @@ namespace
 	constexpr uint32_t g_cs0Size = 0x00020000u;
 
 	// Measured: CS3 is a 64 KiB window.
-	constexpr uint32_t g_cs3Size   = 0x00010000u;
-	constexpr uint32_t g_cs1Size   = 0x00010000u;
-	constexpr uint32_t g_cs5Size   = 0x00000010u;
+	constexpr uint32_t g_cs3Size = 0x00010000u;
+	constexpr uint32_t g_cs1Size = 0x00010000u;
+	constexpr uint32_t g_cs5Size = 0x00000010u;
 	constexpr uint32_t g_sdramSize = 0x00800000u;
 
 	// The image loads where its name says it loads, and the initial stack
@@ -84,10 +91,10 @@ namespace
 	// The vector table: 256 identical big-endian longwords at the SDRAM
 	// base, with VBR pointed at it. Booting CODE directly skips the code
 	// that would build it. Register index 18 is the ColdFire C ABI's VBR.
-	constexpr int      g_regVbr             = 18;
-	constexpr uint32_t g_vectorTableBase    = 0x30000000u;
+	constexpr int g_regVbr = 18;
+	constexpr uint32_t g_vectorTableBase = 0x30000000u;
 	constexpr uint32_t g_vectorTableEntries = 256u;
-	constexpr uint32_t g_vectorHandler      = 0x300585CEu;
+	constexpr uint32_t g_vectorHandler = 0x300585CEu;
 
 	/* The step-4 chunk. runFrames takes a frame count and the boot's exit
 	 * condition -- Scheduler::chainAttached() -- is a property with a
@@ -103,7 +110,7 @@ namespace
 	{
 		std::ifstream in(_path, std::ios::binary);
 
-		if(!in)
+		if (!in)
 			return {};
 
 		return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -118,24 +125,24 @@ namespace
 		{
 			rg2::EnvArtifactResolver env;
 			std::string dir = env.resolve(_why, _name);
-			if(!dir.empty())
+			if (!dir.empty())
 				return dir;
 
 			std::vector<std::string> candidates;
-			if(!m_homePath.empty())
+			if (!m_homePath.empty())
 			{
 				std::string p = m_homePath;
-				if(p.back() == '/' || p.back() == '\\')
+				if (p.back() == '/' || p.back() == '\\')
 					p.pop_back();
 				candidates.push_back(p + "/roms");
 				candidates.push_back(p);
 			}
 
-			for(const auto& cand : candidates)
+			for (const auto& cand : candidates)
 			{
 				const std::string testFile = cand + "/" + (_name ? _name : g_codeImageName);
 				std::ifstream in(testFile, std::ios::binary);
-				if(in.good())
+				if (in.good())
 				{
 					_why.clear();
 					return cand;
@@ -148,7 +155,7 @@ namespace
 	private:
 		std::string m_homePath;
 	};
-}
+} // namespace
 
 namespace rg2
 {
@@ -166,7 +173,7 @@ namespace rg2
 
 		bool place(const uint32_t _offset, const std::vector<uint8_t>& _image)
 		{
-			if(_offset > m_bytes.size() || _image.size() > m_bytes.size() - _offset)
+			if (_offset > m_bytes.size() || _image.size() > m_bytes.size() - _offset)
 				return false;
 
 			std::copy(_image.begin(), _image.end(), m_bytes.begin() + _offset);
@@ -181,7 +188,7 @@ namespace rg2
 			 * bytes. Board::onRead converts the core's byte count through
 			 * busWidthBits() before the access reaches a target
 			 * (board.cpp), so the legal widths here are 8, 16 and 32. */
-			if(_size != 8 && _size != 16 && _size != 32)
+			if (_size != 8 && _size != 16 && _size != 32)
 			{
 				_status = CF_BUS_SIZE_ILLEGAL;
 				return 0u;
@@ -199,7 +206,7 @@ namespace rg2
 
 			uint32_t value = 0;
 
-			for(uint32_t i = 0; i < bytes; ++i)
+			for (uint32_t i = 0; i < bytes; ++i)
 			{
 				const size_t index = size_t(_offset) + i;
 				value = (value << 8) | (index < m_bytes.size() ? m_bytes[index] : 0u);
@@ -212,7 +219,7 @@ namespace rg2
 		{
 			_status = CF_BUS_OK;
 
-			if(_size != 8 && _size != 16 && _size != 32)
+			if (_size != 8 && _size != 16 && _size != 32)
 			{
 				_status = CF_BUS_SIZE_ILLEGAL;
 				return;
@@ -222,11 +229,11 @@ namespace rg2
 			// reason the read path states.
 			const uint32_t bytes = uint32_t(_size) / 8u;
 
-			for(uint32_t i = 0; i < bytes; ++i)
+			for (uint32_t i = 0; i < bytes; ++i)
 			{
 				const size_t index = size_t(_offset) + i;
 
-				if(index >= m_bytes.size())
+				if (index >= m_bytes.size())
 					continue;
 
 				m_bytes[index] = uint8_t((_value >> ((bytes - 1u - i) * 8u)) & 0xffu);
@@ -237,21 +244,17 @@ namespace rg2
 		std::vector<uint8_t> m_bytes;
 	};
 
-	Device::Device(const synthLib::DeviceCreateParams& _params)
-		: synthLib::Device(_params)
-		, m_driver(&m_owningDriver)
+	Device::Device(const synthLib::DeviceCreateParams& _params) : synthLib::Device(_params), m_driver(&m_owningDriver)
 	{
 		// Ask the resolver once, at construction, and never again. The
 		// no-exceptions rule holds inside resolveFirmwareState itself.
 		DeviceArtifactResolver resolver(_params.homePath);
 		m_firmwareStatus = resolveFirmwareState(resolver);
-		m_firmwareVersionWord = m_firmwareStatus.state == FirmwareState::Present
-			? g_expectedFirmwareVersion
-			: 0;
+		m_firmwareVersionWord = m_firmwareStatus.state == FirmwareState::Present ? g_expectedFirmwareVersion : 0;
 
 		/* The panel starts where the board rests it, read from the same
 		 * description the Board is built from rather than restated here. */
-		for(size_t control = 0; control < g_panelControlCount; ++control)
+		for (size_t control = 0; control < g_panelControlCount; ++control)
 			m_panelControls[control].store(panelControlRestPosition(PanelControl(control)), std::memory_order_relaxed);
 
 		// The slots exist before the machine does: the state this device
@@ -267,12 +270,22 @@ namespace rg2
 
 	Device::~Device()
 	{
-		if(m_socketServer)
+		if (m_port > 0)
 		{
-			m_socketServer->close();
-			m_socketServer.reset();
+#if defined(_WIN32)
+			const uint32_t currentPid = static_cast<uint32_t>(_getpid());
+#else
+			const uint32_t currentPid = static_cast<uint32_t>(getpid());
+#endif
+			unregisterInstance(getDefaultRegistryFilePath(), currentPid, m_port);
+		}
+		if (m_webSocketServer)
+		{
+			m_webSocketServer->close();
+			m_webSocketServer.reset();
 		}
 	}
+
 
 	/* ------------------------------------------------------------------
 	 * The boot-on-restore sequence.
@@ -308,11 +321,11 @@ namespace rg2
 		// consumer asks, and a machine with no artifacts is a boot that
 		// says why and changes nothing.
 		DeviceArtifactResolver resolver(getDeviceCreateParams().homePath);
-		std::string         why;
+		std::string why;
 
 		const std::string directory = resolver.resolve(why, g_codeImageName);
 
-		if(directory.empty())
+		if (directory.empty())
 		{
 			result.why = why;
 			return result;
@@ -320,7 +333,7 @@ namespace rg2
 
 		const std::vector<uint8_t> code = readFile(directory + "/" + g_codeImageName);
 
-		if(code.empty())
+		if (code.empty())
 		{
 			result.why = std::string(g_codeImageName) + " is empty or unreadable under " + directory;
 			return result;
@@ -351,10 +364,10 @@ namespace rg2
 		 * missing firmware leaves the Device invalid -- which is what it is. */
 		beginStateChange();
 
-		if(m_socketServer)
+		if (m_webSocketServer)
 		{
-			m_socketServer->close();
-			m_socketServer.reset();
+			m_webSocketServer->close();
+			m_webSocketServer.reset();
 		}
 
 		installScheduler(nullptr);
@@ -365,7 +378,7 @@ namespace rg2
 
 		m_sdram = std::make_unique<Sdram>(g_sdramSize);
 
-		if(!m_sdram->place(g_entryPc - g_sdramBase, code))
+		if (!m_sdram->place(g_entryPc - g_sdramBase, code))
 		{
 			result.why = "the firmware image does not fit the configured SDRAM window";
 			return result;
@@ -377,13 +390,13 @@ namespace rg2
 		{
 			std::vector<uint8_t> table(g_vectorTableEntries * 4u);
 
-			for(uint32_t entry = 0; entry < g_vectorTableEntries; ++entry)
+			for (uint32_t entry = 0; entry < g_vectorTableEntries; ++entry)
 			{
-				for(uint32_t byte = 0; byte < 4u; ++byte)
+				for (uint32_t byte = 0; byte < 4u; ++byte)
 					table[entry * 4u + byte] = uint8_t((g_vectorHandler >> ((3u - byte) * 8u)) & 0xffu);
 			}
 
-			if(!m_sdram->place(g_vectorTableBase - g_sdramBase, table))
+			if (!m_sdram->place(g_vectorTableBase - g_sdramBase, table))
 			{
 				result.why = "the vector table does not fit the configured SDRAM window";
 				return result;
@@ -392,13 +405,13 @@ namespace rg2
 
 		BoardConfig boardConfig;
 
-		boardConfig.memory.cs0   = {g_cs0Base,   g_cs0Size};
-		boardConfig.memory.cs1   = {g_cs1Base,   g_cs1Size};
-		boardConfig.memory.cs2   = {g_cs2Base,   g_cs2Size};
-		boardConfig.memory.cs3   = {g_cs3Base,   g_cs3Size};
-		boardConfig.memory.cs4   = g_panelSramCs4Window;
-		boardConfig.memory.cs5   = {g_cs5Base,   g_cs5Size};
-		boardConfig.memory.mbar  = {g_mbarBase,  g_simSpaceSize};
+		boardConfig.memory.cs0 = {g_cs0Base, g_cs0Size};
+		boardConfig.memory.cs1 = {g_cs1Base, g_cs1Size};
+		boardConfig.memory.cs2 = {g_cs2Base, g_cs2Size};
+		boardConfig.memory.cs3 = {g_cs3Base, g_cs3Size};
+		boardConfig.memory.cs4 = g_panelSramCs4Window;
+		boardConfig.memory.cs5 = {g_cs5Base, g_cs5Size};
+		boardConfig.memory.mbar = {g_mbarBase, g_simSpaceSize};
 		boardConfig.memory.sdram = {g_sdramBase, g_sdramSize};
 
 		/* The panel. This is the Device, so it models the whole machine and
@@ -415,10 +428,10 @@ namespace rg2
 		 * other faulted on the way out of the calibration. */
 		m_panelSram = std::make_unique<PanelSram>(m_board->memory());
 
-		if(!m_panelSram->place(g_panelSramImageBase, readFile(directory + "/" + g_panelSramImageName)))
+		if (!m_panelSram->place(g_panelSramImageBase, readFile(directory + "/" + g_panelSramImageName)))
 		{
-			result.why = std::string(g_panelSramImageName)
-				+ " is empty, unreadable or does not fit the bank under " + directory;
+			result.why =
+				std::string(g_panelSramImageName) + " is empty, unreadable or does not fit the bank under " + directory;
 			return result;
 		}
 
@@ -447,7 +460,7 @@ namespace rg2
 
 		notifyBootStep(BootStep::Create, m_ownedScheduler.get());
 
-		if(!m_ownedScheduler)
+		if (!m_ownedScheduler)
 		{
 			result.why = "Scheduler::create returned no object";
 			return result;
@@ -485,7 +498,7 @@ namespace rg2
 		 * the image placed above is still there. */
 		m_board->resetMcu(g_entrySp, g_entryPc);
 
-		if(!m_board->setMcuReg(g_regVbr, g_vectorTableBase))
+		if (!m_board->setMcuReg(g_regVbr, g_vectorTableBase))
 		{
 			result.why = "the core refused VBR";
 			return result;
@@ -497,21 +510,21 @@ namespace rg2
 		// does not run it at all, and the notification is not emitted for a
 		// step that did not run: an observer must be able to tell a restore
 		// from a cold boot, and a step notified either way could not.
-		if(_request.machineSnapshot && !_request.machineSnapshot->empty())
+		if (_request.machineSnapshot && !_request.machineSnapshot->empty())
 		{
-			if(_request.machineSnapshot->size() != scheduler.stateSize())
+			if (_request.machineSnapshot->size() != scheduler.stateSize())
 			{
 				result.status = Status::BadStateImage;
-				result.why    = "the machine snapshot is not the size this build's Scheduler writes";
+				result.why = "the machine snapshot is not the size this build's Scheduler writes";
 				return result;
 			}
 
 			const Status loadStatus = scheduler.stateLoad(_request.machineSnapshot->data());
 
-			if(loadStatus != Status::Ok)
+			if (loadStatus != Status::Ok)
 			{
 				result.status = loadStatus;
-				result.why    = "Scheduler::stateLoad refused the machine snapshot";
+				result.why = "Scheduler::stateLoad refused the machine snapshot";
 				return result;
 			}
 
@@ -536,20 +549,20 @@ namespace rg2
 		 * A fault ends it too. A faulted context is never dispatched again,
 		 * so running the remaining budget would burn wall-clock time to
 		 * reach the same answer. */
-		while(result.framesRun < _request.frameBudget)
+		while (result.framesRun < _request.frameBudget)
 		{
 			const uint64_t remaining = _request.frameBudget - result.framesRun;
-			const size_t   chunk     = size_t(remaining < g_bootChunkFrames ? remaining : g_bootChunkFrames);
+			const size_t chunk = size_t(remaining < g_bootChunkFrames ? remaining : g_bootChunkFrames);
 
 			scheduler.runFrames(chunk);
 			result.framesRun += chunk;
 
-			if(scheduler.faulted() || scheduler.chainAttached())
+			if (scheduler.faulted() || scheduler.chainAttached())
 				break;
 		}
 
 		result.chainAttached = scheduler.chainAttached();
-		result.faulted       = scheduler.faulted();
+		result.faulted = scheduler.faulted();
 
 		notifyBootStep(BootStep::RunFrames, &scheduler);
 
@@ -586,11 +599,27 @@ namespace rg2
 		installScheduler(&scheduler);
 		m_ready.store(true, std::memory_order_release);
 
-		if(m_board)
+		if (m_board && m_port > 0)
 		{
-			m_socketServer = std::make_unique<TransportSocketServer>(m_board->transport(), 7777);
-			m_socketServer->listen();
+			m_webSocketServer = std::make_unique<TransportWebSocketServer>(m_board->transport(), m_port);
+			if (m_webSocketServer->listen())
+			{
+				m_port = m_webSocketServer->port();
+				m_webSocketServer->startBackgroundThread();
+#if defined(_WIN32)
+				const uint32_t currentPid = static_cast<uint32_t>(_getpid());
+#else
+				const uint32_t currentPid = static_cast<uint32_t>(getpid());
+#endif
+				registerInstance(getDefaultRegistryFilePath(), currentPid, m_port,
+								 "RedGecko2 (Port " + std::to_string(m_port) + ")");
+			}
+			else
+			{
+				m_port = 0;
+			}
 		}
+
 
 		notifyBootStep(BootStep::Publish, &scheduler);
 
@@ -602,7 +631,7 @@ namespace rg2
 
 	void Device::notifyBootStep(const BootStep _step, Scheduler* const _scheduler) noexcept
 	{
-		if(m_bootObserver)
+		if (m_bootObserver)
 			m_bootObserver->onBootStep(_step, _scheduler);
 	}
 
@@ -638,16 +667,15 @@ namespace rg2
 		 * the audio thread. It is held on this object rather than appended
 		 * to _state because the plugin state format has no item for it --
 		 * see boot()'s comment for what that leaves undone. */
-		if(m_ownedScheduler)
+		if (m_ownedScheduler)
 		{
 			m_machineSnapshot.resize(m_ownedScheduler->stateSize());
 			m_ownedScheduler->stateSave(m_machineSnapshot.data());
 		}
 
 		const rg2::StateData& data = m_stateData;
-		const bool ok = rg2::serializeState(_state,
-			data.performance, data.slotPatches, data.slotPatchIds,
-			data.parameterBindings, firmwareVersionWord(), data.parameterOverflowCount);
+		const bool ok = rg2::serializeState(_state, data.performance, data.slotPatches, data.slotPatchIds,
+											data.parameterBindings, firmwareVersionWord(), data.parameterOverflowCount);
 
 		endStateChange();
 		return ok;
@@ -663,13 +691,12 @@ namespace rg2
 		beginStateChange();
 
 		rg2::StateData loaded;
-		const rg2::StateLoadResult result = rg2::deserializeState(_state,
-			loaded.performance, loaded.slotPatches, loaded.slotPatchIds,
-			loaded.parameterBindings, loaded.parameterOverflowCount,
-			m_firmwareStatus.state == rg2::FirmwareState::Present,
-			m_firmwareVersionWord);
+		const rg2::StateLoadResult result =
+			rg2::deserializeState(_state, loaded.performance, loaded.slotPatches, loaded.slotPatchIds,
+								  loaded.parameterBindings, loaded.parameterOverflowCount,
+								  m_firmwareStatus.state == rg2::FirmwareState::Present, m_firmwareVersionWord);
 
-		if(!result.machineLoaded)
+		if (!result.machineLoaded)
 		{
 			endStateChange();
 			return false;
@@ -678,7 +705,7 @@ namespace rg2
 		// The machine side of a restore re-boots through boot()'s sequence.
 		// With no Scheduler there is no machine to load into, so the payload
 		// lands in the held data.
-		if(result.patchLoaded)
+		if (result.patchLoaded)
 			m_stateData = std::move(loaded);
 
 		endStateChange();
@@ -714,10 +741,7 @@ namespace rg2
 		return _percent == 100;
 	}
 
-	uint32_t Device::getDspClockPercent() const
-	{
-		return 100;
-	}
+	uint32_t Device::getDspClockPercent() const { return 100; }
 
 	uint64_t Device::getDspClockHz() const
 	{
@@ -743,10 +767,7 @@ namespace rg2
 	 * raw bytes and the framework's readMidiOut contract is completed
 	 * SMidiEvents; MidiBufferParser is synthLib's own tool for it.
 	 */
-	void Device::readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)
-	{
-		m_midiOutParser.getEvents(_midiOut);
-	}
+	void Device::readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut) { m_midiOutParser.getEvents(_midiOut); }
 
 	void Device::uart0MidiOut(void* _user, uint8_t _byte)
 	{
@@ -758,7 +779,7 @@ namespace rg2
 	{
 		const size_t index = size_t(_control);
 
-		if(index >= g_panelControlCount)
+		if (index >= g_panelControlCount)
 			return;
 
 		/* Clamped here rather than at the converter. The converter saturates
@@ -780,16 +801,18 @@ namespace rg2
 
 	void Device::applyPanelControls() noexcept
 	{
-		if(!m_panelControlsDirty.exchange(false, std::memory_order_acquire))
+		if (!m_panelControlsDirty.exchange(false, std::memory_order_acquire))
 			return;
 
 		Max1039& adc = m_board->adc();
 
-		for(size_t control = 0; control < g_panelControlCount; ++control)
-			adc.setChannelVolts(uint8_t(control), m_panelControls[control].load(std::memory_order_relaxed) * m_panelReferenceVolts);
+		for (size_t control = 0; control < g_panelControlCount; ++control)
+			adc.setChannelVolts(uint8_t(control),
+								m_panelControls[control].load(std::memory_order_relaxed) * m_panelReferenceVolts);
 	}
 
-	void Device::processAudio(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs, const size_t _samples)
+	void Device::processAudio(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs,
+							  const size_t _samples)
 	{
 		// The audio thread's sequence. The set-before-test order is half of
 		// the pairing that makes the state hand-off safe, so it is not free
@@ -801,7 +824,7 @@ namespace rg2
 		// and the block-relative to absolute offset conversion reads it.
 		m_numSamplesProcessed += static_cast<uint32_t>(_samples);
 
-		if(!isValid())
+		if (!isValid())
 		{
 			/* The staged MIDI is dropped, not held. sendMidi enqueues on every
 			 * event the host sends and this is the only other end of that
@@ -816,158 +839,168 @@ namespace rg2
 
 			// The silence the boot window promises: zero the output buffers and
 			// touch the Scheduler not at all.
-			for(auto& out : _outputs)
+			for (auto& out : _outputs)
 			{
-				if(out)
+				if (out)
 					std::fill(out, out + _samples, 0.0f);
 			}
 			return;
 		}
 
 		// The ready branch, and the call order is load-bearing: the
-	// stamped MIDI staged by sendMidi goes out first, before runFrames for
-	// the same block, then one call to
-	// Scheduler::push, then runFrames, then pull, then a read of
-	// Scheduler::faulted(). The call order is what fixes both codec queue
-	// capacities at L + B: push delivers a whole block
-	// before runFrames consumes any of it, and runFrames produces a whole
-	// block before pull takes any of it, so each queue must hold the
-	// lookahead plus the largest host block. Reorder the calls and the
-	// capacity argument collapses.
-	//
-	// The frame conversion is this file's, because the queues carry rg2::Frame
-	// values (eight int32_t slots of Q23) and the
-	// callback receives the framework's float buffers. The scale is
-	// dsp56k::g_float2dspScale and the clamp bounds are dsp56k's own, so the
-	// two directions are exact inverses of dsp56k::sample2dsp/dsp2sample and
-	// the determinism boundary stays integer up to the frames themselves.
+		// stamped MIDI staged by sendMidi goes out first, before runFrames for
+		// the same block, then one call to
+		// Scheduler::push, then runFrames, then pull, then a read of
+		// Scheduler::faulted(). The call order is what fixes both codec queue
+		// capacities at L + B: push delivers a whole block
+		// before runFrames consumes any of it, and runFrames produces a whole
+		// block before pull takes any of it, so each queue must hold the
+		// lookahead plus the largest host block. Reorder the calls and the
+		// capacity argument collapses.
+		//
+		// The frame conversion is this file's, because the queues carry rg2::Frame
+		// values (eight int32_t slots of Q23) and the
+		// callback receives the framework's float buffers. The scale is
+		// dsp56k::g_float2dspScale and the clamp bounds are dsp56k's own, so the
+		// two directions are exact inverses of dsp56k::sample2dsp/dsp2sample and
+		// the determinism boundary stays integer up to the frames themselves.
 
-	/* The submission-to-application junction. sendMidi only stamped and
-	 * enqueued; this is where the emulated machine drains the queue, against
-	 * the running sample counter, which is where sample accuracy actually
-	 * happens. The events carry absolute frame indices already -- sendMidi
-	 * added m_numSamplesProcessed + extraLatency.
-	 *
-	 * The delivery path is the machine's own receive path: Uart0::receive
-	 * lands a byte in the emulated receiver FIFO. The events reach the
-	 * machine in stamp order, at the top of the callback and before
-	 * runFrames. The accuracy gap is real: a block's events all arrive at
-	 * the block's start rather than at their own frames, because no
-	 * frame-indexed delivery entry point exists to carry the stamp.
-	 *
-	 * No Board means no delivery, which is the unbooted Device's honest
-	 * state. */
-	if(m_board)
-	{
-		if(m_socketServer)
+		/* The submission-to-application junction. sendMidi only stamped and
+		 * enqueued; this is where the emulated machine drains the queue, against
+		 * the running sample counter, which is where sample accuracy actually
+		 * happens. The events carry absolute frame indices already -- sendMidi
+		 * added m_numSamplesProcessed + extraLatency.
+		 *
+		 * The delivery path is the machine's own receive path: Uart0::receive
+		 * lands a byte in the emulated receiver FIFO. The events reach the
+		 * machine in stamp order, at the top of the callback and before
+		 * runFrames. The accuracy gap is real: a block's events all arrive at
+		 * the block's start rather than at their own frames, because no
+		 * frame-indexed delivery entry point exists to carry the stamp.
+		 *
+		 * No Board means no delivery, which is the unbooted Device's honest
+		 * state. */
+		if (m_board)
 		{
-			if(!m_socketServer->hasClient())
-				m_socketServer->acceptClient(false);
-			if(m_socketServer->hasClient())
-				m_socketServer->pumpSocket(0);
+			/* Before the MIDI, because a control the host moved in this block is
+			 * part of the state the block's notes are played into. */
+			applyPanelControls();
+
+			Uart0& uart = m_board->uart0();
+
+			for (const auto& e : m_pendingMidi)
+			{
+				if (!e.sysex.empty())
+				{
+					for (const uint8_t byte : e.sysex)
+						uart.receive(byte);
+
+					continue;
+				}
+
+				/* The byte count comes from the status byte and never from
+				 * the struct's three fields: a program change carries one
+				 * data byte and a note-on carries two, so a fixed three-byte
+				 * write would feed the emulated receiver a byte the host
+				 * never sent. synthLib's own parser owns that mapping and
+				 * this is its declared entry point. */
+				const uint32_t length = synthLib::MidiBufferParser::lengthFromStatusByte(e.a);
+
+				uart.receive(e.a);
+
+				if (length > 1)
+					uart.receive(e.b);
+				if (length > 2)
+					uart.receive(e.c);
+			}
 		}
 
-		/* Before the MIDI, because a control the host moved in this block is
-		 * part of the state the block's notes are played into. */
-		applyPanelControls();
+		m_pendingMidi.clear();
 
-		Uart0& uart = m_board->uart0();
-
-		for(const auto& e : m_pendingMidi)
+		/* The block is rendered in chunks of at most kFramesPerChunk, and the loop
+		 * is a BOUND and not an optimisation: the buffers are fixed, so the only
+		 * two honest ways to meet a host block larger than one of them are to
+		 * refuse part of it or to make more than one pass. The previous shape made
+		 * one pass and told push and pull a count the buffers could not carry --
+		 * guarded by an assert, which the shipping build deletes.
+		 *
+		 * The call order holds per chunk, and so does the L + B capacity argument
+		 * it supports: push delivers a whole chunk before runFrames consumes any of
+		 * it, runFrames produces a whole chunk before pull takes any, and a chunk
+		 * is never larger than the host block the queues were sized for. */
+		for (size_t offset = 0; offset < _samples; offset += kFramesPerChunk)
 		{
-			if(!e.sysex.empty())
-			{
-				for(const uint8_t byte : e.sysex)
-					uart.receive(byte);
+			const size_t chunk = _samples - offset < kFramesPerChunk ? _samples - offset : kFramesPerChunk;
 
-				continue;
+			// The ingress conversion. Host floats to Q23 frames, one per sample.
+			for (size_t s = 0; s < chunk; ++s)
+			{
+				m_inFrames[s].slot[0] =
+					_inputs[0] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[0][offset + s])) : 0;
+				m_inFrames[s].slot[1] =
+					_inputs[1] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[1][offset + s])) : 0;
+				m_inFrames[s].slot[2] =
+					_inputs[2] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[2][offset + s])) : 0;
+				m_inFrames[s].slot[3] =
+					_inputs[3] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[3][offset + s])) : 0;
 			}
 
-			/* The byte count comes from the status byte and never from
-			 * the struct's three fields: a program change carries one
-			 * data byte and a note-on carries two, so a fixed three-byte
-			 * write would feed the emulated receiver a byte the host
-			 * never sent. synthLib's own parser owns that mapping and
-			 * this is its declared entry point. */
-			const uint32_t length = synthLib::MidiBufferParser::lengthFromStatusByte(e.a);
+			// One call to Scheduler::push for the chunk, before runFrames consumes
+			// any of it.
+			m_driver->push(m_inFrames.data(), chunk);
 
-			uart.receive(e.a);
+			// One quantum entry point for the chunk. runFrames takes a frame count,
+			// and at the device rate one sample is one ESAI TDM frame, which is one
+			// 96 kHz sample period, so the count here IS the m the framework
+			// requested for these samples.
+			m_driver->runFrames(chunk);
 
-			if(length > 1)
-				uart.receive(e.b);
-			if(length > 2)
-				uart.receive(e.c);
+			// The egress. One call to Scheduler::pull for the chunk -- the audio
+			// thread allocates nothing. The part pull could not supply reads as
+			// silence (CodecSink::pull's contract), and the tail loop below writes
+			// that silence explicitly so the host buffers are always fully written,
+			// never preserved.
+			const size_t taken = m_driver->pull(m_outFrames.data(), chunk);
+
+			for (size_t s = 0; s < taken; ++s)
+			{
+				if (_outputs[0])
+					_outputs[0][offset + s] =
+						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[0]));
+				if (_outputs[1])
+					_outputs[1][offset + s] =
+						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[1]));
+				if (_outputs[2])
+					_outputs[2][offset + s] =
+						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[2]));
+				if (_outputs[3])
+					_outputs[3][offset + s] =
+						dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[3]));
+			}
+			for (size_t s = taken; s < chunk; ++s)
+			{
+				if (_outputs[0])
+					_outputs[0][offset + s] = 0.0f;
+				if (_outputs[1])
+					_outputs[1][offset + s] = 0.0f;
+				if (_outputs[2])
+					_outputs[2][offset + s] = 0.0f;
+				if (_outputs[3])
+					_outputs[3][offset + s] = 0.0f;
+			}
 		}
+
+		// The fault channel. The Device learns of a fault after runFrames
+		// returns, and its
+		// one response is to withdraw -- a release store of false into m_ready,
+		// so isValid() answers false and every later callback takes the
+		// silence-and-zero path until the host re-boots the instance. The fault
+		// is sticky; this device throws nothing and aborts nothing.
+		if (m_driver->faulted())
+			m_ready.store(false, std::memory_order_release);
+
+		m_inCallback.store(false, std::memory_order_release);
 	}
-
-	m_pendingMidi.clear();
-
-	/* The block is rendered in chunks of at most kFramesPerChunk, and the loop
-	 * is a BOUND and not an optimisation: the buffers are fixed, so the only
-	 * two honest ways to meet a host block larger than one of them are to
-	 * refuse part of it or to make more than one pass. The previous shape made
-	 * one pass and told push and pull a count the buffers could not carry --
-	 * guarded by an assert, which the shipping build deletes.
-	 *
-	 * The call order holds per chunk, and so does the L + B capacity argument
-	 * it supports: push delivers a whole chunk before runFrames consumes any of
-	 * it, runFrames produces a whole chunk before pull takes any, and a chunk
-	 * is never larger than the host block the queues were sized for. */
-	for(size_t offset = 0; offset < _samples; offset += kFramesPerChunk)
-	{
-		const size_t chunk = _samples - offset < kFramesPerChunk ? _samples - offset : kFramesPerChunk;
-
-		// The ingress conversion. Host floats to Q23 frames, one per sample.
-		for(size_t s = 0; s < chunk; ++s)
-		{
-			m_inFrames[s].slot[0] = _inputs[0] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[0][offset + s])) : 0;
-			m_inFrames[s].slot[1] = _inputs[1] ? static_cast<int32_t>(dsp56k::sample2dsp(_inputs[1][offset + s])) : 0;
-		}
-
-		// One call to Scheduler::push for the chunk, before runFrames consumes
-		// any of it.
-		m_driver->push(m_inFrames.data(), chunk);
-
-		// One quantum entry point for the chunk. runFrames takes a frame count,
-		// and at the device rate one sample is one ESAI TDM frame, which is one
-		// 96 kHz sample period, so the count here IS the m the framework
-		// requested for these samples.
-		m_driver->runFrames(chunk);
-
-		// The egress. One call to Scheduler::pull for the chunk -- the audio
-		// thread allocates nothing. The part pull could not supply reads as
-		// silence (CodecSink::pull's contract), and the tail loop below writes
-		// that silence explicitly so the host buffers are always fully written,
-		// never preserved.
-		const size_t taken = m_driver->pull(m_outFrames.data(), chunk);
-
-		for(size_t s = 0; s < taken; ++s)
-		{
-			if(_outputs[0])
-				_outputs[0][offset + s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[0]));
-			if(_outputs[1])
-				_outputs[1][offset + s] = dsp56k::dsp2sample<float>(static_cast<dsp56k::TWord>(m_outFrames[s].slot[1]));
-		}
-		for(size_t s = taken; s < chunk; ++s)
-		{
-			if(_outputs[0])
-				_outputs[0][offset + s] = 0.0f;
-			if(_outputs[1])
-				_outputs[1][offset + s] = 0.0f;
-		}
-	}
-
-	// The fault channel. The Device learns of a fault after runFrames
-	// returns, and its
-	// one response is to withdraw -- a release store of false into m_ready,
-	// so isValid() answers false and every later callback takes the
-	// silence-and-zero path until the host re-boots the instance. The fault
-	// is sticky; this device throws nothing and aborts nothing.
-	if(m_driver->faulted())
-		m_ready.store(false, std::memory_order_release);
-
-	m_inCallback.store(false, std::memory_order_release);
-}
 
 	bool Device::sendMidi(const synthLib::SMidiEvent& _ev, std::vector<synthLib::SMidiEvent>& _response)
 	{
@@ -1004,7 +1037,7 @@ namespace rg2
 		// The bound the constructor reserved. Refusing here is what keeps
 		// push_back from reallocating on the audio thread; the false is the
 		// honest answer for an event this device did not take.
-		if(m_pendingMidi.size() >= kMaxPendingMidi)
+		if (m_pendingMidi.size() >= kMaxPendingMidi)
 			return false;
 
 		// Synchronous answer: a reply to a message the host sent comes back
@@ -1014,6 +1047,17 @@ namespace rg2
 		// response vector and success.
 		m_pendingMidi.push_back(std::move(e));
 		return true;
+	}
+
+	void Device::sendRealtimeByte(const uint8_t _byte)
+	{
+		if (m_pendingMidi.size() >= kMaxPendingMidi)
+			return;
+
+		synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
+		e.a = _byte;
+		e.offset = m_numSamplesProcessed + getExtraLatencySamples();
+		m_pendingMidi.push_back(std::move(e));
 	}
 
 	void Device::beginStateChange() noexcept
@@ -1031,7 +1075,7 @@ namespace rg2
 		uint64_t spins = 0;
 #endif
 
-		while(m_inCallback.load(std::memory_order_seq_cst))
+		while (m_inCallback.load(std::memory_order_seq_cst))
 		{
 			std::this_thread::yield();
 
@@ -1050,6 +1094,52 @@ namespace rg2
 		m_ready.store(true, std::memory_order_release);
 	}
 
+	void Device::setPort(const uint16_t port)
+	{
+		if (m_port == port && port != 0)
+			return;
+
+		const bool wasReady = isValid();
+		if (wasReady)
+			beginStateChange();
+
+		const uint16_t oldPort = m_port;
+		m_port = port;
+
+#if defined(_WIN32)
+		const uint32_t currentPid = static_cast<uint32_t>(_getpid());
+#else
+		const uint32_t currentPid = static_cast<uint32_t>(getpid());
+#endif
+		if (oldPort > 0)
+		{
+			unregisterInstance(getDefaultRegistryFilePath(), currentPid, oldPort);
+		}
+
+		if (m_webSocketServer)
+		{
+			m_webSocketServer->close();
+			m_webSocketServer.reset();
+		}
+		if (m_board && m_port > 0)
+		{
+			m_webSocketServer = std::make_unique<TransportWebSocketServer>(m_board->transport(), m_port);
+			if (m_webSocketServer->listen())
+			{
+				m_port = m_webSocketServer->port();
+				m_webSocketServer->startBackgroundThread();
+				registerInstance(getDefaultRegistryFilePath(), currentPid, m_port,
+								 "RedGecko2 (Port " + std::to_string(m_port) + ")");
+			}
+			else
+				m_port = 0;
+		}
+
+		if (wasReady)
+			endStateChange();
+	}
+
+
 	/* The member pin, checked inside the class's own access. These
 	 * static_asserts keep the members' types from drifting. A test that
 	 * bound them from outside the class could not: the members are protected
@@ -1059,10 +1149,11 @@ namespace rg2
 	struct Device::MemberPin
 	{
 		static_assert(std::is_same_v<decltype(m_numSamplesProcessed), uint32_t>,
-			"m_numSamplesProcessed is the subclass's OWN uint32_t member, not an inherited one (the MIDI-out offset conversion reads it)");
+					  "m_numSamplesProcessed is the subclass's OWN uint32_t member, not an inherited one (the MIDI-out "
+					  "offset conversion reads it)");
 		static_assert(std::is_same_v<decltype(m_ready), std::atomic<bool>>,
-			"m_ready is an std::atomic<bool>: the hand-off pairing's first flag");
+					  "m_ready is an std::atomic<bool>: the hand-off pairing's first flag");
 		static_assert(std::is_same_v<decltype(m_inCallback), std::atomic<bool>>,
-			"m_inCallback is an std::atomic<bool>: the acknowledgement the reverse direction needs");
+					  "m_inCallback is an std::atomic<bool>: the acknowledgement the reverse direction needs");
 	};
-}
+} // namespace rg2

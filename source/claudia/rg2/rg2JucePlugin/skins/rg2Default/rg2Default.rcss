@@ -20,8 +20,8 @@ body
 	flex-direction: column;
 	width: 1024dp;
 	height: 560dp;
-	background-color: #92151b;
-	border: 3dp #731014;
+	background-color: #c41e24;
+	border: 2dp #1a0406;
 	box-sizing: border-box;
 }
 
@@ -30,8 +30,8 @@ body
 {
 	display: flex;
 	flex-direction: column;
-	background-color: #7b1216;
-	border-bottom: 2dp #5e0d11;
+	background-color: #c41e24;
+	border-bottom: 2dp #1a0406;
 	padding: 4dp 14dp 6dp 14dp;
 	box-sizing: border-box;
 }
@@ -42,15 +42,17 @@ body
 	flex-direction: row;
 	justify-content: space-between;
 	align-items: center;
-	padding: 2dp 4dp 3dp 4dp;
-	border-bottom: 1dp #540c0f;
+	padding: 2dp 6dp 3dp 6dp;
+	background-color: #8c1015;
+	border-bottom: 1dp #1a0406;
+	border-radius: 2dp;
 }
 
 .jack_lbl
 {
-	font-size: 8dp;
-	font-weight: 700;
-	color: #e8b0b2;
+	font-size: 7.5dp;
+	font-weight: 800;
+	color: #ffffff;
 	letter-spacing: 0.8dp;
 }
 
@@ -71,34 +73,102 @@ body
 	gap: 10dp;
 }
 
-.clavia_logo
-{
-	font-size: 15dp;
-	font-weight: 900;
-	color: #ffffff;
-	letter-spacing: 2dp;
-	font-style: italic;
-	text-shadow: 1dp 1dp 2dp #000000;
-}
-
 .brand_title
 {
-	font-size: 14dp;
-	font-weight: 800;
+	font-size: 16dp;
+	font-weight: 900;
 	color: #ffffff;
-	letter-spacing: 2dp;
+	letter-spacing: 3dp;
 }
 
-.brand_sub
+.brand_subtitle
 {
+	font-size: 8dp;
+	font-weight: 800;
+	color: #ffcccc;
+	letter-spacing: 1.5dp;
+	margin-left: 2dp;
+}
+
+.brand_bar_right
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 10dp;
+}
+
+.port_config_box
+{
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	background-color: #1e2023;
+	border: 1dp #121315;
+	border-radius: 4dp;
+	padding: 3dp 8dp;
+	gap: 6dp;
+}
+
+.port_config_lbl
+{
+	font-size: 9dp;
+	font-weight: 800;
+	color: #a4a9b2;
+	letter-spacing: 0.5dp;
+}
+
+.port_input_field
+{
+	width: 56dp;
+	height: 18dp;
+	line-height: 16dp;
+	background-color: #121315;
+	border: 1dp #383b40;
+	border-radius: 3dp;
+	color: #34d399;
 	font-size: 10dp;
 	font-weight: 700;
-	color: #ff9da1;
-	background-color: #560a0e;
-	padding: 2dp 6dp;
+	text-align: center;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+.port_input_field:focus
+{
+	border-color: #ff3838;
+	background-color: #1e2023;
+}
+
+.btn_port_action
+{
+	display: inline-block;
+	text-align: center;
+	line-height: 16dp;
+	height: 18dp;
+	font-size: 9dp;
+	font-weight: 800;
+	letter-spacing: 0.5dp;
+	color: #ffffff;
+	background-color: #2b2d31;
+	border: 1dp #383b40;
 	border-radius: 3dp;
-	border: 1dp #8c161c;
-	letter-spacing: 1dp;
+	padding: 0 6dp;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+
+.btn_port_action:hover
+{
+	background-color: #c41e24;
+	border-color: #ff3838;
+	color: #ffffff;
+}
+
+.btn_port_action:active
+{
+	background-color: #8c1015;
+	border-color: #1a0406;
 }
 
 /* Socket Status */
@@ -107,20 +177,27 @@ body
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	padding: 3dp 8dp;
+	padding: 4dp 10dp;
 	border-radius: 4dp;
-	background-color: #1a1a20;
-	border: 1dp #30303c;
-	gap: 8dp;
+	background-color: #1e2023;
+	border: 1dp #121315;
+	gap: 10dp;
+}
+
+.socket_status:hover
+{
+	border-color: #383b40;
 }
 
 .socket_indicator
 {
 	display: inline-block;
-	width: 8dp;
-	height: 8dp;
-	border-radius: 4dp;
+	width: 6dp;
+	height: 6dp;
+	border-radius: 3dp;
+	border: none;
 	background-color: #666672;
+	box-sizing: border-box;
 }
 
 .socket_details
@@ -140,68 +217,72 @@ body
 
 .socket_label
 {
-	font-size: 8dp;
-	font-weight: 700;
-	color: #888898;
+	font-size: 9dp;
+	font-weight: 800;
+	color: #a4a9b2;
 	letter-spacing: 0.8dp;
 }
 
 .socket_badge
 {
-	font-size: 8dp;
-	font-weight: 700;
-	padding: 1dp 4dp;
-	border-radius: 2dp;
+	font-size: 9dp;
+	font-weight: 800;
+	padding: 1.5dp 6dp;
+	border-radius: 3dp;
+	letter-spacing: 0.5dp;
 }
 
 .socket_status.socket_listening .socket_indicator
 {
 	background-color: #f59e0b;
-	box-shadow: 0 0 5dp #f59e0b;
+	border: none;
 }
 
 .socket_status.socket_listening .socket_badge
 {
-	background-color: #382c16;
+	background-color: #3b2808;
 	color: #fbbf24;
 	border: 1dp #784c16;
 }
 
 .socket_status.socket_connected
 {
-	background-color: #102416;
-	border-color: #22c55e;
+	background-color: #1e2023;
+	border-color: #166534;
 }
 
 .socket_status.socket_connected .socket_indicator
 {
-	background-color: #22c55e;
-	box-shadow: 0 0 5dp #22c55e;
+	background-color: #10b981;
+	border: none;
 }
 
 .socket_status.socket_connected .socket_badge
 {
-	background-color: #143220;
+	background-color: #062614;
 	color: #4ade80;
-	border: 1dp #1c7538;
+	border: 1dp #166534;
 }
 
 .socket_status.socket_offline .socket_indicator
 {
 	background-color: #ef4444;
+	border: none;
 }
 
 .socket_status.socket_offline .socket_badge
 {
-	background-color: #361416;
+	background-color: #2b0c0e;
 	color: #f87171;
-	border: 1dp #781c20;
+	border: 1dp #7f1d1d;
 }
 
 .socket_text
 {
 	font-size: 9dp;
-	color: #b0b0bc;
+	font-weight: 600;
+	color: #cbd0d6;
+	letter-spacing: 0.3dp;
 }
 
 /* ==========================================================================
@@ -212,9 +293,9 @@ body
 {
 	display: flex;
 	flex-direction: row;
-	background-color: #484c4e;
-	border-top: 2dp #323537;
-	border-bottom: 2dp #323537;
+	background-color: #1e2023;
+	border-top: 2dp #1a0406;
+	border-bottom: 2dp #1a0406;
 	padding: 8dp 10dp;
 	gap: 8dp;
 	height: 480dp;
@@ -225,8 +306,22 @@ body
 {
 	width: 2dp;
 	height: 100%;
-	background-color: #2e3032;
-	border-right: 1dp #5c6264;
+	background-color: #121315;
+	border-right: 1dp #383b40;
+}
+
+/* Common Section Containers */
+.left_top_row,
+.left_mid_row,
+.left_bottom_row,
+.param_lcds_row,
+.encoders_cluster,
+.variations_box,
+.param_pages_column
+{
+	background-color: #2b2d31;
+	border: 1dp #121315;
+	border-radius: 4dp;
 }
 
 /* ==========================================================================
@@ -248,9 +343,6 @@ body
 	flex-direction: row;
 	justify-content: space-between;
 	align-items: flex-start;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 6dp 8dp;
 	box-sizing: border-box;
 }
@@ -265,8 +357,8 @@ body
 
 .ctrl_label
 {
-	font-size: 8dp;
-	font-weight: 700;
+	font-size: 9dp;
+	font-weight: 800;
 	color: #ffffff;
 	letter-spacing: 0.5dp;
 	text-align: center;
@@ -274,9 +366,9 @@ body
 
 .sub_text_tiny
 {
-	font-size: 7dp;
-	font-weight: 600;
-	color: #d0d2d4;
+	font-size: 8dp;
+	font-weight: 700;
+	color: #a4a9b2;
 	letter-spacing: 0.3dp;
 	text-align: center;
 }
@@ -288,29 +380,45 @@ body
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	drag: drag;
+	cursor: ns-resize;
 }
 
 input.range.knob_slider
 {
 	width: 34dp;
-	height: 20dp;
+	height: 18dp;
+	drag: drag;
+	cursor: ns-resize;
 }
 
 input.range.knob_slider slidertrack
 {
-	background-color: #1c1d1e;
-	border: 1dp #303335;
-	border-radius: 3dp;
-	height: 6dp;
+	background-color: #121315;
+	border: 1dp #383b40;
+	border-radius: 2dp;
+	height: 4dp;
 }
 
 input.range.knob_slider sliderbar
 {
-	width: 14dp;
-	height: 16dp;
-	background-color: #242528;
-	border: 1dp #ffffff;
+	width: 12dp;
+	height: 14dp;
+	background-color: #2b2d31;
+	border: 1dp #383b40;
 	border-radius: 2dp;
+}
+
+input.range.knob_slider sliderbar:hover
+{
+	background-color: #383b40;
+	border-color: #555b63;
+}
+
+input.range.knob_slider sliderbar:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 input.range.knob_slider sliderarrowdec,
@@ -326,9 +434,8 @@ input.range.knob_slider sliderarrowinc
 	width: 26dp;
 	height: 26dp;
 	border-radius: 13dp;
-	background-color: #222325;
-	border: 1dp #505355;
-	box-shadow: inset 0 0 4dp #000000;
+	background-color: #1e2023;
+	border: 2dp #121315;
 }
 
 .level_readout_tiny
@@ -338,7 +445,7 @@ input.range.knob_slider sliderarrowinc
 	align-items: center;
 	font-size: 7dp;
 	color: #ffffff;
-	font-weight: 700;
+	font-weight: 800;
 }
 
 .mic_meter_row
@@ -352,16 +459,19 @@ input.range.knob_slider sliderarrowinc
 
 .meter_dot
 {
-	width: 3dp;
-	height: 3dp;
-	border-radius: 2dp;
-	background-color: #2a2c2e;
+	width: 5dp;
+	height: 5dp;
+	border-radius: 2.5dp;
+	border: none;
+	background-color: #301214;
+	box-sizing: border-box;
 }
 
 .meter_tag
 {
 	font-size: 6dp;
-	color: #c0c4c6;
+	font-weight: 700;
+	color: #a4a9b2;
 }
 
 .sys_store_cluster
@@ -408,13 +518,26 @@ input.range.knob_slider sliderarrowinc
 {
 	width: 50dp;
 	height: 20dp;
-	background-color: #1e2022;
-	border: 1dp #3c4042;
-	border-radius: 2dp;
-	color: #d8dadc;
-	font-size: 7dp;
-	font-weight: 700;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 3dp;
+	color: #e2e2e8;
+	font-size: 7.5dp;
+	font-weight: 800;
 	cursor: pointer;
+}
+
+.rocker_switch:hover
+{
+	background-color: #34373c;
+	border-color: #555b63;
+	color: #ffffff;
+}
+
+.rocker_switch:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 /* ==========================================================================
@@ -431,8 +554,8 @@ input.range.knob_slider sliderarrowinc
 
 .lcd_bezel
 {
-	background-color: #1a1b1d;
-	border: 2dp #282a2c;
+	background-color: #121315;
+	border: 1dp #383b40;
 	border-radius: 4dp;
 	padding: 4dp;
 	width: 300dp;
@@ -441,8 +564,8 @@ input.range.knob_slider sliderarrowinc
 
 .lcd_screen
 {
-	background-color: #487f22;
-	border: 1dp #2e5414;
+	background-color: #65a81e;
+	border: 1dp #386b0e;
 	border-radius: 2dp;
 	padding: 5dp 10dp;
 	box-sizing: border-box;
@@ -459,12 +582,11 @@ input.range.knob_slider sliderarrowinc
 
 .lcd_row
 {
-	font-family: monospace;
+	font-family: DejaVu Sans Mono;
 	font-size: 13dp;
-	font-weight: 900;
-	color: #0b1a04;
+	font-weight: 700;
+	color: #061102;
 	letter-spacing: 1.5dp;
-	text-shadow: 0 0 1dp #305814;
 }
 
 /* ==========================================================================
@@ -476,9 +598,6 @@ input.range.knob_slider sliderarrowinc
 	display: flex;
 	flex-direction: row;
 	gap: 8dp;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 6dp 8dp;
 	box-sizing: border-box;
 }
@@ -504,18 +623,19 @@ input.range.knob_slider sliderarrowinc
 	width: 50dp;
 	height: 50dp;
 	border-radius: 25dp;
-	background-color: #1e1f21;
-	border: 2dp #383a3c;
+	background-color: #1e2023;
+	border: 2dp #121315;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	cursor: pointer;
-	box-shadow: 0 0 6dp #101012;
+	drag: drag;
+	cursor: ns-resize;
 }
 
 .big_data_wheel:hover
 {
-	border-color: #55585b;
+	border-color: #383b40;
+	background-color: #2b2d31;
 }
 
 .wheel_dent
@@ -523,9 +643,10 @@ input.range.knob_slider sliderarrowinc
 	width: 10dp;
 	height: 10dp;
 	border-radius: 5dp;
-	background-color: #121314;
-	border: 1dp #28292b;
-	margin-left: -20dp;
+	background-color: #121315;
+	border: 1dp #383b40;
+	margin-left: -22dp;
+	pointer-events: none;
 }
 
 .nav_cross_unit
@@ -547,12 +668,12 @@ input.range.knob_slider sliderarrowinc
 {
 	width: 18dp;
 	height: 14dp;
-	background-color: #242628;
-	border: 1dp #3c3f42;
-	border-radius: 2dp;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 2.5dp;
 	color: #ffffff;
 	font-size: 7dp;
-	font-weight: 700;
+	font-weight: 800;
 	cursor: pointer;
 	padding: 0;
 	display: flex;
@@ -562,7 +683,14 @@ input.range.knob_slider sliderarrowinc
 
 .nav_btn:hover
 {
-	background-color: #34373a;
+	background-color: #34373c;
+	border-color: #555b63;
+}
+
+.nav_btn:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .patch_load_col
@@ -584,14 +712,14 @@ input.range.knob_slider sliderarrowinc
 
 .kb_assign_header
 {
-	border-bottom: 1dp #303335;
+	border-bottom: 1dp #121315;
 	padding-bottom: 2dp;
 }
 
 .section_caption
 {
 	font-size: 8dp;
-	font-weight: 700;
+	font-weight: 800;
 	color: #ffffff;
 	letter-spacing: 0.5dp;
 }
@@ -616,28 +744,35 @@ input.range.knob_slider sliderarrowinc
 {
 	width: 25dp;
 	height: 25dp;
-	background-color: #242628;
-	border: 1dp #3c4044;
-	border-radius: 3dp;
+	line-height: 23dp;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 3.5dp;
 	color: #ffffff;
 	font-size: 11dp;
 	font-weight: 800;
 	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: inline-block;
+	text-align: center;
 }
 
 .slot_btn_g2:hover
 {
 	background-color: #34373c;
+	border-color: #555b63;
+}
+
+.slot_btn_g2:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .slot_btn_g2:checked
 {
-	background-color: #b21a20;
-	border-color: #ff3c44;
-	box-shadow: 0 0 6dp #60080c;
+	background-color: #c41e24;
+	border-color: #ff3838;
+	color: #ffffff;
 }
 
 .split_col
@@ -661,12 +796,12 @@ input.range.knob_slider sliderarrowinc
 .active_slot_badge
 {
 	font-size: 8dp;
-	font-weight: 700;
+	font-weight: 800;
 	color: #ffffff;
-	background-color: #282a2c;
-	padding: 1dp 5dp;
-	border-radius: 2dp;
-	border: 1dp #3c4042;
+	background-color: #121315;
+	padding: 1.5dp 6dp;
+	border-radius: 3dp;
+	border: 1dp #383b40;
 }
 
 /* ==========================================================================
@@ -678,9 +813,6 @@ input.range.knob_slider sliderarrowinc
 	display: flex;
 	flex-direction: row;
 	gap: 6dp;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 6dp 8dp;
 	box-sizing: border-box;
 	align-items: flex-start;
@@ -713,12 +845,28 @@ input.range.knob_slider sliderarrowinc
 {
 	width: 26dp;
 	height: 18dp;
-	font-size: 7dp;
+	line-height: 16dp;
+	font-size: 8dp;
 	font-weight: 700;
 	padding: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: inline-block;
+	text-align: center;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 2.5dp;
+	color: #ffffff;
+}
+
+.btn_octave:hover
+{
+	background-color: #34373c;
+	border-color: #555b63;
+}
+
+.btn_octave:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .util_btn_col
@@ -739,25 +887,32 @@ input.range.knob_slider sliderarrowinc
 
 .btn_shift
 {
-	width: 32dp;
-	height: 28dp;
-	background-color: #d6d4ce;
-	border: 1dp #f0eee8;
-	color: #121314;
-	font-weight: 900;
+	width: 36dp;
+	height: 22dp;
+	line-height: 20dp;
+	display: inline-block;
+	text-align: center;
+	font-size: 9.5dp;
+	background-color: #dcdad2;
+	border: 1dp #8e8c84;
+	color: #121315;
+	font-weight: 700;
 	border-radius: 3dp;
 	cursor: pointer;
 }
 
 .btn_shift:hover
 {
-	background-color: #ffffff;
+	background-color: #eeece4;
+	border-color: #aba89e;
+	color: #000000;
 }
 
 .btn_shift:checked
 {
-	background-color: #ffde59;
-	border-color: #ffffff;
+	background-color: #f59e0b;
+	border: 1dp #b45309;
+	color: #000000;
 }
 
 .perf_controllers_box
@@ -765,7 +920,7 @@ input.range.knob_slider sliderarrowinc
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 5dp;
+	gap: 6dp;
 	margin-left: 4dp;
 }
 
@@ -774,45 +929,157 @@ input.range.knob_slider sliderarrowinc
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 1dp;
+	gap: 2dp;
 }
 
 .perf_label
 {
-	font-size: 6dp;
+	font-size: 8dp;
 	font-weight: 800;
 	color: #ffffff;
+	letter-spacing: 0.5dp;
 }
 
-input.range.perf_slider
+/* Clavia Wooden Pitch Stick Rocker */
+.pitch_stick_slot
 {
-	width: 32dp;
-	height: 16dp;
+	position: relative;
+	width: 46dp;
+	height: 26dp;
+	background-color: #121315;
+	border: 1.5dp #1a0406;
+	border-radius: 3dp;
+	box-sizing: border-box;
 }
 
-input.range.perf_slider slidertrack
+input.range.perf_pitch_stick
 {
-	background-color: #1a1a1c;
-	border: 1dp #2c2d30;
-	border-radius: 2dp;
-	height: 4dp;
+	width: 43dp;
+	height: 23dp;
+	drag: drag;
+	cursor: ew-resize;
 }
 
-input.range.perf_slider sliderbar
+input.range.perf_pitch_stick slidertrack
 {
-	width: 10dp;
-	height: 12dp;
-	background-color: #c41e24;
-	border: 1dp #ff555c;
-	border-radius: 2dp;
+	height: 23dp;
+	background-color: transparent;
+	border: none;
 }
 
-input.range.perf_slider sliderarrowdec,
-input.range.perf_slider sliderarrowinc
+input.range.perf_pitch_stick sliderbar
+{
+	width: 22dp;
+	height: 21dp;
+	margin-top: 1dp;
+	decorator: vertical-gradient(#c68a4c #b87333);
+	border: 1.5dp #7a4618;
+	border-radius: 3dp;
+}
+
+input.range.perf_pitch_stick sliderbar:hover
+{
+	decorator: vertical-gradient(#d4995b #c68a4c);
+	border-color: #92541e;
+}
+
+input.range.perf_pitch_stick sliderbar:active
+{
+	decorator: vertical-gradient(#aa6a2e #9c5e26);
+	border-color: #5c3410;
+}
+
+input.range.perf_pitch_stick sliderarrowdec,
+input.range.perf_pitch_stick sliderarrowinc
 {
 	display: none;
 	width: 0;
 	height: 0;
+}
+
+.pitch_center_notch
+{
+	position: absolute;
+	left: 22dp;
+	top: 3dp;
+	width: 2dp;
+	height: 17dp;
+	background-color: #522d0c;
+	border-left: 0.5dp #381e08;
+	border-right: 0.5dp #8a5022;
+	pointer-events: none;
+}
+
+/* Clavia Textured Stone Mod Wheel */
+.mod_wheel_slot
+{
+	position: relative;
+	width: 24dp;
+	height: 38dp;
+	background-color: #121315;
+	border: 1.5dp #1a0406;
+	border-radius: 3dp;
+	box-sizing: border-box;
+}
+
+input.range.perf_mod_wheel
+{
+	width: 21dp;
+	height: 35dp;
+	drag: drag;
+	cursor: ns-resize;
+}
+
+input.range.perf_mod_wheel slidertrack
+{
+	width: 21dp;
+	height: 35dp;
+	background-color: transparent;
+	border: none;
+}
+
+input.range.perf_mod_wheel sliderbar
+{
+	width: 19dp;
+	height: 16dp;
+	margin-left: 1dp;
+	decorator: vertical-gradient(#7c8085 #64686c);
+	border: 1.5dp #3e4145;
+	border-radius: 2.5dp;
+}
+
+input.range.perf_mod_wheel sliderbar:hover
+{
+	decorator: vertical-gradient(#8a8e94 #72767a);
+	border-color: #52565c;
+}
+
+input.range.perf_mod_wheel sliderbar:active
+{
+	decorator: vertical-gradient(#5a5e62 #4e5256);
+	border-color: #2b2e32;
+}
+
+input.range.perf_mod_wheel sliderarrowdec,
+input.range.perf_mod_wheel sliderarrowinc
+{
+	display: none;
+	width: 0;
+	height: 0;
+}
+
+.mod_wheel_groove
+{
+	position: absolute;
+	left: 4dp;
+	top: 17dp;
+	width: 14dp;
+	height: 3dp;
+	background-color: #222426;
+	border-top: 1dp #121315;
+	border-bottom: 1dp #505458;
+	border-radius: 1.5dp;
+	pointer-events: none;
 }
 
 .comm_leds_col
@@ -825,27 +1092,30 @@ input.range.perf_slider sliderarrowinc
 
 .comm_led
 {
-	width: 4dp;
-	height: 4dp;
-	border-radius: 2dp;
+	width: 5dp;
+	height: 5dp;
+	border-radius: 2.5dp;
+	border: none;
+	box-sizing: border-box;
 }
 
 .comm_led.lit
 {
 	background-color: #22c55e;
-	box-shadow: 0 0 4dp #22c55e;
+	border: none;
 }
 
 .comm_led.unlit
 {
-	background-color: #102616;
+	background-color: #0c2414;
+	border: none;
 }
 
 .comm_lbl
 {
-	font-size: 5dp;
+	font-size: 7dp;
 	font-weight: 700;
-	color: #c0c4c6;
+	color: #a4a9b2;
 }
 
 /* ==========================================================================
@@ -878,7 +1148,7 @@ input.range.perf_slider sliderarrowinc
 
 .col_hdr_text
 {
-	font-size: 8dp;
+	font-size: 9.5dp;
 	font-weight: 700;
 	color: #ffffff;
 	letter-spacing: 0.5dp;
@@ -891,18 +1161,15 @@ input.range.perf_slider sliderarrowinc
 	flex-direction: row;
 	align-items: center;
 	gap: 6dp;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 4dp 6dp;
 	box-sizing: border-box;
 }
 
 .param_lcd_frame
 {
-	background-color: #18191b;
-	border: 2dp #282a2c;
-	border-radius: 3dp;
+	background-color: #121315;
+	border: 1dp #383b40;
+	border-radius: 4dp;
 	padding: 3dp;
 	width: 138dp;
 	box-sizing: border-box;
@@ -910,13 +1177,13 @@ input.range.perf_slider sliderarrowinc
 
 .param_lcd_screen
 {
-	background-color: #487f22;
-	border: 1dp #2e5414;
+	background-color: #65a81e;
+	border: 1dp #386b0e;
 	border-radius: 2dp;
 	height: 38dp;
 	display: flex;
 	flex-direction: row;
-	padding: 2dp 4dp;
+	padding: 2dp 6dp;
 	box-sizing: border-box;
 }
 
@@ -925,32 +1192,35 @@ input.range.perf_slider sliderarrowinc
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
-	width: 62dp;
+	width: 61dp;
 }
 
 .param_lcd_vert_split
 {
 	width: 1dp;
 	height: 100%;
-	background-color: #366018;
+	background-color: #386b0e;
+	border-right: 1dp #76c024;
 	margin: 0 2dp;
 }
 
 .param_name
 {
-	font-family: monospace;
-	font-size: 8dp;
+	font-family: DejaVu Sans Mono;
+	font-size: 9dp;
 	font-weight: 700;
-	color: #0b1a04;
+	color: #0c1c04;
+	letter-spacing: 0.5dp;
 }
 
 .param_data
 {
-	font-family: monospace;
-	font-size: 10dp;
-	font-weight: 900;
-	color: #0b1a04;
+	font-family: DejaVu Sans Mono;
+	font-size: 11dp;
+	font-weight: 700;
+	color: #040c01;
 	margin-top: 1dp;
+	letter-spacing: 0.5dp;
 }
 
 .patch_settings_box
@@ -972,9 +1242,6 @@ input.range.perf_slider sliderarrowinc
 	flex-direction: row;
 	justify-content: flex-start;
 	gap: 6dp;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 8dp 6dp;
 	box-sizing: border-box;
 	width: 602dp;
@@ -1003,48 +1270,51 @@ input.range.perf_slider sliderarrowinc
 	position: relative;
 	width: 64dp;
 	height: 64dp;
+	drag: drag;
+	cursor: ns-resize;
 }
 
 .ring_led
 {
 	position: absolute;
-	width: 4dp;
-	height: 4dp;
-	border-radius: 2dp;
+	width: 5dp;
+	height: 5dp;
+	border-radius: 2.5dp;
+	border: none;
 	box-sizing: border-box;
+	pointer-events: none;
 }
 
 .ring_led.unlit
 {
-	background-color: #30080a;
-	border: 1dp #1c0406;
+	background-color: #301214;
+	border: none;
 }
 
 .ring_led.lit
 {
-	background-color: #ff252c;
-	border: 1dp #ffa0a4;
-	box-shadow: 0 0 5dp #ff2026;
+	background-color: #ff3838;
+	border: none;
 }
 
-/* Trigonometric positioning of the 15 LEDs in a 270-degree arc around (30,30) */
-.ring_led_0  { left: 10dp; top: 46dp; }
-.ring_led_1  { left: 5dp;  top: 39dp; }
-.ring_led_2  { left: 2dp;  top: 31dp; }
-.ring_led_3  { left: 3dp;  top: 22dp; }
-.ring_led_4  { left: 6dp;  top: 14dp; }
-.ring_led_5  { left: 12dp; top: 8dp;  }
-.ring_led_6  { left: 19dp; top: 4dp;  }
-.ring_led_7  { left: 28dp; top: 2dp;  }
-.ring_led_8  { left: 37dp; top: 4dp;  }
-.ring_led_9  { left: 44dp; top: 8dp;  }
-.ring_led_10 { left: 50dp; top: 14dp; }
-.ring_led_11 { left: 53dp; top: 22dp; }
-.ring_led_12 { left: 54dp; top: 31dp; }
-.ring_led_13 { left: 51dp; top: 39dp; }
-.ring_led_14 { left: 46dp; top: 46dp; }
+/* Symmetric integer pixel coordinates around (32, 32), R=24dp */
+.ring_led_0  { left: 13dp; top: 47dp; }
+.ring_led_1  { left:  8dp; top: 40dp; }
+.ring_led_2  { left:  6dp; top: 33dp; }
+.ring_led_3  { left:  7dp; top: 25dp; }
+.ring_led_4  { left: 10dp; top: 17dp; }
+.ring_led_5  { left: 15dp; top: 11dp; }
+.ring_led_6  { left: 22dp; top:  7dp; }
+.ring_led_7  { left: 30dp; top:  6dp; }
+.ring_led_8  { left: 38dp; top:  7dp; }
+.ring_led_9  { left: 45dp; top: 11dp; }
+.ring_led_10 { left: 50dp; top: 17dp; }
+.ring_led_11 { left: 53dp; top: 25dp; }
+.ring_led_12 { left: 54dp; top: 33dp; }
+.ring_led_13 { left: 52dp; top: 40dp; }
+.ring_led_14 { left: 47dp; top: 47dp; }
 
-/* Central Encoder Rotor Knob */
+/* Central Anodized Tactile Rotor Knob */
 .encoder_rotor
 {
 	position: absolute;
@@ -1053,51 +1323,64 @@ input.range.perf_slider sliderarrowinc
 	width: 40dp;
 	height: 40dp;
 	border-radius: 20dp;
-	background-color: #18191b;
-	border: 2dp #323538;
+	background-color: #1e2023;
+	border: 2dp #121315;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	cursor: pointer;
-	box-shadow: 0 0 4dp #0a0a0c;
-}
-
-.encoder_rotor:hover
-{
-	border-color: #55595d;
+	pointer-events: none;
 }
 
 .knob_dial
 {
-	width: 32dp;
-	height: 32dp;
-	border-radius: 16dp;
-	background-color: #222427;
-	border: 1dp #404448;
+	width: 28dp;
+	height: 28dp;
+	border-radius: 14dp;
+	background-color: #2b2d31;
+	border: 1dp #383b40;
 	display: flex;
 	justify-content: center;
 	align-items: flex-start;
+	pointer-events: none;
 }
 
 .dial_dot
 {
-	width: 3dp;
+	width: 2dp;
 	height: 6dp;
 	background-color: #ffffff;
 	border-radius: 1dp;
 	margin-top: 2dp;
+	pointer-events: none;
 }
 
 .btn_col_select
 {
 	width: 28dp;
 	height: 16dp;
-	font-size: 8dp;
-	font-weight: 800;
+	line-height: 14dp;
+	font-size: 9dp;
+	font-weight: 700;
 	padding: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: inline-block;
+	text-align: center;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 2.5dp;
+	color: #e0e2e5;
+}
+
+.btn_col_select:hover
+{
+	background-color: #34373c;
+	border-color: #555b63;
+	color: #ffffff;
+}
+
+.btn_col_select:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 /* ==========================================================================
@@ -1117,9 +1400,6 @@ input.range.perf_slider sliderarrowinc
 	display: flex;
 	flex-direction: column;
 	width: 530dp;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 5dp 8dp;
 	box-sizing: border-box;
 	gap: 4dp;
@@ -1127,7 +1407,7 @@ input.range.perf_slider sliderarrowinc
 
 .variations_header
 {
-	border-bottom: 1dp #303335;
+	border-bottom: 1dp #121315;
 	padding-bottom: 2dp;
 }
 
@@ -1179,31 +1459,64 @@ input.range.perf_slider sliderarrowinc
 {
 	width: 32dp;
 	height: 20dp;
-	font-size: 8dp;
+	line-height: 18dp;
+	font-size: 9dp;
 	font-weight: 700;
 	padding: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: inline-block;
+	text-align: center;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 3dp;
+	color: #ffffff;
+}
+
+.btn_var:hover
+{
+	background-color: #34373c;
+	border-color: #555b63;
+	color: #ffffff;
+}
+
+.btn_var:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .btn_small
 {
 	width: 18dp;
 	height: 18dp;
-	font-size: 7dp;
+	line-height: 16dp;
+	font-size: 8.5dp;
 	font-weight: 700;
 	padding: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: inline-block;
+	text-align: center;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 2.5dp;
+	color: #ffffff;
+}
+
+.btn_small:hover
+{
+	background-color: #34373c;
+	border-color: #555b63;
+}
+
+.btn_small:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .var_sub_tag
 {
 	font-size: 6dp;
-	font-weight: 600;
-	color: #c4c8ca;
+	font-weight: 700;
+	color: #a4a9b2;
 	text-align: center;
 	letter-spacing: 0.2dp;
 }
@@ -1214,9 +1527,6 @@ input.range.perf_slider sliderarrowinc
 	display: flex;
 	flex-direction: column;
 	width: 120dp;
-	background-color: #3e4244;
-	border: 1dp #2e3032;
-	border-radius: 4dp;
 	padding: 5dp 8dp;
 	box-sizing: border-box;
 	gap: 4dp;
@@ -1228,7 +1538,7 @@ input.range.perf_slider sliderarrowinc
 	font-weight: 800;
 	color: #ffffff;
 	letter-spacing: 1dp;
-	border-bottom: 1dp #303335;
+	border-bottom: 1dp #121315;
 	padding-bottom: 2dp;
 }
 
@@ -1251,34 +1561,43 @@ input.range.perf_slider sliderarrowinc
 {
 	width: 22dp;
 	height: 18dp;
-	background-color: #242628;
-	border: 1dp #3c4044;
-	border-radius: 2dp;
+	line-height: 16dp;
+	background-color: #1e2023;
+	border: 1dp #383b40;
+	border-radius: 2.5dp;
 	color: #ffffff;
-	font-size: 8dp;
-	font-weight: 800;
+	font-size: 9dp;
+	font-weight: 700;
 	cursor: pointer;
 	padding: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: inline-block;
+	text-align: center;
 }
 
 .page_btn:hover
 {
 	background-color: #34373c;
+	border-color: #555b63;
 }
 
+.page_btn.checked,
 .page_btn:checked
 {
-	background-color: #b21a20;
-	border-color: #ff3c44;
+	background-color: #c41e24;
+	border-color: #ff3838;
+	color: #ffffff;
+}
+
+.page_btn:active
+{
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .page_name_lbl
 {
 	font-size: 8dp;
-	font-weight: 700;
+	font-weight: 800;
 	color: #ffffff;
 }
 
@@ -1288,11 +1607,14 @@ input.range.perf_slider sliderarrowinc
 
 .g2_btn
 {
-	background-color: #242628;
-	border: 1dp #3c4044;
+	display: inline-block;
+	text-align: center;
+	line-height: 18dp;
+	background-color: #1e2023;
+	border: 1dp #383b40;
 	border-radius: 3dp;
-	color: #e0e2e5;
-	font-size: 8dp;
+	color: #e4e6ea;
+	font-size: 9.5dp;
 	font-weight: 700;
 	cursor: pointer;
 	box-sizing: border-box;
@@ -1300,72 +1622,83 @@ input.range.perf_slider sliderarrowinc
 
 .g2_btn:hover
 {
-	background-color: #323538;
-	border-color: #55595d;
+	background-color: #34373c;
+	border-color: #555b63;
 	color: #ffffff;
 }
 
 .g2_btn:active
 {
-	background-color: #1a1b1c;
+	background-color: #121315;
+	border-color: #121315;
 }
 
 .btn_dark
 {
 	width: 44dp;
 	height: 20dp;
+	line-height: 18dp;
 }
 
 .btn_red
 {
 	width: 44dp;
 	height: 20dp;
-	background-color: #b21a20;
-	border-color: #e82c34;
+	line-height: 18dp;
+	background-color: #c41e24;
+	border: 1dp #1a0406;
 	color: #ffffff;
 }
 
 .btn_red:hover
 {
-	background-color: #cb222a;
-	border-color: #ff4850;
+	background-color: #d82329;
+	border-color: #ff3838;
+}
+
+.btn_red:active
+{
+	background-color: #8c1015;
+	border-color: #1a0406;
 }
 
 .btn_rect
 {
-	width: 36dp;
+	width: 38dp;
 	height: 20dp;
+	line-height: 18dp;
 }
 
 .btn_rect_narrow
 {
-	width: 32dp;
+	width: 34dp;
 	height: 18dp;
+	line-height: 16dp;
 }
 
 /* Red Panel LEDs */
 .panel_led
 {
 	display: inline-block;
-	width: 6dp;
-	height: 6dp;
-	border-radius: 3dp;
+	width: 5dp;
+	height: 5dp;
+	border-radius: 2.5dp;
+	border: none;
 	box-sizing: border-box;
 }
 
 .panel_led.led_unlit,
 .panel_led.slot_led_unlit
 {
-	background-color: #30080a;
-	border: 1dp #1c0406;
+	background-color: #301214;
+	border: none;
 }
 
 .panel_led.led_lit,
 .panel_led.slot_led_lit
 {
-	background-color: #ff252c;
-	border: 1dp #ffa0a4;
-	box-shadow: 0 0 6dp #ff2026;
+	background-color: #ff3838;
+	border: none;
 }
 
 /* ==========================================================================
@@ -1378,9 +1711,9 @@ input.range.perf_slider sliderarrowinc
 	flex-direction: row;
 	justify-content: space-between;
 	align-items: center;
-	background-color: #7b1216;
+	background-color: #c41e24;
 	padding: 5dp 14dp;
-	border-top: 2dp #5e0d11;
+	border-top: 2dp #1a0406;
 	box-sizing: border-box;
 }
 
@@ -1388,7 +1721,7 @@ input.range.perf_slider sliderarrowinc
 {
 	font-size: 8dp;
 	font-weight: 700;
-	color: #d09094;
+	color: #ffcccc;
 	letter-spacing: 0.8dp;
 }
 
@@ -1398,4 +1731,19 @@ input.range.perf_slider sliderarrowinc
 	font-weight: 800;
 	color: #ffffff;
 	letter-spacing: 1dp;
+}
+
+.btn_col_select.btn_col_active
+{
+	background-color: #c41e24;
+	border-color: #ff3838;
+	color: #ffffff;
+}
+
+.g2_btn.active_pulse,
+.g2_btn.checked
+{
+	background-color: #c41e24;
+	border-color: #ff3838;
+	color: #ffffff;
 }

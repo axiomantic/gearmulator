@@ -18,7 +18,28 @@
 		{"index": 1, "name": "ModWheel", "displayName": "MOD WHEEL", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true},
 		{"index": 2, "name": "PitchStick", "displayName": "PITCH STICK", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isBipolar": true, "isPublic": true},
 		{"index": 3, "name": "Aftertouch", "displayName": "AFTERTOUCH", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true},
-		{"index": 4, "name": "ControlPedal", "displayName": "CONTROL PEDAL", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true}
+		{"index": 4, "name": "ControlPedal", "displayName": "CONTROL PEDAL", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 0, "isPublic": true},
+		{"index": 5, "name": "Encoder1", "displayName": "ENCODER 1", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 6, "name": "Encoder2", "displayName": "ENCODER 2", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 7, "name": "Encoder3", "displayName": "ENCODER 3", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 8, "name": "Encoder4", "displayName": "ENCODER 4", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 9, "name": "Encoder5", "displayName": "ENCODER 5", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 10, "name": "Encoder6", "displayName": "ENCODER 6", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 11, "name": "Encoder7", "displayName": "ENCODER 7", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true},
+		{"index": 12, "name": "Encoder8", "displayName": "ENCODER 8", "class": "NonPartSensitive", "min": 0, "max": 127, "default": 64, "isPublic": true}
+	],
+	"controllerMap": [
+		{"cc": 7, "param": "MasterVolume"},
+		{"cc": 1, "param": "ModWheel"},
+		{"cc": 11, "param": "ControlPedal"},
+		{"cc": 70, "param": "Encoder1"},
+		{"cc": 71, "param": "Encoder2"},
+		{"cc": 72, "param": "Encoder3"},
+		{"cc": 73, "param": "Encoder4"},
+		{"cc": 74, "param": "Encoder5"},
+		{"cc": 75, "param": "Encoder6"},
+		{"cc": 76, "param": "Encoder7"},
+		{"cc": 77, "param": "Encoder8"}
 	],
 	"valuelists":
 	{

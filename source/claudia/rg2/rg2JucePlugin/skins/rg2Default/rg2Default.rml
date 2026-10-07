@@ -8,7 +8,7 @@
 	</head>
 	<body id="Root" rootScale="1.000000" style="left: 0dp; top: 0dp; width: 1024dp; height: 560dp;">
 		<div class="g2_chassis">
-			<!-- Top Jack & Brand Lip -->
+			<!-- Top Brand Lip -->
 			<div class="chassis_top_lip">
 				<div class="jack_labels_row">
 					<span class="jack_lbl">MIC IN</span>
@@ -30,18 +30,25 @@
 				</div>
 				<div class="top_brand_bar">
 					<div class="brand_title_group">
-						<span class="clavia_logo">clavia</span>
-						<span class="brand_title">nord modular G2</span>
-						<span class="brand_sub">RED GECKO 2</span>
+						<span class="brand_title">RED GECKO 2</span>
+						<span class="brand_subtitle">VA MODULAR SYNTHESIZER</span>
 					</div>
-					<div id="socket_status" class="socket_status socket_listening">
-						<span id="socket_indicator" class="socket_indicator"></span>
-						<div class="socket_details">
-							<div class="socket_meta_row">
-								<span class="socket_label">BRIDGE:</span>
-								<span id="socket_badge" class="socket_badge">LISTENING</span>
+					<div class="brand_bar_right">
+						<div class="port_config_box">
+							<span class="port_config_lbl">PORT:</span>
+							<input type="text" id="input_port" class="port_input_field" value="7777" maxlength="5"/>
+							<button id="btn_set_port" class="btn_port_action">SET</button>
+							<button id="btn_find_port" class="btn_port_action" title="Find Free Port">AUTO</button>
+						</div>
+						<div id="socket_status" class="socket_status socket_listening">
+							<span id="socket_indicator" class="socket_indicator"></span>
+							<div class="socket_details">
+								<div class="socket_meta_row">
+									<span class="socket_label">BRIDGE:</span>
+									<span id="socket_badge" class="socket_badge">LISTENING</span>
+								</div>
+								<span id="socket_text" class="socket_text">127.0.0.1:7777</span>
 							</div>
-							<span id="socket_text" class="socket_text">127.0.0.1:7777</span>
 						</div>
 					</div>
 				</div>
@@ -81,7 +88,7 @@
 							<div class="sys_btn_col">
 								<div class="btn_with_led">
 									<span id="led_system" class="panel_led led_unlit"></span>
-									<button id="btn_system" class="g2_btn btn_dark" isToggle="0">System</button>
+									<button id="btn_sys" class="g2_btn btn_dark" isToggle="0">System</button>
 								</div>
 								<span class="sub_text_tiny">Dump One</span>
 							</div>
@@ -114,7 +121,7 @@
 						<div class="lcd_bezel">
 							<div class="lcd_screen main_lcd_screen">
 								<div id="main_lcd_line1" class="lcd_row">1:5</div>
-								<div id="main_lcd_line2" class="lcd_row">NORD MODULAR G2</div>
+								<div id="main_lcd_line2" class="lcd_row">RED GECKO 2</div>
 							</div>
 						</div>
 					</div>
@@ -210,15 +217,21 @@
 							<span class="sub_text_tiny">Clear</span>
 						</div>
 
-						<!-- Pitch Stick & Mod Wheel preview controllers -->
+						<!-- Pitch Stick & Mod Wheel performance controllers -->
 						<div class="perf_controllers_box">
 							<div class="stick_wheel_col">
 								<span class="perf_label">PITCH</span>
-								<input type="range" id="pitch_stick" class="perf_slider" min="0" max="1" step="0.01" value="0.5"/>
+								<div class="pitch_stick_slot">
+									<input type="range" id="pitch_stick" class="perf_pitch_stick" min="0" max="1" step="0.01" value="0.5"/>
+									<div class="pitch_center_notch"></div>
+								</div>
 							</div>
 							<div class="stick_wheel_col">
 								<span class="perf_label">MOD</span>
-								<input type="range" id="mod_wheel" class="perf_slider" min="0" max="1" step="0.01" value="0.0"/>
+								<div class="mod_wheel_slot">
+									<input type="range" id="mod_wheel" class="perf_mod_wheel" orientation="vertical" min="0" max="1" step="0.01" value="0.0"/>
+									<div class="mod_wheel_groove"></div>
+								</div>
 							</div>
 							<div class="comm_leds_col">
 								<span id="led_midi_in" class="comm_led unlit"></span>
@@ -607,10 +620,10 @@
 				</div>
 			</div>
 
-			<!-- Bottom Chassis Rim with Original Clavia Attribution -->
+			<!-- Bottom Chassis Rim -->
 			<div class="chassis_bottom_lip">
 				<span class="bottom_lip_left">RED GECKO 2 &bull; GEARMULATOR DSP56300 VA EMULATION</span>
-				<span class="bottom_lip_right">MODULAR SYNTHESIZER MADE IN SWEDEN BY CLAVIA 1.0</span>
+				<span class="bottom_lip_right">VA MODULAR SYNTHESIZER 1.0</span>
 			</div>
 		</div>
 	</body>

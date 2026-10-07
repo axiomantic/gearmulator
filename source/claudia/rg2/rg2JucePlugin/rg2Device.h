@@ -52,6 +52,7 @@
 
 #include "rg2State.h"
 #include "scheduler.h"
+#include "transportWebSocket.h"
 
 #include "synthLib/midiBufferParser.h"
 
@@ -65,7 +66,6 @@
 namespace rg2
 {
 	class Uart0;
-	class TransportSocketServer;
 } // namespace rg2
 
 namespace rg2
@@ -131,10 +131,15 @@ namespace rg2
 		 * requires the boot this constructor deliberately does not perform. */
 		uint16_t firmwareVersionWord() const noexcept { return m_firmwareVersionWord; }
 
-		const TransportSocketServer* socketServer() const noexcept { return m_socketServer.get(); }
-		TransportSocketServer* socketServer() noexcept { return m_socketServer.get(); }
+		const TransportWebSocketServer* webSocketServer() const noexcept { return m_webSocketServer.get(); }
+		TransportWebSocketServer* webSocketServer() noexcept { return m_webSocketServer.get(); }
+
+		uint16_t port() const noexcept { return m_webSocketServer ? m_webSocketServer->port() : 0; }
+		void setPort(uint16_t port);
 
 		Board* board() const noexcept { return m_board.get(); }
+
+		void sendRealtimeByte(uint8_t _byte);
 
 		/* ---------------------------------------------------------------
 		 * The boot-on-restore sequence. Every step below runs on the calling
@@ -407,7 +412,8 @@ namespace rg2
 		std::unique_ptr<Board> m_board;
 		std::unique_ptr<SerialExecutor> m_executor;
 		std::unique_ptr<Scheduler> m_ownedScheduler;
-		std::unique_ptr<TransportSocketServer> m_socketServer;
+		std::unique_ptr<TransportWebSocketServer> m_webSocketServer;
+		uint16_t m_port = 7777;
 
 		/* The flat block Scheduler::stateSave writes. Refreshed by getState,
 		 * consumed by boot()'s step 3. */
